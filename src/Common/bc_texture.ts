@@ -1,3 +1,7 @@
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { convertToCanvasData } from "../gfx/helpers/TextureConversionHelpers";
+import { GfxFormat } from "../gfx/platform/GfxPlatform";
+import { assert } from "../util";
 
 interface DecodedSurfaceBase {
     width: number;
@@ -120,7 +124,13 @@ function decompressBC1Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
 
             let colorBits = view.getUint32(srcOffs + 0x04, true);
             for (let y = 0; y < 4; y++) {
+                if (yy + y >= height)
+                    continue;
+
                 for (let x = 0; x < 4; x++) {
+                    if (xx + x >= width)
+                        continue;
+
                     const dstPx = (yy + y) * width + xx + x;
                     const dstOffs = dstPx * 4;
                     const colorIdx = colorBits & 0x03;
@@ -386,32 +396,17 @@ export function decompressBC(surface: DecodedSurfaceBC): DecodedSurfaceSW {
     }
 }
 
-export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW, slice: number) {
+export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW) {
     canvas.width = surface.width;
     canvas.height = surface.height;
-    const ctx = canvas.getContext('2d')!;
-    const width = surface.width;
-    const height = surface.height;
-    const pitch = surface.width * surface.height * 4;
-    const offset = pitch * slice;
-    const imageData = new ImageData(width, height);
 
-    switch (surface.type) {
-    case 'RGBA':
-        if (surface.flag === 'UNORM') {
-            imageData.data.set(surface.pixels.subarray(offset, offset + pitch));
-        } else if (surface.flag === 'SRGB') {
-            // XXX(jstpierre): SRGB
-            imageData.data.set(surface.pixels.subarray(offset, offset + pitch));
-        } else if (surface.flag === 'SNORM') {
-            const src = surface.pixels;
-            const data = new Uint8Array(pitch);
-            for (let i = 0; i < src.length; i++) {
-                data[i] = src[offset + i] + 128;
-            }
-            imageData.data.set(data);
-        }
-        break;
+    assert(surface.type === 'RGBA');
+    if (surface.flag === 'UNORM') {
+        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.U8_RGBA_NORM);
+    } else if (surface.flag === 'SRGB') {
+        // TODO(jstpierre): What to do with SRGB?
+        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.U8_RGBA_NORM);
+    } else if (surface.flag === 'SNORM') {
+        convertToCanvasData(canvas, ArrayBufferSlice.fromView(surface.pixels), GfxFormat.S8_RGBA_NORM);
     }
-    ctx.putImageData(imageData, 0, 0);
 }

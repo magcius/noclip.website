@@ -1,8 +1,8 @@
 
-import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator, calcJointMatrixFromTransform, calcJointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator, calcJointMatrixFromTransform, calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, BCK, JointTransformInfo } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { dGlobals, dDlst_list_Set } from "./zww_scenes";
 import { mat4, quat, ReadonlyVec3, vec3 } from "gl-matrix";
@@ -148,17 +148,17 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
         const loadFlags = modelData.bmd.inf1.loadFlags;
 
         if (this.anm !== null) {
-            const duration = this.frameCtrl.endFrame;
+            const animFrame1 = this.frameCtrl.applyLoopMode(animFrame + 1);
 
             if (this.curMorf >= 1.0) {
-                calcJointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
+                calcANK1JointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, animFrame1);
                 // callback1
             } else {
                 // callback1
                 let amt = (this.curMorf - this.prevMorf) / (1.0 - this.prevMorf);
 
                 if (amt > 0.0) {
-                    calcJointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
+                    calcANK1JointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, animFrame1);
                     dstTransform.lerp(dstTransform, scratchTransform, amt);
                 }
             }

@@ -1,21 +1,24 @@
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
-import { colorCopy, colorNewFromRGBA, White } from '../Color';
+import { Camera, computeViewMatrix } from '../Camera';
+import { colorCopy, colorNewFromRGBA, Red, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeDepthKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
-import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
+import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../gx/gx_render';
+import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
-import { MaterialRenderContext, SFAMaterial } from './materials';
-import { DrawStep, ModelRenderContext } from './models';
-import { arrayBufferSliceFromDataView, computeModelView } from './util';
 
+import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials';
+import { ModelRenderContext } from './models';
+import { setGXMaterialOnRenderInst } from './render';
+import { mat4SetTranslation } from './util';
+import { LightType } from './WorldLights';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -36,8 +39,8 @@ class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
-                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
+                dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
@@ -48,17 +51,17 @@ class MyShapeHelper {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
             buffers.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
 
-        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
 
-        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
-            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
+            dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
             buffer: this.indexBuffer,
@@ -70,31 +73,31 @@ class MyShapeHelper {
     }
 
     public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
-        const hostAccessPass = device.createHostAccessPass();
-
         if (uploadVertices) {
             for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
-                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+                device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
         }
 
         if (uploadIndices)
-            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
-
-        device.submitPass(hostAccessPass);
+            device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        if (packet !== null)
-            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        if (draw !== null)
+            renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
         else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyInputState(this.inputState);
+        // Do not destroy inputLayout; it is owned by the render cache.
         if (this.zeroBuffer !== null)
             device.destroyBuffer(this.zeroBuffer);
+        for (let buffer of this.vertexBuffers)
+            device.destroyBuffer(buffer);
+        device.destroyBuffer(this.indexBuffer);
     }
 }
 
@@ -108,17 +111,20 @@ export class ShapeGeometry {
     private loadedVertexData: LoadedVertexData;
 
     private shapeHelper: MyShapeHelper | null = null;
-    private packetParams = new PacketParams();
+    private drawParams = new DrawParams();
     private verticesDirty = true;
 
-    private aabb?: AABB;
+    public aabb?: AABB;
+    private sortLayer?: number;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
-    private hasFineSkinning = false;
+    public normalMatrixInTexMatrixCount = 0;
+    public hasSkinning = false;
+    public hasFineSkinning = false;
 
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexData = this.vtxLoader.parseDisplayList(arrayBufferSliceFromDataView(displayList));
+        this.loadedVertexData = this.vtxLoader.parseDisplayList(ArrayBufferSlice.fromView(displayList));
         this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }
@@ -133,14 +139,20 @@ export class ShapeGeometry {
         this.aabb = aabb.clone();
     }
 
-    public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
+    public setSortLayer(sortLayer: number) {
+        this.sortLayer = sortLayer;
+    }
+
+    public setPnMatrixMap(pnMatrixMap: number[], hasSkinning: boolean, hasFineSkinning: boolean) {
         for (let i = 0; i < pnMatrixMap.length; i++)
             this.pnMatrixMap[i] = pnMatrixMap[i];
+        this.normalMatrixInTexMatrixCount = pnMatrixMap.length;
+        this.hasSkinning = hasSkinning;
         this.hasFineSkinning = hasFineSkinning;
     }
 
-    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
-        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, setSortDepthFromAabb: boolean)
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
+        modelToWorldMtx: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, overrideSortDepth?: number, overrideSortLayer?: number)
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
@@ -155,129 +167,139 @@ export class ShapeGeometry {
 
         this.shapeHelper.setOnRenderInst(renderInst);
 
-        this.packetParams.clear();
+        this.drawParams.clear();
 
-        const viewMtx = scratchMtx0;
-        computeViewMatrix(viewMtx, camera);
+        const worldToViewMtx = scratchMtx0;
+        computeViewMatrix(worldToViewMtx, camera);
 
-        const modelViewMtx = scratchMtx1;
-        mat4.mul(modelViewMtx, viewMtx, matrix);
+        const modelToViewMtx = scratchMtx1;
+        mat4.mul(modelToViewMtx, worldToViewMtx, modelToWorldMtx);
 
-        if (setSortDepthFromAabb && this.aabb !== undefined) {
-            const center = scratchVec0;
-            this.aabb.centerPoint(center);
+        // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
+        // The translucent flag must be set before calling setSortKeyDepth, otherwise errors will occur.
+        if (overrideSortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
+        else if (this.sortLayer !== undefined)
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + this.sortLayer);
+        else
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
+
+        if (overrideSortDepth !== undefined)
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, overrideSortDepth);
+        else if (this.aabb !== undefined) {
+            // Set sort depth from center of AABB
+            this.aabb.centerPoint(scratchVec0);
             // FIXME: Should aabb.transform be used instead?
-            vec3.transformMat4(center, center, modelViewMtx);
-            const depth = -center[2];
+            vec3.transformMat4(scratchVec0, scratchVec0, modelToViewMtx);
+            const depth = -scratchVec0[2];
 
-            if (false && getSortKeyLayer(renderInst.sortKey) === GfxRendererLayer.TRANSLUCENT) {
-                const ctx = getDebugOverlayCanvas2D();
-                const wsaabb = this.aabb!.clone();
-                wsaabb.transform(wsaabb, matrix);
-                const wcenter = vec3.create();
-                wsaabb.centerPoint(wcenter);
-                drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, wcenter);
-                drawWorldSpaceAABB(ctx, camera.clipFromWorldMatrix, wsaabb);
-                drawWorldSpaceText(ctx, camera.clipFromWorldMatrix, wcenter, `${depth}`);
-            }
+            // const debugCtx = getDebugOverlayCanvas2D();
+            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, matrix);
 
             // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
             // Hopefully our depth range is adequate.
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
-        for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.
+        for (let i = 0; i < this.drawParams.u_PosMtx.length; i++) {
+            // If fine-skinning is enabled, matrix 9 is overridden with the model-view matrix,
+            // and vertices marked with matrix 9 are skinned by software.
             if (this.hasFineSkinning && i === 9)
-                mat4.copy(this.packetParams.u_PosMtx[i], modelViewMtx);
+                mat4.copy(this.drawParams.u_PosMtx[i], modelToViewMtx);
             else
-                mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, matrixPalette[this.pnMatrixMap[i]]);
+                mat4.mul(this.drawParams.u_PosMtx[i], modelToViewMtx, matrixPalette[this.pnMatrixMap[i]]);
         }
+    }
 
-        material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
+    public getdrawParams() {
+        return this.drawParams;
+    }
+    
+    public destroy(device: GfxDevice) {
+        if (this.shapeHelper !== null) {
+            this.shapeHelper.destroy(device);
+            this.shapeHelper = null;
+        }
     }
 }
 
 export interface MaterialOptions {
-    overrideIndMtx?: mat4[];
     furLayer?: number;
 }
 
+const scratchBox0 = new AABB();
+
 export class ShapeMaterial {
-    private gxMaterial: GXMaterial | undefined;
-    private materialHelper: GXMaterialHelperGfx;
-    private materialParams = new MaterialParams();
     private matCtx: MaterialRenderContext | undefined;
 
     public constructor(private material: SFAMaterial) {
-        this.updateMaterialHelper();
     }
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
-        this.updateMaterialHelper();
     }
 
-    private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.getGXMaterial()) {
-            this.gxMaterial = this.material.getGXMaterial();
-            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
-        }
-    }
-
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
-        this.updateMaterialHelper();
-        
+    public setOnMaterialParams(params: MaterialParams, geom: ShapeGeometry, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
-                modelViewMtx: mat4.create(),
-                invModelViewMtx: mat4.create(),
+                worldToViewMtx: mat4.create(),
+                viewToWorldMtx: mat4.create(),
+                modelToViewMtx: mat4.create(),
+                viewToModelMtx: mat4.create(),
+                ambienceIdx: modelCtx.ambienceIdx,
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
                 furLayer: matOptions.furLayer ?? 0,
             };
         }
 
         this.matCtx.sceneCtx = modelCtx.sceneCtx;
+        this.matCtx.ambienceIdx = modelCtx.ambienceIdx;
         colorCopy(this.matCtx.outdoorAmbientColor, modelCtx.outdoorAmbientColor);
         this.matCtx.furLayer = matOptions.furLayer ?? 0;
 
-        computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
-        mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
+        computeViewMatrix(this.matCtx.worldToViewMtx, modelCtx.sceneCtx.viewerInput.camera);
+        mat4.invert(this.matCtx.viewToWorldMtx, this.matCtx.worldToViewMtx);
 
-        for (let i = 0; i < 8; i++) {
-            const tex = this.material.getTexture(i);
-            if (tex !== undefined) {
-                tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.matCtx);
-            } else {
-                this.materialParams.m_TextureMapping[i].reset();
+        mat4.mul(this.matCtx.modelToViewMtx, this.matCtx.worldToViewMtx, modelToWorldMtx);
+        mat4.invert(this.matCtx.viewToModelMtx, this.matCtx.modelToViewMtx);
+
+        modelCtx.setupPointLights(params.u_Lights, modelCtx.sceneCtx);
+
+        modelCtx.mapLights = [];
+        if (modelCtx.sceneCtx.world !== undefined && geom.aabb !== undefined && this.material instanceof StandardMapMaterial) {
+            scratchBox0.copy(geom.aabb);
+            scratchBox0.transform(scratchBox0, modelToWorldMtx);
+            const worldView = scratchMtx0;
+            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+            const probedLights = modelCtx.sceneCtx.world.worldLights.probeLightsOnMapBox(scratchBox0, LightType.POINT, 8);
+            // XXX: actually, it seems there is a maximum of 2 map-affecting lights per shape in the original game.
+            for (let i = 0; i < probedLights.length && i < 8; i++) {
+                const viewPosition = scratchVec0;
+                probedLights[i].getPosition(viewPosition);
+                // const ctx = getDebugOverlayCanvas2D();
+                // drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, viewPosition);
+                vec3.transformMat4(viewPosition, viewPosition, worldView);
+                modelCtx.mapLights.push({
+                    radius: probedLights[i].radius,
+                    color: probedLights[i].color,
+                    viewPosition: vec3.clone(viewPosition),
+                });
             }
         }
 
-        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+        this.matCtx.mapLights = modelCtx.mapLights;
 
-        this.material.setupMaterialParams(this.materialParams, this.matCtx);
-
-        // XXX: test lighting
-        colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White); // TODO
-        modelCtx.setupLights(this.materialParams.u_Lights, modelCtx);
-
-        if (matOptions.overrideIndMtx !== undefined) {
-            for (let i = 0; i < 3; i++) {
-                if (matOptions.overrideIndMtx[i] !== undefined)
-                    mat4.copy(this.materialParams.u_IndTexMtx[i], matOptions.overrideIndMtx[i]!);
-            }
-        }
-
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+        this.material.setOnMaterialParams(params, this.matCtx);
     }
 
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    public getGXMaterialHelper() {
+        return this.material.getGXMaterialHelper();
     }
 }
+
+const scratchMaterialParams = new MaterialParams();
 
 // The geometry and material of a shape.
 export class Shape {
@@ -288,14 +310,39 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, setSortDepthFromAabb);
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
+        this.material.setOnMaterialParams(scratchMaterialParams, this.geom, modelToWorldMtx, modelCtx, matOptions);
+
+        const drawParams = this.geom.getdrawParams();
+
+        // For environment mapping
+        if (this.geom.hasSkinning && modelCtx.object !== undefined) {
+            const descaleMtx = mat4.create();
+            const invScale = 1.0 / modelCtx.object.scale;
+            mat4.fromScaling(descaleMtx, [invScale, invScale, invScale])
+            for (let i = 0; i < drawParams.u_PosMtx.length; i++) {
+                // XXX: this is the game's peculiar way of creating normal matrices
+                mat4.copy(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
+                mat4SetTranslation(scratchMaterialParams.u_TexMtx[i], 0, 0, 0);
+                mat4.mul(scratchMaterialParams.u_TexMtx[i], scratchMaterialParams.u_TexMtx[i], descaleMtx);
+                // The following line causes glitches due to an issue related to computeNormalMatrix's method of detecting uniform scaling.
+                // computeNormalMatrix(scratchMaterialParams.u_TexMtx[i], drawParams.u_PosMtx[i]);
+            }
+        }
+
+        const materialHelper = this.material.getGXMaterialHelper();
+
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, setSortDepthFromAabb);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, modelCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
         renderInstManager.submitRenderInst(renderInst);
+    }
+    
+    public destroy(device: GfxDevice) {
+        this.geom.destroy(device);
     }
 }

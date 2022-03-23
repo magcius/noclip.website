@@ -2,8 +2,8 @@
 import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, fallbackUndefined } from "../util";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable } from "./Entity";
+import { assert, nullify } from "../util";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster } from "./Entity";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -195,9 +195,7 @@ function unpack_portable_data(stream: Stream, portable: Portable, items: Metadat
 
             if (!!(item.flags & Metadata_Item_Flags.PREDICATED_ON_TRUTH))
                 skip = !predicate;
-            else if (!(item.flags & Metadata_Item_Flags.PREDICATED_ON_FALSEHOOD))
-                skip = false;
-            else
+            else if (!!(item.flags & Metadata_Item_Flags.PREDICATED_ON_FALSEHOOD))
                 skip = predicate;
 
             if (skip)
@@ -296,9 +294,6 @@ interface Metadata_Add_Options {
 
 class Metadata {
     public items: Metadata_Item[] = [];
-
-    public postprocess(): void {
-    }
 
     private add(name: string, type: Metadata_Type, options: Metadata_Add_Options): Metadata_Item {
         const item = { name, type, flags: 0, minimum_revision_number: 1, maximum_revision_number: -1, predicated_upon: null, integer_info: null, ... options };
@@ -447,7 +442,6 @@ class Entity_Type_Audio_Marker extends Portable_Type {
         m.add_float('rate_scale', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_float('volume_scale', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_vector3_path('stereo_path', { minimum_revision_number: 0x71, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
-        m.postprocess();
     }
 }
 
@@ -458,8 +452,6 @@ class Entity_Type_Audio_Recording extends Portable_Type {
         super();
         const m = this.metadata;
         make_entity_metadata(m);
-        m.postprocess();
-
         m.add_string('recording_name', { flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_string('source_name', { minimum_revision_number: 0x18, maximum_revision_number: 0x18, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_integer('underground', { minimum_revision_number: 0x1a, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
@@ -478,7 +470,6 @@ class Entity_Type_Audio_Recording extends Portable_Type {
         m.add_integer("proxy_marker_id", { minimum_revision_number: 0x81, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID, });
         m.add_integer("lake_z_override_marker_id", { minimum_revision_number: 0x82, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID, });
         m.add_integer("radar_lily_pad_size", { minimum_revision_number: 0x83, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID, integer_info: make_ranged_integer_info(0, 0xFF) });
-        m.postprocess();
     }
 }
 
@@ -564,7 +555,6 @@ class Entity_Type_Boat extends Portable_Type {
         m.add_float('speed_lookahead', { minimum_revision_number: 0x99, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_float('lift_armature_mount_position_z', { minimum_revision_number: 0x9d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('boat_path_checksum', { minimum_revision_number: 0xa3, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -589,7 +579,6 @@ class Entity_Type_Bridge extends Portable_Type {
         m.add_integer('pivot_id_b', { flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_float('pivot_target_b');
         m.add_float('pivot_t_b');
-        m.postprocess();
     }
 }
 
@@ -608,7 +597,10 @@ class Entity_Type_Cloud extends Portable_Type {
         m.add_color4('color', { flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_integer('animation_frame_override', { minimum_revision_number: 0x7d });
         m.add_float('emissive_scale', { minimum_revision_number: 0x7e });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -626,7 +618,10 @@ class Entity_Type_Cluster extends Portable_Type {
         m.add_float('bounding_radius', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_vector3('bounding_center', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('cluster_flags', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Cluster(portable_id, revision_number);
     }
 }
 
@@ -649,7 +644,6 @@ class Entity_Type_Collision_Path extends Portable_Type {
         m.add_vector3_path('path');
         // Mesh
         m.add_integer('XXX_deprecated_has_mesh', { minimum_revision_number: 0x40, maximum_revision_number: 0x7c, integer_info: make_boolean_integer_info() });
-        m.postprocess();
     }
 }
 
@@ -675,7 +669,6 @@ class Entity_Type_Collision_Volume extends Portable_Type {
         m.add_string('footstep_category', { minimum_revision_number: 0x19, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_vector3_path('hull_perimeter', { minimum_revision_number: 0x1d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_string('texture_name', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES | Metadata_Item_Flags.IS_TEXTURE_MAP });
-        m.postprocess();
     }
 }
 
@@ -711,7 +704,6 @@ class Entity_Type_Color_Marker extends Portable_Type {
         m.add_string('color_correction_lut_name');
         const override_key_value = m.add_integer('override_key_value', { minimum_revision_number: 0x66, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI, integer_info: make_boolean_integer_info() });
         m.add_float('key_value', { predicated_upon: override_key_value, minimum_revision_number: 0x66, flags: Metadata_Item_Flags.PREDICATED_ON_TRUTH | Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -787,7 +779,10 @@ class Entity_Type_Door extends Portable_Type {
         m.add_integer('looping', { minimum_revision_number: 0x76, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         const color_override = m.add_integer('color_override', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE, integer_info: make_boolean_integer_info() });
         m.add_color4('color', { predicated_upon: color_override, minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.LINEAR_COLOR });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -822,7 +817,10 @@ class Entity_Type_Double_Ramp extends Portable_Type {
         m.add_integer('cosmetic_id_b1', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('cosmetic_id_b2', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('cosmetic_id_b3', { minimum_revision_number: 0x70, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -871,7 +869,6 @@ class Entity_Type_Fog_Marker extends Portable_Type {
         m.add_integer('volumetric_at_quality', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI, integer_info: make_boolean_integer_info() });
         m.add_float('volumetric_density_scale', { minimum_revision_number: 0x7e, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_float('shadow_brightness', { minimum_revision_number: 0x7e, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -906,7 +903,6 @@ class Entity_Type_Force_Bridge extends Portable_Type {
         m.add_integer('geometry_ids.last_edge_connection_id', { minimum_revision_number: 0x7b, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('geometry_ids.last_edge_dot_dot_id', { minimum_revision_number: 0x7b, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('geometry_ids.last_edge_dot_cap_id', { minimum_revision_number: 0x7b, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
-        m.postprocess();
     }
 }
 
@@ -932,7 +928,6 @@ class Entity_Type_Force_Bridge_Segment extends Portable_Type {
         m.add_integer('XXX_deprecated_is_dot_segment', { minimum_revision_number: 0x6f, maximum_revision_number: 0x75, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI, integer_info: make_boolean_integer_info() });
         m.add_integer('flags', { minimum_revision_number: 0x76 });
         m.add_float('trace_location', { minimum_revision_number: 0x77, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -959,7 +954,6 @@ class Entity_Type_Force_Field extends Portable_Type {
         m.add_color4('color', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_vector2('num_bars', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_vector2('bar_offset', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
-        m.postprocess();
     }
 }
 
@@ -986,7 +980,6 @@ class Entity_Type_Gauge extends Portable_Type {
         m.add_string('trigger_sound', { minimum_revision_number: 0x7e });
         m.add_string('special_proc', { minimum_revision_number: 0x7f });
         m.add_integer('reference_id', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID })
-        m.postprocess();
     }
 }
 
@@ -1003,7 +996,6 @@ class Entity_Type_Grass_Chunk extends Portable_Type {
         m.add_integer('render_in_reflection', { minimum_revision_number: 0x76 });
         m.add_integer('gameplay_relevant', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_integer('source_portable_id', { minimum_revision_number: 0x6f });
-        m.postprocess();
     }
 }
 
@@ -1023,7 +1015,6 @@ class Entity_Type_Group extends Portable_Type {
         m.add_integer('initial_group_visibility', { minimum_revision_number: 0x67, integer_info: make_boolean_integer_info() });
         m.add_integer('necessary_for_gameplay_despite_visibility', { minimum_revision_number: 0x76, integer_info: make_boolean_integer_info() });
         m.add_float('lm_threshold_factor', { minimum_revision_number: 0x68 });
-        m.postprocess();
     }
 }
 
@@ -1046,10 +1037,9 @@ class Entity_Type_Inanimate extends Portable_Type {
         m.add_string('render_material');
         const color_override = m.add_integer('color_override', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE, integer_info: make_boolean_integer_info() });
         m.add_color4('color', { predicated_upon: color_override, minimum_revision_number: 0x50, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.LINEAR_COLOR });
-        m.postprocess();
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1081,7 +1071,6 @@ class Entity_Type_Issued_Sound extends Portable_Type {
         m.add_float('distance_to_linger', { minimum_revision_number: 0x1d });
         m.add_vector3('stereo_source_left', { minimum_revision_number: 0x6f });
         m.add_vector3('stereo_source_right', { minimum_revision_number: 0x6f });
-        m.postprocess();
     }
 }
 
@@ -1123,7 +1112,6 @@ class Entity_Type_Lake extends Portable_Type {
         m.add_float('pool_emissive_factor', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_float('pool_specular_factor', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_float('pool_fresnel_reflectance', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
-        m.postprocess();
     }
 }
 
@@ -1154,7 +1142,6 @@ class Entity_Type_Landing_Signal extends Portable_Type {
         m.add_float('waypoint_spacing_inner', { minimum_revision_number: 0x50 });
         m.add_float('waypoint_spacing_outer', { minimum_revision_number: 0x50 });
         m.add_vector3('forward_vector_worldspace', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -1187,7 +1174,6 @@ class Entity_Type_Laser extends Portable_Type {
         m.add_integer('box_id', { minimum_revision_number: 0x81, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('menu_artifact_mask', { minimum_revision_number: 0x82 });
         m.add_float('timeout_to_grant_trophy', { minimum_revision_number: 0x84 });
-        m.postprocess();
     }
 }
 
@@ -1228,7 +1214,10 @@ class Entity_Type_Light extends Portable_Type {
         m.add_string('looping_sound_name', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_integer('looping_sound_id', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('volume_marker', { minimum_revision_number: 0x81, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1252,7 +1241,6 @@ class Entity_Type_Light_Probe extends Portable_Type {
         m.add_color4('color_tint', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_float('exposure', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_string('override_env_map', { minimum_revision_number: 0x76 });
-        m.postprocess();
     }
 }
 
@@ -1305,7 +1293,7 @@ class Entity_Type_Machine_Panel extends Portable_Type {
         m.add_float('gesture_finished_t_target', { minimum_revision_number: 0x23 });
         m.add_float('gesture_finished_time', { minimum_revision_number: 0x23 });
         m.add_integer('id_to_power', { minimum_revision_number: 0x19, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
-        m.add_integer('power_off_on_fai;', { minimum_revision_number: 0x1a, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
+        m.add_integer('power_off_on_fail', { minimum_revision_number: 0x1a, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         m.add_integer('powered_by', { minimum_revision_number: 0x23, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('my_multipanel', { minimum_revision_number: 0x1c, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('my_bridge', { minimum_revision_number: 0x5d, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
@@ -1364,7 +1352,10 @@ class Entity_Type_Machine_Panel extends Portable_Type {
         m.add_float('ray_shortening', { minimum_revision_number: 0x5f, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_integer('covert', { minimum_revision_number: 0x60, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         m.add_integer('has_ever_been_solved', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI, integer_info: make_boolean_integer_info() });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1397,9 +1388,11 @@ class Entity_Type_Marker extends Portable_Type {
         m.add_string('mesh_name', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.IS_MESH });
         m.add_integer('is_convex_hull', { minimum_revision_number: 0x7d, integer_info: make_boolean_integer_info() });
         m.add_vector3_path('hull_perimeter', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
+    }
 }
 
 class Entity_Type_Multipanel extends Portable_Type {
@@ -1427,7 +1420,10 @@ class Entity_Type_Multipanel extends Portable_Type {
         m.add_integer('is_speed_clock', { minimum_revision_number: 0x66, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         m.add_integer('is_panel_stealer', { minimum_revision_number: 0x68, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES, integer_info: make_boolean_integer_info() });
         m.add_integer('master_multipanel', { minimum_revision_number: 0x67, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1442,7 +1438,6 @@ class Entity_Type_Note extends Portable_Type {
         m.add_string('texture_name', { flags: Metadata_Item_Flags.IS_TEXTURE_MAP });
         m.add_float('radius');
         m.add_vector3_path('path');
-        m.postprocess();
     }
 }
 
@@ -1472,7 +1467,10 @@ class Entity_Type_Obelisk extends Portable_Type {
         m.add_integer('num_reports_completed', { minimum_revision_number: 0x84, maximum_revision_number: 0x84, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('has_been_activated', { minimum_revision_number: 0x87, integer_info: make_boolean_integer_info() });
         m.add_float('brightness_scale_when_dim', { minimum_revision_number: 0x86 });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1494,7 +1492,6 @@ class Entity_Type_Obelisk_Report extends Portable_Type {
         m.add_integer('preset_obelisk_id', { minimum_revision_number: 0x82, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_float('redarkening', { minimum_revision_number: 0x80 });
         m.add_float('brightness_scale_when_dim', { minimum_revision_number: 0x81 });
-        m.postprocess();
     }
 }
 
@@ -1509,7 +1506,6 @@ class Entity_Type_Occluder extends Portable_Type {
         m.add_float('width');
         m.add_float('height');
         m.add_integer('is_plane', { integer_info: make_boolean_integer_info() });
-        m.postprocess();
     }
 }
 
@@ -1589,7 +1585,6 @@ class Entity_Type_Particle_Source extends Portable_Type {
         m.add_integer('flight_path_id', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('pattern_point_id', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('target_entity_id', { minimum_revision_number: 0x83, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -1671,7 +1666,7 @@ class Entity_Type_Pattern_Point extends Portable_Type {
         m.add_integer('fill_segment_on_broken_link', { minimum_revision_number: 0x7f, integer_info: make_boolean_integer_info() });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Pattern_Point(portable_id, revision_number);
     }
 }
@@ -1717,10 +1712,9 @@ class Entity_Type_Power_Cable extends Portable_Type {
         m.add_string("powered_on_mask_name", { minimum_revision_number: 0x58, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES | Metadata_Item_Flags.IS_TEXTURE_MAP });
         m.add_integer("user_data", { minimum_revision_number: 0x5c, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
 
-        m.postprocess();
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Power_Cable(portable_id, revision_number);
     }
 }
@@ -1767,7 +1761,10 @@ class Entity_Type_Pressure_Plate extends Portable_Type {
         m.add_float('reset_rate', { minimum_revision_number: 0x69, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_float('glow_base_t', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_float('glow_scale', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1796,7 +1793,10 @@ class Entity_Type_Pylon extends Portable_Type {
         m.add_string('mesh_name', { minimum_revision_number: 0x70, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES | Metadata_Item_Flags.IS_MESH });
         m.add_float('on_t', { minimum_revision_number: 0x71 });
         m.add_float('on_t_target', { minimum_revision_number: 0x71 });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1815,7 +1815,10 @@ class Entity_Type_Radar_Item extends Portable_Type {
         m.add_integer('trigger_level', { minimum_revision_number: 0x7f });
         m.add_integer('activate_flags', { minimum_revision_number: 0x7d });
         m.add_integer('sound_id', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1842,7 +1845,6 @@ class Entity_Type_Record_Player extends Portable_Type {
         m.add_string('lotus_onlyone_solvable_name', { minimum_revision_number: 0x3e });
         m.add_string('lotus_onlyone_tricolor_solvable_name', { minimum_revision_number: 0x3f });
         m.add_integer('lotus_count', { minimum_revision_number: 0x3e });
-        m.postprocess();
     }
 }
 
@@ -1863,7 +1865,6 @@ class Entity_Type_Slab extends Portable_Type {
         m.add_color4('emissive_color', { minimum_revision_number: 0x50 });
         m.add_float('emissive_scale', { minimum_revision_number: 0x50 });
         m.add_float('uv_scale', { minimum_revision_number: 0x6f });
-        m.postprocess();
     }
 }
 
@@ -1880,7 +1881,10 @@ class Entity_Type_Speaker extends Portable_Type {
         m.add_string('material', { maximum_revision_number: 0x5f });
         m.add_float('volume', { minimum_revision_number: 0x23 });
         m.add_string('mesh_name', { minimum_revision_number: 0x60, flags: Metadata_Item_Flags.IS_MESH });
-        m.postprocess();
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Inanimate(portable_id, revision_number);
     }
 }
 
@@ -1900,10 +1904,9 @@ class Entity_Type_Terrain_Guide extends Portable_Type {
         m.add_integer('generated_from_entity_id', { minimum_revision_number: 0x5f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('checksum', { minimum_revision_number: 0x5f });
         m.add_integer('for_collision', { minimum_revision_number: 0x5f, integer_info: make_boolean_integer_info() });
-        m.postprocess();
     }
 
-    public unserialize_proc(stream: Stream, portable: Portable, revision_number: number): void {
+    public override unserialize_proc(stream: Stream, portable: Portable, revision_number: number): void {
         if (revision_number > 0x48) {
             const count = stream.readUint32();
             portable.control_points = [];
@@ -1937,7 +1940,6 @@ class Entity_Type_Video_Player extends Portable_Type {
         m.add_integer('reverb_marker_id', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('reverb_marker_id2', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_float('inclusion_current', { minimum_revision_number: 0x81 });
-        m.postprocess();
     }
 }
 
@@ -1955,7 +1957,6 @@ class Entity_Type_Video_Screen extends Portable_Type {
         m.add_float('end2_eye_closed_t', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_float('end2_eye_closed_t_target', { minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
         m.add_string('damage_texture_name', { minimum_revision_number: 0x80 });
-        m.postprocess();
     }
 }
 
@@ -1983,7 +1984,6 @@ class Entity_Type_Waypoint_Path3 extends Portable_Type {
         m.add_float('control_point_scale', { minimum_revision_number: 0x7d });
         m.add_integer('connection_marker_a', { minimum_revision_number: 0x7e, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
         m.add_integer('connection_marker_b', { minimum_revision_number: 0x7e, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
-        m.postprocess();
     }
 }
 
@@ -1998,7 +1998,6 @@ class Entity_Type_World extends Portable_Type {
         m.add_float('world_z_min', { flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_float('world_z_max', { flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE });
         m.add_integer('shadow_render_count', { minimum_revision_number: 0x6f, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
-        m.postprocess();
     }
 }
 
@@ -2059,7 +2058,7 @@ class Portable_Type_Manager {
     }
 
     public get_portable_type_from_name(type_name: string): Portable_Type {
-        return fallbackUndefined(this.types.get(type_name), null)!;
+        return nullify(this.types.get(type_name))!;
     }
 }
 

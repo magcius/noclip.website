@@ -1,15 +1,15 @@
 
-import { assert } from "../../util";
+import { assert } from "../platform/GfxPlatformUtil";
 
 export const enum GfxTopology {
-    TRIANGLES, TRISTRIP, TRIFAN, QUADS, QUADSTRIP,
+    Triangles, TriStrips, TriFans, Quads, QuadStrips,
 };
 
-export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, indexBuffer: Uint16Array): void {
+export function convertToTriangles(dstBuffer: Uint16Array | Uint32Array, dstOffs: number, topology: GfxTopology, indexBuffer: Uint16Array | Uint32Array): void {
     assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length) <= dstBuffer.length);
 
     let dst = dstOffs;
-    if (topology === GfxTopology.QUADS) {
+    if (topology === GfxTopology.Quads) {
         for (let i = 0; i < indexBuffer.length; i += 4) {
             dstBuffer[dst++] = indexBuffer[i + 0];
             dstBuffer[dst++] = indexBuffer[i + 1];
@@ -18,7 +18,7 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
             dstBuffer[dst++] = indexBuffer[i + 2];
             dstBuffer[dst++] = indexBuffer[i + 3];
         }
-    } else if (topology === GfxTopology.TRISTRIP) {
+    } else if (topology === GfxTopology.TriStrips) {
         for (let i = 0; i < indexBuffer.length - 2; i++) {
             if (i % 2 === 0) {
                 dstBuffer[dst++] = indexBuffer[i + 0];
@@ -30,13 +30,13 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
                 dstBuffer[dst++] = indexBuffer[i + 2];
             }
         }
-    } else if (topology === GfxTopology.TRIFAN) {
+    } else if (topology === GfxTopology.TriFans) {
         for (let i = 0; i < indexBuffer.length - 2; i++) {
             dstBuffer[dst++] = indexBuffer[0];
             dstBuffer[dst++] = indexBuffer[i + 1];
             dstBuffer[dst++] = indexBuffer[i + 2];
         }
-    } else if (topology === GfxTopology.QUADSTRIP) {
+    } else if (topology === GfxTopology.QuadStrips) {
         for (let i = 0; i < indexBuffer.length - 2; i += 2) {
             dstBuffer[dst++] = indexBuffer[i + 0];
             dstBuffer[dst++] = indexBuffer[i + 1];
@@ -45,16 +45,16 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
             dstBuffer[dst++] = indexBuffer[i + 1];
             dstBuffer[dst++] = indexBuffer[i + 3];
         }
-    } else if (topology === GfxTopology.TRIANGLES) {
+    } else if (topology === GfxTopology.Triangles) {
         dstBuffer.set(indexBuffer, dstOffs);
     }
 }
 
-export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
+export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array | number[], dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
     assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, numVertices) <= dstBuffer.length);
 
     let dst = dstOffs;
-    if (topology === GfxTopology.QUADS) {
+    if (topology === GfxTopology.Quads) {
         for (let i = 0; i < numVertices; i += 4) {
             dstBuffer[dst++] = baseVertex + i + 0;
             dstBuffer[dst++] = baseVertex + i + 1;
@@ -63,7 +63,7 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array, ds
             dstBuffer[dst++] = baseVertex + i + 3;
             dstBuffer[dst++] = baseVertex + i + 0;
         }
-    } else if (topology === GfxTopology.TRISTRIP) {
+    } else if (topology === GfxTopology.TriStrips) {
         for (let i = 0; i < numVertices - 2; i++) {
             if (i % 2 === 0) {
                 dstBuffer[dst++] = baseVertex + i + 0;
@@ -75,13 +75,13 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array, ds
                 dstBuffer[dst++] = baseVertex + i + 2;
             }
         }
-    } else if (topology === GfxTopology.TRIFAN) {
+    } else if (topology === GfxTopology.TriFans) {
         for (let i = 0; i < numVertices - 2; i++) {
             dstBuffer[dst++] = baseVertex + 0;
             dstBuffer[dst++] = baseVertex + i + 1;
             dstBuffer[dst++] = baseVertex + i + 2;
         }
-    } else if (topology === GfxTopology.QUADSTRIP) {
+    } else if (topology === GfxTopology.QuadStrips) {
         for (let i = 0; i < numVertices - 2; i += 2) {
             dstBuffer[dst++] = baseVertex + i + 0;
             dstBuffer[dst++] = baseVertex + i + 1;
@@ -90,14 +90,14 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array, ds
             dstBuffer[dst++] = baseVertex + i + 1;
             dstBuffer[dst++] = baseVertex + i + 3;
         }
-    } else if (topology === GfxTopology.TRIANGLES) {
+    } else if (topology === GfxTopology.Triangles) {
         for (let i = 0; i < numVertices; i++)
             dstBuffer[dst++] = baseVertex + i;
     }
 }
 
 export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer: Uint16Array): Uint16Array {
-    if (topology === GfxTopology.TRIANGLES)
+    if (topology === GfxTopology.Triangles)
         return indexBuffer;
 
     const newSize = getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length);
@@ -120,17 +120,17 @@ export function makeTriangleIndexBuffer(topology: GfxTopology, baseVertex: numbe
 
 export function getTriangleCountForTopologyIndexCount(topology: GfxTopology, indexCount: number): number {
     switch (topology) {
-    case GfxTopology.TRIANGLES:
+    case GfxTopology.Triangles:
         // One triangle per every three indexes.
         return indexCount / 3;
-    case GfxTopology.TRISTRIP:
-    case GfxTopology.TRIFAN:
+    case GfxTopology.TriStrips:
+    case GfxTopology.TriFans:
         // One triangle per index, minus the first two.
         return (indexCount - 2);
-    case GfxTopology.QUADS:
+    case GfxTopology.Quads:
         // Two triangles per four indices.
         return 2 * (indexCount / 4);
-    case GfxTopology.QUADSTRIP:
+    case GfxTopology.QuadStrips:
         // Two triangles per two indexes, minus the first two.
         return 2 * (indexCount - 2);
     }

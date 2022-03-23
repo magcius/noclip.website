@@ -9,13 +9,15 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp } from './MathHelpers';
-import { DebugFloaterHolder, FloatingPanel } from './DebugFloaters';
-import { LinearEaseType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
+import { clamp, invlerp, lerp } from './MathHelpers';
+import { DebugFloaterHolder } from './DebugFloaters';
 import { DraggingMode } from './InputManager';
+import { CLAPBOARD_ICON, StudioPanel } from './Studio';
+import { SceneDesc, SceneGroup } from './SceneBase';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -40,12 +42,12 @@ function setFontelloIcon(elem: HTMLElement, icon: FontelloIcon): void {
 }
 
 const OPEN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 2 92 92" height="20" fill="white"><path d="M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z"/></svg>`;
-const SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 26.25" height="20" fill="white"><path d="M8.6953,14.3916 C5.5543,14.3916 3.0003,11.8356 3.0003,8.6956 C3.0003,5.5546 5.5543,2.9996 8.6953,2.9996 C11.8363,2.9996 14.3913,5.5546 14.3913,8.6956 C14.3913,11.8356 11.8363,14.3916 8.6953,14.3916 L8.6953,14.3916 Z M15.8423,13.7216 L15.6073,13.9566 C16.7213,12.4956 17.3913,10.6756 17.3913,8.6956 C17.3913,3.8936 13.4983,-0.0004 8.6953,-0.0004 C3.8933,-0.0004 0.0003,3.8936 0.0003,8.6956 C0.0003,13.4976 3.8933,17.3916 8.6953,17.3916 C10.6753,17.3916 12.4953,16.7216 13.9573,15.6076 L13.7213,15.8426 L18.3343,20.4546 L20.4553,18.3336 L15.8423,13.7216 Z"/></svg>`;
+export const SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 26.25" height="20" fill="white"><path d="M8.6953,14.3916 C5.5543,14.3916 3.0003,11.8356 3.0003,8.6956 C3.0003,5.5546 5.5543,2.9996 8.6953,2.9996 C11.8363,2.9996 14.3913,5.5546 14.3913,8.6956 C14.3913,11.8356 11.8363,14.3916 8.6953,14.3916 L8.6953,14.3916 Z M15.8423,13.7216 L15.6073,13.9566 C16.7213,12.4956 17.3913,10.6756 17.3913,8.6956 C17.3913,3.8936 13.4983,-0.0004 8.6953,-0.0004 C3.8933,-0.0004 0.0003,3.8936 0.0003,8.6956 C0.0003,13.4976 3.8933,17.3916 8.6953,17.3916 C10.6753,17.3916 12.4953,16.7216 13.9573,15.6076 L13.7213,15.8426 L18.3343,20.4546 L20.4553,18.3336 L15.8423,13.7216 Z"/></svg>`;
 const TEXTURES_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="20" fill="white"><path d="M143.5,143.5v300h300v-300H143.5z M274.8,237.2c10.3,0,18.7,8.4,18.7,18.9c0,10.3-8.4,18.7-18.7,18.7   c-10.3,0-18.7-8.4-18.7-18.7C256,245.6,264.4,237.2,274.8,237.2z M406,406H181v-56.2l56.2-56.1l37.5,37.3l75-74.8l56.2,56.1V406z"/><polygon points="387.2,68.6 68.5,68.6 68.5,368.5 106,368.5 106,106 387.2,106"/></svg>`;
 const FRUSTUM_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="20" fill="white"><polygon points="48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684" /><polygon points="51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701" /><polygon points="61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268" /></svg>`;
 const STATISTICS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 0 55 60" height="16" fill="white"><g><polygon points="6.9,11.5 6.9,56 55.4,56 55.4,53 9.9,53 9.9,11.5"/><path d="M52.7,15.8c-2.7,0-4.9,2.2-4.9,4.9c0,1,0.3,1.8,0.8,2.6l-5,6.8c-0.4-0.1-0.9-0.2-1.3-0.2c-1.5,0-2.9,0.7-3.8,1.8l-5.6-2.8   c0-0.2,0.1-0.5,0.1-0.8c0-2.7-2.2-4.9-4.9-4.9s-4.9,2.2-4.9,4.9c0,1.1,0.3,2,0.9,2.8l-3.9,5.1c-0.5-0.2-1.1-0.3-1.7-0.3   c-2.7,0-4.9,2.2-4.9,4.9s2.2,4.9,4.9,4.9s4.9-2.2,4.9-4.9c0-1-0.3-2-0.8-2.7l4-5.2c0.5,0.2,1.1,0.3,1.6,0.3c1.4,0,2.6-0.6,3.5-1.5   l5.8,2.9c0,0.1,0,0.2,0,0.3c0,2.7,2.2,4.9,4.9,4.9c2.7,0,4.9-2.2,4.9-4.9c0-1.2-0.4-2.2-1.1-3.1l4.8-6.5c0.6,0.2,1.2,0.4,1.9,0.4   c2.7,0,4.9-2.2,4.9-4.9S55.4,15.8,52.7,15.8z"/></g></svg>`;
 const ABOUT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16" fill="white"><path d="M50,1.1C23,1.1,1.1,23,1.1,50S23,98.9,50,98.9C77,98.9,98.9,77,98.9,50S77,1.1,50,1.1z M55.3,77.7c0,1.7-1.4,3.1-3.1,3.1  h-7.9c-1.7,0-3.1-1.4-3.1-3.1v-5.1c0-1.7,1.4-3.1,3.1-3.1h7.9c1.7,0,3.1,1.4,3.1,3.1V77.7z M67.8,47.3c-2.1,2.9-4.7,5.2-7.9,6.9  c-1.8,1.2-3,2.4-3.6,3.8c-0.4,0.9-0.7,2.1-0.9,3.5c-0.1,1.1-1.1,1.9-2.2,1.9h-9.7c-1.3,0-2.3-1.1-2.2-2.3c0.2-2.7,0.9-4.8,2-6.4  c1.4-1.9,3.9-4.2,7.5-6.7c1.9-1.2,3.3-2.6,4.4-4.3c1.1-1.7,1.6-3.7,1.6-6c0-2.3-0.6-4.2-1.9-5.6c-1.3-1.4-3-2.1-5.3-2.1  c-1.9,0-3.4,0.6-4.7,1.7c-0.8,0.7-1.3,1.6-1.6,2.8c-0.4,1.4-1.7,2.3-3.2,2.3l-9-0.2c-1.1,0-2-1-1.9-2.1c0.3-4.8,2.2-8.4,5.5-11  c3.8-2.9,8.7-4.4,14.9-4.4c6.6,0,11.8,1.7,15.6,5c3.8,3.3,5.7,7.8,5.7,13.5C70.9,41.2,69.8,44.4,67.8,47.3z"/></svg>`;
-const CLAPBOARD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" height="20" fill="white"><path d="M61,22H14.51l3.41-.72h0l7.74-1.64,2-.43h0l6.85-1.46h0l1.17-.25,8.61-1.83h0l.78-.17,9-1.91h0l.4-.08L60,12.33a1,1,0,0,0,.77-1.19L59.3,4.3a1,1,0,0,0-1.19-.77l-19,4-1.56.33h0L28.91,9.74,27.79,10h0l-9.11,1.94-.67.14h0L3.34,15.17a1,1,0,0,0-.77,1.19L4,23.11V60a1,1,0,0,0,1,1H61a1,1,0,0,0,1-1V23A1,1,0,0,0,61,22ZM57,5.8l.65.6.89,4.19-1.45.31L52.6,6.75ZM47.27,7.88,51.8,12,47.36,13,42.82,8.83ZM37.48,10,42,14.11l-4.44.94L33,10.91ZM27.7,12l4.53,4.15-4.44.94L23.26,13Zm-9.78,2.08,4.53,4.15L18,19.21l-4.53-4.15ZM19.49,29H14.94l3.57-5h4.54Zm9-5h4.54l-3.57,5H24.94ZM39,45.88l-11,6A1,1,0,0,1,26.5,51V39A1,1,0,0,1,28,38.12l11,6a1,1,0,0,1,0,1.76ZM39.49,29H34.94l3.57-5h4.54Zm10,0H44.94l3.57-5h4.54ZM60,29H54.94l3.57-5H60Z"/></svg>`;
+const DICE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="18" height="18" fill="white"><path d="M 12.161286,0.33596185 C 9.1715371,-0.03245869 6.4678746,2.0779729 6.099454,5.0677219 L 0.33596183,51.838714 c -0.36842076,2.989751 1.74201117,5.693411 4.73176007,6.061832 l 46.7709931,5.763492 c 2.98975,0.368421 5.69341,-1.742009 6.061831,-4.73176 L 63.664038,12.161286 C 64.032459,9.171537 61.922029,6.4678748 58.932279,6.0994541 Z M 20.047281,10.438667 a 5.4374807,5.4374806 7.0250241 0 1 4.731761,6.061832 5.4374807,5.4374806 7.0250241 0 1 -6.061833,4.73176 5.4374807,5.4374806 7.0250241 0 1 -4.73176,-6.061832 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.73176 z m 28.782293,3.546782 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061775 5.4374807,5.4374806 7.0250241 0 1 -6.061367,4.731817 5.4374807,5.4374806 7.0250241 0 1 -4.731761,-6.061832 5.4374807,5.4374806 7.0250241 0 1 6.061833,-4.73176 z M 32.665036,26.603204 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061775 5.4374807,5.4374806 7.0250241 0 1 -6.06131,4.731351 5.4374807,5.4374806 7.0250241 0 1 -4.731817,-6.061366 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.73176 z M 16.500499,39.220959 a 5.4374807,5.4374806 7.0250241 0 1 4.731761,6.061833 5.4374807,5.4374806 7.0250241 0 1 -6.061776,4.731295 5.4374807,5.4374806 7.0250241 0 1 -4.731817,-6.061367 5.4374807,5.4374806 7.0250241 0 1 6.061832,-4.731761 z m 28.782293,3.546782 a 5.4374807,5.4374806 7.0250241 0 1 4.731295,6.061776 5.4374807,5.4374806 7.0250241 0 1 -6.06131,4.731353 5.4374807,5.4374806 7.0250241 0 1 -4.731818,-6.061368 5.4374807,5.4374806 7.0250241 0 1 6.061833,-4.731761 z"/></svg>`;
 
 // Custom icons used by game-specific panels.
 export const LAYER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
@@ -168,6 +170,7 @@ export class TextEntry implements Widget {
 
         this.textfield = new TextField();
         const textarea = this.textfield.textarea;
+        textarea.title = 'Search Bar';
         textarea.style.boxSizing = 'border-box';
         textarea.style.padding = '12px';
         textarea.style.paddingLeft = '32px';
@@ -191,6 +194,7 @@ export class TextEntry implements Widget {
 
         this.clearButton = document.createElement('div');
         this.clearButton.textContent = '🗙';
+        this.clearButton.title = 'Clear';
         this.clearButton.style.color = 'white';
         this.clearButton.style.position = 'absolute';
         this.clearButton.style.width = '24px';
@@ -240,14 +244,15 @@ export const enum ScrollSelectItemType {
 interface ScrollSelectItemHeader {
     type: ScrollSelectItemType.Header;
     visible?: boolean;
-    html: string;
+    name?: string;
+    html?: HTMLElement;
 }
 
 interface ScrollSelectItemSelectable {
     type: ScrollSelectItemType.Selectable;
     visible?: boolean;
     name?: string;
-    html?: string;
+    html?: HTMLElement;
 }
 
 export type ScrollSelectItem = ScrollSelectItemHeader | ScrollSelectItemSelectable;
@@ -298,6 +303,19 @@ export abstract class ScrollSelect implements Widget {
         }
     }
 
+    public scrollItemIntoView(i: number): boolean {
+        const outer = this.getOuterForIndex(i);
+        if (!this.itemIsVisible(outer))
+            return false;
+        const selector = outer.querySelector('.selector') as HTMLElement;
+        if (selector) {
+            outer.scrollIntoView();
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     public setItems(items: ScrollSelectItem[]): void {
         this.scrollContainer.style.display = (items.length > 0) ? '' : 'none';
         this.scrollContainer.innerHTML = '';
@@ -324,7 +342,7 @@ export abstract class ScrollSelect implements Widget {
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
                 if (item.html !== undefined)
-                    textSpan.innerHTML = item.html;
+                    textSpan.appendChild(item.html);
                 else if (item.name !== undefined)
                     textSpan.textContent = item.name;
                 else
@@ -357,7 +375,12 @@ export abstract class ScrollSelect implements Widget {
                 textSpan.style.textShadow = `0 0 8px black`;
                 textSpan.style.paddingLeft = `8px`;
                 textSpan.style.verticalAlign = `baseline`;
-                textSpan.innerHTML = item.html;
+                if (item.html !== undefined)
+                    textSpan.appendChild(item.html);
+                else if (item.name !== undefined)
+                    textSpan.textContent = item.name;
+                else
+                    throw "whoops";
                 outer.appendChild(textSpan);
                 hasHeader = true;
             }
@@ -534,7 +557,12 @@ export class SingleSelect extends ScrollSelect {
         return true;
     }
 
-    public setItems(items: ScrollSelectItem[]): void {
+    public scrollFocus(): void {
+        if (this.highlightedIndex !== -1)
+            this.scrollItemIntoView(this.highlightedIndex);
+    }
+
+    public override setItems(items: ScrollSelectItem[]): void {
         this.highlightedIndex = -1;
         super.setItems(items);
     }
@@ -725,7 +753,7 @@ export class Panel implements Widget {
         this.toplevel.style.overflow = 'hidden';
         this.toplevel.style.display = 'grid';
         this.toplevel.style.gridAutoFlow = 'column';
-        this.toplevel.style.gridGap = '20px';
+        this.toplevel.style.gap = '20px';
         this.toplevel.style.transition = '.25s ease-out';
         this.toplevel.style.alignItems = 'start';
         this.toplevel.style.outline = 'none';
@@ -742,7 +770,7 @@ export class Panel implements Widget {
 
         this.extraRack = document.createElement('div');
         this.extraRack.style.gridAutoFlow = 'column';
-        this.extraRack.style.gridGap = '20px';
+        this.extraRack.style.gap = '20px';
         this.extraRack.style.transition = '.15s ease-out .10s';
         this.toplevel.appendChild(this.extraRack);
 
@@ -884,29 +912,40 @@ function matchRegExps(n: RegExp[], S: string): boolean {
     })
 }
 
+function randomChoice<T>(L: T[]): T {
+    const idx = Math.floor(Math.random() * L.length);
+    return assertExists(L[idx]);
+}
+
 class SceneSelect extends Panel {
-    private sceneGroups: (string | Viewer.SceneGroup)[] = [];
-    private sceneDescs: (string | Viewer.SceneDesc)[] = [];
+    private sceneGroups: (string | SceneGroup)[] = [];
+    private sceneDescs: (string | SceneDesc)[] = [];
 
     private searchEntry: TextEntry;
+    private randomButton: HTMLElement;
     private sceneGroupList: SingleSelect;
     private sceneDescList: SingleSelect;
 
-    private selectedSceneGroup: Viewer.SceneGroup;
-    private currentSceneGroup: Viewer.SceneGroup;
-    private currentSceneDesc: Viewer.SceneDesc;
+    private selectedSceneGroup: SceneGroup;
+    private currentSceneGroup: SceneGroup;
+    private currentSceneDesc: SceneDesc;
     private loadProgress: number;
 
     private currentSearchTokens: RegExp[] = [];
 
-    public onscenedescselected: (sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) => void;
+    public onscenedescselected: (sceneGroup: SceneGroup, sceneDesc: SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
         super();
         this.setTitle(OPEN_ICON, 'Games');
 
+        const topBox = document.createElement('div');
+        topBox.style.display = 'grid';
+        topBox.style.gridTemplateColumns = '1fr 40px';
+        topBox.style.background = 'rgba(0, 0, 0, 1.0)';
+        this.contents.append(topBox);
+
         this.searchEntry = new TextEntry();
-        this.searchEntry.elem.style.background = 'rgba(0, 0, 0, 1.0)';
         this.searchEntry.setIcon(SEARCH_ICON);
         this.searchEntry.setPlaceholder('Search...');
         this.searchEntry.ontext = (searchString: string) => {
@@ -918,7 +957,22 @@ class SceneSelect extends Panel {
             this.setExpanded(true, false);
             this.setAutoClosed(false);
         };
-        this.contents.appendChild(this.searchEntry.elem);
+        topBox.appendChild(this.searchEntry.elem);
+
+        this.randomButton = document.createElement('div');
+        this.randomButton.title = 'Random';
+        this.randomButton.style.placeSelf = 'stretch';
+        this.randomButton.style.color = 'white';
+        this.randomButton.style.lineHeight = '20px';
+        this.randomButton.style.cursor = 'pointer';
+        this.randomButton.style.backgroundRepeat = 'no-repeat';
+        this.randomButton.style.backgroundPosition = 'center center';
+        this.randomButton.style.backgroundImage = svgStringToCSSBackgroundImage(DICE_ICON);
+        this.randomButton.onclick = () => {
+            this.selectRandom();
+        };
+        this.syncRandomButtonVisible();
+        topBox.appendChild(this.randomButton);
 
         this.sceneGroupList = new SingleSelect();
         this.sceneGroupList.setHeight('400px');
@@ -932,15 +986,15 @@ class SceneSelect extends Panel {
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
-            this.selectSceneGroup(i);
+            this.selectSceneGroupIndex(i);
         };
 
         this.sceneDescList.onselectionchange = (i: number) => {
-            this.selectSceneDesc(i);
+            this.selectSceneDescIndex(i);
         };
     }
 
-    protected onKeyDown(e: KeyboardEvent): void {
+    protected override onKeyDown(e: KeyboardEvent): void {
         if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
             this.sceneGroupList.elem.onkeydown!(e);
         } else {
@@ -965,12 +1019,15 @@ class SceneSelect extends Panel {
         this.syncVisibility();
     }
 
+    private syncRandomButtonVisible(): void {
+    }
+
     private syncVisibility(): void {
         // Start searching!
         const n = this.currentSearchTokens;
 
         let lastDescHeaderVisible = false;
-        function matchSceneDesc(item: (string | Viewer.SceneDesc)): boolean {
+        function matchSceneDesc(item: (string | SceneDesc)): boolean {
             if (typeof item === 'string') {
                 // If this is a header, then all items under the header should match.
                 lastDescHeaderVisible = matchRegExps(n, item);
@@ -1034,22 +1091,21 @@ class SceneSelect extends Panel {
         this.sceneDescList.computeHeaderVisibility();
     }
 
-    public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
+    public setCurrentDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
-
-        const index = this.sceneGroups.indexOf(this.currentSceneGroup);
-        this.sceneGroupList.setHighlighted(index);
-
         this.syncSceneDescs();
+
+        this.sceneGroupList.setHighlighted(this.sceneGroups.indexOf(this.currentSceneGroup));
+        this.sceneDescList.setHighlighted(this.sceneDescs.indexOf(this.currentSceneDesc));
     }
 
-    public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
+    public setSceneGroups(sceneGroups: (string | SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
-                return { type: ScrollSelectItemType.Header, html: g };
+                return { type: ScrollSelectItemType.Header, name: g };
             else
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
         }));
@@ -1062,8 +1118,23 @@ class SceneSelect extends Panel {
         this.syncHeaderStyle();
     }
 
-    private selectSceneDesc(i: number) {
-        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i] as Viewer.SceneDesc);
+    private selectSceneDesc(sceneDesc: SceneDesc) {
+        this.onscenedescselected(this.selectedSceneGroup, sceneDesc);
+    }
+
+    private selectSceneDescIndex(i: number) {
+        this.selectSceneDesc(this.sceneDescs[i] as SceneDesc);
+    }
+
+    private selectRandom(): void {
+        const sceneGroups = this.sceneGroups.filter((v) => typeof v !== 'string' && !v.hidden && v.sceneDescs.length > 0) as SceneGroup[];
+        this.selectSceneGroup(randomChoice(sceneGroups));
+
+        const sceneDescs = this.sceneDescs.filter((v) => typeof v !== 'string') as SceneDesc[];
+        this.selectSceneDesc(randomChoice(sceneDescs));
+
+        this.sceneGroupList.scrollFocus();
+        this.sceneDescList.scrollFocus();
     }
 
     private getLoadingGradient(rightColor: string) {
@@ -1071,7 +1142,7 @@ class SceneSelect extends Panel {
         return `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, ${rightColor} ${pct})`;
     }
 
-    protected syncHeaderStyle() {
+    protected override syncHeaderStyle() {
         super.syncHeaderStyle();
 
         setElementHighlighted(this.header, !!this.expanded);
@@ -1104,10 +1175,13 @@ class SceneSelect extends Panel {
         this.sceneDescList.setFlairs(sceneDescFlairs);
     }
 
-    private selectSceneGroup(i: number) {
-        const sceneGroup = this.sceneGroups[i];
-        this.selectedSceneGroup = sceneGroup as Viewer.SceneGroup;
+    private selectSceneGroup(sceneGroup: SceneGroup): void {
+        this.selectedSceneGroup = sceneGroup;
         this.syncSceneDescs();
+    }
+
+    private selectSceneGroupIndex(i: number) {
+        this.selectSceneGroup(this.sceneGroups[i] as SceneGroup);
     }
 
     private syncSceneDescs() {
@@ -1117,11 +1191,11 @@ class SceneSelect extends Panel {
             this.setSceneDescs([]);
     }
 
-    private setSceneDescs(sceneDescs: (string | Viewer.SceneDesc)[]) {
+    private setSceneDescs(sceneDescs: (string | SceneDesc)[]) {
         this.sceneDescs = sceneDescs;
         this.sceneDescList.setItems(sceneDescs.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
-                return { type: ScrollSelectItemType.Header, html: g };
+                return { type: ScrollSelectItemType.Header, name: g };
             else
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
         }));
@@ -1376,15 +1450,13 @@ export class Slider implements Widget {
 }
 .Slider::-moz-range-track {
     cursor: pointer;
+    height: 24px;
     background: #444;
 }
 .Slider::-webkit-slider-runnable-track {
     cursor: pointer;
+    height: 24px;
     background: #444;
-}
-.Slider::-moz-range-progress, .Slider::-webkit-slider-thumb {
-    cursor: pointer;
-    background: #aaa;
 }
 </style>
 <div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center">
@@ -1425,90 +1497,122 @@ export class Slider implements Widget {
     }
 
     public getT(): number {
-        return (+this.sliderInput.value - +this.sliderInput.min) / (+this.sliderInput.max - +this.sliderInput.min);
+        return invlerp(+this.sliderInput.min, +this.sliderInput.max, +this.sliderInput.value);
     }
 
     public setT(t: number): void {
-        const v = (t * (+this.sliderInput.max - +this.sliderInput.min)) + +this.sliderInput.min;
+        const v = lerp(+this.sliderInput.min, +this.sliderInput.max, t);
         this.setValue(v);
+    }
+}
+
+export class RadioButtons implements Widget {
+    public elem: HTMLElement;
+    public selectedIndex: number = -1;
+    public onselectedchange: ((() => void) | null) = null;
+    public options: HTMLElement[] = [];
+
+    constructor(title: string, optionNames: string[]) {
+        this.elem = document.createElement('div');
+
+        this.elem.style.display = 'grid';
+
+        const fr = `${optionNames.length}fr ${optionNames.map(() => '1fr').join(' ')}`;
+        this.elem.style.gridTemplateColumns = fr;
+        this.elem.style.alignItems = 'center';
+
+        const header = document.createElement('div');
+        header.style.fontWeight = 'bold';
+        header.textContent = title;
+
+        this.elem.appendChild(header);
+
+        optionNames.forEach((optionName, i) => {
+            const option = document.createElement('div');
+            option.style.fontWeight = `bold`;
+            option.style.textAlign = `center`;
+            option.style.lineHeight = `24px`;
+            option.style.cursor = `pointer`;
+            option.textContent = optionName;
+            option.onclick = () => {
+                this.setSelectedIndex(i);
+            };
+
+            this.elem.appendChild(option);
+            this.options.push(option);
+        });
+    }
+
+    private sync(): void {
+        this.options.forEach((option, i) => {
+            setElementHighlighted(option, i === this.selectedIndex);
+        });
+    }
+
+    public setSelectedIndex(i: number): void {
+        if (this.selectedIndex === i)
+            return;
+
+        this.selectedIndex = i;
+        this.sync();
+
+        if (this.onselectedchange !== null)
+            this.onselectedchange();
     }
 }
 
 class ViewerSettings extends Panel {
     private fovSlider: Slider;
+    private camControllerClasses: CameraControllerClass[] = [FPSCameraController, OrbitCameraController, OrthoCameraController];
+    private camRadioButtons: RadioButtons;
     private camSpeedSlider: Slider;
-    private cameraControllerWASD: HTMLElement;
-    private cameraControllerOrbit: HTMLElement;
-    private cameraControllerOrtho: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
+    private antialiasingRadioButtons: RadioButtons;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
 
-        // TODO(jstpierre): make css not leak
-        this.contents.innerHTML = `
-<style>
-.SettingsHeader, .SettingsButton {
-    font-weight: bold;
-}
-.SettingsButton {
-    background: #444;
-    text-align: center;
-    line-height: 24px;
-    cursor: pointer;
-}
-</style>
-
-<div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
-</div>
-
-<div class="SliderContainer">
-</div>
-`;
         this.contents.style.lineHeight = '36px';
 
-        const sliderContainer = this.contents.querySelector('.SliderContainer')!;
+        // Don't change the order
+        this.camRadioButtons = new RadioButtons('Camera Controls', ['WASD', 'Orbit', 'Ortho']);
+        this.camRadioButtons.onselectedchange = () => {
+            if (ui.studioModeEnabled)
+                return;
+
+            this.setCameraControllerIndex(this.camRadioButtons.selectedIndex);
+        };
+        this.contents.appendChild(this.camRadioButtons.elem);
+
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
         this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
-        sliderContainer.appendChild(this.fovSlider.elem);
+        this.contents.appendChild(this.fovSlider.elem);
 
         this.camSpeedSlider = new Slider();
         this.camSpeedSlider.setLabel("Camera Speed");
         this.camSpeedSlider.setRange(0, 200);
         this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
-        sliderContainer.appendChild(this.camSpeedSlider.elem);
+        this.contents.appendChild(this.camSpeedSlider.elem);
 
         this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
-        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
-        this.cameraControllerWASD.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(FPSCameraController);
-            }
-        };
+        const limits = this.viewer.gfxDevice.queryLimits();
 
-        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
-        this.cameraControllerOrbit.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrbitCameraController);
-            }
-        };
+        const aaModes = ['None', 'FXAA'];
+        if (limits.supportedSampleCounts.includes(4))
+            aaModes.push('4x MSAA');
 
-        this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
-        this.cameraControllerOrtho.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrthoCameraController);
-            }
-        };
+        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', aaModes);
+        this.antialiasingRadioButtons.onselectedchange = () => { GlobalSaveManager.saveSetting(`AntialiasingMode`, this.antialiasingRadioButtons.selectedIndex); };
+        this.contents.appendChild(this.antialiasingRadioButtons.elem);
+        GlobalSaveManager.addSettingListener('AntialiasingMode', this.antialiasingChanged.bind(this));
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -1521,7 +1625,13 @@ class ViewerSettings extends Panel {
         GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
     }
 
-    private onFovSliderChange(e: UIEvent): void {
+    public setCameraControllerIndex(idx: number) {
+        const index = this.camRadioButtons.selectedIndex;
+        const cameraControllerClass = this.camControllerClasses[index];
+        this.setCameraControllerClass(cameraControllerClass);
+    }
+
+    private onFovSliderChange(): void {
         const value = this.fovSlider.getT();
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
@@ -1542,13 +1652,15 @@ class ViewerSettings extends Panel {
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
+        if (this.viewer.cameraController instanceof cameraControllerClass)
+            return;
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
         this.updateCameraSpeedFromSlider();
     }
 
     private onScrollWheel(): void {
-        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
+        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz) * 4, 0, 200);
         this.ui.setMouseActive();
         this.viewer.setKeyMoveSpeed(v);
     }
@@ -1558,10 +1670,7 @@ class ViewerSettings extends Panel {
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
-        setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
-        setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
-        setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
-
+        this.camRadioButtons.setSelectedIndex(this.camControllerClasses.indexOf(cameraControllerClass));
         setElementVisible(this.fovSlider.elem, cameraControllerClass !== OrthoCameraController);
     }
 
@@ -1574,10 +1683,15 @@ class ViewerSettings extends Panel {
         const invertX = saveManager.loadSetting<boolean>(key, false);
         this.invertXCheckbox.setChecked(invertX);
     }
+
+    private antialiasingChanged(saveManager: SaveManager, key: string): void {
+        const antialiasingMode = saveManager.loadSetting<AntialiasingMode>(key, AntialiasingMode.FXAA);
+        this.antialiasingRadioButtons.setSelectedIndex(antialiasingMode);
+    }
 }
 
 class XRSettings extends Panel {
-    public onWebXRStateRequested: (state: boolean)=>void = (state: boolean) => {};
+    public onWebXRStateRequested: (state: boolean) => void = (state: boolean) => { };
 
     public enableXRCheckBox: Checkbox;
     private scaleSlider: Slider;
@@ -1629,7 +1743,7 @@ class XRSettings extends Panel {
         this.contents.appendChild(this.scaleSlider.elem);
     }
 
-    private async enableXRChecked(saveManager: SaveManager, key: string) {
+    private enableXRChecked() {
         const enableXR = this.enableXRCheckBox.checked;
         this.enableXRCheckBox.setChecked(enableXR);
         this.onWebXRStateRequested(enableXR);
@@ -1650,7 +1764,7 @@ class LineGraph {
         Viewer.resizeCanvas(this.canvas, width, height, window.devicePixelRatio);
 
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.textYOffset = 24;
     }
@@ -1691,10 +1805,9 @@ class LineGraph {
     }
 }
 
-
 class StatisticsPanel extends Panel {
-    public history: RenderStatistics[] = [];
     private fpsGraph = new LineGraph();
+    private fpsHistory: number[] = [];
     private fpsPoints: number[] = [];
     private fpsColor: Color = { r: 0.4, g: 0.9, b: 0.6, a: 1.0 };
 
@@ -1709,162 +1822,68 @@ class StatisticsPanel extends Panel {
         if (!this.expanded)
             return;
 
-        this.history.unshift({ ...renderStatistics });
-
-        while (this.history.length > 100) {
-            this.history.pop();
-        }
+        this.fpsHistory.unshift(renderStatistics.fps);
+        while (this.fpsHistory.length > 100)
+            this.fpsHistory.pop();
 
         this.fpsPoints.length = 100;
-        for (let i = 0; i < this.fpsPoints.length; i++) {
-            this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
-        }
+        for (let i = 0; i < this.fpsPoints.length; i++)
+            this.fpsPoints[i] = this.fpsHistory[i] !== undefined ? this.fpsHistory[i] : 0;
 
-        this.fpsGraph.beginDraw(this.elem.offsetWidth, 200);
+        this.fpsGraph.beginDraw(440, 200);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
-        this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
-        if (renderStatistics.drawCallCount)
-            this.fpsGraph.drawText(`Draw Calls: ${renderStatistics.drawCallCount}`);
-        if (renderStatistics.triangleCount)
-            this.fpsGraph.drawText(`Drawn Triangles: ${renderStatistics.triangleCount}`);
-        if (renderStatistics.textureBindCount)
-            this.fpsGraph.drawText(`Texture Binds: ${renderStatistics.textureBindCount}`);
-        if (renderStatistics.bufferUploadCount)
-            this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
-
-        const camPositionX = this.viewer.camera.worldMatrix[12].toFixed(2);
-        const camPositionY = this.viewer.camera.worldMatrix[13].toFixed(2);
-        const camPositionZ = this.viewer.camera.worldMatrix[14].toFixed(2);
-        this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
-
-        const vendorInfo = this.viewer.gfxDevice.queryVendorInfo();
-        this.fpsGraph.drawText(`Platform: ${vendorInfo.platformString}`);
+        for (const line of renderStatistics.lines)
+            this.fpsGraph.drawText(line);
     }
 }
 
-class StudioPanel extends FloatingPanel {
-    private animationManager: CameraAnimationManager;
+class StudioSidePanel extends Panel {
     private enableStudioBtn: HTMLElement;
     private disableStudioBtn: HTMLElement;
 
-    private studioPanelContents: HTMLElement;
-    private studioHelpText: HTMLElement;
-
-    private studioDataBtn: HTMLInputElement;
-    private studioSaveLoadControls: HTMLElement;
-    private newAnimationBtn: HTMLInputElement;
-    private loadAnimationBtn: HTMLInputElement;
-    private saveAnimationBtn: HTMLInputElement;
-    private importAnimationBtn: HTMLInputElement;
-    private exportAnimationBtn: HTMLInputElement;
-
-    private studioControlsContainer: HTMLElement;
-
-    private keyframeList: HTMLElement;
-    private selectedKeyframeListItem?: HTMLElement;
-
-    private editKeyframePositionBtn: HTMLElement;
-    private editingKeyframePosition: boolean = false;
-    private persistHelpText: boolean = false;
-
-    private keyframeControls: HTMLElement;
-    private selectedKeyframe: Keyframe;
-    private keyframeNameInput: HTMLInputElement;
-    private keyframeDurationContainer: HTMLElement;
-    private keyframeDurationInput: HTMLInputElement;
-    private matchPrevSpeedBtn: HTMLInputElement;
-    private keyframeHoldDurationInput: HTMLInputElement;
-
-    private interpolationSettings: HTMLElement;
-    private hermiteBtn: HTMLElement;
-    private linearBtn: HTMLElement;
-    private linearEaseSettingsDiv: HTMLElement;
-    private noEaseBtn: HTMLElement;
-    private easeInBtn: HTMLElement;
-    private easeOutBtn: HTMLElement;
-    private easeBothBtn: HTMLElement;
-    private selectedEaseBtn?: HTMLElement;
-    private moveKeyframeUpBtn: HTMLElement;
-    private moveKeyframeDownBtn: HTMLElement;
-
-    private previewKeyframeBtn: HTMLElement;
-    private stopPreviewKeyframeBtn: HTMLElement;
-
-    private firstKeyframeBtn: HTMLElement;
-    private previousKeyframeBtn: HTMLElement;
-    private nextKeyframeBtn: HTMLElement;
-    private lastKeyframeBtn: HTMLElement;
-
-    private playbackControls: HTMLElement;
-    private hideUiCheckbox: Checkbox;
-    private delayStartCheckbox: Checkbox;
-    private loopAnimationCheckbox: Checkbox;
-    private playAnimationBtn: HTMLElement;
-    private stopAnimationBtn: HTMLElement;
-
-    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+    constructor(private ui: UI) {
         super();
-        this.setWidth(500);
-        this.contents.style.maxHeight = '';
-        this.contents.style.overflow = '';
-        this.elem.onmouseout = () => {
-            this.elem.style.opacity = '0.8';
-        };
-        this.elem.style.opacity = '0.8';
         this.setTitle(CLAPBOARD_ICON, 'Studio');
+        document.head.insertAdjacentHTML('beforeend', `
+            <style>
+                button.SettingsButton {
+                    font: 16px monospace;
+                    font-weight: bold;
+                    border: none;
+                    width: 100%;
+                    color: inherit;
+                    padding: 0.15rem;
+                    text-align: center;
+                    background-color: rgb(64, 64, 64);
+                    cursor: pointer;
+                }
+            </style>
+            `);
         this.contents.insertAdjacentHTML('beforeend', `
-        <div style="display: grid; grid-template-columns: 3fr 1fr 1fr; align-items: center;">
-            <div class="SettingsHeader">Studio Mode</div>
-            <div id="enableStudioBtn" class="SettingsButton EnableStudioMode">Enable</div><div id="disableStudioBtn" class="SettingsButton DisableStudioMode">Disable</div>
-        </div>
-        <div id="studioPanelContents" hidden></div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
+                <div style="font-weight: bold;">Studio Mode</div>
+                <button id="enableStudioBtn" class="SettingsButton">Enable</button>
+                <button id="disableStudioBtn" class="SettingsButton">Disable</button>
+            </div>
+            <div id="studioPanelContents" hidden></div>
         `);
         this.contents.style.lineHeight = '36px';
+
         this.enableStudioBtn = this.contents.querySelector('#enableStudioBtn') as HTMLInputElement;
         this.disableStudioBtn = this.contents.querySelector('#disableStudioBtn') as HTMLInputElement;
-        this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
-
-        // A listener to give focus to the canvas whenever it's clicked, even if the panel is still up.
-        const keepFocus = function (e: MouseEvent) {
-            if (e.target === viewer.canvas)
-                document.body.focus();
-        }
 
         this.enableStudioBtn.onclick = () => {
             if (!ui.studioModeEnabled) {
-                // Switch to the FPS Camera Controller ().
-                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
-                ui.studioModeEnabled = true;
-                // Disable switching of camera controllers in studio mode.
-                ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
-                    el.classList.add('disabled');
-                });
-                // If this is the first time Studio Mode is being enabled, we need to initialize things.
-                if (!this.studioPanelContents.children.length) {
-                    this.initStudio();
-                }
-                this.animationManager.enableStudioController(this.viewer);
-                this.studioPanelContents.removeAttribute('hidden');
-                document.addEventListener('mousedown', keepFocus);
+                ui.enableStudioMode();
                 setElementHighlighted(this.enableStudioBtn, true);
                 setElementHighlighted(this.disableStudioBtn, false);
-
-                // If there's an existing animation for the current map, load it automatically.
-                this.loadAnimation();
+                this.setExpanded(false);
             }
         }
         this.disableStudioBtn.onclick = () => {
             if (ui.studioModeEnabled) {
-                ui.studioModeEnabled = false;
-                // Re-enable camera controller switching.
-                ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
-                    el.classList.remove('disabled');
-                });
-                // Switch back to the FPS Camera Controller.
-                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
-                this.studioPanelContents.setAttribute('hidden', '');
-                document.removeEventListener('mousedown', keepFocus);
+                ui.disableStudioMode();
                 setElementHighlighted(this.disableStudioBtn, true);
                 setElementHighlighted(this.enableStudioBtn, false);
             }
@@ -1872,756 +1891,14 @@ class StudioPanel extends FloatingPanel {
         setElementHighlighted(this.disableStudioBtn, true);
         setElementHighlighted(this.enableStudioBtn, false);
 
-        this.elem.style.display = 'none';
+        const showPanel = window.localStorage.getItem('show-studio-side-panel');
+        if (!showPanel)
+            this.elem.style.display = 'none';
     }
 
     public v(): void {
         this.elem.style.display = '';
-    }
-
-    private initStudio(): void {
-        // Add Studio Mode-specific CSS.
-        document.head.insertAdjacentHTML('beforeend', `
-        <style>
-            #studioHelpText {
-                line-height:1.5;
-                padding: 0 1rem 0.5rem 1rem;
-                min-height:3rem;
-            }
-            #keyframeList {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-                height: 27rem;
-                overflow-y: scroll;
-                border: 1px solid #555;
-            }
-            #keyframeList > li {
-                position: relative;
-                background-color: #441111;
-            }
-            #keyframeControls {
-                line-height: 1.2;
-            }
-            #keyframeControls input {
-                background: #000;
-                color: white;
-                font-weight: bold;
-                font: 16px monospace;
-                border: 1px solid #444444;
-            }
-            .KeyframeSettingsName {
-                margin-top: 0.5rem;
-                margin-bottom: 0.25rem;
-            }
-            .KeyframeNumericInput {
-                width: 4rem;
-            }
-            #studioControlsContainer .disabled,
-            .SettingsButton.disabled {
-                cursor: not-allowed!important;
-            }
-            #playbackControls {
-                padding: 0 5rem 1rem;
-                border-top: 1px solid #444;
-            }
-            button.SettingsButton {
-                font: 16px monospace;
-                font-weight: bold;
-                border: none;
-                width: 100%;
-                color: inherit;
-                padding: 0.15rem;
-            }
-        </style>
-        `);
-        this.studioPanelContents.insertAdjacentHTML('afterbegin', `
-        <button type="button" id="studioDataBtn" class="SettingsButton" style="width: 40%; display: block; margin: 0 auto 0.25rem;">📁</button>
-        <div id="studioSaveLoadControls" style="width:85%; margin: auto;" hidden>
-            <div style="display: grid;grid-template-columns: 1fr 1fr 1fr; gap: 0.25rem 1rem;">
-                <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
-                <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
-                <button type="button" id="saveAnimationBtn" class="SettingsButton">Save</button>
-                <div></div>
-                <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
-                <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
-            </div>
-        </div>
-        <div id="studioHelpText"></div>
-        <div id="studioControlsContainer" hidden>
-            <div style="display: grid; grid-template-columns: 1fr 1fr;">
-                <div style="margin: 0 0.5rem 0 0.25rem">
-                    <ol id="keyframeList" class="KeyframeList"></ol>
-                    <div id="keyframeNavControls" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.25rem;">
-                        <button type="button" id="firstKeyframeBtn" class="SettingsButton">&lt;&lt;-</button>
-                        <button type="button" id="previousKeyframeBtn" class="SettingsButton">&lt;-</button>
-                        <button type="button" id="nextKeyframeBtn" class="SettingsButton">-&gt;</button>
-                        <button type="button" id="lastKeyframeBtn" class="SettingsButton">-&gt;&gt;</button>
-                    </div>
-                </div>
-                <div id="keyframeControls" hidden>
-                    <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Position</button>
-                    <div>
-                        <div class="SettingsHeader KeyframeSettingsName">Name</div>
-                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="20" autocomplete="off"/>
-                    </div>
-                    <div id="keyframeDurationContainer">
-                        <div class="SettingsHeader KeyframeSettingsName">Duration</div>
-                        <div style="display:flex; align-items:center; justify-content:space-evenly">
-                            <input id="keyframeDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
-                            <button type="button" id="matchPrevSpeedBtn" class="SettingsButton" style="width:60%">Match Prev Speed</button>
-                        </div>
-                    </div>
-                    <div id="interpolationSettings">
-                        <div class="SettingsHeader KeyframeSettingsName">Motion Interpolation</div>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr;">
-                                <div class="SettingsSubHeader KeyframeSettingsName">Type:</div>
-                                <div>
-                                    <button type="button" id="hermiteBtn" class="SettingsButton">Hermite</button>
-                                    <button type="button" id="linearBtn" class="SettingsButton">Linear</button>
-                                </div>
-                            </div>
-                        <div id="linearEaseSettingsDiv" hidden>
-                            <div class="SettingsHeader KeyframeSettingsName">Linear Easing Method</div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr;">
-                                <button type="button" id="noEaseBtn" class="SettingsButton EaseButton" data-ease-type="NoEase">No Ease</button>
-                                <button type="button" id="easeInBtn" class="SettingsButton EaseButton" data-ease-type="EaseIn">Ease In</button>
-                                <button type="button" id="easeOutBtn" class="SettingsButton EaseButton" data-ease-type="EaseOut">Ease Out</button>
-                                <button type="button" id="easeBothBtn" class="SettingsButton EaseButton" data-ease-type="EaseBoth">Ease Both</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="SettingsHeader KeyframeSettingsName">Hold Duration</div>
-                        <input id="keyframeHoldDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
-                    </div>
-                    <div style="margin: 1rem;">
-                        <button type="button" id="moveKeyframeUpBtn" style="margin-bottom:0.5rem;" class="SettingsButton">Move up</button>
-                        <button type="button" id="moveKeyframeDownBtn" class="SettingsButton">Move down</button>
-                    </div>
-                    <button type="button" id="previewKeyframeBtn" class="SettingsButton">Preview keyframe</button>
-                    <button type="button" id="stopPreviewKeyframeBtn" class="SettingsButton" hidden>Stop Preview</button>
-                </div>
-            </div>
-            <div id="playbackControls">
-                <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
-                <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
-            </div>
-        </div>`);
-        this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
-        this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
-        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter. Press Escape to cancel.';
-        this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
-        this.studioHelpText.innerText = this.studioHelpText.dataset.startPosHelpText;
-
-        this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLInputElement;
-        this.studioDataBtn.dataset.helpText = 'Save the current animation, or load a previously-saved animation.';
-
-        this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
-
-        this.newAnimationBtn = this.contents.querySelector('#newAnimationBtn') as HTMLInputElement;
-        this.newAnimationBtn.dataset.helpText = 'Clear the current keyframes and create a new animation.';
-
-        this.loadAnimationBtn = this.contents.querySelector('#loadAnimationBtn') as HTMLInputElement;
-        this.loadAnimationBtn.dataset.helpText = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
-
-        this.saveAnimationBtn = this.contents.querySelector('#saveAnimationBtn') as HTMLInputElement;
-        this.saveAnimationBtn.dataset.helpText = 'Save the current animation for this map to your browser\'s local storage.';
-
-        this.importAnimationBtn = this.contents.querySelector('#importAnimationBtn') as HTMLInputElement;
-        this.importAnimationBtn.dataset.helpText = 'Load an animation from a JSON file.';
-
-        this.exportAnimationBtn = this.contents.querySelector('#exportAnimationBtn') as HTMLInputElement;
-        this.exportAnimationBtn.dataset.helpText = 'Save the current animation as a JSON file.';
-
-        this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
-        this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
-
-        this.editKeyframePositionBtn = this.contents.querySelector('#editKeyframePositionBtn') as HTMLInputElement;
-        setElementHighlighted(this.editKeyframePositionBtn, false);
-
-        this.keyframeControls = this.contents.querySelector('#keyframeControls') as HTMLElement;
-        this.keyframeNameInput = this.contents.querySelector('#keyframeName') as HTMLInputElement;
-        this.keyframeDurationContainer = this.contents.querySelector('#keyframeDurationContainer') as HTMLElement;
-        this.keyframeDurationInput = this.contents.querySelector('#keyframeDuration') as HTMLInputElement;
-        this.matchPrevSpeedBtn = this.contents.querySelector('#matchPrevSpeedBtn') as HTMLInputElement;
-        this.matchPrevSpeedBtn.dataset.helpText = 'Attempt to auto-calculate the duration to match the previous keyframe\'s speed.';
-        this.keyframeHoldDurationInput = this.contents.querySelector('#keyframeHoldDuration') as HTMLInputElement;
-
-        this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
-
-        this.hermiteBtn = this.contents.querySelector('#hermiteBtn') as HTMLInputElement;
-        this.hermiteBtn.dataset.helpText = 'Hermite interpolation. Use for smooth motion between and through keyframes.';
-        this.linearBtn = this.contents.querySelector('#linearBtn') as HTMLInputElement;
-        this.linearBtn.dataset.helpText = 'Linear interpolation. Use if Hermite produces excessive undesired motion.';
-
-        this.linearEaseSettingsDiv = this.contents.querySelector('#linearEaseSettingsDiv') as HTMLElement;
-        this.linearEaseSettingsDiv.dataset.helpText = 'Motion easing method for linear interpolation.';
-        this.noEaseBtn = this.contents.querySelector('#noEaseBtn') as HTMLInputElement;
-        this.easeInBtn = this.contents.querySelector('#easeInBtn') as HTMLInputElement;
-        this.easeOutBtn = this.contents.querySelector('#easeOutBtn') as HTMLInputElement;
-        this.easeBothBtn = this.contents.querySelector('#easeBothBtn') as HTMLInputElement;
-
-        this.moveKeyframeUpBtn = this.contents.querySelector('#moveKeyframeUpBtn') as HTMLInputElement;
-        this.moveKeyframeDownBtn = this.contents.querySelector('#moveKeyframeDownBtn') as HTMLInputElement;
-
-        this.previewKeyframeBtn = this.contents.querySelector('#previewKeyframeBtn') as HTMLInputElement;
-        this.stopPreviewKeyframeBtn = this.contents.querySelector('#stopPreviewKeyframeBtn') as HTMLInputElement;
-
-        this.firstKeyframeBtn = this.contents.querySelector('#firstKeyframeBtn') as HTMLInputElement;
-        this.previousKeyframeBtn = this.contents.querySelector('#previousKeyframeBtn') as HTMLInputElement;
-        this.nextKeyframeBtn = this.contents.querySelector('#nextKeyframeBtn') as HTMLInputElement;
-        this.lastKeyframeBtn = this.contents.querySelector('#lastKeyframeBtn') as HTMLInputElement;
-
-        this.playbackControls = this.contents.querySelector('#playbackControls') as HTMLElement;
-
-        this.delayStartCheckbox = new Checkbox('Delay animation playback');
-        this.loopAnimationCheckbox = new Checkbox('Loop animation');
-        this.hideUiCheckbox = new Checkbox('Hide UI during playback');
-        this.delayStartCheckbox.elem.dataset.helpText = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
-        this.loopAnimationCheckbox.elem.dataset.helpText = 'Loop the animation until manually stopped.'
-        this.hideUiCheckbox.elem.dataset.helpText = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
-        this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
-        this.playbackControls.insertAdjacentElement('afterbegin', this.loopAnimationCheckbox.elem);
-        this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
-
-        this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLInputElement;
-        this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLInputElement;
-
-        this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
-
-        this.studioDataBtn.onclick = () => this.studioSaveLoadControls.toggleAttribute('hidden');
-        this.newAnimationBtn.onclick = () => this.newAnimation();
-        this.loadAnimationBtn.onclick = () => this.loadAnimation();
-        this.saveAnimationBtn.onclick = () => this.saveAnimation();
-        this.exportAnimationBtn.onclick = () => this.exportAnimation();
-        this.importAnimationBtn.onclick = () => this.importAnimation();
-
-        this.keyframeList.dataset.helpText = 'Click on a keyframe to jump to its end position.';
-        // Event fired when start position for an animation is first set.
-        this.keyframeList.addEventListener('startPositionSet', () => {
-            this.studioHelpText.dataset.default = 'Move the camera and press Enter to place keyframes.';
-            this.studioHelpText.innerText = this.studioHelpText.dataset.default;
-            this.studioControlsContainer.removeAttribute('hidden');
-            const startPositionListItem: HTMLElement = document.createElement('li');
-            startPositionListItem.innerText = 'Starting Position';
-            startPositionListItem.dataset.name = startPositionListItem.innerText;
-            startPositionListItem.onclick = (e: MouseEvent) => {
-                this.selectKeyframeListItem(e);
-                this.keyframeNameInput.setAttribute('disabled', '');
-                this.moveKeyframeDownBtn.setAttribute('hidden', '');
-                this.moveKeyframeUpBtn.setAttribute('hidden', '');
-                if (this.loopAnimationCheckbox.checked) {
-                    this.keyframeDurationContainer.removeAttribute('hidden');
-                    this.previewKeyframeBtn.removeAttribute('hidden');
-                    if (this.selectedKeyframe.interpDuration > 0) {
-                        this.interpolationSettings.removeAttribute('hidden');
-                    }
-                } else {
-                    this.keyframeDurationContainer.setAttribute('hidden', '');
-                    this.interpolationSettings.setAttribute('hidden', '');
-                    this.previewKeyframeBtn.setAttribute('hidden', '');
-                }
-            };
-            startPositionListItem.dataset.index = '0';
-            this.keyframeList.insertAdjacentElement('afterbegin', startPositionListItem);
-            startPositionListItem.click();
-            this.saveAnimation();
-        });
-
-        // Event fired whenever a new keyframe is added.
-        this.keyframeList.addEventListener('newKeyframe', e => this.handleNewKeyframeEvent(e as CustomEvent));
-
-        this.editKeyframePositionBtn.onclick = () => {
-            if (this.selectedKeyframeListItem) {
-                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                this.disableKeyframeControls();
-                this.editingKeyframePosition = true;
-                this.keyframeList.dataset.editingKeyframePosition = 'true';
-                this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
-                setElementHighlighted(this.editKeyframePositionBtn, true);
-            }
-        }
-
-        // Event fired when a keyframe's position is edited.
-        this.keyframeList.addEventListener('keyframePositionEdited', () => {
-            if (this.editingKeyframePosition) {
-                this.editingKeyframePosition = false;
-                this.resetHelpText();
-                this.enableKeyframeControls();
-                this.keyframeList.removeAttribute('data-editing-keyframe-position');
-                setElementHighlighted(this.editKeyframePositionBtn, false);
-                this.saveAnimation();
-            }
-        });
-
-        this.firstKeyframeBtn.onclick = () => this.navigateKeyframeList(-this.keyframeList.children.length);
-        this.previousKeyframeBtn.onclick = () => this.navigateKeyframeList(-1);
-        this.nextKeyframeBtn.onclick = () => this.navigateKeyframeList(1);
-        this.lastKeyframeBtn.onclick = () => this.navigateKeyframeList(this.keyframeList.children.length);
-
-        this.keyframeNameInput.onkeyup = () => {
-            if (this.selectedKeyframeListItem) {
-                this.selectedKeyframeListItem.dataset.name = this.keyframeNameInput.value;
-                this.selectedKeyframeListItem.childNodes[0].nodeValue = this.keyframeNameInput.value;
-            }
-        }
-
-        this.keyframeNameInput.onchange = () => {
-            if (this.selectedKeyframeListItem) {
-                if (!this.keyframeNameInput.value || this.keyframeNameInput.value.trim() === '') {
-                    this.keyframeNameInput.value = 'Keyframe';
-                    this.selectedKeyframeListItem.dataset.name = 'Keyframe';
-                    this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
-                }
-                this.selectedKeyframe.name = this.keyframeNameInput.value;
-                this.saveAnimation();
-            }
-        }
-
-        const MAX_KEYFRAME_DURATION = 100.0;
-        const MIN_KEYFRAME_DURATION = 0;
-        this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.';
-        this.keyframeDurationInput.onchange = () => {
-            let durationVal = parseFloat(this.keyframeDurationInput.value)
-            if (Number.isNaN(durationVal))
-                durationVal = 5;
-            else
-                clamp(durationVal, MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
-            this.selectedKeyframe.interpDuration = durationVal;
-            this.keyframeDurationInput.value = durationVal.toString();
-            if (this.interpolationSettings.hasAttribute('hidden')) {
-                if (durationVal > 0) {
-                    this.interpolationSettings.removeAttribute('hidden');
-                }
-            } else if (durationVal === 0) {
-                this.interpolationSettings.setAttribute('hidden', '');
-            }
-            this.saveAnimation();
-        }
-
-        this.matchPrevSpeedBtn.onclick = () => {
-            if (this.selectedKeyframeListItem) {
-                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                const duration = this.animationManager.getMatchedSpeedDuration(index, this.loopAnimationCheckbox.checked);
-                this.selectedKeyframe.interpDuration = duration;
-                this.keyframeDurationInput.value = duration.toString();
-            }
-        }
-
-        this.hermiteBtn.onclick = () => {
-            this.linearEaseSettingsDiv.setAttribute('hidden', '');
-            this.selectedKeyframe.usesLinearInterp = false;
-            setElementHighlighted(this.hermiteBtn, true);
-            setElementHighlighted(this.linearBtn, false);
-            this.saveAnimation();
-        }
-        this.linearBtn.onclick = () => {
-            this.linearEaseSettingsDiv.removeAttribute('hidden');
-            this.selectedKeyframe.usesLinearInterp = true;
-            setElementHighlighted(this.hermiteBtn, false);
-            setElementHighlighted(this.linearBtn, true);
-            this.saveAnimation();
-        }
-        setElementHighlighted(this.hermiteBtn, false);
-        setElementHighlighted(this.linearBtn, false);
-
-        const easeBtns: NodeList = document.querySelectorAll('#interpolationSettings .EaseButton');
-        for (let i = 0; i < easeBtns.length; i++) {
-            const btn: HTMLElement = easeBtns[i] as HTMLElement;
-            btn.onclick = () => this.setEaseType(btn);
-            setElementHighlighted(btn, false);
-        }
-
-        this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
-        this.keyframeHoldDurationInput.onchange = () => {
-            let durationVal = parseFloat(this.keyframeHoldDurationInput.value);
-            if (Number.isNaN(durationVal))
-                durationVal = 0;
-            else
-                durationVal = clamp(durationVal, MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
-            this.selectedKeyframe.holdDuration = durationVal;
-            this.keyframeHoldDurationInput.value = durationVal.toString();
-            this.saveAnimation();
-        }
-
-        this.moveKeyframeUpBtn.onclick = () => {
-            if (this.selectedKeyframeListItem) {
-                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                if (this.animationManager.moveKeyframeUp(index)) {
-                    const listItems = this.keyframeList.children;
-                    this.keyframeList.insertBefore(listItems[index], listItems[index - 1]);
-                    this.updateKeyframeIndices(index - 1);
-                    this.selectedKeyframeListItem.click();
-                    this.saveAnimation();
-                }
-            }
-        }
-
-        this.moveKeyframeDownBtn.onclick = () => {
-            if (this.selectedKeyframeListItem) {
-                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                if (this.animationManager.moveKeyframeDown(index)) {
-                    const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                    const listItems = this.keyframeList.children;
-                    this.keyframeList.insertBefore(listItems[index + 1], listItems[index]);
-                    this.updateKeyframeIndices(index);
-                    this.selectedKeyframeListItem.click();
-                    this.saveAnimation();
-                }
-            }
-        }
-
-        this.previewKeyframeBtn.dataset.helpText = 'Preview the animation between the previous keyframe and this one.'
-        this.previewKeyframeBtn.onclick = () => {
-            if (this.keyframeList.children.length > 1 && this.selectedKeyframeListItem) {
-                this.disableKeyframeControls();
-                this.playAnimationBtn.setAttribute('hidden', '');
-                this.previewKeyframeBtn.setAttribute('hidden', '');
-                this.stopPreviewKeyframeBtn.removeAttribute('hidden');
-                this.stopPreviewKeyframeBtn.removeAttribute('disabled');
-                this.stopPreviewKeyframeBtn.classList.remove('disabled');
-                this.stopAnimationBtn.removeAttribute('hidden');
-                this.stopAnimationBtn.removeAttribute('disabled');
-                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string), this.loopAnimationCheckbox.checked);
-            }
-        }
-
-        this.stopPreviewKeyframeBtn.onclick = () => {
-            this.animationManager.stopAnimation();
-        }
-
-        this.loopAnimationCheckbox.onchanged = () => {
-            if (this.selectedKeyframeListItem === this.keyframeList.children[0] && this.keyframeList.children.length > 1) {
-                if (this.loopAnimationCheckbox.checked) {
-                    this.keyframeDurationContainer.removeAttribute('hidden');
-                    if (this.selectedKeyframe.interpDuration > 0)
-                        this.interpolationSettings.removeAttribute('hidden');
-                    this.previewKeyframeBtn.removeAttribute('hidden');
-                } else {
-                    this.keyframeDurationContainer.setAttribute('hidden', '');
-                    this.interpolationSettings.setAttribute('hidden', '');
-                    this.previewKeyframeBtn.setAttribute('hidden', '');
-                }
-            }
-        }
-
-        this.playAnimationBtn.onclick = (e) => {
-            if (this.keyframeList.children.length > 1) {
-                e.stopPropagation();
-                this.disableKeyframeControls();
-                this.playAnimationBtn.setAttribute('hidden', '');
-                this.stopAnimationBtn.removeAttribute('disabled');
-                this.stopAnimationBtn.classList.remove('disabled');
-                this.stopAnimationBtn.removeAttribute('hidden');
-                if (this.hideUiCheckbox.checked) {
-                    this.ui.toggleUI(false);
-                    this.elem.style.display = 'none';
-                }
-                if (this.delayStartCheckbox.checked) {
-                    setTimeout(() => {
-                        this.animationManager.playAnimation(this.loopAnimationCheckbox.checked);
-                    }, 2000);
-                } else {
-                    this.animationManager.playAnimation(this.loopAnimationCheckbox.checked);
-                }
-            }
-        }
-
-        this.stopAnimationBtn.onclick = () => {
-            this.animationManager.stopAnimation();
-            this.playAnimationBtn.removeAttribute('hidden');
-            this.stopAnimationBtn.setAttribute('hidden', '');
-        }
-
-        this.studioControlsContainer.addEventListener('animationStopped', () => {
-            this.enableKeyframeControls();
-
-            if (this.selectedKeyframeListItem) {
-                if (this.loopAnimationCheckbox.checked || this.selectedKeyframeListItem !== this.keyframeList.children[0]) {
-                    this.keyframeDurationContainer.removeAttribute('hidden');
-                    this.previewKeyframeBtn.removeAttribute('hidden');
-                }
-            }
-
-            this.playAnimationBtn.removeAttribute('hidden');
-            this.stopPreviewKeyframeBtn.setAttribute('hidden', '');
-            this.stopAnimationBtn.setAttribute('hidden', '');
-            this.ui.toggleUI(true);
-            this.elem.style.display = '';
-        });
-
-        // Set a mouseover event for any elements in the panel with defined help text.
-        const controls: NodeList = document.querySelectorAll('#studioPanelContents *');
-        for (let i = 0; i < controls.length; i++) {
-            const control: HTMLElement = controls[i] as HTMLElement;
-            if (control.dataset.helpText) {
-                control.onfocus = () => this.displayHelpText(control);
-                control.onmouseenter = () => this.displayHelpText(control);
-                control.onmouseleave = () => this.resetHelpText();
-            }
-        }
-    }
-
-    public onSceneChange() {
-        this.newAnimation();
-        this.loadAnimation();
-        this.animationManager.enableStudioController(this.viewer);
-    }
-
-    private newAnimation(): void {
-        this.animationManager.newAnimation();
-        this.studioControlsContainer.setAttribute('hidden','');
-        this.keyframeList.innerText = '';
-        this.keyframeList.dataset.selectedIndex = '-1';
-        this.keyframeList.removeAttribute('data-editing-keyframe-position');
-        this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
-        this.resetHelpText();
-    }
-
-    private loadAnimation() {
-        const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
-        if (jsonAnim) {
-            const animation: Keyframe[] = JSON.parse(jsonAnim);
-            if (this.animationManager.isAnimation(animation)) {
-                this.newAnimation();
-                this.animationManager.loadAnimation(animation);
-            } else {
-                // Unlikely, but better not to keep garbage data saved.
-                console.error('Animation saved in localStorage is invalid and will be deleted. Existing animation JSON: ', jsonAnim);
-                window.localStorage.removeItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
-                this.errorHelpText('Saved animation invalid. See console for details.');
-            }
-        }
-    }
-
-    private saveAnimation() {
-        const jsonAnim: string = this.animationManager.serializeAnimation();
-        window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
-    }
-
-    private exportAnimation() {
-        const a = document.createElement('a');
-        const anim = new Blob([this.animationManager.serializeAnimation()], {type: 'application/json'});
-        a.href = URL.createObjectURL(anim);
-        a.download = 'studio-animation-' + GlobalSaveManager.getCurrentSceneDescId() + '.json';
-        a.click();
-    }
-
-    private importAnimation() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'application/json';
-        input.onchange = async () => {
-            if (!input.files || !input.files.item(0))
-                return;
-            try {
-                const fileContents = await this.loadFile(input.files.item(0) as File);
-                const animation = JSON.parse(fileContents);
-                if (this.animationManager.isAnimation(animation)) {
-                    this.newAnimation();
-                    this.animationManager.loadAnimation(animation);
-                } else {
-                    throw new Error('File is not a valid animation.');
-                }
-            } catch (e) {
-                console.error('Failed to load animation from JSON file.', e);
-                this.errorHelpText('Failed to load file. See console for details.');
-            }
-        }
-        input.click();
-    }
-
-    private loadFile(file: File): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                resolve(reader.result as string);
-            }
-            reader.onerror = (e) => reject(e);
-            reader.readAsText(file);
-        });
-    }
-
-    private navigateKeyframeList(amount: number): void {
-        if (this.selectedKeyframeListItem) {
-            let index = parseInt(this.selectedKeyframeListItem.dataset.index as string) + amount;
-            if (index < 0) {
-                index = 0;
-            } else if (index >= this.keyframeList.children.length) {
-                index = this.keyframeList.children.length - 1;
-            }
-            (this.keyframeList.children[index] as HTMLElement).click();
-        }
-    }
-
-    private setEaseType(btn: HTMLElement) {
-        this.selectedKeyframe.linearEaseType = btn.dataset.easeType as LinearEaseType;
-        if (this.selectedEaseBtn) {
-            setElementHighlighted(this.selectedEaseBtn, false);
-        }
-        this.selectedEaseBtn = btn;
-        setElementHighlighted(this.selectedEaseBtn, true);
-        this.saveAnimation();
-    }
-
-    private displayHelpText(elem: HTMLElement) {
-        if (!this.editingKeyframePosition && !this.persistHelpText)
-            this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
-    }
-
-    private resetHelpText() {
-        if (!this.editingKeyframePosition && !this.persistHelpText)
-            this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
-    }
-
-    private errorHelpText(e: string) {
-        this.studioHelpText.innerText = e;
-        this.studioHelpText.style.color = '#ff4141';
-        this.studioHelpText.style.fontWeight = '700';
-        this.persistHelpText = true;
-        window.setTimeout(() => {
-            this.studioHelpText.style.color = '';
-            this.studioHelpText.style.fontWeight = '';
-            this.persistHelpText = false;
-            this.resetHelpText();
-        }, 5000);
-    }
-
-    private handleNewKeyframeEvent(e: CustomEvent) {
-        const keyframeListItem: HTMLElement = document.createElement('li');
-        // The keyframe index is passed as the CustomEvent detail.
-        const keyframeIndex: number = e.detail;
-        const kf: Keyframe = this.animationManager.getKeyframeByIndex(keyframeIndex);
-        keyframeListItem.innerText = kf.name as string;
-        keyframeListItem.dataset.index = keyframeIndex.toString();
-        keyframeListItem.dataset.name = keyframeListItem.innerText;
-        keyframeListItem.onclick = (e: MouseEvent) => this.selectKeyframeListItem(e);
-        const clearButton = document.createElement('button');
-        clearButton.textContent = '🗙';
-        clearButton.type = 'button';
-        clearButton.style.color = 'white';
-        clearButton.style.position = 'absolute';
-        clearButton.style.width = '24px';
-        clearButton.style.height = '24px';
-        clearButton.style.right = '8px';
-        clearButton.style.top = '6px';
-        clearButton.style.bottom = '6px';
-        clearButton.style.lineHeight = '20px';
-        clearButton.style.cursor = 'pointer';
-        clearButton.style.backgroundColor = 'transparent';
-        clearButton.style.border = '0';
-        clearButton.style.fontSize = '16px';
-        clearButton.style.padding = '0';
-        clearButton.style.fontWeight = 'bold';
-        clearButton.onclick = e => {
-            e.stopPropagation();
-            if (this.keyframeList.hasAttribute('disabled')) {
-                return;
-            }
-
-            if (this.selectedKeyframeListItem === keyframeListItem) {
-                this.keyframeList.dataset.selectedIndex = '-1';
-                this.selectedKeyframeListItem = undefined;
-                this.keyframeControls.setAttribute('hidden', '');
-            }
-            const toRemove = parseInt(keyframeListItem.dataset.index as string);
-            keyframeListItem.remove();
-            this.updateKeyframeIndices(toRemove);
-            this.animationManager.removeKeyframe(toRemove);
-        };
-        keyframeListItem.insertAdjacentElement('beforeend', clearButton);
-
-        if (keyframeIndex === this.keyframeList.children.length) {
-            this.keyframeList.insertAdjacentElement('beforeend', keyframeListItem);
-        } else {
-            this.keyframeList.children[keyframeIndex - 1].insertAdjacentElement('afterend', keyframeListItem);
-            this.updateKeyframeIndices(keyframeIndex - 1);
-        }
-        keyframeListItem.click();
-        this.saveAnimation();
-    }
-
-    /**
-     * Called when a keyframe in the keyframe list is clicked.
-     */
-    private selectKeyframeListItem(e: MouseEvent) {
-        if (this.keyframeList.hasAttribute('disabled')) {
-            return;
-        }
-
-        const liElem = e.target as HTMLElement;
-        const index: number = parseInt(liElem.dataset.index as string);
-        this.keyframeList.dataset.selectedIndex = index.toString();
-        this.selectedKeyframe = this.animationManager.getKeyframeByIndex(index);
-        if (this.selectedKeyframeListItem) {
-            setElementHighlighted(this.selectedKeyframeListItem, false);
-        }
-        this.selectedKeyframeListItem = liElem;
-        this.keyframeNameInput.value = liElem.dataset.name as string;
-        this.keyframeDurationInput.value = this.selectedKeyframe.interpDuration.toString();
-        this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDuration.toString();
-        if (this.selectedKeyframe.usesLinearInterp) {
-            this.linearEaseSettingsDiv.removeAttribute('hidden');
-            setElementHighlighted(this.hermiteBtn, false);
-            setElementHighlighted(this.linearBtn, true);
-        } else {
-            this.linearEaseSettingsDiv.setAttribute('hidden','');
-            setElementHighlighted(this.hermiteBtn, true);
-            setElementHighlighted(this.linearBtn, false);
-        }
-        const easeType: LinearEaseType = this.selectedKeyframe.linearEaseType;
-        if (this.selectedEaseBtn) {
-            setElementHighlighted(this.selectedEaseBtn, false);
-        }
-        switch (easeType) {
-            case LinearEaseType.NoEase:
-                this.selectedEaseBtn = this.noEaseBtn;
-                break;
-            case LinearEaseType.EaseIn:
-                this.selectedEaseBtn = this.easeInBtn;
-                break;
-            case LinearEaseType.EaseOut:
-                this.selectedEaseBtn = this.easeOutBtn;
-                break;
-            case LinearEaseType.EaseBoth:
-                this.selectedEaseBtn = this.easeBothBtn;
-                break;
-        }
-        setElementHighlighted(this.selectedEaseBtn, true);
-        if (this.selectedKeyframe.interpDuration > 0) {
-            this.interpolationSettings.removeAttribute('hidden');
-        } else {
-            this.interpolationSettings.setAttribute('hidden', '');
-        }
-        this.keyframeControls.removeAttribute('hidden');
-        this.keyframeNameInput.removeAttribute('hidden');
-        this.keyframeNameInput.removeAttribute('disabled');
-        this.keyframeDurationContainer.removeAttribute('hidden');
-        this.moveKeyframeDownBtn.removeAttribute('hidden');
-        this.moveKeyframeUpBtn.removeAttribute('hidden');
-        this.previewKeyframeBtn.removeAttribute('hidden');
-        setElementHighlighted(this.selectedKeyframeListItem, true);
-    }
-
-    private disableKeyframeControls(): void {
-        this.studioControlsContainer.querySelectorAll(`#keyframeList, #keyframeList li, button, input`).forEach((e) => {
-            e.setAttribute('disabled', '');
-            e.classList.add('disabled');
-        });
-    }
-
-    private enableKeyframeControls(): void {
-        this.studioControlsContainer.querySelectorAll(`#keyframeList, #keyframeList li, button, input`).forEach((e) => {
-            e.removeAttribute('disabled');
-            e.classList.remove('disabled');
-        });
-    }
-
-    private updateKeyframeIndices(updatedPos: number) {
-        for (let i = updatedPos; i < this.keyframeList.children.length; i++) {
-            (this.keyframeList.children[i] as HTMLElement).dataset.index = i.toString();
-        }
+        window.localStorage.setItem('show-studio-side-panel', 'true');
     }
 }
 
@@ -2805,19 +2082,6 @@ me compare the two.</p>
 the source code to the site is available at <a href="https://github.com/magcius/noclip.website">GitHub</a>,
 whether you want to browse around, use it for your own purposes, or help contribute.</p>
 
-## Why does Skyward Sword have a level called Despacito? Is that its official name?
-
-<p>Nah. The internal names of a lot of the Zelda games is often just a letter-number code,
-something like 'F203_05'. Most of the maps have no real in-game name as far as I can
-tell, so I often spend a lot of time hunting down longplays on YouTube or playing the
-game myself to try and come up with a name for it. I had done this for most of
-Skyward Sword, but got a bit stumped on some of the maps, and put "Despacito" as an
-inside joke.</p>
-
-<p>If you come up with a better name for these maps, feel free to tell me, either on
-the <a href="https://discord.gg/bkJmKKv">official noclip.website Discord</a> or through
-<a href="https://twitter.com/JasperRLZ/">Twitter</a>.</p>
-
 ## Are you afraid of being taken down?
 
 <p>Less than you might think. Companies take down fan projects when they're competing
@@ -2876,6 +2140,7 @@ but I could not have done it alone. I've been assisted by so many others through
 <a href="https://github.com/vlad001">vlad001</a>,
 <a href="https://twitter.com/Jewelots_">Jewel</a>,
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
+<a href="https://github.com/naclomi/">naclomi</a>,
 along with countless others from the modding communities, game reverse
 engineering and research communities, and emulation communities.</p>
 
@@ -2895,6 +2160,11 @@ used under Creative Commons CC-BY:</p>
 <li> Overlap <span>by</span> Zach Bogart
 <li> VR <span>by</span> Fauzan Adaiima
 <li> Play Clapboard <span>by</span> Yoyon Pujiyono
+<li> Undo <span>by</span> Numero Uno
+<li> Redo <span>by</span> Numero Uno
+<li> Zoom In <span>by</span> Tanvir Islam
+<li> Zoom Out <span>by</span> Tanvir Islam
+
 </ul>
 `;
 
@@ -3059,7 +2329,7 @@ class BottomBar {
         this.elem.style.right = '32px';
         this.elem.style.display = 'grid';
         this.elem.style.gridTemplateColumns = '1fr 1fr 1fr';
-        this.elem.style.gridGap = '8px';
+        this.elem.style.gap = '8px';
         this.elem.style.transition = '.1s ease-out';
         this.elem.style.pointerEvents = 'none';
 
@@ -3080,7 +2350,7 @@ class BottomBar {
         const area = document.createElement('div');
         area.style.display = 'grid';
         area.style.gridAutoFlow = 'column';
-        area.style.gridGap = '8px';
+        area.style.gap = '8px';
         return area;
     }
 
@@ -3219,7 +2489,7 @@ class PanelButton extends SingleIconButton {
         this.syncStyle();
     }
 
-    public setArea(area: BottomBarArea): void {
+    public override setArea(area: BottomBarArea): void {
         super.setArea(area);
         setAreaAnchor(this.panel, area);
     }
@@ -3239,7 +2509,7 @@ class PanelButton extends SingleIconButton {
         this.setIsOpen(false);
     }
 
-    public syncStyle(): void {
+    public override syncStyle(): void {
         super.syncStyle();
 
         if (this.isOpen) {
@@ -3328,7 +2598,7 @@ class FullscreenButton extends SingleIconButton {
         return document.fullscreenElement === document.body;
     }
 
-    public syncStyle() {
+    public override syncStyle() {
         super.syncStyle();
         setFontelloIcon(this.icon, this.isFS() ? FontelloIcon.resize_small : FontelloIcon.resize_full);
         this.tooltipElem.textContent = this.isFS() ? 'Unfullscreen' : 'Fullscreen';
@@ -3346,7 +2616,7 @@ class PlayPauseButton extends SingleIconButton {
     public onplaypause: ((shouldBePlaying: boolean) => void) | null = null;
     public isPlaying: boolean;
 
-    public syncStyle(): void {
+    public override syncStyle(): void {
         super.syncStyle();
         setFontelloIcon(this.icon, this.isPlaying ? FontelloIcon.pause : FontelloIcon.play);
         this.tooltipElem.textContent = this.isPlaying ? 'Pause' : 'Play';
@@ -3408,6 +2678,7 @@ export class UI {
     public panels: Panel[];
     private about: About;
     private faqPanel: FAQPanel;
+    private studioSidePanel: StudioSidePanel;
     private studioPanel: StudioPanel;
     private recordingBranding = new RecordingBranding();
 
@@ -3457,7 +2728,7 @@ export class UI {
         this.panelContainer = document.createElement('div');
         this.panelContainer.style.display = 'grid';
         this.panelContainer.style.gridTemplateColumns = '1fr';
-        this.panelContainer.style.gridGap = '20px';
+        this.panelContainer.style.gap = '20px';
         this.panelToplevel.appendChild(this.panelContainer);
 
         this.toplevel.appendChild(this.panelToplevel);
@@ -3495,6 +2766,7 @@ export class UI {
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
+        this.studioSidePanel = new StudioSidePanel(this);
         this.studioPanel = new StudioPanel(this, viewer);
         this.toplevel.appendChild(this.studioPanel.elem);
 
@@ -3572,7 +2844,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null) {
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.studioSidePanel, this.about]);
         } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
@@ -3643,5 +2915,20 @@ export class UI {
 
         this.isVisible = v;
         this.syncVisibilityState();
+    }
+
+    public enableStudioMode(): void {
+        // Switch to the FPS Camera Controller (so the UI shows the correct controller highlighted).
+        this.viewerSettings.setCameraControllerIndex(0);
+        this.studioPanel.initStudio();
+        this.studioPanel.show();
+        this.viewer.setCameraController(this.studioPanel.studioCameraController);
+        this.studioModeEnabled = true;
+    }
+
+    public disableStudioMode(): void {
+        this.studioModeEnabled = false;
+        this.viewerSettings.setCameraControllerIndex(0);
+        this.studioPanel.hide();
     }
 }

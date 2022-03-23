@@ -1,0 +1,22 @@
+[package]
+name = "noclip-support"
+version = "0.0.0"
+categories = ["wasm"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = ['-Os', '--debuginfo']
+
+[profile.release]
+lto = true
+opt-level = "s"
+
+[dependencies]
+wasm-bindgen = "0.2.45"
+wee_alloc = { version = "0.4.5", optional = true }
+naga = { git = "https://github.com/gfx-rs/naga", features = ["glsl-in", "wgsl-out"] }
+web-sys = { version = "0.3.48", features = ["console"] }
+byteorder = "1.4.3"

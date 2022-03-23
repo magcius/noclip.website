@@ -11,46 +11,15 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
-import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
+import { CalcBillboardFlags, calcBillboardMatrix, computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-
-function calcBBoardMtx(dst: mat4, m: mat4): void {
-    // Modifies m in-place.
-
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx;
-    dst[4] = 0;
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = my;
-    dst[9] = 0;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = 0;
-    dst[10] = mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -61,7 +30,7 @@ export class NITRO_Program extends DeviceProgram {
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_PacketParams = 2;
+    public static ub_drawParams = 2;
 
     public static both = `
 precision mediump float;
@@ -78,16 +47,16 @@ layout(std140) uniform ub_MaterialParams {
 };
 #define u_TexCoordMode (u_Misc0.x)
 
-layout(std140) uniform ub_PacketParams {
+layout(std140) uniform ub_drawParams {
     Mat4x3 u_PosMtx[32];
 };
 
 uniform sampler2D u_Texture;
 `;
 
-    public both = NITRO_Program.both;
+    public override both = NITRO_Program.both;
 
-    public vert = `
+    public override vert = `
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
@@ -109,7 +78,7 @@ void main() {
     }
 }
 `;
-    public frag = `
+    public override frag = `
 precision mediump float;
 in vec4 v_Color;
 in vec2 v_TexCoord;
@@ -138,8 +107,8 @@ export class VertexData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, public nitroVertexData: NITRO_GX.VertexData) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.nitroVertexData.packedVertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.nitroVertexData.indexBuffer.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.nitroVertexData.packedVertexBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.nitroVertexData.indexBuffer.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4 },
@@ -149,7 +118,7 @@ export class VertexData {
             { location: NITRO_Program.a_PosMtxIdx, format: GfxFormat.F32_R, bufferIndex: 0, bufferByteOffset: 12*4 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
@@ -218,14 +187,13 @@ class MaterialData {
         if (texture !== null) {
             this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
             device.setResourceName(this.gfxTexture, texture.name);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
-            device.submitPass(hostAccessPass);
 
-            this.gfxSampler = cache.createSampler(device, {
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+            device.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
+
+            this.gfxSampler = cache.createSampler({
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -297,9 +265,9 @@ class MaterialInstance {
             cullMode: material.cullMode,
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
 
         this.createProgram();
@@ -328,7 +296,7 @@ class MaterialInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, template: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null): void {
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         template.setGfxProgram(gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 
@@ -396,8 +364,8 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
-        const d = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_drawParams, 12*32);
+        const d = template.mapUniformBufferF32(NITRO_Program.ub_drawParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
             const matrixId = this.batchData.batch.matrixTable[i];
@@ -511,7 +479,7 @@ export class BMDModelInstance {
 
         if (isBillboard) {
             // Apply billboard model if necessary.
-            calcBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         }
     }
 

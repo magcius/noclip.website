@@ -3,18 +3,19 @@ import { NameObj } from "../NameObj";
 import { SceneObjHolder, SceneObj } from "../Main";
 import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "../ActorUtil";
 import { ViewerRenderInput } from "../../viewer";
-import { vec3, vec2, vec4, mat4 } from "gl-matrix";
+import { vec3, vec2, vec4, mat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { AreaObj, AreaFormType } from "../AreaObj";
 import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo";
 import { fallback } from "../../util";
 import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../LiveActor";
 import { isFirstStep } from "../Spine";
-import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1 } from "../../MathHelpers";
+import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
-import { DepthStencilAttachment } from "../../gfx/helpers/RenderTargetHelpers";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
+import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);
@@ -23,13 +24,13 @@ function calcRotateY(x: number, y: number): number {
 export class DrawSyncManager {
     public peekZ = new PeekZManager();
 
-    public beginFrame(device: GfxDevice, depthStencilAttachment: DepthStencilAttachment): void {
-        this.peekZ.setParameters(device, depthStencilAttachment.width!, depthStencilAttachment.height!);
+    public beginFrame(device: GfxDevice): void {
+        this.peekZ.beginFrame(device);
     }
 
-    public endFrame(device: GfxDevice, depthStencilAttachment: DepthStencilAttachment): void {
-        this.peekZ.submitFrame(device, depthStencilAttachment.gfxAttachment!);
-        this.peekZ.peekData(device);
+    public endFrame(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: GfxrRenderTargetID): void {
+        this.peekZ.pushPasses(renderInstManager, builder, depthTargetID);
+        this.peekZ.peekData(renderInstManager.gfxRenderCache.device);
     }
 
     public destroy(device: GfxDevice): void {
@@ -44,13 +45,13 @@ const scratchVec3c = vec3.create();
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
 
-export function project(dst: vec4, v: vec3, viewerInput: ViewerRenderInput): void {
+function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
     vec4.set(dst, v[0], v[1], v[2], 1.0);
     vec4.transformMat4(dst, dst, viewerInput.camera.clipFromWorldMatrix);
     divideByW(dst, dst);
 }
 
-export function calcScreenPosition(dst: vec2, v: vec4, viewerInput: ViewerRenderInput): void {
+function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
     dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
     dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
 }
@@ -72,8 +73,8 @@ export class BrightObjBase {
     protected brightCenter = vec2.create();
     protected nowCenter = vec2.create();
 
-    public checkVisibilityOfSphere(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, radius: number, viewerInput: ViewerRenderInput): void {
-        getCamYdir(scratchVec3a, viewerInput.camera);
+    public checkVisibilityOfSphere(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, radius: number): void {
+        getCamYdir(scratchVec3a, sceneObjHolder.viewerInput.camera);
         vec3.sub(scratchVec3b, scratchVec3a, position);
         vec3.normalize(scratchVec3b, scratchVec3b);
 
@@ -86,9 +87,9 @@ export class BrightObjBase {
         checkArg.pointsVisibleNum = 0;
         vec2.set(checkArg.posCenterAccum, 0.0, 0.0);
 
-        project(scratchVec4, position, viewerInput);
-        calcScreenPosition(checkArg.posCenter, scratchVec4, viewerInput);
-        this.checkVisible(sceneObjHolder, checkArg, position, viewerInput);
+        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        calcScreenPosition(checkArg.posCenter, scratchVec4, sceneObjHolder.viewerInput);
+        this.checkVisible(sceneObjHolder, checkArg, position);
 
         for (let i = 0; i < 8; i++) {
             const theta = MathConstants.TAU * (i / 8);
@@ -96,7 +97,7 @@ export class BrightObjBase {
             const rad = 0.4 * radius;
             vec3.set(scratchVec3a, rad * x, rad * y, 0.0);
             transformVec3Mat4w1(scratchVec3a, scratchMatrix, scratchVec3a);
-            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a, viewerInput);
+            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a);
         }
 
         for (let i = 0; i < 8; i++) {
@@ -105,15 +106,15 @@ export class BrightObjBase {
             const rad = 0.7 * radius;
             vec3.set(scratchVec3a, rad * x, rad * y, 0.0);
             transformVec3Mat4w1(scratchVec3a, scratchMatrix, scratchVec3a);
-            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a, viewerInput);
+            this.checkVisible(sceneObjHolder, checkArg, scratchVec3a);
         }
 
         this.setResult(checkArg);
     }
 
-    private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, viewerInput: ViewerRenderInput): void {
-        project(scratchVec4, position, viewerInput);
-        calcScreenPosition(scratchVec2, scratchVec4, viewerInput);
+    private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: ReadonlyVec3): void {
+        project(scratchVec4, position, sceneObjHolder.viewerInput);
+        calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
 
         let peekZResult: PeekZResult;
         if (checkArg.pointsNum === checkArg.peekZ.length) {
@@ -124,8 +125,8 @@ export class BrightObjBase {
         }
 
         // Position is originally in screen space. Convert to NDC.
-        const x = (scratchVec2[0] / viewerInput.backbufferWidth) * 2 - 1;
-        const y = (scratchVec2[1] / viewerInput.backbufferHeight) * 2 - 1;
+        const x = (scratchVec2[0] / sceneObjHolder.viewerInput.backbufferWidth) * 2 - 1;
+        const y = (scratchVec2[1] / sceneObjHolder.viewerInput.backbufferHeight) * 2 - 1;
 
         sceneObjHolder.drawSyncManager.peekZ.newData(peekZResult, x, y);
 
@@ -137,7 +138,7 @@ export class BrightObjBase {
             // Put projected coordinate in 0-1 normalized space.
             const projectedZ = scratchVec4[2] * 0.5 + 0.5;
 
-            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.LESS);
+            const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.Less);
 
             if (visible) {
                 checkArg.pointsVisibleNum++;
@@ -185,11 +186,11 @@ export class BrightObjBase {
 class LensFlareArea extends AreaObj {
     public flags: number;
 
-    protected parseArgs(infoIter: JMapInfoIter): void {
+    protected override parseArgs(infoIter: JMapInfoIter): void {
         this.flags = fallback(getJMapInfoArg0(infoIter), -1);
     }
 
-    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    protected override postCreate(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.create(SceneObj.LensFlareDirector);
     }
 }
@@ -254,16 +255,16 @@ abstract class LensFlareModel extends LiveActor<LensFlareModelNrv> {
             this.setNerve(LensFlareModelNrv.Hide);
     }
 
-    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
         this.appearAnim(sceneObjHolder);
     }
 
-    public control(sceneObjHolder: SceneObjHolder): void {
+    public override control(sceneObjHolder: SceneObjHolder): void {
         this.controlAnim(sceneObjHolder);
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LensFlareModelNrv, deltaTimeFrames: number): void {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LensFlareModelNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LensFlareModelNrv.Show) {
@@ -320,7 +321,7 @@ class LensFlareRing extends LensFlareModel {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'LensFlare');
         this.fadeStep = 0.05;
-        vec3.set(this.scale, 0.135, 0.135, 0.135);
+        vec3SetAll(this.scale, 0.135);
     }
 
     protected appearAnim(sceneObjHolder: SceneObjHolder): void {
@@ -340,7 +341,7 @@ class LensFlareRing extends LensFlareModel {
         setBckFrameAndStop(this, this.distFromCenter * endFrameBck);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('LensFlare');
     }
 }
@@ -361,7 +362,7 @@ class LensFlareGlow extends LensFlareModel {
         setBrkFrameAndStop(this, (1.0 - this.brightness * this.fade) * endFrame);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('GlareGlow');
     }
 }
@@ -381,7 +382,7 @@ class LensFlareLine extends LensFlareModel {
         setBrkFrameAndStop(this, (1.0 - this.brightness * this.fade) * endFrame);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('GlareLine');
     }
 }
@@ -446,7 +447,7 @@ export class LensFlareDirector extends NameObj {
         return false;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         const areaFlags = this.checkArea(sceneObjHolder);
         const hasBrightObj = this.checkBrightObj(!!areaFlags);
 
@@ -488,7 +489,7 @@ export class LensFlareDirector extends NameObj {
         }
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
         LensFlareRing.requestArchives(sceneObjHolder);
         LensFlareGlow.requestArchives(sceneObjHolder);
         LensFlareLine.requestArchives(sceneObjHolder);
@@ -496,7 +497,7 @@ export class LensFlareDirector extends NameObj {
 }
 
 export function createLensFlareArea(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LensFlareArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new LensFlareArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function requestArchivesLensFlareArea(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

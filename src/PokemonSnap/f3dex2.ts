@@ -26,20 +26,22 @@ export enum RSP_Geometry {
 
 export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
     const out = RDP.translateRenderMode(renderMode);
-
-    if (geoMode & RSP_Geometry.G_CULL_BACK) {
-        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FRONT_AND_BACK;
-        } else {
-            out.cullMode = GfxCullMode.BACK;
-        }
-    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.FRONT;
-    } else {
-        out.cullMode = GfxCullMode.NONE;
-    }
+    out.cullMode = translateCullMode(geoMode);
 
     return out;
+}
+
+export function translateCullMode(geoMode: number): GfxCullMode {
+    if (geoMode & RSP_Geometry.G_CULL_BACK) {
+        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+            return GfxCullMode.FrontAndBack;
+        } else {
+            return GfxCullMode.Back;
+        }
+    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+        return GfxCullMode.Front;
+    }
+    return GfxCullMode.None;
 }
 
 export class DrawCall extends F3DEX.DrawCall {
@@ -51,11 +53,11 @@ export class DrawCall extends F3DEX.DrawCall {
 
 // same logic, just with the new type
 export class RSPOutput extends F3DEX.RSPOutput {
-    public drawCalls: DrawCall[] = [];
+    public override drawCalls: DrawCall[] = [];
 
-    public currentDrawCall = new DrawCall();
+    public override currentDrawCall = new DrawCall();
 
-    public newDrawCall(firstIndex: number): DrawCall {
+    public override newDrawCall(firstIndex: number): DrawCall {
         this.currentDrawCall = new DrawCall();
         this.currentDrawCall.firstIndex = firstIndex;
         this.drawCalls.push(this.currentDrawCall);

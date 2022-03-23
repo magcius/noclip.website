@@ -5,6 +5,7 @@ const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const webpack = require('webpack');
+const { NormalModuleReplacementPlugin } = require('webpack');
 
 module.exports = {
   entry: {
@@ -12,7 +13,7 @@ module.exports = {
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: '[name]-[contentHash].js',
+    filename: '[name]-[contenthash].js',
   },
   resolve: {
     extensions: ['.ts', '.js'],
@@ -22,14 +23,11 @@ module.exports = {
       // ts-loader defined in dev and prod separately
       {
         test: /\.(png|woff2)$/,
-        loader: 'file-loader',
-        options: {
-          name: '[name]-[sha1:hash:hex:20].[ext]',
-        },
+        type: 'asset/resource',
       },
       {
         test: /\.glsl$/,
-        loader: 'raw-loader',
+        type: 'asset/source',
       },
       {
         test: /\.d\.ts$/,
@@ -63,10 +61,17 @@ module.exports = {
       filename: 'embed.html',
       template: './src/index.html',
     }),
-    new CopyPlugin([
+    new CopyPlugin({
       // All .wasm files are currently expected to be at the root
-      {from: 'src/**/*.wasm', flatten: true},
-      'node_modules/librw/lib/librw.wasm',
-    ]),
+      patterns: [
+        { from: 'src/**/*.wasm', to: '[name].[ext]' },
+        { from: 'node_modules/librw/lib/librw.wasm', to: '[name].[ext]' },
+      ],
+    }),
+    new NormalModuleReplacementPlugin(/iconv-lite/, './dummy-iconv-lite.js'),
   ],
+  experiments: {
+    syncWebAssembly: true,
+  },
+  target: 'web',
 };

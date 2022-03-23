@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { vec3, quat, mat4, mat3 } from 'gl-matrix';
+import { vec3, quat, mat4 } from 'gl-matrix';
 import { align } from '../util';
 import * as rw from 'librw';
 import { Color, colorNewFromRGBA } from '../Color';
@@ -51,7 +51,7 @@ export function aabbClosestPoint(out: vec3, aabb: AABB, v: vec3) {
 export function computeViewSpaceDepthFromWorldSpaceAABBClosestPoint(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
     mat4.getTranslation(v, camera.worldMatrix);
     aabbClosestPoint(v, aabb, v);
-    return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
+    return computeViewSpaceDepthFromWorldSpacePoint(camera.viewMatrix, v);
 }
 
 const scratchQuat = quat.create();

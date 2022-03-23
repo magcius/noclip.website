@@ -7,15 +7,16 @@ import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { assert, hexzero } from "../util";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, psmToString, GSWrapMode } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
-import { computeModelMatrixR, setMatrixTranslation, transformVec3Mat4w1, Vec3Zero } from "../MathHelpers";
-import AnimationController from "../AnimationController";
+import { clamp, computeModelMatrixR, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
 import { getPointHermite } from "../Spline";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class FFXProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -26,16 +27,16 @@ export class FFXProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_LightDirection;
 };
 
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix;
     Mat4x2 u_TextureMatrix;
     vec4   u_Params;
@@ -47,7 +48,7 @@ varying vec4 v_Color;
 varying vec2 v_TexCoord;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec2 a_TexCoord;
@@ -149,8 +150,8 @@ export class LevelModelData {
     public inputState: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public model: BIN.LevelModel) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.model.vertexData.buffer as ArrayBuffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.model.indexData.buffer as ArrayBuffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.model.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.model.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: FFXProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGB },
@@ -160,11 +161,11 @@ export class LevelModelData {
         ];
         const VERTEX_STRIDE = 3 + 4 + 2 + 4;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: VERTEX_STRIDE * 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: VERTEX_STRIDE * 4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
@@ -183,37 +184,37 @@ function translateWrapMode(wm: GSWrapMode): GfxWrapMode {
         // region_ modes are handled by modifying the texture, so ignore them here
         case GSWrapMode.REGION_CLAMP:
         case GSWrapMode.CLAMP:
-            return GfxWrapMode.CLAMP;
+            return GfxWrapMode.Clamp;
         case GSWrapMode.REGION_REPEAT:
         case GSWrapMode.REPEAT:
-            return GfxWrapMode.REPEAT;
+            return GfxWrapMode.Repeat;
     }
 }
 
 function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     switch (cmp) {
-        case GSDepthCompareMode.NEVER: return GfxCompareMode.NEVER;
-        case GSDepthCompareMode.ALWAYS: return GfxCompareMode.ALWAYS;
+        case GSDepthCompareMode.NEVER: return GfxCompareMode.Never;
+        case GSDepthCompareMode.ALWAYS: return GfxCompareMode.Always;
         // We use a LESS-style depth buffer.
-        case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LEQUAL;
-        case GSDepthCompareMode.GREATER: return GfxCompareMode.LESS;
+        case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LessEqual;
+        case GSDepthCompareMode.GREATER: return GfxCompareMode.Less;
     }
 }
 
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
         case GSTextureFilter.NEAREST:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
         case GSTextureFilter.LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.NoMip];
         case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Nearest];
         case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Linear];
         case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest];
         case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
-            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+            return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         default: throw new Error();
     }
 }
@@ -236,30 +237,30 @@ export class DrawCallInstance {
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
             depthWrite: gsConfiguration.depthWrite,
-            cullMode: gsConfiguration.cullingEnabled ? GfxCullMode.FRONT : GfxCullMode.NONE,
+            cullMode: gsConfiguration.cullingEnabled ? GfxCullMode.Front : GfxCullMode.None,
         };
 
         if ((gsConfiguration.prim & 0x40) !== 0 && gsConfiguration.alpha_data0 !== 0) {
             if (gsConfiguration.alpha_data0 === 0x44) {
                 setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                 });
             } else if (gsConfiguration.alpha_data0 === 0x48) {
                 setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE,
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.One,
                 });
             } else {
                 throw `unknown alpha blend setting ${hexzero(gsConfiguration.alpha_data0, 2)}`;
             }
         } else { // alpha blending disabled
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.ONE,
-                blendDstFactor: GfxBlendFactor.ZERO,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
             });
         }
 
@@ -282,7 +283,7 @@ export class DrawCallInstance {
             const wrapT = translateWrapMode(gsConfiguration.clamp.wmt);
 
             this.textureMappings.push(new TextureMapping());
-            this.textureMappings[0].gfxSampler = cache.createSampler(device, {
+            this.textureMappings[0].gfxSampler = cache.createSampler({
                 minFilter, magFilter, mipFilter,
                 wrapS, wrapT,
                 minLOD: 0, maxLOD: 100,
@@ -304,7 +305,7 @@ export class DrawCallInstance {
             }
         }
 
-        this.gfxProgram = cache.createProgram(device, program);
+        this.gfxProgram = cache.createProgram(program);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4, params: vec3, textureRemaps: GfxTexture[]): void {
@@ -410,7 +411,7 @@ export function findTextureIndex(frame: number, effect: BIN.PartEffect): number 
     return key.data[1][0];
 }
 
-const enum EulerOrder{
+const enum EulerOrder {
     XYZ,
     YXZ,
     ZXY,
@@ -419,9 +420,25 @@ const enum EulerOrder{
     ZYX,
 }
 
+function computeRotationMatrix(dst: mat4, angles: vec3, order: EulerOrder): void {
+    if (order === EulerOrder.XYZ)
+        computeModelMatrixR(dst, angles[0], angles[1], angles[2]);
+    else if (order === EulerOrder.ZYX) {
+        mat4.fromXRotation(dst, angles[0]);
+        mat4.rotateY(dst, dst, angles[1]);
+        mat4.rotateZ(dst, dst, angles[2]);
+    } else {
+        console.warn('unimplemented euler order', order)
+    }
+}
+
 const scratchVec = vec3.create();
-function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEffect, eulerOrder: EulerOrder): void {
-    frame = frame % effect.length;
+export function applyEffect(dst: mat4, params: vec3, basePos: vec3, frame: number, effect: BIN.PartEffect, eulerOrder: EulerOrder, runOnce: boolean): void {
+    if (runOnce)
+        frame = clamp(frame, 0, effect.length)
+    else
+        frame = frame % effect.length;
+
     let key = effect.keyframes[0];
     for (let i = 0; i < effect.keyframes.length; i++) {
         key = effect.keyframes[i];
@@ -450,13 +467,7 @@ function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEff
         } break;
         case BIN.EffectType.ROTATION: {
             mat4.copy(scratchMatrix, dst);
-            if (eulerOrder === EulerOrder.XYZ)
-                computeModelMatrixR(dst, scratchVec[0], scratchVec[1], scratchVec[2]);
-            else if (eulerOrder === EulerOrder.ZYX) {
-                mat4.fromXRotation(dst, scratchVec[0]);
-                mat4.rotateY(dst, dst, scratchVec[1]);
-                mat4.rotateZ(dst, dst, scratchVec[2]);
-            }
+            computeRotationMatrix(dst, scratchVec, eulerOrder);
 
             dst[12] = scratchMatrix[12];
             dst[13] = scratchMatrix[13];
@@ -465,18 +476,23 @@ function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEff
         case BIN.EffectType.PARAMETER: {
             vec3.copy(params, scratchVec);
         } break;
+        case BIN.EffectType.COMBINED: {
+            computeRotationMatrix(dst, key.data[0], eulerOrder);
+            vec3.add(scratchVec, basePos, key.data[1]);
+            vec3.scale(scratchVec, scratchVec, 0.1)
+
+            setMatrixTranslation(dst, scratchVec);
+        } break;
         default: return;
     }
 }
 
-const paramScratch = vec3.create();
 // LevelPartInstance is a logical grouping of level models that move together and act on the same effect data
 export class LevelPartInstance {
     public modelMatrix = mat4.create();
     public models: LevelModelInstance[] = [];
-    private visible = true;
-    public effects: BIN.PartEffect[] = [];
-    private animationController = new AnimationController(60);
+    public effectParams = vec3.create();
+    public visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public part: BIN.LevelPart, data: LevelModelData[], textures: TextureData[]) {
         computeModelMatrixR(this.modelMatrix, part.euler[0], part.euler[1], part.euler[2]);
@@ -490,16 +506,10 @@ export class LevelPartInstance {
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureRemaps: GfxTexture[]): void {
         if (!this.visible)
             return;
-        this.animationController.setTimeFromViewerInput(viewerInput);
-
-        vec3.copy(paramScratch, Vec3Zero);
-        for (let i = 0; i < this.effects.length; i++)
-            applyEffect(this.modelMatrix, paramScratch, this.animationController.getTimeInFrames(), this.effects[i], this.part.eulerOrder);
 
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, paramScratch, textureRemaps);
+            this.models[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, this.effectParams, textureRemaps);
     }
-
 }
 
 export class TextureData {
@@ -509,12 +519,11 @@ export class TextureData {
     constructor(device: GfxDevice, public data: BIN.Texture) {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, data.width, data.height, 1));
         device.setResourceName(gfxTexture, data.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [data.pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [data.pixels]);
         this.gfxTexture = gfxTexture;
 
-        this.viewerTexture = textureToCanvas(data, data.name, data.pixels);
+        this.viewerTexture = textureToCanvas(data);
     }
 
     public destroy(device: GfxDevice): void {
@@ -522,22 +531,13 @@ export class TextureData {
     }
 }
 
-function textureToCanvas(texture: BIN.Texture, name: string, pixels: Uint8Array): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width;
-    const height = texture.height;
-    canvas.width = width;
-    canvas.height = height;
-    canvas.title = name;
+function textureToCanvas(texture: BIN.Texture): Viewer.Texture {
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
+    canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
-
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', psmToString(texture.tex0.psm));
 
-    return { name: name, surfaces, extraInfo };
+    return { name: texture.name, surfaces, extraInfo };
 }

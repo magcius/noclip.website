@@ -3,7 +3,7 @@ import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "./viewer";
 import { DataFetcher } from "./DataFetcher";
 import { DataShare } from "./DataShare";
-import { GfxRenderInstManager } from "./gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "./gfx/render/GfxRenderInstManager";
 import InputManager from "./InputManager";
 
 export interface ProgressMeter {
@@ -40,8 +40,4 @@ export interface SceneGroup {
     sceneIdMap?: Map<string, string>;
     hidden?: boolean;
     altName?: string;
-}
-
-export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
-    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
 }

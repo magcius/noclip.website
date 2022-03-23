@@ -9,7 +9,7 @@ import * as BHD from "./bhd";
 import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
@@ -18,99 +18,24 @@ import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { ParamFile, parseParamDef } from "./param";
+import { CameraController } from "../Camera";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
 }
 
-class ResourceSystem {
-    public files = new Map<string, ArrayBufferSlice>();
-
-    constructor() {
-    }
-
-    public mountCRG1(n: CRG1Arc): void {
-        const filenames = Object.keys(n.Files);
-        for (let i = 0; i < filenames.length; i++)
-            this.files.set(filenames[i], n.Files[filenames[i]]);
-    }
-
-    public mountFile(fileName: string, buffer: ArrayBufferSlice): void {
-        this.files.set(fileName, buffer);
-    }
-
-    public lookupFile(filename: string): ArrayBufferSlice | null {
-        if (this.files.has(filename))
-            return this.files.get(filename)!;
-        else
-            return null;
-    }
-}
-
-class DKSRenderer implements Viewer.SceneGfx {
-    public msbRenderers: MSBRenderer[] = [];
-    private renderTarget = new BasicRenderTarget();
-    private renderInstManager = new GfxRenderInstManager();
-    private uniformBuffer: GfxRenderDynamicUniformBuffer;
-
-    constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
-    }
-
-    public getCache(): GfxRenderCache {
-        return this.renderInstManager.gfxRenderCache;
-    }
-
-    public createPanels(): Panel[] {
-        const layerPanel = new LayerPanel(this.msbRenderers[0].flverInstances);
-        return [layerPanel];
-    }
-
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
-
-        for (let i = 0; i < this.msbRenderers.length; i++)
-            this.msbRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
-
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
-
-        this.renderInstManager.popTemplateRenderInst();
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderInstManager.drawOnPassRenderer(device, passRenderer);
-        this.renderInstManager.resetRenderInsts();
-        return passRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
-        for (let i = 0; i < this.msbRenderers.length; i++)
-            this.msbRenderers[i].destroy(device);
-        this.textureHolder.destroy(device);
-    }
-}
-
 export class ModelHolder {
     public flverData: (FLVERData | undefined)[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, flver: (FLVER.FLVER | undefined)[]) {
+    constructor(cache: GfxRenderCache, flver: (FLVER.FLVER | undefined)[]) {
         for (let i = 0; i < flver.length; i++)
             if (flver[i] !== undefined)
-                this.flverData[i] = new FLVERData(device, cache, flver[i]!);
+                this.flverData[i] = new FLVERData(cache, flver[i]!);
     }
 
     public destroy(device: GfxDevice): void {
@@ -136,16 +61,149 @@ export class MaterialDataHolder {
     }
 }
 
+class ResourceSystem {
+    public files = new Map<string, ArrayBufferSlice>();
+
+    constructor(public dataFetcher: DataFetcher) {
+    }
+
+    public mountCRG1(n: CRG1Arc): void {
+        const filenames = Object.keys(n.Files);
+        for (let i = 0; i < filenames.length; i++)
+            this.files.set(filenames[i], n.Files[filenames[i]]);
+    }
+
+    public mountFile(fileName: string, buffer: ArrayBufferSlice): void {
+        this.files.set(fileName, buffer);
+    }
+
+    public mountBND3(bnd: BND3.BND): void {
+        for (let i = 0; i < bnd.files.length; i++)
+            this.files.set(bnd.files[i].name, bnd.files[i].data);
+    }
+
+    public lookupFile(filename: string): ArrayBufferSlice | null {
+        if (this.files.has(filename))
+            return this.files.get(filename)!;
+        else
+            return null;
+    }
+}
+
+class DKSRenderer implements Viewer.SceneGfx {
+    public msbRenderers: MSBRenderer[] = [];
+    private renderHelper: GfxRenderHelper;
+
+    constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
+        this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.getCache();
+    }
+
+    public createPanels(): Panel[] {
+        const layerPanel = new LayerPanel(this.msbRenderers[0].flverInstances);
+        return [layerPanel];
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1/100);
+    }
+
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].prepareToRender(renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender();
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        viewerInput.camera.setClipPlanes(0.1);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        renderInstManager.resetRenderInsts();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy();
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].destroy(device);
+        this.textureHolder.destroy(device);
+    }
+}
+
+export class DrawParamBank {
+    public fogBank: ParamFile;
+    public lightBank: ParamFile;
+    public lightScatteringBank: ParamFile;
+    public pointLightBank: ParamFile;
+    public toneCorrectBank: ParamFile;
+    public toneMapBank: ParamFile;
+
+    constructor(resourceSystem: ResourceSystem, areaID: string, bankID: number = 0) {
+        const aid = `a${areaID.slice(1, 3)}`;
+        const paramdefbnd = BND3.parse(resourceSystem.lookupFile(`paramdef/paramdef.paramdefbnd`)!);
+        const drawparambnd = BND3.parse(resourceSystem.lookupFile(`param/DrawParam/${aid}_DrawParam.parambnd`)!);
+
+        let mid = areaID.slice(0, 3);
+        if (bankID !== 0)
+            mid += `_${bankID}`;
+
+        function createParamFile(name: string): ParamFile {
+            const paramdef = parseParamDef(assertExists(paramdefbnd.files.find((file) => file.name.endsWith(`${name}.paramdef`))).data);
+            return new ParamFile(assertExists(drawparambnd.files.find((file) => file.name.endsWith(`${mid}_${name}.param`))).data, paramdef);
+        }
+
+        this.fogBank = createParamFile(`FogBank`);
+        this.lightBank = createParamFile(`LightBank`);
+        this.lightScatteringBank = createParamFile(`LightScatteringBank`);
+        this.pointLightBank = createParamFile(`PointLightBank`);
+        this.toneCorrectBank = createParamFile(`ToneCorrectBank`);
+        this.toneMapBank = createParamFile(`ToneMapBank`);
+    }
+
+    public static fetchResources(resourceSystem: ResourceSystem, areaID: string): void {
+        const aid = `a${areaID.slice(1, 3)}`;
+        fetchLoose(resourceSystem, `paramdef/paramdef.paramdefbnd`);
+        fetchLoose(resourceSystem, `param/DrawParam/${aid}_DrawParam.parambnd`);
+    }
+}
+
 const pathBase = `dks`;
 
-async function fetchCRG1Arc(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, archiveName: string) {
-    const buffer = await dataFetcher.fetchData(`${pathBase}/${archiveName}`);
+async function fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string) {
+    const buffer = await resourceSystem.dataFetcher.fetchData(`${pathBase}/${archiveName}`);
     const crg1Arc = BYML.parse<CRG1Arc>(buffer, BYML.FileType.CRG1);
     resourceSystem.mountCRG1(crg1Arc);
 }
 
-async function fetchLoose(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, fileName: string) {
-    const buffer = await dataFetcher.fetchData(`${pathBase}/${fileName}`);
+async function fetchLoose(resourceSystem: ResourceSystem, fileName: string) {
+    const buffer = await resourceSystem.dataFetcher.fetchData(`${pathBase}/${fileName}`);
     resourceSystem.mountFile(fileName, buffer);
 }
 
@@ -180,12 +238,14 @@ class DKSSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const resourceSystem = new ResourceSystem();
+        const resourceSystem = new ResourceSystem(dataFetcher);
+
+        const areaID = this.id.slice(0, 3); // "m10"
 
         const arcName = `${this.id}_arc.crg1`;
-
-        fetchCRG1Arc(resourceSystem, dataFetcher, arcName);
-        fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`);
+        fetchCRG1Arc(resourceSystem, arcName);
+        fetchLoose(resourceSystem, `mtd/Mtd.mtdbnd`);
+        DrawParamBank.fetchResources(resourceSystem, areaID);
         await dataFetcher.waitForLoad();
 
         const textureHolder = new DDSTextureHolder();
@@ -208,17 +268,18 @@ class DKSSceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const modelHolder = new ModelHolder(device, renderer.getCache(), flver);
+        const modelHolder = new ModelHolder(renderer.getCache(), flver);
 
-        const mapKey = this.id.slice(0, 3); // "m10"
-        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);
-        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0001`);
-        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0002`);
-        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
-        this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
+        const drawParamBank = new DrawParamBank(resourceSystem, areaID);
+
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${areaID}/${areaID}_0000`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${areaID}/${areaID}_0001`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${areaID}/${areaID}_0002`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${areaID}/${areaID}_0003`);
+        this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${areaID}/${areaID}_9999`);
 
         const cache = renderer.getCache();
-        const msbRenderer = new MSBRenderer(device, cache, textureHolder, modelHolder, materialDataHolder, msb);
+        const msbRenderer = new MSBRenderer(device, cache, textureHolder, modelHolder, materialDataHolder, drawParamBank, msb);
         renderer.msbRenderers.push(msbRenderer);
         return renderer;
     }

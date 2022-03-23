@@ -1,6 +1,6 @@
 
 import { NameObj, MovementType } from "./NameObj";
-import { SceneObjHolder, SceneObj } from "./Main";
+import { SceneObjHolder, SceneObj, getObjectName } from "./Main";
 import BitMap from "../BitMap";
 import { JMapInfoIter } from "./JMapInfo";
 import { assertExists, fallback } from "../util";
@@ -249,6 +249,7 @@ class SwitchWatcher {
     public listenerAppear: SwitchEventListener | null = null;
 
     constructor(public switchCtrl: StageSwitchCtrl) {
+        assertExists(switchCtrl);
     }
 
     private checkSwitch(sceneObjHolder: SceneObjHolder, listener: SwitchEventListener, bit: number, isOn: boolean): void {
@@ -279,8 +280,8 @@ export class SwitchWatcherHolder extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.SwitchWatcherHolder, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         for (let i = 0; i < this.watchers.length; i++)
             this.watchers[i].movement(sceneObjHolder);
     }
@@ -350,8 +351,8 @@ export class SleepControllerHolder extends NameObj {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         for (let i = 0; i < this.controllers.length; i++)
             this.controllers[i].update(sceneObjHolder);
     }
@@ -397,14 +398,14 @@ export class SwitchSynchronizer extends NameObj {
     private reverse: boolean = false;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(sceneObjHolder, name);
+        super(sceneObjHolder, getObjectName(infoIter));
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.switchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
         this.reverse = true;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
         if (this.reverse) {
             if (!this.switchCtrl.isOnSwitchB(sceneObjHolder))
                 this.switchCtrl.onSwitchA(sceneObjHolder);

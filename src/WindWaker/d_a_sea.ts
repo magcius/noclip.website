@@ -2,20 +2,24 @@
 import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
+import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp, randomRange } from "../MathHelpers";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
-import { vec2, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { fopAc_ac_c, fpc__ProcessName, cPhs__Status } from "./framework";
 import { ResType } from "./d_resorce";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
+import { Plane } from '../Geometry';
+import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent';
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { dfRange, dfShow } from '../DebugFloaters';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -25,8 +29,9 @@ class daSea_WaveInfo__Param {
     public height: number;
     public km: number;
     public phase: number;
-    public thetaScaleX: number;
-    public thetaScaleZ: number;
+    public direction = vec2.create();
+    public angle: number = 0;
+
     public counterMax: number;
 
     public parse(buffer: ArrayBufferSlice): number {
@@ -34,11 +39,12 @@ class daSea_WaveInfo__Param {
         this.height = view.getFloat32(0x00);
         this.km = view.getFloat32(0x04);
         this.phase = view.getInt16(0x08);
-        this.thetaScaleX = view.getFloat32(0x0C);
-        this.thetaScaleZ = view.getFloat32(0x10);
+        this.direction[0] = view.getFloat32(0x0C);
+        this.direction[1] = view.getFloat32(0x10);
         this.counterMax = view.getUint32(0x14);
         return 0x18;
     }
+
 }
 
 class daSea_WaveInfo {
@@ -139,7 +145,7 @@ class daSea_WaterHeightInfo_Mng {
 /**
  * Get length from point {@param pos} to a box with extents {@param min},{@param max}.
  */
-function GetLenBox2D(min: vec2, max: vec2, pos: vec2): number {
+function GetLenBox2D(min: ReadonlyVec2, max: ReadonlyVec2, pos: vec2): number {
     const xP = pos[0], yP = pos[1];
     const x0 = min[0], y0 = min[1];
     const x1 = max[0], y1 = max[1];
@@ -180,7 +186,7 @@ function GetLenBox2D(min: vec2, max: vec2, pos: vec2): number {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 export class d_a_sea extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_sea;
@@ -208,7 +214,7 @@ export class d_a_sea extends fopAc_ac_c {
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.waveInfo = new daSea_WaveInfo(globals);
 
         const resCtrl = globals.resCtrl;
@@ -280,7 +286,6 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public ChkArea(globals: dGlobals, x: number, z: number): boolean {
-        // ChkAreaBeforePos
         if (!this.ChkAreaBeforePos(globals, x, z))
             return false;
 
@@ -288,8 +293,45 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public calcWave(globals: dGlobals, x: number, z: number): number {
-        // TODO(jstpierre):
-        return this.baseHeight;
+        const gridSize = 800.0;
+
+        /*
+        const drawTriangle = (a: ReadonlyVec3, b: ReadonlyVec3, c: ReadonlyVec3) => {
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, a, b);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, b, c);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, c, a);
+        };
+        */
+
+        if (this.ChkArea(globals, x, z)) {
+            const xi = ((x - this.drawMinX) / gridSize) | 0;
+            const zi = ((z - this.drawMinZ) / gridSize) | 0;
+            const x0 = this.drawMinX + xi * gridSize, x1 = x0 + gridSize;
+            const z0 = this.drawMinZ + zi * gridSize, z1 = z0 + gridSize;
+
+            const v00 = vec3.create(), v01 = vec3.create(), v10 = vec3.create(), v11 = vec3.create();
+
+            vec3.set(v00, x0, this.heightTable[(zi + 0) * 65 + xi + 0], z0);
+            vec3.set(v01, x0, this.heightTable[(zi + 1) * 65 + xi + 0], z1);
+            vec3.set(v10, x1, this.heightTable[(zi + 0) * 65 + xi + 1], z0);
+            vec3.set(v11, x1, this.heightTable[(zi + 1) * 65 + xi + 1], z1);
+
+            const p = new Plane();
+            if ((((x - v01[0]) / gridSize) + ((z - v10[2]) / gridSize)) < 1.0) {
+                p.setTri(v00, v01, v10);
+                // drawTriangle(v00, v01, v10);
+            } else {
+                p.setTri(v01, v10, v11);
+                // drawTriangle(v01, v10, v11);
+            }
+
+            const y = -(p.d + (p.n[0] * x + p.n[2] * z)) / p.n[1];
+            // const v = vec3.fromValues(x, y, z);
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, v);
+            return y;
+        } else {
+            return this.baseHeight;
+        }
     }
 
     private ClrFlat(): void {
@@ -388,7 +430,7 @@ export class d_a_sea extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         renderInstManager.setCurrentRenderInstList(globals.dlst.sea);
 
         this.ddraw.beginDraw();
@@ -523,12 +565,12 @@ export class d_a_sea extends fopAc_ac_c {
         materialParams.m_TextureMapping[2].lodBias = 1.0;
         dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -539,7 +581,7 @@ export class d_a_sea extends fopAc_ac_c {
     private fadeTable = nArray(65, () => 0);
 
     private copyPos = true;
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.copyPos)
             vec3.copy(this.playerPos, globals.playerPosition);
 
@@ -583,8 +625,8 @@ export class d_a_sea extends fopAc_ac_c {
         for (let i = 0; i < 4; i++) {
             const wavePrm = this.waveInfo.waveParam[i];
             const km = this.waveInfo.GetKm(i);
-            this.scratchThetaX[i] = wavePrm.thetaScaleX * km;
-            this.scratchThetaZ[i] = wavePrm.thetaScaleZ * km;
+            this.scratchThetaX[i] = wavePrm.direction[0] * km;
+            this.scratchThetaZ[i] = wavePrm.direction[1] * km;
             this.scratchOffsAnim[i] = MathConstants.TAU * (this.waveInfo.GetRatio(i) - 0.5);
             this.scratchHeight[i] = wavePrm.height * waveHeight;
         }
@@ -645,7 +687,7 @@ export class d_a_sea extends fopAc_ac_c {
         this.animCounter += deltaTimeInFrames;
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const device = globals.modelCache.device;
         this.ddraw.destroy(device);
     }
@@ -657,4 +699,51 @@ export function dLib_getWaterY(globals: dGlobals, pos: ReadonlyVec3, objAcch: an
 
     const waveY = globals.sea.calcWave(globals, pos[0], pos[2]);
     return waveY;
+}
+
+export class dLib_wave_c {
+    public angleX = (Math.random() * 0x10000) | 0;
+    public angleZ = (Math.random() * 0x10000) | 0;
+    public rotX = 0.0;
+    public rotZ = 0.0;
+    public animX = 0.0;
+    public animZ = 0.0;
+}
+
+function waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, deltaTimeInFrames: number | null): void {
+    if (globals.sea === null)
+        return;
+
+    const r = 300.0;
+    const y00 = globals.sea.calcWave(globals, pos[0], pos[2] - r);
+    const y01 = globals.sea.calcWave(globals, pos[0], pos[2] + r);
+    const angleX = -cM_atan2s(y01 - y00, r * 2.0);
+    const y10 = globals.sea.calcWave(globals, pos[0] - r, pos[2]);
+    const y11 = globals.sea.calcWave(globals, pos[0] + r, pos[2]);
+    const angleZ = cM_atan2s(y11 - y10, r * 2.0);
+
+    if (deltaTimeInFrames !== null) {
+        wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 10, 0x200 * deltaTimeInFrames);
+        wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 10, 0x200 * deltaTimeInFrames);
+    } else {
+        wave.angleX = angleX;
+        wave.angleZ = angleZ;
+    }
+}
+
+export function dLib_waveInit(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3): void {
+    wave.animX = cM_rndF(32768.0);
+    wave.animZ = cM_rndF(32768.0);
+    // this is possibly a noclip improvement: I can't find where the angles are initialized in the original code,
+    // but I don't believe I've ever seen a boat somersault on spawn (maybe it's just too far away to draw?)
+    waveRot(globals, wave, pos, null);
+}
+
+export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeInFrames: number): void {
+    waveRot(globals, wave, pos, deltaTimeInFrames);
+    wave.animX += 400 * deltaTimeInFrames;
+    wave.animZ += 430 * deltaTimeInFrames;
+    const swayAmountFull = 130.0 + swayAmount;
+    wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM__Short2Rad(wave.animX));
+    wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM__Short2Rad(wave.animZ));
 }

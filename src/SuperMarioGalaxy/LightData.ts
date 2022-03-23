@@ -364,7 +364,7 @@ export class LightDirector extends NameObj {
         return this.findAreaLightFromZoneAndId(sceneObjHolder, zoneLightId.zoneId, zoneLightId.lightId);
     }
 
-    public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
+    private findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
         const areaLightName = this.lightDataHolder.getAreaLightName(sceneObjHolder, zoneId, lightId);
         return assertExists(this.lightDataHolder.findAreaLight(areaLightName));
     }
@@ -398,14 +398,14 @@ export class LightAreaHolder extends AreaObjMgr<LightArea> {
         sceneObjHolder.lightDirector.lightAreaHolder = this;
     }
 
-    public initAfterPlacement(): void {
+    public override initAfterPlacement(): void {
         this.sort();
     }
 
     private sort(): void {
         // Sort by highest priority.
         this.areaObj.sort((a, b) => {
-            return b.priority - a.priority;
+            return a.priority - b.priority;
         });
     }
 
@@ -446,17 +446,17 @@ export class LightArea extends AreaObj {
         this.priority = fallback(getJMapInfoArg1(infoIter), -1);
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'LightArea';
     }
 }
 
 export function createLightCtrlCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createLightCtrlCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 
 export function initLightCtrl(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {

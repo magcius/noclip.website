@@ -12,13 +12,13 @@ import { DataFetcher } from '../DataFetcher';
 import { readUint32 } from './util';
 
 export abstract class BlockFetcher {
-    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null>;
+    public abstract fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<Model | null>;
 }
 
 export class BlockCollection {
     private tab: DataView;
     private bin: ArrayBufferSlice;
-    private blockModels: ModelInstance[] = [];
+    private blockModels: (Model | undefined)[] = [];
 
     private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelVersion: ModelVersion, private isCompressed: boolean) {
     }
@@ -29,7 +29,7 @@ export class BlockCollection {
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${tabPath}`),
-            dataFetcher.fetchData(`${pathBase}/${binPath}`),
+            dataFetcher.fetchData(`${pathBase}/${binPath}`, { allow404: true }),
         ]);
         self.tab = tab.createDataView();
         self.bin = bin;
@@ -37,12 +37,11 @@ export class BlockCollection {
         return self;
     }
 
-    public getBlockModel(num: number): ModelInstance | null {
+    public getBlockModel(num: number): Model | null {
         if (this.blockModels[num] === undefined) {
             const tabValue = readUint32(this.tab, 0, num);
-            if (!(tabValue & 0x10000000)) {
+            if (!(tabValue & 0x10000000))
                 return null;
-            }
 
             const blockOffset = tabValue & 0xffffff;
             const blockBin = this.bin.subarray(blockOffset);
@@ -51,11 +50,16 @@ export class BlockCollection {
             if (uncomp === null)
                 return null;
 
-            const model = loadModel(uncomp.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
-            this.blockModels[num] = new ModelInstance(model);
+            this.blockModels[num] = loadModel(uncomp.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
         }
 
-        return this.blockModels[num];
+        return this.blockModels[num]!;
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let model of this.blockModels)
+            if (model !== undefined)
+                model.destroy(device);
     }
 }
 
@@ -69,7 +73,7 @@ function getModFileNum(mod: number): number {
 
 export class SFABlockFetcher implements BlockFetcher {
     private trkblkTab: DataView;
-    private blockColls: BlockCollection[] = [];
+    private blockColls: (BlockCollection | undefined)[] = [];
     private texFetcher: TextureFetcher;
 
     private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
@@ -91,7 +95,7 @@ export class SFABlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null> {
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<Model | null> {
         if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
             return null;
         }
@@ -115,7 +119,13 @@ export class SFABlockFetcher implements BlockFetcher {
             this.blockColls[mod] = blockColl;
         }
 
-        return this.blockColls[mod];
+        return this.blockColls[mod]!;
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let coll of this.blockColls)
+            if (coll !== undefined)
+                coll.destroy(device);
     }
 }
 
@@ -136,9 +146,13 @@ export class SwapcircleBlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null> {
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<Model | null> {
         console.log(`fetching swapcircle block ${mod}.${sub}`);
         return this.blockColl.getBlockModel(0x21c + sub);
+    }
+
+    public destroy(device: GfxDevice) {
+        this.blockColl.destroy(device);
     }
 }
 
@@ -224,7 +238,7 @@ export class AncientBlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number): Promise<ModelInstance | null> {
+    public async fetchBlock(mod: number, sub: number): Promise<Model | null> {
         const num = ANCIENT_TRKBLK[mod] + sub;
         if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
             return null;
@@ -234,6 +248,6 @@ export class AncientBlockFetcher implements BlockFetcher {
         console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
         const blockData = this.blocksBin.slice(blockOffset).createDataView();
 
-        return new ModelInstance(loadModel(blockData, this.texFetcher, this.materialFactory, ModelVersion.AncientMap));
+        return loadModel(blockData, this.texFetcher, this.materialFactory, ModelVersion.AncientMap);
     }
 }

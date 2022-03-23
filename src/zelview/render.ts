@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -10,23 +10,18 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { F3DEX_Program } from '../BanjoKazooie/render';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
     canvas.title = texture.name;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
@@ -39,13 +34,13 @@ const enum TexCM {
 
 function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.WRAP:   return GfxWrapMode.Repeat;
+    case TexCM.MIRROR: return GfxWrapMode.Mirror;
+    case TexCM.CLAMP:  return GfxWrapMode.Clamp;
     // TODO: handle TexCM.MIRROR | TexCM.CLAMP (0x3) -- "mirror once" mode; occurs in Forest Temple
     default:
         console.warn(`Unknown TexCM ${cm}`);
-        return GfxWrapMode.CLAMP;
+        return GfxWrapMode.Clamp;
     }
 }
 
@@ -72,19 +67,17 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
 function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
     device.setResourceName(gfxTexture, texture.name);
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(gfxTexture, 0, [texture.pixels]);
     return gfxTexture;
 }
 
 function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-    return cache.createSampler(device, {
+    return cache.createSampler({
         wrapS: translateCM(texture.tile.cmS),
         wrapT: translateCM(texture.tile.cmT),
-        minFilter: GfxTexFilterMode.POINT,
-        magFilter: GfxTexFilterMode.POINT,
-        mipFilter: GfxMipFilterMode.NO_MIP,
+        minFilter: GfxTexFilterMode.Point,
+        magFilter: GfxTexFilterMode.Point,
+        mipFilter: GfxMipFilterMode.NoMip,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -102,16 +95,16 @@ export class RenderData {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
+                GfxBufferUsage.Vertex,
+                GfxBufferFrequencyHint.Dynamic
             );
         } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
@@ -120,7 +113,7 @@ export class RenderData {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -140,19 +133,6 @@ export class RenderData {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
-}
-
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x0200);
-    const cullBack = !!(m & 0x0400);
-    if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
-    else if (cullFront)
-        return GfxCullMode.FRONT;
-    else if (cullBack)
-        return GfxCullMode.BACK;
-    else
-        return GfxCullMode.NONE;
 }
 
 const viewMatrixScratch = mat4.create();
@@ -180,8 +160,8 @@ class DrawCallInstance {
             }
         }
 
-        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(true);
+        this.megaStateFlags = translateBlendMode(this.drawCall.DP_OtherModeL);
+        this.setCullModeOverride(null);
         this.createProgram();
     }
 
@@ -195,8 +175,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        // FIXME: Levels disable the SHADE flags. wtf?
-        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
+        const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
@@ -218,8 +197,9 @@ class DrawCallInstance {
         this.gfxProgram = null;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
+        if (cullMode === null)
+            cullMode = translateCullMode(this.drawCall.SP_GeometryMode);
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -261,7 +241,7 @@ class DrawCallInstance {
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
@@ -334,9 +314,9 @@ class MeshRenderer {
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+            this.drawCallInstances[i].setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -379,9 +359,9 @@ export class RootMeshRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         const geo = this.geometryData.mesh;
@@ -400,8 +380,8 @@ export class RootMeshRenderer {
         return geoNodeRenderer;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
+    public setCullModeOverride(cullMode: GfxCullMode): void {
+        this.rootNodeRenderer.setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {

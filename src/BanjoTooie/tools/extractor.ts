@@ -9,7 +9,7 @@ import { Endianness } from "../../endian";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer);
 }
 
 const pathBaseIn = `../../../data/BanjoTooie_Raw`;
@@ -37,7 +37,7 @@ function getFileBuffer(fs: FS, index: number): ArrayBufferSlice {
 
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, 2), { raw: true });
-    return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(decompressed.buffer);
 }
 
 interface CRG1File {

@@ -13,6 +13,7 @@ import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioG
 import * as Scenes_SuperMarioGalaxy2 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy2';
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes';
 import * as Scenes_Zelda_OcarinaOfTime from './zelview/scenes';
+import * as Scenes_Zelda_OcarinaOfTime_Beta from './zelview/scenes_beta';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
@@ -35,12 +36,13 @@ import * as Scenes_Elebits from './rres/Scenes_Elebits';
 import * as Scenes_KirbysReturnToDreamLand from './rres/Scenes_KirbysReturnToDreamLand';
 import * as Scenes_Klonoa from './rres/Scenes_Klonoa';
 import * as Scenes_MarioAndSonicAtThe2012OlympicGames from './rres/Scenes_MarioAndSonicAtTheOlympicGames2012';
-import * as Scenes_MarioKartWii from './rres/Scenes_MarioKartWii';
+import * as Scenes_MarioKartWii from './MarioKartWii/Scenes_MarioKartWii';
 import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
-import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
+import * as Scenes_WiiSports from './WiiSports/Scenes_WiiSports';
+import * as Scenes_WiiSportsResort from './WiiSports/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './InteractiveExamples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
@@ -58,30 +60,47 @@ import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource';
+import * as Scenes_CounterStrikeGO from './SourceEngine/Scenes_CounterStrikeGO';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
+import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
+import * as Scenes_HalfLife2LostCoast from './SourceEngine/Scenes_HalfLife2LostCoast';
+import * as Scenes_HalfLife2Ep1 from './SourceEngine/Scenes_HalfLife2Ep1';
+import * as Scenes_HalfLife2Ep2 from './SourceEngine/Scenes_HalfLife2Ep2';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
+import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
+import * as Scenes_TheStanleyParable from './SourceEngine/Scenes_TheStanleyParable';
+import * as Scenes_Infra from './SourceEngine/Scenes_Infra';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_SuperMonkeyBall2 from './SuperMonkeyBall2/scenes';
+import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
+import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
+import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes";
+import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes';
+import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
+import * as Scenes_Subnautica from './Subnautica/scenes';
+import * as Scenes_Glover from './Glover/scenes';
+import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { assertExists, assert, fallbackUndefined } from './util';
+import { assertExists, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
-import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob } from './DownloadUtils';
 import { DataShare } from './DataShare';
@@ -100,6 +119,7 @@ const sceneGroups = [
     Scenes_SuperMarioGalaxy2.sceneGroup,
     Scenes_SuperPaperMario.sceneGroup,
     Scenes_SuperSmashBrosBrawl.sceneGroup,
+    Scenes_WiiSports.sceneGroup,
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
     Scenes_LuigisMansion.sceneGroup,
@@ -108,22 +128,33 @@ const sceneGroups = [
     Scenes_MetroidPrime.sceneGroupMP2,
     Scenes_PaperMario_TheThousandYearDoor.sceneGroup,
     Scenes_Pikmin2.sceneGroup,
+    Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioSunshine.sceneGroup,
     Scenes_Zelda_TwilightPrincess.sceneGroup,
     Scenes_Zelda_TheWindWaker.sceneGroup,
     "Nintendo 3DS",
+    Scenes_LuigisMansion3D.sceneGroup,
     Scenes_Zelda_MajorasMask3D.sceneGroup,
     Scenes_Zelda_OcarinaOfTime3D.sceneGroup,
     "Nintendo DS",
     Scenes_MarioKartDS.sceneGroup,
+    Scenes_MetroidPrimeHunters.sceneGroup,
     Scenes_NewSuperMarioBrosDS.sceneGroup,
+    Scenes_PokemonPlatinum.sceneGroup,
+    Scenes_PokemonHGSS.sceneGroup,
     Scenes_SuperMario64DS.sceneGroup,
     "Nintendo 64",
     Scenes_BanjoKazooie.sceneGroup,
+    Scenes_BanjoTooie.sceneGroup,
+    Scenes_BeetleAdventureRacing.sceneGroup,
+    Scenes_DiddyKongRacing.sceneGroup,
+    Scenes_Glover.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime.sceneGroup,
     "PlayStation 2",
+    Scenes_FFX.sceneGroup,
     Scenes_GTA.sceneGroup.iii,
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
@@ -131,56 +162,52 @@ const sceneGroups = [
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     "PC",
-    Scenes_HalfLife2.sceneGroup,
-    Scenes_Portal.sceneGroup,
-    "Experimental",
-    Scenes_BanjoTooie.sceneGroup,
-    Scenes_BeetleAdventureRacing.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
+    Scenes_Fez.sceneGroup,
+    Scenes_CounterStrikeSource.sceneGroup,
+    Scenes_HalfLife2.sceneGroup,
+    Scenes_HalfLife2DM.sceneGroup,
+    Scenes_TeamFortress2.sceneGroup,
+    Scenes_Portal.sceneGroup,
+    Scenes_Portal2.sceneGroup,
+    "Experimental",
     Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
-    Scenes_Fez.sceneGroup,
-    Scenes_FFX.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
-    Scenes_LuigisMansion3D.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
-    Scenes_MetroidPrimeHunters.sceneGroup,
-    Scenes_PokemonPlatinum.sceneGroup,
-    Scenes_PokemonHGSS.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
+    Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
     Scenes_SonicColors.sceneGroup,
-    Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperMonkeyBall2.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
-    Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
-    Scenes_TeamFortress2.sceneGroup,
     Scenes_TheWitness.sceneGroup,
+    Scenes_WiiBanner.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime_Beta.sceneGroup,
+    Scenes_CounterStrikeGO.sceneGroup,
+    Scenes_HalfLife2LostCoast.sceneGroup,
+    Scenes_HalfLife2Ep1.sceneGroup,
+    Scenes_HalfLife2Ep2.sceneGroup,
+    Scenes_MarioKart8Deluxe.sceneGroup,
+    Scenes_TheStanleyParable.sceneGroup,
+    Scenes_Infra.sceneGroup,
+    Scenes_JetSetRadio.sceneGroup,
+    Scenes_Subnautica.sceneGroup,
+    Scenes_HalfLife.sceneGroup,
 ];
-
-function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-    return new Response(blob).arrayBuffer();
-}
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
 }
-
-// Ideas for option bits. Not used yet.
-const enum OptionsBitsV3 {
-    HasSceneTime       = 0b00000001,
-    ScenePaused        = 0b00000010,
-    LowCameraPrecision = 0b00000100,
-};
 
 const enum SaveStatesAction {
     Load,
@@ -216,6 +243,10 @@ class AnimationLoop implements ViewerUpdateInfo {
     };
 }
 
+function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
+    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -223,7 +254,6 @@ class Main {
     public groups: (string | SceneGroup)[];
     public ui: UI;
     public saveManager = GlobalSaveManager;
-    public paused: boolean = false;
 
     private droppedFileGroup: SceneGroup;
 
@@ -242,6 +272,8 @@ class Main {
 
     public sceneTimeScale = 1.0;
     public isEmbedMode = false;
+    private isFrameStep = false;
+    private pixelSize = 1;
 
     // Link to debugJunk so we can reference it from the DevTools.
     private debugJunk = debugJunk;
@@ -257,6 +289,11 @@ class Main {
         document.body.appendChild(this.toplevel);
 
         this.canvas = document.createElement('canvas');
+        this.canvas.style.imageRendering = 'pixelated';
+
+        this.toplevel.appendChild(this.canvas);
+        window.onresize = this._onResize.bind(this);
+        this._onResize();
 
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
@@ -285,10 +322,6 @@ class Main {
             e.preventDefault();
         };
         this.toplevel.ondrop = this._onDrop.bind(this);
-
-        this.toplevel.appendChild(this.canvas);
-        window.onresize = this._onResize.bind(this);
-        this._onResize();
 
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
@@ -393,10 +426,15 @@ class Main {
                 }
             }
         }
+
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
             this.ui.togglePlayPause();
+        if (inputManager.isKeyDown('Comma')) {
+            this.ui.togglePlayPause(false);
+            this.isFrameStep = true;
+        }
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -422,10 +460,6 @@ class Main {
         }
     }
 
-    public setPaused(v: boolean): void {
-        this.paused = v;
-    }
-
     private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
         this.checkKeyShortcuts();
 
@@ -434,8 +468,17 @@ class Main {
         // Needs to be called before this.viewer.update()
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
-        this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
+        let sceneTimeScale = this.sceneTimeScale;
+        if (!this.ui.isPlaying) {
+            if (this.isFrameStep) {
+                sceneTimeScale /= 4.0;
+                this.isFrameStep = false;
+            } else {
+                sceneTimeScale = 0.0;
+            }
+        }
 
+        this.viewer.sceneTimeScale = sceneTimeScale;
         this.viewer.update(updateInfo);
 
         if (shouldTakeScreenshot)
@@ -470,7 +513,7 @@ class Main {
     }
 
     private _onResize() {
-        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
+        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio / this.pixelSize);
     }
 
     private _saveStateTmp = new Uint8Array(512);
@@ -479,7 +522,7 @@ class Main {
     private _getSceneSaveState() {
         let byteOffs = 0;
 
-        const optionsBits: OptionsBitsV3 = 0;
+        const optionsBits = 0;
         this._saveStateView.setUint8(byteOffs, optionsBits);
         byteOffs++;
 
@@ -487,7 +530,7 @@ class Main {
 
         // TODO(jstpierre): Pass DataView into serializeSaveState
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, byteOffs);
+            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs);
 
         const s = btoa(this._saveStateTmp, byteOffs);
         return `ShareData=${s}`;
@@ -501,7 +544,7 @@ class Main {
         byteOffs += 0x04;
         byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
+            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -513,13 +556,13 @@ class Main {
         const byteLength = atob(this._saveStateTmp, 0, state);
 
         let byteOffs = 0;
-        const optionsBits: OptionsBitsV3 = this._saveStateView.getUint8(byteOffs + 0x00);
+        const optionsBits = this._saveStateView.getUint8(byteOffs + 0x00);
         assert(optionsBits === 0);
         byteOffs++;
 
         byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
+            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer as ArrayBuffer, byteOffs, byteLength);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -644,9 +687,6 @@ class Main {
         // Force time to play when loading a map.
         this.ui.togglePlayPause(true);
 
-        const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
-        this.viewer.inputManager.isInteractive = isInteractive;
-
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
         this._saveStateAndUpdateURL();
@@ -662,8 +702,12 @@ class Main {
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
             const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
 
-            if (!didLoadCameraState)
-                mat4.identity(camera.worldMatrix);
+            if (!didLoadCameraState) {
+                if (scene.getDefaultWorldMatrix !== undefined)
+                    scene.getDefaultWorldMatrix(camera.worldMatrix);
+                else
+                    mat4.identity(camera.worldMatrix);
+            }
 
             mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
@@ -727,6 +771,7 @@ class Main {
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
         const inputManager = this.viewer.inputManager;
+        inputManager.reset();
         const context: SceneContext = {
             device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
         };
@@ -763,13 +808,6 @@ class Main {
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
 
         const sceneDescId = this._getCurrentSceneDescId()!;
-
-        if (typeof gtag !== 'undefined') {
-            gtag("event", "loadScene", {
-                'event_category': "Scenes",
-                'event_label': sceneDescId,
-            });
-        }
 
         Sentry.addBreadcrumb({
             category: 'loadScene',
@@ -821,16 +859,13 @@ class Main {
 
     // Hooks for people who want to mess with stuff.
     public getStandardClearColor(): Color {
-        return standardFullClearRenderPassDescriptor.colorClearColor;
+        return standardFullClearRenderPassDescriptor.colorClearColor as Color;
     }
 
     public get scene() {
         return this.viewer.scene;
     }
 }
-
-// Google Analytics
-declare var gtag: (command: string, eventName: string, eventParameters: { [key: string]: string }) => void;
 
 // Declare a "main" object for easy access.
 declare global {

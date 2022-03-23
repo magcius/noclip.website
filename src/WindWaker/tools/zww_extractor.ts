@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as BYML from "../../byml";
-import * as Yaz0 from './Yaz0_NoWASM';
+import * as Yaz0 from '../../Common/Compression/Yaz0';
 import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync } from "fs";
 import { assertExists, hexzero, assert, readString } from "../../util";
 import { Endianness } from "../../endian";
@@ -10,7 +10,7 @@ import { Endianness } from "../../endian";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+    return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
 function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: number): ArrayBufferSlice {
@@ -18,7 +18,7 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     const b = Buffer.alloc(byteLength);
     readSync(fd, b, 0, byteLength, byteOffset);
     closeSync(fd);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+    return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
 const pathBaseIn  = `../../../data/zww_raw`;
@@ -172,7 +172,7 @@ class REL {
 
         let buffer = fetchDataSync(relFilename);
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
-            buffer = Yaz0.decompress(buffer);
+            buffer = Yaz0.decompressSW(buffer);
 
         this.buffer = buffer;
 

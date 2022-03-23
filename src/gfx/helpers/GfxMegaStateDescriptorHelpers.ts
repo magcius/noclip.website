@@ -1,9 +1,7 @@
 
-import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxColorWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform";
-import { colorNewCopy, TransparentBlack } from "../../Color";
+import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxChannelWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers";
-import { fallbackUndefined } from "../../util";
-import { gfxColorCopy } from "../platform/GfxPlatformUtil";
+import { fallbackUndefined, gfxColorCopy, gfxColorNewCopy } from "../platform/GfxPlatformUtil";
 
 function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
     dst.blendDstFactor = src.blendDstFactor;
@@ -16,13 +14,13 @@ function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttach
         dst = {
             rgbBlendState: {} as GfxChannelBlendState,
             alphaBlendState: {} as GfxChannelBlendState,
-            colorWriteMask: 0,
+            channelWriteMask: 0,
         };
     }
 
     copyChannelBlendState(dst.rgbBlendState, src.rgbBlendState);
     copyChannelBlendState(dst.alphaBlendState, src.alphaBlendState);
-    dst.colorWriteMask = src.colorWriteMask;
+    dst.channelWriteMask = src.channelWriteMask;
     return dst;
 }
 
@@ -57,7 +55,7 @@ export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescript
     // Copy fields that need copying.
     dst.attachmentsState = [];
     copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
-    dst.blendConstant = colorNewCopy(dst.blendConstant);
+    dst.blendConstant = gfxColorNewCopy(dst.blendConstant);
     return dst;
 }
 
@@ -69,15 +67,15 @@ export function makeMegaState(other: Partial<GfxMegaStateDescriptor> | null = nu
 }
 
 export interface AttachmentStateSimple {
-    colorWriteMask: GfxColorWriteMask;
+    channelWriteMask: GfxChannelWriteMask;
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
 }
 
 export function copyAttachmentStateFromSimple(dst: GfxAttachmentState, src: Partial<AttachmentStateSimple>): void {
-    if (src.colorWriteMask !== undefined)
-        dst.colorWriteMask = src.colorWriteMask;
+    if (src.channelWriteMask !== undefined)
+        dst.channelWriteMask = src.channelWriteMask;
 
     if (src.blendMode !== undefined) {
         dst.rgbBlendState.blendMode = src.blendMode;
@@ -106,27 +104,27 @@ export function setAttachmentStateSimple(dst: Partial<GfxMegaStateDescriptor>, s
 }
 
 const defaultBlendState: GfxChannelBlendState = {
-    blendMode: GfxBlendMode.ADD,
-    blendSrcFactor: GfxBlendFactor.ONE,
-    blendDstFactor: GfxBlendFactor.ZERO,
+    blendMode: GfxBlendMode.Add,
+    blendSrcFactor: GfxBlendFactor.One,
+    blendDstFactor: GfxBlendFactor.Zero,
 };
 
 export const defaultMegaState: GfxMegaStateDescriptor = {
     attachmentsState: [{
-        colorWriteMask: GfxColorWriteMask.COLOR,
+        channelWriteMask: GfxChannelWriteMask.RGB,
         rgbBlendState: defaultBlendState,
         alphaBlendState: defaultBlendState,
     }],
 
-    blendConstant: colorNewCopy(TransparentBlack),
+    blendConstant: { r: 0, g: 0, b: 0, a: 0 },
     depthWrite: true,
-    depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
-    stencilCompare: GfxCompareMode.NEVER,
+    depthCompare: reverseDepthForCompareMode(GfxCompareMode.LessEqual),
+    stencilCompare: GfxCompareMode.Always,
     stencilWrite: false,
-    stencilPassOp: GfxStencilOp.KEEP,
-    cullMode: GfxCullMode.NONE,
+    stencilPassOp: GfxStencilOp.Keep,
+    cullMode: GfxCullMode.None,
     frontFace: GfxFrontFaceMode.CCW,
     polygonOffset: false,
 };
 
-export const fullscreenMegaState = makeMegaState({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false }, defaultMegaState);
+export const fullscreenMegaState = makeMegaState({ depthCompare: GfxCompareMode.Always, depthWrite: false }, defaultMegaState);

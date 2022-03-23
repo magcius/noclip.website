@@ -49,16 +49,13 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     mat4.identity(dst);
 
-    const sinP = 0.5 * sinR - 0.5;
-    const cosP = -0.5 * cosR;
-
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS *  sinR;
-    dst[12] = scaleS * (cosP - sinP - translationS);
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * (cosP + sinP + translationT) + 1.0;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -267,9 +264,10 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const width = view.getUint16(0x1C);
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
-    const mipCount = view.getUint32(0x24);
-    const minLOD = view.getFloat32(0x28) * 1/8;
-    const maxLOD = view.getFloat32(0x2C) * 1/8;
+    const mipCountRaw = view.getUint32(0x24);
+    const minLOD = view.getFloat32(0x28);
+    const maxLOD = view.getFloat32(0x2C);
+    const mipCount = Math.ceil(Math.min(mipCountRaw, maxLOD + 1));
 
     const data = buffer.subarray(dataOffs);
 
@@ -290,7 +288,7 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
 
     const index = view.getUint32(0x08);
     const numStages = view.getUint8(0x0C);
-    assert(numStages === numStagesCheck);
+    // assert(numStages === numStagesCheck);
 
     const dlOffs = 0x20;
     displayListRegistersRun(r, buffer.subarray(dlOffs, 480));
@@ -532,11 +530,18 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const texSrts: MDL0_TexSrtEntry[] = [];
     for (let i = 0; i < 8; i++) {
         // SRT
-        const scaleS = view.getFloat32(texSrtTableIdx + 0x00);
-        const scaleT = view.getFloat32(texSrtTableIdx + 0x04);
-        const rotation = view.getFloat32(texSrtTableIdx + 0x08);
-        const translationS = view.getFloat32(texSrtTableIdx + 0x0C);
-        const translationT = view.getFloat32(texSrtTableIdx + 0x10);
+        const enum Flags {
+            SCALE_ONE  = 0x02,
+            ROT_ZERO   = 0x04,
+            TRANS_ZERO = 0x08,
+        }
+        const srtFlag: Flags = (srtFlags >>> i * 4) & 0x0F;
+
+        const scaleS = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x00);
+        const scaleT = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x04);
+        const rotation = (srtFlag & Flags.ROT_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x08);
+        const translationS = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x0C);
+        const translationT = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x10);
 
         const refCamera = view.getInt8(texMtxTableIdx + 0x00);
         const refLight = view.getInt8(texMtxTableIdx + 0x01);
@@ -881,6 +886,8 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const billboardMode: BillboardMode = view.getUint32(0x18);
     const billboardRefNodeId = view.getUint32(0x1C);
 
+    const modelMatrix = mat4.create();
+
     const scaleX = view.getFloat32(0x20);
     const scaleY = view.getFloat32(0x24);
     const scaleZ = view.getFloat32(0x28);
@@ -891,7 +898,6 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
 
-    const modelMatrix = mat4.create();
     computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     // TODO(jstpierre): NW4R doesn't appear to use this anymore?
@@ -1890,17 +1896,10 @@ function parsePAT0(buffer: ArrayBufferSlice): PAT0 {
 }
 
 function findFrameData<T extends { frame: number }>(frames: T[], frame: number): T {
-    if (frames.length === 1)
-        return frames[0];
-
-    // Find the left-hand frame.
-    let idx0 = frames.length;
-    while (idx0-- > 0) {
-        if (frame >= frames[idx0].frame)
-            break;
-    }
-
-    return frames[idx0];
+    for (let i = 0; i < frames.length; i++)
+        if (frame < frames[i].frame)
+            return frames[i];
+    return frames[frames.length - 1];
 }
 
 export class PAT0TexAnimator {
@@ -2848,21 +2847,11 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'bres');
-
-    let littleEndian: boolean;
-    switch (view.getUint16(0x04, false)) {
-    case 0xFEFF:
-        littleEndian = false;
-        break;
-    case 0xFFFE:
-        littleEndian = true;
-        break;
-    default:
-        throw new Error("Invalid BOM");
-    }
-
+    const littleEndianMarker = view.getUint16(0x04);
+    assert(littleEndianMarker === 0xFEFF || littleEndianMarker === 0xFFFE);
+    const littleEndian = (littleEndianMarker === 0xFFFE);
     assert(!littleEndian);
-
+    const fileVersion = view.getUint16(0x06);
     const fileLength = view.getUint32(0x08);
     const rootSectionOffs = view.getUint16(0x0C);
     const numSections = view.getUint16(0x0E);

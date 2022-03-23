@@ -4,15 +4,15 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
-import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { Camera, computeViewMatrix, CameraController } from "../Camera";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 
 class Command_Material {
     public materialHelper: GXMaterialHelperGfx;
@@ -36,7 +36,7 @@ class Command_Material {
 
 const bboxScratch = new AABB();
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class Command_Batch {
     private shapeHelper: GXShapeHelperGfx;
 
@@ -62,8 +62,8 @@ class Command_Batch {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialCommand.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
-        this.materialCommand.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        this.computeModelView(drawParams.u_PosMtx[0], viewerInput.camera);
+        this.materialCommand.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -145,9 +145,9 @@ class Command_Bin {
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
-                minFilter: GfxTexFilterMode.BILINEAR,
-                magFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Bilinear,
+                magFilter: GfxTexFilterMode.Bilinear,
+                mipFilter: GfxMipFilterMode.NoMip,
                 minLOD: 0,
                 maxLOD: 100,
             });
@@ -185,7 +185,7 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
         return [layers];
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -194,10 +194,10 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
             this.binCommands[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         for (let i = 0; i < this.binCommands.length; i++)
             this.binCommands[i].destroy(device);

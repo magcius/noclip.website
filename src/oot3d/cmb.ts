@@ -3,7 +3,7 @@ import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture';
-import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxColorWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
+import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
@@ -233,13 +233,13 @@ export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: 
 function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
     switch (cullModeFlags) {
     case 0x00:
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     case 0x01:
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     case 0x02:
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     case 0x03:
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
     default:
         throw "whoops";
     }
@@ -260,13 +260,21 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const textureCombinerSettingsTableOffs = offs + (materialCount * materialDataSize);
 
     for (let i = 0; i < materialCount; i++) {
+        const isFragmentLightingEnabled = !!view.getUint8(offs + 0x00);
+        const isVertexLightingEnabled = !!view.getUint8(offs + 0x01);
+        const isHemisphereLightingEnabled = !!view.getUint8(offs + 0x02);
+        const isHemisphereOcclusionEnabled = !!view.getUint8(offs + 0x03);
+
         const cullModeFlags = view.getUint8(offs + 0x04);
         assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);
         const cullMode = translateCullModeFlags(cullModeFlags);
 
         const isPolygonOffsetEnabled = view.getUint8(offs + 0x05);
         const polygonOffsetUnit = view.getInt8(offs + 0x07);
-        const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0x10000 : 0;
+        const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0xFFFE : 0;
+
+        const textureBindingTableCount = view.getUint32(offs + 0x08);
+        const textureCoordinatorTableCount = view.getUint32(offs + 0x0C);
 
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
@@ -293,10 +301,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const textureCoordinators: TextureCoordinator[] = [];
         for (let j = 0; j < 3; j++) {
             // TODO(jstpierre): Unsure about how these are packed...
-            const matrixMode = view.getUint8(coordinatorsOffs + 0x00);
+            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x00);
             const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
             const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
-            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x03);
+            const matrixMode = view.getUint8(coordinatorsOffs + 0x03);
             const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
             const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
             const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
@@ -308,7 +316,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             coordinatorsOffs += 0x18;
         }
 
-        const unkColor0 = view.getUint32(offs + 0xB0, true);
+        const emissionColor = colorNewFromRGBA8(view.getUint32(offs + 0xA0, false));
+        const ambientColor = colorNewFromRGBA8(view.getUint32(offs + 0xA4, false));
+        const diffuseColor = colorNewFromRGBA8(view.getUint32(offs + 0xA8, false));
+        const specularColor0 = colorNewFromRGBA8(view.getUint32(offs + 0xAC, false));
+        const specularColor1 = colorNewFromRGBA8(view.getUint32(offs + 0xB0, false));
 
         const constantColors: Color[] = [];
         constantColors[0] = colorNewFromRGBA8(view.getUint32(offs + 0xB4, false));
@@ -325,6 +337,16 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const bumpTextureIndex = view.getUint16(offs + 0xDC, true);
         const bumpMode = view.getUint16(offs + 0xDE, true);
+        const isBumpRenormalize = !!view.getUint32(offs + 0xE0, true);
+
+        const layerConfig = view.getUint32(offs + 0xE4, true);
+        const fresnelSelector = view.getUint16(offs + 0xE8, true);
+        const isClampHighlight = !!view.getUint8(offs + 0xEA);
+        const isDistribution0Enabled = !!view.getUint8(offs + 0xEB);
+        const isDistribution1Enabled = !!view.getUint8(offs + 0xEC);
+        const isGeometricFactor0Enabled = !!view.getUint8(offs + 0xED);
+        const isGeometricFactor1Enabled = !!view.getUint8(offs + 0xEE);
+        const isReflectionEnabled = !!view.getUint8(offs + 0xEF);
 
         // Fragment lighting table.
         const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
@@ -397,30 +419,31 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const alphaTestEnabled = !!view.getUint8(offs + 0x130);
         const alphaTestReference = (view.getUint8(offs + 0x131) / 0xFF);
-        const alphaTestFunction: GfxCompareMode = alphaTestEnabled ? view.getUint16(offs + 0x132, true) : GfxCompareMode.ALWAYS;
+        const alphaTestFunction: GfxCompareMode = alphaTestEnabled ? view.getUint16(offs + 0x132, true) : GfxCompareMode.Always;
 
         const depthTestEnabled = !!view.getUint8(offs + 0x134);
         const depthWriteEnabled = !!view.getUint8(offs + 0x135);
-        const depthTestFunction: GfxCompareMode = depthTestEnabled ? view.getUint16(offs + 0x136, true) : GfxCompareMode.ALWAYS;
+        const depthTestFunction: GfxCompareMode = depthTestEnabled ? view.getUint16(offs + 0x136, true) : GfxCompareMode.Always;
 
-        const blendEnabled = !!view.getUint8(offs + 0x138);
+        const blendMode = view.getUint8(offs + 0x138);
+        const blendEnabled = blendMode !== 0;
 
         // Making a guess that this is LogicOpEnabled / LogicOp.
         assert(view.getUint8(offs + 0x139) == 0);
         assert(view.getUint16(offs + 0x13A, true) == 0);
 
-        const blendSrcFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13C, true) : GfxBlendFactor.ONE;
-        const blendDstFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13E, true) : GfxBlendFactor.ZERO;
-        const blendFunctionRGB: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x140, true) : GfxBlendMode.ADD;
+        const blendSrcFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13C, true) : GfxBlendFactor.One;
+        const blendDstFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13E, true) : GfxBlendFactor.Zero;
+        const blendFunctionRGB: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x140, true) : GfxBlendMode.Add;
         const rgbBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionRGB,
             blendDstFactor: blendDstFactorRGB,
             blendSrcFactor: blendSrcFactorRGB,
         };
         // TODO(jstpierre): What is at 0x142? Logic op?
-        const blendSrcFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x144, true) : GfxBlendFactor.ONE;
-        const blendDstFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x146, true) : GfxBlendFactor.ZERO;
-        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.ADD;
+        const blendSrcFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x144, true) : GfxBlendFactor.One;
+        const blendDstFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x146, true) : GfxBlendFactor.Zero;
+        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.Add;
         const alphaBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionAlpha,
             blendDstFactor: blendDstFactorAlpha,
@@ -436,7 +459,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const renderFlags = makeMegaState({
             attachmentsState: [
                 {
-                    colorWriteMask: GfxColorWriteMask.ALL,
+                    channelWriteMask: GfxChannelWriteMask.AllChannels,
                     rgbBlendState,
                     alphaBlendState,
                 },
@@ -453,8 +476,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         offs += 0x15C;
 
-        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion) {
+            // Stencil.
             offs += 0x10;
+        }
     }
 }
 
@@ -581,6 +606,8 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     assert(readString(buffer, 0x00, 0x04) === 'mshs');
     const count = view.getUint32(0x08, true);
+    const opaqueMeshCount = view.getUint16(0x0C, true);
+    const idCount = view.getUint16(0x0E, true);
     let idx = 0x10;
     for (let i = 0; i < count; i++) {
         const mesh = new Mesh();
@@ -704,10 +731,26 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     assert(readString(buffer, 0x00, 0x04) === 'sepd');
     const count = view.getUint16(0x08, true);
+    const flags = view.getUint16(0x0A, true);
 
     const sepd = new Sepd();
 
-    // Probably OBB / position offset before the sepd arrays?
+    const centerX = view.getFloat32(0x0C, true);
+    const centerY = view.getFloat32(0x10, true);
+    const centerZ = view.getFloat32(0x14, true);
+    const offsX = view.getFloat32(0x18, true);
+    const offsY = view.getFloat32(0x1C, true);
+    const offsZ = view.getFloat32(0x20, true);
+
+    if (cmb.version === Version.LuigisMansion) {
+        const minX = view.getFloat32(0x24, true);
+        const minY = view.getFloat32(0x28, true);
+        const minZ = view.getFloat32(0x2C, true);
+        const maxX = view.getFloat32(0x30, true);
+        const maxY = view.getFloat32(0x34, true);
+        const maxZ = view.getFloat32(0x38, true);
+    }
+
     let sepdArrIdx = cmb.version === Version.LuigisMansion ? 0x3C : 0x24;
 
     function readVertexAttrib(): SepdVertexAttrib {

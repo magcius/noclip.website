@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 import * as Tex from './tex';
 import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
@@ -21,6 +21,9 @@ import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorH
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
 import { translateCM } from '../Common/N64/RDP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -31,10 +34,10 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = program_glsl;
-    public both = PaperMario64Program.program;
+    public override both = PaperMario64Program.program;
 }
 
-function makeVertexBufferData(v: Vertex[]): ArrayBuffer {
+function makeVertexBufferData(v: Vertex[]): ArrayBufferLike {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
@@ -62,10 +65,10 @@ export class N64Data {
 
     constructor(device: GfxDevice, public rspOutput: RSPOutput) {
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBufferData);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexBufferData);
         assert(this.rspOutput.vertices.length <= 0xFFFF);
         const indexBufferData = new Uint16Array(this.rspOutput.indices);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: PaperMario64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, },
@@ -73,7 +76,7 @@ export class N64Data {
             { location: PaperMario64Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -99,15 +102,9 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
     const surfaces: HTMLCanvasElement[] = [];
 
     for (let i = 0; i < texture.levels.length; i++) {
-        const canvas = document.createElement("canvas");
-        canvas.width = texture.width >>> i;
-        canvas.height = texture.height >>> i;
-
-        const ctx = canvas.getContext("2d")!;
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-        imgData.data.set(texture.levels[i]);
-        ctx.putImageData(imgData, 0, 0);
-
+        const width = texture.width >>> i;
+        const height = texture.height >>> i;
+        const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.levels[i]), width, height);
         surfaces.push(canvas);
     }
 
@@ -126,9 +123,8 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     public loadTexture(device: GfxDevice, texture: Tex.Image): LoadedTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, texture.levels);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, texture.levels);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
@@ -138,7 +134,7 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -146,7 +142,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -159,7 +155,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -173,13 +169,13 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.FrontAndBack;
     else if (cullFront)
-        return GfxCullMode.FRONT;
+        return GfxCullMode.Front;
     else if (cullBack)
-        return GfxCullMode.BACK;
+        return GfxCullMode.Back;
     else
-        return GfxCullMode.NONE;
+        return GfxCullMode.None;
 }
 
 const backgroundBillboardBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
@@ -189,8 +185,8 @@ export class BackgroundBillboardRenderer {
     private gfxProgram: GfxProgram;
     private textureMappings = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, public textureHolder: PaperMario64TextureHolder, public textureName: string) {
-        this.gfxProgram = device.createProgram(this.program);
+    constructor(cache: GfxRenderCache, public textureHolder: PaperMario64TextureHolder, public textureName: string) {
+        this.gfxProgram = cache.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
@@ -221,7 +217,6 @@ export class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -284,9 +279,9 @@ class ModelTreeLeafInstance {
                 depthWrite: false,
             };
             setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
         }
 
@@ -301,9 +296,9 @@ class ModelTreeLeafInstance {
                 this.gfxSampler[i] = device.createSampler({
                     wrapS: translateCM(image.cms),
                     wrapT: translateCM(image.cmt),
-                    minFilter: GfxTexFilterMode.POINT,
-                    magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.LINEAR,
+                    minFilter: GfxTexFilterMode.Point,
+                    magFilter: GfxTexFilterMode.Point,
+                    mipFilter: GfxMipFilterMode.Linear,
                     minLOD: 0, maxLOD: 100,
                 });
 
@@ -373,12 +368,12 @@ class ModelTreeLeafInstance {
         let depth = -1;
         bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
         if (viewerInput.camera.frustum.contains(bboxScratch))
-            depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch));
+            depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch));
         else
             return;
 
         if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.gfxProgram);

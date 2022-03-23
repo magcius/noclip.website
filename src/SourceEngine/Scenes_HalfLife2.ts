@@ -1,7 +1,7 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 class HalfLife2SceneDesc implements SceneDesc {
@@ -11,12 +11,15 @@ class HalfLife2SceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext) {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
-            await filesystem.createVPKMount(`${pathBase}/hl2_textures`);
-            await filesystem.createVPKMount(`${pathBase}/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase}/hl2_textures`),
+                filesystem.createVPKMount(`${pathBase}/hl2_misc`),
+            ]);
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`);
     }
 }
 

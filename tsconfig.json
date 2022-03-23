@@ -5,22 +5,27 @@
         "downlevelIteration": true,
         "esModuleInterop": true,
         "experimentalDecorators": true,
+        "noImplicitAny": true,
+        "noImplicitOverride": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,
-        "noImplicitAny": true,
+        "strictBindCallApply": true,
         "strictFunctionTypes": true,
         "strictNullChecks": true,
+        "useUnknownInCatchVariables": true,
         "resolveJsonModule": true,
         "lib": [
             "es2015",
             "es2015.promise",
             "es2016.array.include",
-            "ESNext.BigInt",
+            "es2017.sharedmemory",
+            "es2019.array",
+            "esnext.BigInt",
             "dom"
         ],
         "sourceMap": true,
         "moduleResolution": "node",
-        "module": "commonjs",
+        "module": "esNext",
         "types": [
             "gl-matrix",
             "pako",
@@ -36,6 +41,7 @@
     "exclude": [
         "**/assembly/*.ts",
         "**/worker/*.ts",
-        "**/tools/*.ts"
+        "**/tools/*.ts",
+        "*.wasm"
     ]
 }

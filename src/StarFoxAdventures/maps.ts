@@ -1,20 +1,25 @@
 import * as Viewer from '../viewer';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { DataFetcher } from '../DataFetcher';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
+import { White } from '../Color';
 
-import { SFARenderer, SceneRenderContext } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
-import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance } from './models';
-import { White } from '../Color';
+import { World } from './world';
+import { AABB } from '../Geometry';
+import { LightType } from './WorldLights';
+import { computeViewMatrix } from '../Camera';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 
 export interface BlockInfo {
     mod: number;
@@ -37,9 +42,8 @@ export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: 
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const sub = (blockInfo >>> 17) & 0x3F;
     const mod = (blockInfo >>> 23);
-    if (mod == 0xff) {
+    if (mod == 0xff)
         return null;
-    }
     return {mod, sub};
 }
 
@@ -87,6 +91,8 @@ interface BlockIter {
 }
 
 const scratchMtx0 = mat4.create();
+const scratchBox0 = new AABB();
+const scratchVec0 = vec3.create();
 
 export class MapInstance {
     private matrix: mat4 = mat4.create(); // map-to-world
@@ -96,7 +102,7 @@ export class MapInstance {
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
     private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
+    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher, public world?: World) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
@@ -144,11 +150,11 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, scratchMtx0);
+            b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
         }
     }
 
@@ -165,15 +171,22 @@ export class MapInstance {
                 }
 
                 try {
-                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
-                    if (blockRenderer) {
-                        row.push(blockRenderer);
+                    const blockModel = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
+                    if (blockModel) {
+                        row.push(new ModelInstance(blockModel));
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${z} due to exception:`);
                     console.error(e);
                 }
             }
+        }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let row of this.blocks) {
+            for (let model of row)
+                model?.destroy(device);
         }
     }
 }
@@ -202,8 +215,8 @@ export async function loadMap(gameInfo: GameInfo, dataFetcher: DataFetcher, mapN
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
-    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
-        super(device, animController);
+    constructor(private device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory) {
+        super(device, animController, materialFactory);
     }
 
     public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, blockFetcher: BlockFetcher): Promise<Viewer.SceneGfx> {
@@ -217,22 +230,26 @@ class MapSceneRenderer extends SFARenderer {
         this.map.setMatrix(matrix);
     }
 
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
+    protected override update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }
-    
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+
+    protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
+
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: false,
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
-            setupLights: () => {},
+            setupPointLights: () => {},
         };
 
-        this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRender(device, renderInstManager, modelCtx);
-        this.endPass(device);    
+        this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
+
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -311,7 +328,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
+        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer as ArrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
         const map = mapsJson[this.mapKey];
 

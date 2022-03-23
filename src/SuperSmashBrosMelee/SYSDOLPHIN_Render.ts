@@ -1,11 +1,11 @@
 
 import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc, HSD_PObj, HSD_PObjFlags } from "./SYSDOLPHIN";
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
+import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, DrawParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
 import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { LoadedVertexData } from "../gx/gx_displaylist";
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
@@ -26,7 +26,7 @@ class HSD_TObj_Data {
         const [minFilter, mipFilter] = translateTexFilterGfx(this.tobj.minFilt);
         const [magFilter]            = translateTexFilterGfx(this.tobj.magFilt);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = cache.createSampler({
             wrapS: translateWrapModeGfx(this.tobj.wrapS),
             wrapT: translateWrapModeGfx(this.tobj.wrapT),
             minFilter, mipFilter, magFilter,
@@ -1056,7 +1056,7 @@ class HSD_MObj_Instance {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 function findSkeleton(jobj: HSD_JObj_Instance): HSD_JObj_Instance {
     while (!(jobj.data.jobj.flags & (HSD_JObjFlags.SKELETON_ROOT | HSD_JObjFlags.SKELETON)))
@@ -1133,14 +1133,14 @@ class HSD_DObj_Instance {
                 // TODO(jstpierre): Shared vtx.
                 assert(pobj.jointReferenceID === 0);
 
-                mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, jobj.jointMtx);
+                mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, jobj.jointMtx);
             } else if (pobj.kind === 'Envelope') {
                 mkEnvelopeModelNodeMtx(scratchMatrixNd, jobj);
 
                 for (let i = 0; i < pobj.envelopeDesc.length; i++) {
                     const mtxEnv = pobj.envelopeDesc[i];
 
-                    const dst = packetParams.u_PosMtx[i];
+                    const dst = drawParams.u_PosMtx[i];
                     dst.fill(0);
 
                     if (mtxEnv.length === 1) {
@@ -1179,16 +1179,16 @@ class HSD_DObj_Instance {
             // Override cull-mode.
             const cullMode = pobj.flags & (HSD_PObjFlags.CULLBACK | HSD_PObjFlags.CULLFRONT);
             if (cullMode === 0)
-                megaStateFlags.cullMode = GfxCullMode.NONE;
+                megaStateFlags.cullMode = GfxCullMode.None;
             else if (cullMode === HSD_PObjFlags.CULLFRONT)
-                megaStateFlags.cullMode = GfxCullMode.FRONT;
+                megaStateFlags.cullMode = GfxCullMode.Front;
             else if (cullMode === HSD_PObjFlags.CULLBACK)
-                megaStateFlags.cullMode = GfxCullMode.BACK;
+                megaStateFlags.cullMode = GfxCullMode.Back;
             else
-                megaStateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
+                megaStateFlags.cullMode = GfxCullMode.FrontAndBack;
 
             shapeHelper.setOnRenderInst(renderInst);
-            this.mobj.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            this.mobj.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 

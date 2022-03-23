@@ -162,6 +162,10 @@ export class HitSensor {
         return this.sensorType === type;
     }
 
+    public setType(type: HitSensorType): void {
+        this.sensorType = type;
+    }
+
     public addHitSensor(other: HitSensor): void {
         this.pairwiseSensors.push(other);
     }
@@ -264,6 +268,13 @@ export class HitSensorKeeper {
         return sensor;
     }
 
+    public addCallback(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor): HitSensor {
+        const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
+        const sensorInfo = new HitSensorInfo(name, sensor, null, null, radius, Vec3Zero, true);
+        this.registHitSensorInfo(sensorInfo);
+        return sensor;
+    }
+
     public addPos(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, pos: ReadonlyVec3, offset: ReadonlyVec3): HitSensor {
         const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
         const sensorInfo = new HitSensorInfo(name, sensor, pos, null, radius, offset, false);
@@ -358,8 +369,8 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.characterGroup;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.clearGroup(this.playerGroup);
         this.clearGroup(this.rideGroup);
@@ -471,12 +482,24 @@ export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
     return isSensorPlayer(sensor) || isSensorRide(sensor);
 }
 
+export function isSensorEnemyAttack(sensor: HitSensor): boolean {
+    return sensor.isType(HitSensorType.EnemyAttack);
+}
+
 export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
 }
 
+export function sendMsgEnemyAttackStrong(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackStrong, sendSensor);
+}
+
 export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
+}
+
+export function sendMsgEnemyAttackElectric(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackElectric, sendSensor);
 }
 
 export function sendMsgPush(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
@@ -520,6 +543,14 @@ export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveAc
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, offset);
 }
 
+export function addHitSensorCallbackMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
+    return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor);
+}
+
+export function addHitSensorCallbackMapObjSimple(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
+    return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObjSimple, pairwiseCapacity, radius, actor);
+}
+
 export function addHitSensorPosMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, pos: ReadonlyVec3, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.addPos(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, pos, offset);
 }
@@ -550,6 +581,18 @@ export function addHitSensorAtJointEnemyAttack(sceneObjHolder: SceneObjHolder, a
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, jointMtx, offset);
 }
 
+export function addHitSensorMtxEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.Enemy, pairwiseCapacity, radius, actor, mtx, offset);
+}
+
+export function addHitSensorMtxEnemyAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, mtx, offset);
+}
+
+export function clearHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.clear();
+}
+
 export function invalidateHitSensor(actor: LiveActor, name: string): void {
     actor.hitSensorKeeper!.getSensor(name)!.invalidate();
 }
@@ -560,6 +603,10 @@ export function invalidateHitSensors(actor: LiveActor): void {
 
 export function validateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.validate();
+}
+
+export function validateHitSensor(actor: LiveActor, name: string): void {
+    actor.hitSensorKeeper!.getSensor(name)!.validate();
 }
 
 export function setSensorRadius(actor: LiveActor, name: string, radius: number): void {

@@ -3,14 +3,14 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, Red, Green, Magenta, Yellow, Blue } from "../Color";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
 import { ResType } from "./d_resorce";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./d_a";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture";
@@ -18,17 +18,16 @@ import { Camera, divideByW } from "../Camera";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
 import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
-import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { _T } from "../gfx/platform/GfxPlatformImpl";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -46,6 +45,7 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
 export const enum ThunderMode {
     Off     = 0,
     On      = 1,
+    Two     = 2,
     FarOnly = 10,
 }
 
@@ -159,14 +159,14 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
-function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, packetParams_ = packetParams): void {
+function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, drawParams_ = drawParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
+    mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -373,7 +373,7 @@ export class dKankyo_sun_Packet {
                     this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0, moonShineSize);
                 }
 
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                const renderInst = ddraw.makeRenderInst(renderInstManager);
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
@@ -405,7 +405,7 @@ export class dKankyo_sun_Packet {
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF9100FF);
 
                 this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                const renderInst = ddraw.makeRenderInst(renderInstManager);
 
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
@@ -498,7 +498,7 @@ export class dKankyo_sun_Packet {
         const lensflareAlpha = (80.0 * vizSq ** 3.0) / 0xFF;
         colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
 
         mat4.rotateZ(scratchMatrix, scratchMatrix, this.lenzflareAngle);
@@ -532,7 +532,7 @@ export class dKankyo_sun_Packet {
             const scaleX = 1.0;
             const texCoordScale = i === 0 ? 1.0 : 2.0;
             this.drawSquare(ddraw, scratchMatrix, basePos, size, scaleX, texCoordScale);
-            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
 
             if (i === 0) {
                 envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -557,7 +557,7 @@ export class dKankyo_sun_Packet {
         this.ddraw.allocVertices(2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -658,7 +658,7 @@ export class dKankyo_vrkumo_Packet {
                 if (kumo.alpha <= 0.000001)
                     continue;
 
-                const size = kumo.distFalloff * (1.0 - Math.pow(((textureIdx + i) & 0x0F) * 1/16, 3)) * (0.45 + (this.strength * 0.55));
+                const size = kumo.distFalloff * (1.0 - ((((textureIdx + i) & 0x0F) / 16.0) ** 3.0)) * (0.45 + (this.strength * 0.55));
 
                 const bounceAnim = Math.sin(textureIdx + 0.0001 * this.bounceAnimTimer);
                 const sizeAnim = size + (0.06 * size) * bounceAnim * kumo.distFalloff;
@@ -766,11 +766,11 @@ export class dKankyo_vrkumo_Packet {
 
             ddraw.end();
 
-            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
             submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
 
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -910,7 +910,7 @@ export class dKankyo_rain_Packet {
             ddraw.end();
         }
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperRain, renderInst, viewerInput);
     }
 
@@ -979,7 +979,7 @@ export class dKankyo_rain_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperSibuki, renderInst, viewerInput);
     }
 
@@ -993,7 +993,7 @@ export class dKankyo_rain_Packet {
         this.ddraw.beginDraw();
         this.drawRain(globals, renderInstManager, viewerInput);
         this.drawSibuki(globals, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1152,10 +1152,10 @@ export class dKankyo_wave_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1338,10 +1338,10 @@ export class dKankyo_star_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1349,7 +1349,7 @@ export class dKankyo_star_Packet {
     }
 }
 
-export function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
+export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
 }
@@ -1396,7 +1396,7 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, of
     const projectedZ = v[2] * 0.5 + 0.5;
 
     // Point is visible if our projected Z is in front of the depth buffer.
-    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.LESS);
+    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
 
     return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }
@@ -1712,8 +1712,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
-                    emitter.maxFrame = -1;
-                    emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+                    emitter.becomeInvalidEmitterImmediate();
                     eff.emitter = null;
                     eff.state = 0;
                 }
@@ -2101,65 +2100,62 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
     for (let i = 0; i < 100; i++) {
         const kumo = pkt.instances[i];
 
-        {
-            const distance = Math.hypot(kumo.position[0], kumo.position[2]);
-            if (distance > 15000.0) {
-                if (distance <= 15100.0) {
-                    kumo.position[0] *= -1;
-                    kumo.position[2] *= -1;
-                } else {
-                    kumo.position[0] = cM_rndFX(14000.0);
-                    kumo.position[2] = cM_rndFX(14000.0);
-                }
-                kumo.alpha = 0.0;
-            }
+        let distFromCenterXZ = Math.hypot(kumo.position[0], kumo.position[2]);
 
-            const strengthVelocity = 4.0 + pkt.strength * 4.3;
-            if (kumo.alpha > 0) {
-                const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeInFrames;
-                vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+        if (distFromCenterXZ > 15000.0) {
+            if (distFromCenterXZ <= 15100.0) {
+                kumo.position[0] *= -1;
+                kumo.position[2] *= -1;
             } else {
-                const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeInFrames;
-                vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+                kumo.position[0] = cM_rndFX(14000.0);
+                kumo.position[2] = cM_rndFX(14000.0);
+                distFromCenterXZ = Math.hypot(kumo.position[0], kumo.position[2]);
             }
+            kumo.alpha = 0.0;
         }
 
-        const distance = Math.hypot(kumo.position[0], kumo.position[2]);
-        const distNormalized = Math.min(distance / 15000.0, 1.0);
+        const strengthVelocity = 4.0 + pkt.strength * 4.3;
+        if (kumo.alpha > 0) {
+            const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeInFrames;
+            vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+        } else {
+            const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeInFrames;
+            vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+        }
+
+        // Normalized distance from the center. 0 = at center, 1 = at edge
+        const distFromCenterXZ01 = Math.min(distFromCenterXZ / 15000.0, 1.0);
 
         const strengthY = 3000.0 + pkt.strength * -1000.0;
-        const distCubic = 1.0 - (distNormalized ** 3.0);
-        kumo.position[1] = (500.0 * (i / 100.0)) + skyboxOffsY + (strengthY * distCubic);
+        const centerAmtCubic = 1.0 - (distFromCenterXZ01 ** 3.0);
+        kumo.position[1] = (500.0 * (i / 100.0)) + skyboxOffsY + (strengthY * centerAmtCubic);
 
-        kumo.distFalloff = 1.0 - (distNormalized ** 6.0);
+        kumo.distFalloff = 1.0 - (distFromCenterXZ01 ** 6.0);
 
-        let alphaBaseTarget: number;
+        let alphaTarget: number;
         let alphaMaxVel = 1.0;
         if (globals.stageName === 'M_DragB') {
             kumo.alpha = 1.0;
-            alphaBaseTarget = 1.0;
+            alphaTarget = 1.0;
         } else {
             if (i < pkt.count) {
                 alphaMaxVel = 0.1;
                 if (kumo.distFalloff >= 0.05 && kumo.distFalloff < 0.2)
-                    alphaBaseTarget = (kumo.distFalloff - 0.05) / 0.15;
+                    alphaTarget = (kumo.distFalloff - 0.05) / 0.15;
                 else if (kumo.distFalloff < 0.2)
-                    alphaBaseTarget = 0.0;
+                    alphaTarget = 0.0;
                 else
-                    alphaBaseTarget = 1.0 + pkt.strength * -0.55;
+                    alphaTarget = 1.0 + pkt.strength * -0.55;
             } else {
-                alphaBaseTarget = 0.0;
+                alphaTarget = 0.0;
                 alphaMaxVel = 0.005;
             }
         }
 
-        let alphaTarget: number = 0.0;
-        if (distCubic > 0.98)
-            alphaTarget = 0.0;
-        else if (distCubic > 0.88)
-            alphaTarget = alphaBaseTarget * ((0.98 - distCubic) / 0.10);
-        else
-            alphaTarget = alphaBaseTarget;
+        // When the clouds start getting too close to the center, fade them out so that you can't
+        // see the sphere projection which breaks the illusion...
+        const overheadFade = saturate(invlerp(0.98, 0.88, centerAmtCubic));
+        alphaTarget *= overheadFade;
 
         kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeInFrames, alphaMaxVel, 0.01);
     }
@@ -2330,7 +2326,7 @@ export class d_thunder extends kankyo_class {
     private brkAnm = new mDoExt_brkAnm();
     private rotation: number = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const modelData = globals.resCtrl.getObjectRes(ResType.Model, `Always`, 0x3E);
         this.model = new J3DModelInstance(modelData);
 
@@ -2364,7 +2360,7 @@ export class d_thunder extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         MtxTrans(this.pos, false);
         mDoMtx_ZrotM(calc_mtx, this.rotation);
         mDoMtx_XrotM(calc_mtx, this.rotation);
@@ -2376,7 +2372,7 @@ export class d_thunder extends kankyo_class {
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const hasStopped = this.brkAnm.play(deltaTimeInFrames);
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);

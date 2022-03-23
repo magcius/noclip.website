@@ -12,10 +12,10 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByte
 import { parseMaterial, GXMaterial } from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ColorKind, PacketParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { ColorKind, DrawParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { ViewerRenderInput } from '../viewer';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { dKy_GxFog_set } from './d_kankyo';
@@ -105,7 +105,7 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
 
 // The game uses unsigned shorts to index into cos/sin tables.
@@ -405,8 +405,8 @@ export class FlowerPacket {
 
             const renderInst = renderInstManager.newRenderInst();
             model.shapes[0].setOnRenderInst(renderInst);
-            mat4.mul(packetParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
-            model.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
+            model.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -601,7 +601,8 @@ export class TreePacket {
         const y = globals.scnPlay.bgS.GroundCross(chk);
         if (y > -Infinity) {
             treeData.pos[1] = y;
-            globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx).getNormal(scratchVec3a);
+            const pla = globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx)
+            vec3.copy(scratchVec3a, pla.n);
         } else {
             treeData.pos[1] = y;
             vec3.set(scratchVec3a, 0, 1, 0);
@@ -764,8 +765,8 @@ export class TreePacket {
 
                 const shadowRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shadow.shapes[0].setOnRenderInst(shadowRenderInst);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
-                this.treeModel.shadow.materialHelper.allocatePacketParamsDataOnInst(shadowRenderInst, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
+                this.treeModel.shadow.materialHelper.allocatedrawParamsDataOnInst(shadowRenderInst, drawParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
         }
@@ -792,14 +793,14 @@ export class TreePacket {
 
                 const trunkRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[0].setOnRenderInst(trunkRenderInst);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
-                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
+                this.treeModel.main.materialHelper.allocatedrawParamsDataOnInst(trunkRenderInst, drawParams);
                 renderInstManager.submitRenderInst(trunkRenderInst);
 
                 const topRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[1].setOnRenderInst(topRenderInst);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
-                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.topModelMtx);
+                this.treeModel.main.materialHelper.allocatedrawParamsDataOnInst(topRenderInst, drawParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
         }
@@ -1058,8 +1059,8 @@ export class GrassPacket {
 
                 const renderInst = renderInstManager.newRenderInst();
                 this.grassModel.shapes[0].setOnRenderInst(renderInst);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMtx);
-                this.grassModel.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.modelMtx);
+                this.grassModel.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }

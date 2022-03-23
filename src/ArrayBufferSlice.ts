@@ -12,18 +12,6 @@
 import { assert } from "./util";
 import { getSystemEndianness, Endianness } from "./endian";
 
-// Limited amounts of structural typing.
-declare global {
-    interface ArrayBuffer { [Symbol.species]?: "ArrayBuffer"; }
-    interface Uint8Array { [Symbol.species]?: "Uint8Array"; }
-    interface Uint16Array { [Symbol.species]?: "Uint16Array"; }
-    interface Uint32Array { [Symbol.species]?: "Uint32Array"; }
-    interface Int8Array { [Symbol.species]?: "Int8Array"; }
-    interface Int16Array { [Symbol.species]?: "Int16Array"; }
-    interface Int32Array { [Symbol.species]?: "Int32Array"; }
-    interface Float32Array { [Symbol.species]?: "Float32Array"; }
-}
-
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
 ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
@@ -41,15 +29,18 @@ function isAligned(n: number, m: number) {
 
 export default class ArrayBufferSlice {
     constructor(
-        // The field arrayBuffer is chosen so that someone can't easily mistake an ArrayBufferSlice
+        // The field name `arrayBuffer` is chosen so that someone can't easily mistake an ArrayBufferSlice
         // for an ArrayBuffer or ArrayBufferView, which is important for native APIs like OpenGL that
-        // will silently choke on something like this. TypeScript has no way to explicitly mark our
-        // class as incompatible with the ArrayBuffer interface.
-        public readonly arrayBuffer: ArrayBuffer,
+        // will silently choke on something like this.
+        public readonly arrayBuffer: ArrayBufferLike,
         public readonly byteOffset: number = 0,
         public readonly byteLength: number = arrayBuffer.byteLength - byteOffset
     ) {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
+    }
+
+    public static fromView(view: ArrayBufferView): ArrayBufferSlice {
+        return new ArrayBufferSlice(view.buffer, view.byteOffset, view.byteLength);
     }
 
     /**
@@ -143,7 +134,7 @@ export default class ArrayBufferSlice {
             o[i+0] = a[i+1];
             o[i+1] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
+        return new ArrayBufferSlice(o.buffer);
     }
 
     private bswap32(): ArrayBufferSlice {
@@ -156,7 +147,7 @@ export default class ArrayBufferSlice {
             o[i+2] = a[i+1];
             o[i+3] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
+        return new ArrayBufferSlice(o.buffer);
     }
 
     private bswap(componentSize: 2 | 4): ArrayBufferSlice {

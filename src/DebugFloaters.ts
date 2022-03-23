@@ -18,15 +18,19 @@ function getParentMetadata(target: any, key: string) {
 
 export class FloatingPanel implements Widget {
     public elem: HTMLElement;
+    public onclose: (() => void) | null = null;
 
     public customHeaderBackgroundColor: string = '';
     protected header: HTMLElement;
     protected headerContainer: HTMLElement;
     protected svgIcon: SVGSVGElement;
+    protected minimizeButton: HTMLElement;
+    protected minimized = false;
 
     private toplevel: HTMLElement;
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
+    public closeButton: HTMLElement;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -61,13 +65,47 @@ export class FloatingPanel implements Widget {
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
         this.header.style.display = 'grid';
-        this.header.style.gridTemplateColumns = '28px 1fr';
+        this.header.style.gridTemplateColumns = '28px 1fr 28px';
         this.header.style.alignItems = 'center';
         this.header.style.justifyItems = 'center';
         this.header.style.gridAutoFlow = 'column';
-        this.header.addEventListener('mousedown', (e) => {
+        this.header.onmousedown = (e) => {
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: false, useGrabbingCursor: true, releaseOnMouseUp: true });
-        });
+        };
+        this.header.ondblclick = (e) => {
+            this.close();
+        }
+
+        this.minimizeButton = document.createElement('div');
+        this.minimizeButton.textContent = '_';
+        this.minimizeButton.title = 'Minimize';
+        this.minimizeButton.style.gridColumn = '3';
+        this.minimizeButton.style.lineHeight = '28px';
+        this.minimizeButton.style.margin = '0';
+        this.minimizeButton.style.padding = '0 4px';
+        this.minimizeButton.style.fontSize = '100%';
+        this.minimizeButton.style.cursor = 'pointer';
+        this.minimizeButton.style.userSelect = 'none';
+        this.minimizeButton.onclick = (e: MouseEvent) => {
+            this.setMinimized(!this.minimized);
+        };
+        this.minimizeButton.ondblclick = (e: MouseEvent) => {
+            e.stopPropagation();
+        };
+
+        this.closeButton = document.createElement('div');
+        this.closeButton.textContent = 'X';
+        this.closeButton.title = 'Close';
+        this.closeButton.style.gridColumn = '4';
+        this.closeButton.style.lineHeight = '28px';
+        this.closeButton.style.margin = '0';
+        this.closeButton.style.padding = '0 4px';
+        this.closeButton.style.fontSize = '100%';
+        this.closeButton.style.cursor = 'pointer';
+        this.closeButton.style.userSelect = 'none';
+        this.closeButton.onclick = () => {
+            this.close();
+        };
 
         this.headerContainer.appendChild(this.header);
 
@@ -76,27 +114,21 @@ export class FloatingPanel implements Widget {
         this.contents.style.overflow = 'auto';
         this.mainPanel.appendChild(this.contents);
 
-        this.setWidth(400);
+        this.setWidth(`400px`);
 
         this.elem = this.toplevel;
-
-        this.elem.onmouseover = () => {
-            this.elem.style.opacity = '1';
-        };
-        this.elem.onmouseout = () => {
-            this.elem.style.opacity = '0.2';
-        };
-        this.elem.style.opacity = '0.2';
     }
 
-    public setWidth(v: number): void {
-        this.header.style.width = `${v}px`;
-        this.contents.style.width = `${v}px`;
+    public setWidth(v: string): void {
+        this.header.style.width = v;
+        this.contents.style.width = v;
     }
 
-    public destroy(): void {
+    public close(): void {
         if (this.toplevel.parentElement !== null)
             this.toplevel.parentElement.removeChild(this.toplevel);
+        if (this.onclose)
+            this.onclose();
     }
 
     public onMotion(dx: number, dy: number): void {
@@ -111,11 +143,20 @@ export class FloatingPanel implements Widget {
         this.toplevel.style.display = v ? 'grid' : 'none';
     }
 
+    public setMinimized(v: boolean) {
+        if (this.minimized === v)
+            return;
+        this.minimized = v;
+        this.contents.style.height = this.minimized ? '0px' : '';
+    }
+
     public setTitle(icon: string, title: string) {
         this.svgIcon = createDOMFromString(icon).querySelector('svg')!;
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
+        this.header.appendChild(this.minimizeButton);
+        this.header.appendChild(this.closeButton);
         this.toplevel.dataset.title = title;
         this.syncHeaderStyle();
     }
@@ -134,6 +175,10 @@ export class FloatingPanel implements Widget {
     public bindCheckbox(labelName: string, obj: any, paramName: string): void {
         let value = obj[paramName];
         assert(typeof value === "boolean");
+
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
 
         const cb = new Checkbox(labelName, value);
         cb.onchanged = () => {
@@ -172,6 +217,12 @@ export class FloatingPanel implements Widget {
         if (usePercent === undefined && parentMetadata !== null)
             usePercent = parentMetadata.usepercent;
         usePercent = !!usePercent;
+
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata === undefined && parentMetadata !== null && parentMetadata.label !== undefined)
+            labelNameMetadata = parentMetadata.label;
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
 
         const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
@@ -289,6 +340,7 @@ export class FloatingPanel implements Widget {
 
 export class DebugFloaterHolder {
     private floatingPanels: FloatingPanel[] = [];
+    private debugFloater: FloatingPanel | null = null;
     public elem: HTMLElement;
     public midiControls = new GlobalMIDIControls();
 
@@ -301,27 +353,31 @@ export class DebugFloaterHolder {
 
     public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
         const panel = new FloatingPanel();
-        panel.setWidth(600);
+        panel.setWidth(`600px`);
         panel.setTitle(icon, title);
+        panel.onclose = () => {
+            if (this.debugFloater === panel)
+                this.debugFloater = null;
+        };
         this.elem.appendChild(panel.elem);
         this.floatingPanels.push(panel);
         return panel;
     }
 
-    public destroyScene(): void {
-        for (let i = 0; i < this.floatingPanels.length; i++)
-            this.floatingPanels[i].destroy();
-        this.floatingPanels = [];
-    }
-
-    private debugFloater: FloatingPanel | null = null;
     private getDebugFloater(): FloatingPanel {
         if (this.debugFloater === null)
             this.debugFloater = this.makeFloatingPanel('Debug');
         return this.debugFloater;
     }
 
-    private _bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
+    public destroyScene(): void {
+        for (let i = 0; i < this.floatingPanels.length; i++)
+            this.floatingPanels[i].close();
+        this.floatingPanels = [];
+        this.debugFloater = null;
+    }
+
+    private _bindPanelRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
         // Children are by default invisible, unless we're in a color, or some sort of number array.
         const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
 
@@ -335,19 +391,21 @@ export class DebugFloaterHolder {
 
             if (typeof v === "number")
                 panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata, this.midiControls);
+            else if (typeof v === "boolean")
+                panel.bindCheckbox(`${parentName}.${keyName}`, obj, keyName);;
 
-            this._bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
+            this._bindPanelRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }
     }
 
-    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
+    public bindPanel(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this._bindSlidersRecurse(obj, panel, '');
+        this._bindPanelRecurse(obj, panel, '');
     }
 }
 
@@ -480,4 +538,8 @@ export function dfSigFigs(v: number = 2) {
 
 export function dfUsePercent(v: boolean = true) {
     return Reflect.metadata('df:usepercent', v);
+}
+
+export function dfLabel(v: string) {
+    return Reflect.metadata('df:label', v);
 }

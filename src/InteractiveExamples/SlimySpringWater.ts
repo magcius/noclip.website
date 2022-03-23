@@ -10,17 +10,17 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { PacketParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { OrbitCameraController } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, SceneDesc } from '../SceneBase';
 import { assert } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { createModelInstance } from '../j3d/scenes';
 import { computeModelMatrixS } from '../MathHelpers';
 import { AABB } from '../Geometry';
@@ -28,6 +28,7 @@ import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dfUsePercent } from '../DebugFloaters';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -107,8 +108,8 @@ class PlaneShape {
         }
         assert(indexOffs === this.indexCount);
 
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, bufferIndex: 0, },
@@ -117,11 +118,11 @@ class PlaneShape {
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 9*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
-        this.inputLayout = cache.createInputLayout(device, {
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
@@ -148,7 +149,7 @@ class PlaneShape {
     }
 }
 
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class FakeWaterModelInstance {
     private plane: PlaneShape;
     private materialInstance: MaterialInstance;
@@ -204,7 +205,7 @@ class FakeWaterModelInstance {
             mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASA, GX.CC.A2, GX.CC.ZERO);
             mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.KONST, GX.CA.A2, GX.CA.ZERO);
 
-            material.tevStages.push.apply(material.tevStages, mb.finish().tevStages);
+            material.tevStages.push(... mb.finish().tevStages);
         }
 
         // Replace the alpha test section with dynamic alpha test based on s_kColor3.
@@ -213,8 +214,7 @@ class FakeWaterModelInstance {
         material.alphaTest.compareB = GX.CompareType.LEQUAL;
 
         material.hasDynamicAlphaTest = true;
-        materialHelper.calcMaterialParamsBufferSize();
-        materialHelper.createProgram();
+        materialHelper.materialInvalidated();
 
         this.k3.r = materialHelper.material.alphaTest.referenceA;
         this.k3.g = materialHelper.material.alphaTest.referenceB;
@@ -241,13 +241,13 @@ class FakeWaterModelInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
 
-        // Calc our packet params.
-        mat4.copy(packetParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
-        this.materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        // Calc our draw params.
+        mat4.copy(drawParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
+        this.materialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         // Push our material instance.
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, drawParams);
         this.plane.prepareToRender(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
@@ -260,7 +260,6 @@ class FakeWaterModelInstance {
 }
 
 class SlimySpringWaterRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
 
     public skybox: J3DModelInstanceSimple;
@@ -279,11 +278,11 @@ class SlimySpringWaterRenderer implements SceneGfx {
     public createCameraController() {
         this.orbitCC = new OrbitCameraController(this.shouldOrbit);
         this.orbitCC.orbitSpeed *= 0.4;
-        this.orbitCC.z = -1500;
+        this.orbitCC.z = this.orbitCC.zTarget = -1500;
         return this.orbitCC;
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.orbitCC.shouldOrbit = this.shouldOrbit;
         this.flowerBox.visible = this.showFlowerBox;
 
@@ -299,24 +298,36 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.waterModel.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
-        this.renderHelper.renderInstManager.resetRenderInsts();
-        return passRenderer;
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderHelper.destroy();
         this.skybox.destroy(device);
         this.flowerBox.destroy(device);
         this.waterModel.destroy(device);

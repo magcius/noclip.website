@@ -239,7 +239,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
     private positionOffset = vec3.create();
     private yawOffset = 0;
 
-    public reset(): void {
+    public override reset(): void {
         super.reset();
         this.blocks = [];
         this.timer = 0;
@@ -278,7 +278,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
             return this.getFloatValue(reg);
     }
 
-    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: (MIPS.Register | null)[], branch: MIPS.BranchInfo | null): number {
+    protected override handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: (MIPS.Register | null)[], branch: MIPS.BranchInfo | null): number {
         switch (func) {
             case MotionFuncs.ResetPos:
                 break;
@@ -469,7 +469,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         return 0;
     }
 
-    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+    protected override handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
         if (op === MIPS.Opcode.SW || op === MIPS.Opcode.SWC1) {
             // same condition as StateParser, looks like loading a struct field
             switch (offset) {
@@ -530,7 +530,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         }
     }
 
-    protected handleLoop(op: MIPS.Opcode, left: MIPS.Register, right: MIPS.Register, offset: number): void {
+    protected override handleLoop(op: MIPS.Opcode, left: MIPS.Register, right: MIPS.Register, offset: number): void {
         let frames = 0;
         if (!(op === MIPS.Opcode.BNE || op === MIPS.Opcode.BNEL) ||
             !(left.lastOp === MIPS.Opcode.ADDIU || left.lastOp === MIPS.Opcode.NOP) ||
@@ -552,7 +552,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         });
     }
 
-    protected finish(): void {
+    protected override finish(): void {
         // if we couldn't understand the function, add a placeholder 5 second wait
         if (this.blocks.length === 0)
             this.blocks.push({

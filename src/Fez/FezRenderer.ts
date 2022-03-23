@@ -1,9 +1,9 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewMatrix, CameraController } from "../Camera";
@@ -20,6 +20,7 @@ import { ModelCache } from "./Scenes_Fez";
 import { SkyRenderer, SkyData } from './Sky';
 import { GeometryData } from './GeometryData';
 import { Fez_Level, Fez_BackgroundPlane } from './XNB_Fez';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 class FezProgram {
     public static ub_SceneParams = 0;
@@ -42,7 +43,8 @@ layout(std140) uniform ub_ShapeParams {
 #define u_BaseDiffuse (u_Misc[0].x)
 #define u_BaseAmbient (u_Misc[0].y)
 
-uniform sampler2D u_Texture[2];
+uniform sampler2D u_TextureDiffuse;
+uniform sampler2D u_TextureShadow;
 `;
 
     public vert: string = `
@@ -63,14 +65,14 @@ void main() {
 `;
 
     public frag: string = `
+in vec3 v_Normal;
 in vec2 v_TexCoord;
 in vec3 v_ShadowTexCoord;
-in vec3 v_Normal;
 
 void main() {
     vec2 t_DiffuseTexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
     t_DiffuseTexCoord = t_DiffuseTexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
-    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(u_Texture[0]), t_DiffuseTexCoord.xy);
+    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(u_TextureDiffuse), t_DiffuseTexCoord.xy);
 
     float t_LightFalloff = clamp(dot(u_LightDirection.xyz, v_Normal.xyz), 0.0, 1.0);
     float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
@@ -81,7 +83,7 @@ void main() {
     // Add in the shadow texture
     vec2 t_ShadowTexCoord = ((v_ShadowTexCoord.xy / v_ShadowTexCoord.z) * vec2(0.5)) + vec2(0.5);
     t_ShadowTexCoord = t_ShadowTexCoord.xy * u_ShadowTexScaleBias.xy + u_ShadowTexScaleBias.zw;
-    vec4 t_ShadowMapColor = texture(SAMPLER_2D(u_Texture[1]), t_ShadowTexCoord);
+    vec4 t_ShadowMapColor = texture(SAMPLER_2D(u_TextureShadow), t_ShadowTexCoord);
     vec4 t_ShadowMul = 1.0 - (t_ShadowMapColor * 0.25);
     gl_FragColor.rgb *= t_ShadowMul.rgb;
 }
@@ -106,7 +108,6 @@ class FezLevelRenderData {
 
 export class FezRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
-    private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
     private modelMatrix: mat4 = mat4.create();
     private backgroundPlaneStaticData: BackgroundPlaneStaticData;
@@ -187,10 +188,10 @@ export class FezRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(16/60);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         template.setGfxProgram(gfxProgram);
 
         let offs = template.allocateUniformBuffer(FezProgram.ub_SceneParams, 16);
@@ -214,21 +215,32 @@ export class FezRenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.prepareToRender(device, hostAccessPass, viewerInput, renderInstManager);
-        device.submitPass(hostAccessPass);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput, renderInstManager);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
-        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
@@ -236,8 +248,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.backgroundPlaneRenderers[i].destroy(device);
         this.backgroundPlaneStaticData.destroy(device);
 
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderHelper.destroy();
     }
 }
 
@@ -256,7 +267,7 @@ export class FezObjectRenderer {
         this.textureMapping.gfxSampler = textureData.sampler;
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-        this.megaStateFlags.cullMode = GfxCullMode.BACK;
+        this.megaStateFlags.cullMode = GfxCullMode.Back;
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -325,26 +336,26 @@ export class BackgroundPlaneRenderer {
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
         if (backgroundPlane.doubleSided)
-            this.megaStateFlags.cullMode = GfxCullMode.NONE;
+            this.megaStateFlags.cullMode = GfxCullMode.None;
         else
-            this.megaStateFlags.cullMode = GfxCullMode.BACK;
+            this.megaStateFlags.cullMode = GfxCullMode.Back;
 
         this.xTextureRepeat = backgroundPlane.xTextureRepeat;
         this.yTextureRepeat = backgroundPlane.yTextureRepeat;
         this.clampTexture = backgroundPlane.clampTexture;
 
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
         this.sampler = device.createSampler({
-            wrapS: this.xTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
-            wrapT: this.yTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
+            wrapS: this.xTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            wrapT: this.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
             minLOD: 0, maxLOD: 0,
         });
 

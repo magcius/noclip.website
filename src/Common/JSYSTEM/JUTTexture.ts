@@ -17,6 +17,8 @@ export interface BTI_Texture extends TextureInputGX {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
 }
 
 export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI_Texture {
@@ -74,7 +76,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampl
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
-    const gfxSampler = cache.createSampler(device, {
+    const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(sampler.wrapS),
         wrapT: translateWrapModeGfx(sampler.wrapT),
         minFilter, mipFilter, magFilter,

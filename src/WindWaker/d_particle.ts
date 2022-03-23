@@ -3,12 +3,12 @@
 
 import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, colorCopy } from "../Color";
-import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw, BaseEmitterFlags, JPAEmitterWorkData } from "../Common/JSYSTEM/JPA";
+import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA";
 import { Frustum } from "../Geometry";
-import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
-import { computeModelMatrixR, saturate, transformVec3Mat4w0 } from "../MathHelpers";
+import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
@@ -18,7 +18,7 @@ import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
 import { dGlobals } from "./zww_scenes";
 import * as GX from '../gx/gx_enum';
 import { ColorKind } from "../gx/gx_render";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -34,11 +34,11 @@ const enum EffectDrawGroup {
     Indirect = 1,
 }
 
-function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
+function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
-    m.flipY = true;
+    m.flipY = flipY;
+    m.lateBinding = 'OpaqueSceneTexture';
 }
 
 export class dPa_control_c {
@@ -48,16 +48,16 @@ export class dPa_control_c {
     private resourceDatas = new Map<number, JPAResourceData>();
 
     constructor(device: GfxDevice, private jpac: JPAC[]) {
+        const flipY = gfxDeviceNeedsFlipY(device);
         this.emitterManager = new JPAEmitterManager(device, 6000, 300);
-        for (let i = 0; i < this.jpac.length; i++)
-            this.jpacData.push(new JPACData(this.jpac[i]));
-    }
+        for (let i = 0; i < this.jpac.length; i++) {
+            const jpacData = new JPACData(this.jpac[i]);
 
-    public setOpaqueSceneTexture(opaqueSceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.jpacData.length; i++) {
-            const m = this.jpacData[i].getTextureMappingReference('AK_kagerouSwap00');
+            const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
             if (m !== null)
-                setTextureMappingIndirect(m, opaqueSceneTexture);
+                setTextureMappingIndirect(m, flipY);
+
+            this.jpacData.push(jpacData);
         }
     }
 
@@ -68,7 +68,21 @@ export class dPa_control_c {
     }
 
     public calc(viewerInput: ViewerRenderInput): void {
-        const inc = 0.5;
+        const inc = viewerInput.deltaTime / 1000 * 30;
+
+        // Some hacky distance culling for emitters.
+        getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
+            const emitter = this.emitterManager.aliveEmitters[i];
+            if (vec3.distance(emitter.globalTranslation, scratchVec3a) > 5000) {
+                emitter.stopCalcEmitter();
+                emitter.stopDrawParticle();
+            } else {
+                emitter.playCalcEmitter();
+                emitter.playDrawParticle();
+            }
+        }
+
         this.emitterManager.calc(inc);
     }
 
@@ -130,7 +144,7 @@ export class dPa_control_c {
             computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
         if (scale !== null) {
             vec3.copy(baseEmitter.globalScale, scale);
-            vec2.set(baseEmitter.globalScale2D, scale[0], scale[1]);
+            vec2.set(baseEmitter.globalParticleScale, scale[0], scale[1]);
         }
 
         if (colorPrm !== null)
@@ -147,10 +161,23 @@ export class dPa_control_c {
         }
 
         if (publicScale2D !== null)
-            vec2.set(baseEmitter.globalScale2D, publicScale2D[0], publicScale2D[1]);
+            vec2.set(baseEmitter.globalParticleScale, publicScale2D[0], publicScale2D[1]);
 
         return baseEmitter;
     }
+
+    // TODO(jstpierre): Full simple particle system
+/*
+    public setSimple(globals: dGlobals, userID: number, pos: ReadonlyVec3, alpha: number = 1.0, colorPrm: Color | null = null, colorEnv: Color | null = null, affectedByWind: boolean = false): boolean {
+        let groupID = EffectDrawGroup.Main;
+
+        if (!!(userID & 0x4000))
+            groupID = EffectDrawGroup.Indirect;
+
+        this.set(globals, groupID, userID, pos, null, null, alpha, null, 0, colorPrm, colorEnv);
+        return true;
+    }
+*/
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.jpacData.length; i++)
@@ -169,14 +196,14 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
     private pos: ReadonlyVec3;
     private rot: ReadonlyVec3;
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
         this.rot = rot;
     }
 
-    public execute(emitter: JPABaseEmitter): void {
+    public override execute(emitter: JPABaseEmitter): void {
         const deltaTimeFrames = emitter.emitterManager.workData.deltaTime;
         const globals = this.globals, envLight = globals.g_env_light;
 
@@ -185,17 +212,17 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             vec3.copy(emitter.globalTranslation, this.pos);
             const scale = Math.min(this.scaleTimer / this.maxScaleTimer, 1.0);
             vec3.set(emitter.globalScale, scale, scale, scale);
-            vec2.set(emitter.globalScale2D, scale, scale);
-            emitter.initialVelDir = 15.0 * scale;
+            vec2.set(emitter.globalParticleScale, scale, scale);
+            emitter.directionalSpeed = 15.0 * scale;
             computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]), 0.0);
         } else {
-            const scale = emitter.globalScale2D[0] - (0.2 * deltaTimeFrames);
+            const scale = emitter.globalParticleScale[0] - (0.2 * deltaTimeFrames);
             if (scale <= 0.0) {
                 this.remove();
             } else {
                 vec3.set(emitter.globalScale, scale, scale, scale);
-                vec2.set(emitter.globalScale2D, scale, scale);
-                emitter.initialVelDir = 15.0 * scale;
+                vec2.set(emitter.globalParticleScale, scale, scale);
+                emitter.directionalSpeed = 15.0 * scale;
             }
         }
     }
@@ -205,8 +232,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
     }
 }
@@ -229,7 +255,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
 
     private ddraw = new TDDraw();
 
-    constructor(protected globals: dGlobals) {
+    constructor(protected override globals: dGlobals) {
         super(globals);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -238,7 +264,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
@@ -248,7 +274,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
         this.maxParticleVelocity = 10000.0;
     }
 
-    public draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+    public override draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
         if (emitter.aliveParticlesBase.length < 2)
             return;
 
@@ -277,14 +303,14 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             ddraw.end();
         }
 
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
         dKy_get_seacolor(this.globals.g_env_light, workData.materialParams.u_Color[ColorKind.C0], workData.materialParams.u_Color[ColorKind.C1]);
         workData.fillParticleRenderInst(device, renderInstManager, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public executeAfter(emitter: JPABaseEmitter): void {
+    public override executeAfter(emitter: JPABaseEmitter): void {
         const workData = emitter.emitterManager.workData;
         mat4.copy(this.rotMtx, workData.emitterGlobalRotation);
 
@@ -298,10 +324,10 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             let velTarget = vel * this.velFade1 * this.velFade2;
 
             this.vel = cLib_addCalc2(this.vel, velTarget, 1.0, this.velSpeed);
-            emitter.initialVelDir = this.vel;
+            emitter.directionalSpeed = this.vel;
             vec3.copy(emitter.globalTranslation, this.pos);
         } else {
-            emitter.initialVelDir = 0.0;
+            emitter.directionalSpeed = 0.0;
             if (this.fadeTimer < 1)
                 this.remove();
             else
@@ -314,8 +340,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
@@ -335,10 +360,12 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     public minVel: number = 3.0;
     public indScaleY: number = 1.0;
     public indTransY: number = 0.0;
+    public baseY: number = 0.0;
+    public minY: number = -Infinity;
 
     private trackPrevPos = nArray(3, () => vec3.create());
 
-    constructor(protected globals: dGlobals) {
+    constructor(protected override globals: dGlobals) {
         super(globals);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -347,7 +374,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
     }
 
-    public draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+    public override draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
         // There should always be a multiple of three particles, with how we emit them.
         const trackCount = (emitter.aliveParticlesBase.length / 3) | 0;
         if (trackCount < 2)
@@ -391,15 +418,15 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         const indTexMtx = workData.materialParams.u_TexMtx[1];
         indTexMtx[5] = this.indScaleY;
-        indTexMtx[13] = this.indTransY * emitter.tick;
+        indTexMtx[13] = this.indTransY * emitter.age;
 
-        const renderInst = ddraw.endDraw(device, renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
         workData.fillParticleRenderInst(device, renderInstManager, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    public override setup(emitter: JPABaseEmitter, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
         this.emitter = emitter;
         this.state = 0;
         this.pos = pos;
@@ -407,10 +434,21 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     }
 
     private getMaxWaterY(dst: vec3): void {
-        // TODO
+        const globals = this.globals, sea = globals.sea!;
+
+        if (sea.ChkArea(globals, dst[0], dst[2])) {
+            dst[1] = Math.max(sea.calcWave(globals, dst[0], dst[2]), this.minY);
+        } else {
+            if (Number.isFinite(this.minY))
+                dst[1] = this.minY;
+            else
+                dst[1] = this.baseY;
+        }
+
+        dst[1] += 2.0;
     }
 
-    public execute(emitter: JPABaseEmitter): void {
+    public override execute(emitter: JPABaseEmitter): void {
         const workData = emitter.emitterManager.workData;
 
         dKy_get_seacolor(this.globals.g_env_light, emitter.globalColorPrm, null);
@@ -431,7 +469,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         for (let i = 0; i < emitter.aliveParticlesBase.length; i++) {
             const particle = emitter.aliveParticlesBase[i];
-            this.getMaxWaterY(particle.globalPosition);
+            this.getMaxWaterY(particle.offsetPosition);
         }
     }
 
@@ -440,8 +478,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }

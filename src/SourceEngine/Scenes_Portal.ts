@@ -1,28 +1,47 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
+import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
+import { BSPEntity } from "./VMT";
+
+class npc_portal_turret_floor extends BaseEntity {
+    public static classname = 'npc_portal_turret_floor';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props/Turret_01.mdl');
+    }
+}
+
 
 class PortalSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
+    private registerEntityFactories(registry: EntityFactoryRegistry): void {
+        registry.registerFactory(npc_portal_turret_floor);
+    }
+
     public async createScene(device: GfxDevice, context: SceneContext) {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
-            filesystem.createVPKMount(`${pathBase}/portal_pak`);
-            filesystem.createVPKMount(`${pathBase2}/hl2_textures`);
-            filesystem.createVPKMount(`${pathBase2}/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase}/portal_pak`),
+                filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+                filesystem.createVPKMount(`HalfLife2/hl2_misc`),
+            ]);
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        this.registerEntityFactories(loadContext.entityFactoryRegistry);
+        return createScene(context, loadContext, this.id, `${pathBase}/maps/${this.id}.bsp`, false);
     }
 }
 
 const pathBase = `Portal`;
-const pathBase2 = `HalfLife2`;
 
 const id = 'Portal';
 const name = 'Portal';

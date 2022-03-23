@@ -1,13 +1,24 @@
+
 const webpack = require('webpack');
-const merge = require('webpack-merge');
+const path = require('path');
+const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
+const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
 module.exports = merge(common, {
   mode: 'development',
-  devtool: 'cheap-module-eval-source-map',
+  devtool: 'eval-cheap-module-source-map',
+  cache: {
+    type: 'filesystem',
+  },
   devServer: {
-    contentBase: './dist',
+    static: {
+      directory: path.join(__dirname, `data`),
+      publicPath: `/data/`,
+      watch: false,
+    },
+    compress: true,
   },
   module: {
     rules: [
@@ -15,8 +26,6 @@ module.exports = merge(common, {
         test: /\.ts$/,
         exclude: /node_modules/,
         use: [
-          // Cache intermediate results
-          {loader: 'cache-loader'},
           // Run ts-loader in parallel, leaving one CPU for checker
           {
             loader: 'thread-loader',
@@ -39,9 +48,11 @@ module.exports = merge(common, {
     new webpack.DefinePlugin({
       'process.env.NODE_ENV': JSON.stringify('development'),
     }),
-    // Run ts checker asynchronously
-    new ForkTsCheckerWebpackPlugin({
-      checkSyntacticErrors: true,
+    new ForkTsCheckerWebpackPlugin(),
+    new WasmPackPlugin({
+      crateDirectory: path.join(__dirname, 'rust'),
+      forceMode: "production",
+      extraArgs: "--profiling",
     }),
   ],
 });

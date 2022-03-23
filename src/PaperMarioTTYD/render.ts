@@ -1,21 +1,21 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, DrawParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags, CollisionFlags } from './world';
 
 import * as Viewer from '../viewer';
-import { mat4 } from 'gl-matrix';
-import { assert, nArray } from '../util';
+import { mat4, ReadonlyMat4 } from 'gl-matrix';
+import { assert, nArray, setBitFlagEnabled } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
@@ -25,7 +25,9 @@ import * as GX from '../gx/gx_enum';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { AnimGroupInstance, AnimGroupDataCache } from './AnimGroup';
+import { AnimGroupInstance, AnimGroupDataCache, AnimGroupData } from './AnimGroup';
+import { evtmgr } from './evt';
+import { computeModelMatrixT, MathConstants, scaleMatrix, setMatrixTranslation, Vec3Zero } from '../MathHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -36,7 +38,7 @@ export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
@@ -44,7 +46,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -57,7 +59,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -73,9 +75,10 @@ class BackgroundBillboardRenderer {
     private program = new BackgroundBillboardProgram();
     private gfxProgram: GfxProgram;
     private textureMappings = nArray(1, () => new TextureMapping());
+    public scroll: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
-        this.gfxProgram = device.createProgram(this.program);
+    constructor(cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {
+        this.gfxProgram = cache.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
@@ -92,10 +95,16 @@ class BackgroundBillboardRenderer {
         let offs = renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
         const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
 
+        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
+
         // Extract yaw
         const view = renderInput.camera.viewMatrix;
-        const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
-        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
+        const angle = Math.atan2(-view[2], view[0]) / (Math.PI * 2);
+
+        let o = 4 * angle;
+        if (this.scroll) {
+            o += 0.001 * (view[12]);
+        }
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
 
@@ -103,7 +112,6 @@ class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -119,15 +127,15 @@ class MaterialInstance {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial);
         // Cull mode is set by the node
         this.materialHelper.megaStateFlags.cullMode = undefined;
-        this.materialHelper.cacheProgram(device, cache);
+        this.materialHelper.cacheProgram(cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return MaterialInstance.translateSampler(device, cache, sampler);
         });
 
-        this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
+        this.isTranslucent = material.materialLayer === MaterialLayer.Blend;
 
-        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
+        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.AlphaTest;
     }
 
     public setMaterialHacks(materialHacks: GXMaterialHacks): void {
@@ -136,24 +144,24 @@ class MaterialInstance {
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
         switch (materialLayer) {
-        case MaterialLayer.OPAQUE:
+        case MaterialLayer.Opaque:
             return GfxRendererLayer.OPAQUE;
-        case MaterialLayer.OPAQUE_PUNCHTHROUGH:
+        case MaterialLayer.OpaquePunchthrough:
             return GfxRendererLayer.OPAQUE + 1;
-        case MaterialLayer.ALPHA_TEST:
+        case MaterialLayer.AlphaTest:
             return GfxRendererLayer.ALPHA_TEST;
-        case MaterialLayer.ALPHA_TEST_PUNCHTHROUGH:
+        case MaterialLayer.AlphaTestPunchthrough:
             return GfxRendererLayer.ALPHA_TEST + 1;
-        case MaterialLayer.BLEND:
+        case MaterialLayer.Blend:
             return GfxRendererLayer.TRANSLUCENT;
         }
     }
 
     private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
-        return cache.createSampler(device, {
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+        return cache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
             wrapS: translateWrapModeGfx(sampler.wrapS),
             wrapT: translateWrapModeGfx(sampler.wrapT),
             maxLOD: 100,
@@ -215,26 +223,21 @@ class MaterialInstance {
     }
 }
 
+const drawParams = new DrawParams();
 class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
-    private packetParams = new PacketParams();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
         this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
-    private computeModelView(dst: mat4, camera: Camera): void {
-        computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, this.nodeInstance.modelMatrix);
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder, materialInstanceOverride: MaterialInstance | null = null): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder, modelMatrix: ReadonlyMat4, materialInstanceOverride: MaterialInstance | null = null): void {
         const renderInst = renderInstManager.newRenderInst();
         this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
-        this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
-        materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
+        materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -244,13 +247,13 @@ class BatchInstance {
 }
 
 function fillDebugColorFromCollisionFlags(dst: Color, flags: CollisionFlags): void {
-    if (!!(flags & CollisionFlags.WALK_SLOW)) {
+    if (!!(flags & CollisionFlags.WalkSlow)) {
         colorFromRGBA(dst, 0.0, 0.0, 1.0);
-    } else if (!!(flags & CollisionFlags.HAZARD_RESPAWN_ENABLED)) {
+    } else if (!!(flags & CollisionFlags.HazardRespawnEnabled)) {
         colorFromRGBA(dst, 0.0, 1.0, 0.0);
     } else if (!!(flags & 0x200000)) {
         colorFromRGBA(dst, 1.0, 0.0, 1.0);
-    } else if (flags !== 0) {
+    } else if (flags !== CollisionFlags.None) {
         colorFromRGBA(dst, 1.0, 0.0, 0.0);
     } else {
         colorFromRGBA(dst, 1.0, 1.0, 1.0);
@@ -260,7 +263,8 @@ function fillDebugColorFromCollisionFlags(dst: Color, flags: CollisionFlags): vo
 }
 
 const sceneParams = new SceneParams();
-const bboxScratch = new AABB();
+const scratchAABB = new AABB();
+const scratchMatrix = mat4.create();
 class NodeInstance {
     public visible: boolean = true;
     public children: NodeInstance[] = [];
@@ -272,14 +276,16 @@ class NodeInstance {
     private showCollisionAttrib: boolean = false;
     private collisionMaterialInstance: MaterialInstance | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    private flags = 0x200;
+    private runtimeModelMatrix = mat4.create();
 
     constructor(public node: SceneGraphNode, parentNamePath: string, private childIndex: number) {
         this.namePath = `${parentNamePath}/${node.nameStr}`;
-        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IS_DECAL);
+        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IsDecal);
         this.megaStateFlags = Object.assign({}, this.node.renderFlags);
     }
 
-    public updateModelMatrix(parentMatrix: mat4): void {
+    public updateModelMatrix(parentMatrix: ReadonlyMat4): void {
         if (this.meshAnimator !== null) {
             this.meshAnimator.calcModelMtx(this.modelMatrix);
             mat4.mul(this.modelMatrix, this.node.modelMatrix, this.modelMatrix);
@@ -293,13 +299,19 @@ class NodeInstance {
         if (!this.visible)
             return;
 
-        bboxScratch.transform(this.node.bbox, this.modelMatrix);
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+        const forceVisible = !!(this.flags & 0x20);
+        const hidden = !!((this.flags & 0x4000) || ((this.flags & 0x01) && !(this.flags & 0x80)));
+        if (!forceVisible && hidden)
+            return;
 
-        for (let i = 0; i < this.children.length; i++) {
-            this.children[i].updateModelMatrix(this.modelMatrix);
-            this.children[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder);
-        }
+        mat4.mul(scratchMatrix, this.modelMatrix, this.runtimeModelMatrix);
+        this.flags = setBitFlagEnabled(this.flags, 0x200, false);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].updateModelMatrix(scratchMatrix);
+
+        scratchAABB.transform(this.node.bbox, scratchMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, scratchAABB);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
@@ -313,7 +325,7 @@ class NodeInstance {
             //                          (1.0 * (pCam->far + pCam->near) * (1.0 + indexBias)));
 
             const indexBias = this.childIndex * 0.01;
-            const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
+            const camera = viewerInput.camera, far = camera.far, near = camera.near;
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
@@ -321,9 +333,9 @@ class NodeInstance {
                 const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;
-                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
                 fillSceneParamsData(d, offs, sceneParams);
             }
         }
@@ -331,7 +343,10 @@ class NodeInstance {
         const materialInstanceOverride = this.getMaterialInstanceOverride(device, renderInstManager.gfxRenderCache);
 
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder, materialInstanceOverride);
+            this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder, scratchMatrix, materialInstanceOverride);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -351,13 +366,13 @@ class NodeInstance {
             samplers: [],
             texMtx: [],
             matColorReg: White,
-            materialLayer: MaterialLayer.BLEND,
+            materialLayer: MaterialLayer.Blend,
             name: "Collision",
             gxMaterial: mb.finish(),
         };
         this.collisionMaterialInstance = new MaterialInstance(device, cache, collisionMaterial);
         this.collisionMaterialInstance.materialHelper.megaStateFlags.polygonOffset = true;
-        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.None;
         fillDebugColorFromCollisionFlags(this.collisionMaterialInstance.konst0, this.node.collisionFlags);
     }
 
@@ -384,6 +399,39 @@ class NodeInstance {
             this.children[i].setVisible(visible);
     }
 
+    public setFlag(flag: number, v: boolean, recurse: boolean): void {
+        this.flags = setBitFlagEnabled(this.flags, flag, v);
+
+        if (recurse)
+            for (let i = 0; i < this.children.length; i++)
+                this.children[i].setFlag(flag, v, recurse);
+    }
+
+    private maybeResetRuntimeModelMatrix(): void {
+        if (!(this.flags & 0x200)) {
+            mat4.identity(this.runtimeModelMatrix);
+            this.flags |= 0x200;
+        }
+    }
+
+    public rotate(rx: number, ry: number, rz: number): void {
+        this.maybeResetRuntimeModelMatrix();
+        mat4.rotateZ(this.runtimeModelMatrix, this.runtimeModelMatrix, rz * MathConstants.DEG_TO_RAD);
+        mat4.rotateY(this.runtimeModelMatrix, this.runtimeModelMatrix, ry * MathConstants.DEG_TO_RAD);
+        mat4.rotateX(this.runtimeModelMatrix, this.runtimeModelMatrix, rx * MathConstants.DEG_TO_RAD);
+    }
+
+    public scale(sx: number, sy: number, sz: number): void {
+        this.maybeResetRuntimeModelMatrix();
+        scaleMatrix(this.runtimeModelMatrix, this.runtimeModelMatrix, sx, sy, sz);
+    }
+
+    public trans(tx: number, ty: number, tz: number): void {
+        this.maybeResetRuntimeModelMatrix();
+        computeModelMatrixT(scratchMatrix, tx, ty, tz);
+        mat4.mul(this.runtimeModelMatrix, this.runtimeModelMatrix, scratchMatrix);
+    }
+
     public setShowCollisionAttrib(v: boolean): void {
         this.showCollisionAttrib = v;
 
@@ -400,9 +448,61 @@ class NodeInstance {
             this.children[i].playAnimation(animationController, animation);
     }
 
+    public getMapObj(name: string): NodeInstance | null {
+        if (this.node.nameStr === name)
+            return this;
+
+        for (let i = 0; i < this.children.length; i++) {
+            const sub = this.children[i].getMapObj(name);
+            if (sub !== null)
+                return sub;
+        }
+
+        return null;
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].destroy(device);
+    }
+}
+
+export class MOBJ {
+    private animGroup: AnimGroupInstance | null = null;
+    private animName: string | null = null;
+    private modelMatrix = mat4.create();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, animGroupDataCache: AnimGroupDataCache, public name: string, animPoseName: string) {
+        this.init(device, cache, animGroupDataCache, animPoseName);
+    }
+
+    private async init(device: GfxDevice, cache: GfxRenderCache, animGroupDataCache: AnimGroupDataCache, mobjName: string) {
+        const animGroupData = await animGroupDataCache.requestAnimGroupData(mobjName);
+        this.animGroup = new AnimGroupInstance(device, cache, animGroupData);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.animGroup === null)
+            return;
+
+        if (this.animName !== null) {
+            this.animGroup.playAnimation(this.animName);
+            this.animName = null;
+        }
+
+        mat4.copy(this.animGroup.modelMatrix, this.modelMatrix);
+        this.animGroup.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public setPosition(x: number, y: number, z: number): void {
+        mat4.fromScaling(this.modelMatrix, [75, 75, 75]);
+        this.modelMatrix[12] = x * 7.5;
+        this.modelMatrix[13] = y * 7.5;
+        this.modelMatrix[14] = z * 7.5;
+    }
+
+    public setAnim(animName: string): void {
+        this.animName = animName;
     }
 }
 
@@ -421,10 +521,12 @@ export class WorldRenderer extends BasicGXRendererHelper {
     private animationController = new AnimationController(60);
     private animationNames: string[];
 
-    public animGroupInstances: AnimGroupInstance[] = [];
     public animGroupCache: AnimGroupDataCache | null = null;
+    public mobj: MOBJ[] = [];
 
-    constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
+    public evtctx: evtmgr | null = null;
+
+    constructor(private device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         super(device);
 
         this.translateModel(device, d);
@@ -435,10 +537,20 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.animationNames = this.d.animations.map((a) => a.name);
 
         // Play all animations b/c why not.
-        this.playAllAnimations();
+        // this.playAllAnimations();
 
         if (backgroundTextureName !== null)
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(this.getCache(), textureHolder, backgroundTextureName);
+    }
+
+    public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {
+        const mobj = new MOBJ(this.device, this.renderHelper.getCache(), this.animGroupCache!, mobjName, animPoseName);
+        this.mobj.push(mobj);
+        return mobj;
+    }
+
+    public getMapObj(name: string): NodeInstance | null {
+        return this.rootNode.getMapObj(name);
     }
 
     public playAllAnimations(): void {
@@ -472,7 +584,10 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.rootNode.stopAnimation();
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.evtctx !== null)
+            this.evtctx.exec();
+
         viewerInput.camera.setClipPlanes(1, 32768);
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -488,11 +603,11 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.rootNode.updateModelMatrix(this.rootMatrix);
         this.rootNode.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.textureHolder);
 
-        for (let i = 0; i < this.animGroupInstances.length; i++)
-            this.animGroupInstances[i].prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.mobj.length; i++)
+            this.mobj[i].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
     public createPanels(): UI.Panel[] {
@@ -539,7 +654,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
 
         this.bufferCoalescer.destroy(device);

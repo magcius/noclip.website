@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
@@ -14,17 +14,12 @@ import { nArray, assertExists } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
+import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = bmdTex.width;
-    canvas.height = bmdTex.height;
-    canvas.title = name;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(pixels);
-    ctx.putImageData(imgData, 0, 0);
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), bmdTex.width, bmdTex.height);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getFormatName(bmdTex.format));
@@ -50,9 +45,9 @@ class MaterialInstance {
         const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         if (texture !== null) {
             this.gfxSampler = device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
+                minFilter: GfxTexFilterMode.Point,
+                magFilter: GfxTexFilterMode.Point,
+                mipFilter: GfxMipFilterMode.NoMip,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -79,9 +74,9 @@ class MaterialInstance {
         };
 
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendMode: GfxBlendMode.Add,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
     }
 
@@ -126,9 +121,8 @@ class MaterialInstance {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, textureName);
         this.gfxTextures.push(gfxTexture);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
         return texture;
@@ -179,67 +173,6 @@ class Node {
     }
 }
 
-export function calcBBoardMtx(dst: mat4, m: mat4): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx;
-    dst[4] = 0;
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = my;
-    dst[9] = 0;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = 0;
-    dst[10] = mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-const scratchVec3 = vec3.create();
-export function calcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    vec3.set(v, 0.0, -m[6], m[5]);
-    vec3.normalize(v, v);
-
-    dst[0] = mx;
-    dst[4] = m[4];
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = m[5];
-    dst[9] = v[1] * mz;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = m[6];
-    dst[10] = v[2] * mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    m[3] = 9999.0;
-    m[7] = 9999.0;
-    m[11] = 9999.0;
-    m[15] = 9999.0;
-}
-
 const scratchMat4 = mat4.create();
 class ShapeInstance {
     private vertexData: VertexData;
@@ -260,20 +193,20 @@ class ShapeInstance {
         mat4.mul(dst, dst, this.node.modelMatrix);
 
         if (this.node.billboardMode === BillboardMode.BB)
-            calcBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         else if (this.node.billboardMode === BillboardMode.BBY)
-            calcYBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
-        const packetParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_drawParams, 12*32);
+        const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_drawParams);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
-        offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
+        offs += fillMatrix4x3(drawParamsMapped, offs, scratchMat4);
 
         this.materialInstance.setOnRenderInst(template, viewerInput);
 

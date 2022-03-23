@@ -1,17 +1,16 @@
 
-import { mat4, vec3, quat } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 
 import { assertExists, nullify, assert, nArray } from "../util";
-import { setMatrixTranslation } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTransformInfo, J3DLoadFlags } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcJointAnimationTransform, calcJointMatrixFromTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcANK1JointAnimationTransform, calcJointMatrixFromTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { ResTable } from "./Main";
 import { getEaseInOutValue } from "./ActorUtil";
+import { ResTable } from "./LiveActor";
 
 export class BckCtrlData {
     public Name: string = '';
@@ -113,7 +112,7 @@ function reflectBckCtrlData(bckCtrlData: BckCtrlData, xanimePlayer: XanimePlayer
 }
 
 export function getRes<T>(table: ResTable<T>, name: string): T | null {
-    return nullify(table.get(name.toLowerCase()));
+    return nullify<T>(table.get(name.toLowerCase()));
 }
 
 export abstract class AnmPlayerBase<T extends AnimationBase> {
@@ -176,6 +175,7 @@ export class XanimeFrameCtrl extends J3DFrameCtrl {
 const scratchTransform = new JointTransformInfo();
 export class XanimeCore implements JointMatrixCalc {
     public curAnmTime = 0.0;
+    public curAnmTime1 = 0.0;
     public interpoleRatio = 0.0;
     public isFrozen: boolean = false;
     public updateFrozenJoints: boolean = false;
@@ -218,9 +218,8 @@ export class XanimeCore implements JointMatrixCalc {
 
         if (this.ank1 !== null) {
             const entry = this.ank1.jointAnimationEntries[i];
-            const animFrame = this.curAnmTime * this.ank1.duration;
 
-            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.ank1.duration);
+            calcANK1JointAnimationTransform(scratchTransform, entry, this.curAnmTime, this.curAnmTime1);
 
             if (this.updateFrozenJoints)
                 xj.xformFrozen.copy(xj.xformAnm);
@@ -316,9 +315,8 @@ export class XanimePlayer {
 
     public calcAnm(): void {
         if (this.currentRes !== null) {
-            const duration = this.currentRes.duration !== 0 ? this.currentRes.duration : 1;
-            const currentTimeInFrames = this.updatedFrameCtrl ? this.oldTimeInFrames : this.frameCtrl.currentTimeInFrames;
-            this.core.curAnmTime = currentTimeInFrames / duration;
+            this.core.curAnmTime = this.updatedFrameCtrl ? this.oldTimeInFrames : this.frameCtrl.currentTimeInFrames;
+            this.core.curAnmTime1 = this.frameCtrl.applyLoopMode(this.core.curAnmTime + 1);
         }
 
         this.core.updateFrame();
@@ -406,11 +404,11 @@ export class BtkPlayer extends AnmPlayerBase<TTK1> {
         super(resTable);
     }
 
-    public startAnimation(): void {
+    public override startAnimation(): void {
         entryTexMtxAnimator(this.modelInstance, this.currentRes!, this.frameCtrl);
     }
 
-    public stopAnimation(): void {
+    public override stopAnimation(): void {
         removeTexMtxAnimator(this.modelInstance, this.currentRes!);
     }
 }
@@ -420,11 +418,11 @@ export class BrkPlayer extends AnmPlayerBase<TRK1> {
         super(resTable);
     }
 
-    public startAnimation(): void {
+    public override startAnimation(): void {
         entryTevRegAnimator(this.modelInstance, this.currentRes!, this.frameCtrl);
     }
 
-    public stopAnimation(): void {
+    public override stopAnimation(): void {
         removeTevRegAnimator(this.modelInstance, this.currentRes!);
     }
 }
@@ -434,11 +432,11 @@ export class BtpPlayer extends AnmPlayerBase<TPT1> {
         super(resTable);
     }
 
-    public startAnimation(): void {
+    public override startAnimation(): void {
         entryTexNoAnimator(this.modelInstance, this.currentRes!, this.frameCtrl);
     }
 
-    public stopAnimation(): void {
+    public override stopAnimation(): void {
         removeTexNoAnimator(this.modelInstance, this.currentRes!);
     }
 }

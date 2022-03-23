@@ -2,23 +2,24 @@
 import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
-import { mat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
-import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from "../Camera";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, DrawParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, texProjCameraSceneTex, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
 import { GfxDevice, GfxSampler, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
-import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderInstManager";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { nArray, assertExists } from '../util';
+import { nArray, assertExists, assert } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
-import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
+import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { LoadedVertexDraw } from '../gx/gx_displaylist';
+import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -50,21 +51,19 @@ export class MDL0Model {
 
         for (let i = 0; i < this.mdl0.materials.length; i++) {
             const material = this.mdl0.materials[i];
-            this.materialData[i] = new MaterialData(device, material, this.materialHacks);
+            this.materialData[i] = new MaterialData(cache, material, this.materialHacks);
         }
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.shapeData.length; i++)
             this.shapeData[i].destroy(device);
-        for (let i = 0; i < this.materialData.length; i++)
-            this.materialData[i].destroy(device);
         this.bufferCoalescer.destroy(device);
     }
 }
 
 const bboxScratch = new AABB();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
@@ -85,41 +84,43 @@ class ShapeInstance {
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         const usesSkinning = this.shape.mtxIdx < 0;
+        assert(usesSkinning === materialInstance.usesSkinning);
+
         if (!usesSkinning)
             materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera, viewport);
 
-        packetParams.clear();
+        drawParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
-            const packet = this.shape.loadedVertexData.draws[p];
+            const draw = this.shape.loadedVertexData.draws[p];
 
             let instVisible = false;
             if (usesSkinning) {
-                for (let j = 0; j < packet.posNrmMatrixTable.length; j++) {
-                    const posNrmMatrixIdx = packet.posNrmMatrixTable[j];
+                for (let j = 0; j < draw.posMatrixTable.length; j++) {
+                    const posNrmMatrixIdx = draw.posMatrixTable[j];
 
                     // Leave existing matrix.
                     if (posNrmMatrixIdx === 0xFFFF)
                         continue;
 
-                    mat4.copy(packetParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
+                    mat4.copy(drawParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
 
                     if (instanceStateData.jointToWorldMatrixVisibility[j] !== IntersectionState.FULLY_OUTSIDE)
                         instVisible = true;
                 }
             } else {
                 instVisible = true;
-                mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[this.shape.mtxIdx]);
+                mat4.copy(drawParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[this.shape.mtxIdx]);
             }
 
             if (!instVisible)
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.setOnRenderInst(renderInst, packet);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            this.shapeData.setOnRenderInst(renderInst, draw);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
             if (usesSkinning)
-                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
+                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, draw, camera, viewport);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -137,23 +138,15 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[9] = ty;
 }
 
-function colorChannelCopy(o: GX_Material.ColorChannelControl): GX_Material.ColorChannelControl {
-    return Object.assign({}, o);
+function colorChannelCopy(o: Readonly<GX_Material.ColorChannelControl>): GX_Material.ColorChannelControl {
+    const { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction } = o;
+    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
 }
 
-function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.LightChannelControl {
+function lightChannelCopy(o: Readonly<GX_Material.LightChannelControl>): GX_Material.LightChannelControl {
     const colorChannel = colorChannelCopy(o.colorChannel);
     const alphaChannel = colorChannelCopy(o.alphaChannel);
     return { colorChannel, alphaChannel };
-}
-
-type CopyFunc<T> = (a: T) => T;
-
-function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
-    const b = Array(a.length);
-    for (let i = 0; i < a.length; i++)
-        b[i] = copyFunc(a[i]);
-    return b;
 }
 
 const materialParams = new MaterialParams();
@@ -164,6 +157,7 @@ class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
     public visible = true;
+    public usesSkinning = false;
 
     constructor(private modelInstance: MDL0ModelInstance, public materialData: MaterialData) {
         // Create a copy of the GX material, so we can patch in custom channel controls without affecting the original.
@@ -176,14 +170,22 @@ class MaterialInstance {
         this.setSortKeyLayer(layer);
     }
 
-    public setSkinningEnabled(v: boolean): void {
+    public setUsesSkinning(v: boolean): void {
+        if (this.usesSkinning === v)
+            return;
+
+        this.usesSkinning = v;
+        let changed = false;
         for (let i = 0; i < this.materialData.material.texSrts.length; i++) {
             const mapMode = this.materialData.material.texSrts[i].mapMode;
-            if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT)
-                this.materialHelper.material.useTexMtxIdx![i] = v;
+            if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT) {
+                this.materialHelper.material.useTexMtxIdx![i] = this.usesSkinning;
+                changed = true;
+            }
         }
 
-        this.materialHelper.createProgram();
+        if (changed)
+            this.materialHelper.createProgram();
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -332,7 +334,7 @@ class MaterialInstance {
         }
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -350,8 +352,8 @@ class MaterialInstance {
         // Fill in our environment mapped texture matrices.
         for (let i = 0; i < 10; i++) {
             let texMtxIdx: number;
-            if (packet !== null) {
-                texMtxIdx = packet.texMatrixTable[i];
+            if (draw !== null) {
+                texMtxIdx = draw.texMatrixTable[i];
 
                 // Don't bother computing a normal matrix if the matrix is unused.
                 if (texMtxIdx === 0xFFFF)
@@ -391,9 +393,7 @@ class MaterialInstance {
                 lightSet.calcAmbColorCopy(materialParams.u_Color[ColorKind.AMB0], lightSetting);
                 if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting)) {
                     this.materialHelper.material.hasLightsBlock = undefined;
-                    autoOptimizeMaterial(this.materialHelper.material);
-                    this.materialHelper.calcMaterialParamsBufferSize();
-                    this.materialHelper.createProgram();
+                    this.materialHelper.autoOptimizeMaterial();
                 }
             }
         }
@@ -415,149 +415,50 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, draw, camera, viewport);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
-
-    public destroy(device: GfxDevice): void {
-    }
 }
 
-const enum MtxCol {
-    X = 0, Y = 4, Z = 8,
+function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
 }
 
-function GetMtx34Scale(m: mat4, c: MtxCol): number {
-    return Math.hypot(m[c + 0], m[c + 1], m[c + 2]);
+function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZSphere);
 }
 
-function SetMdlViewMtxSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rxx: number, rxy: number, rxz: number, ryx: number, ryy: number, ryz: number, rzx: number, rzy: number, rzz: number): void {
-    dst[0] =  scaleX * rxx;
-    dst[1] =  scaleX * rxy;
-    dst[2] =  scaleX * rxz;
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * ryx;
-    dst[5] =  scaleY * ryy;
-    dst[6] =  scaleY * ryz;
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * rzx;
-    dst[9] =  scaleZ * rzy;
-    dst[10] = scaleZ * rzz;
-    dst[11] = 0.0;
-}
-
-const scratchVec3 = nArray(3, () => vec3.create());
-function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vy: vec3 = scratchVec3[0]): void {
-    vec3.set(vy, m[4], m[5], 0);
-    vec3.normalize(vy, vy);
-
-    const yx = vy[0], yy = vy[1];
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-         yy, yx, 0,
-        -yx, yy, 0,
-        0, 0, 1);
-}
-
-function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vz, vz);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vy, vz, vx);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
-}
-
+const scratchVec3 = vec3.create();
 const scratchMatrixInv1 = mat4.create();
-function GetModelLocalAxisY(v: vec3, parentModelMatrix: mat4 | null, modelMatrix: mat4, scratchMatrix: mat4 = scratchMatrixInv1): void {
-    if (parentModelMatrix !== null) {
-        mat4.invert(scratchMatrix, parentModelMatrix);
-        mat4.mul(scratchMatrix, parentModelMatrix, modelMatrix);
-        vec3.set(v, scratchMatrix[4], scratchMatrix[5], scratchMatrix[6]);
+function GetModelLocalAxisY(v: vec3, parentNodeMatrix: ReadonlyMat4 | null, nodeMatrix: ReadonlyMat4, scratchMatrix: mat4 = scratchMatrixInv1): void {
+    if (parentNodeMatrix !== null) {
+        mat4.invert(scratchMatrix, parentNodeMatrix);
+        mat4.mul(scratchMatrix, parentNodeMatrix, nodeMatrix);
+        getMatrixAxisY(v, scratchMatrix);
     } else {
-        vec3.set(v, modelMatrix[4], modelMatrix[5], modelMatrix[6]);
+        getMatrixAxisY(v, nodeMatrix);
     }
+    vec3.normalize(v, v);
 }
 
-function Calc_BILLBOARD_ROT(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vy: vec3 = scratchVec3[0]): void {
+function Calc_BILLBOARD_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vy: vec3 = scratchVec3): void {
     GetModelLocalAxisY(vy, parentNodeMatrix, nodeMatrix);
-    vy[2] = 0;
-    vec3.normalize(vy, vy);
-
-    const yx = vy[0], yy = vy[1];
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-         yy, yx, 0,
-        -yx, yy, 0,
-        0, 0, 1);
+    calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane, vy);
 }
 
-function Calc_BILLBOARD_PERSP_ROT(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
+function Calc_BILLBOARD_PERSP_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vy: vec3 = scratchVec3): void {
     GetModelLocalAxisY(vy, parentNodeMatrix, nodeMatrix);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vy, vy);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vz, vx, vy);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZSphere, vy);
 }
 
-function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vx, vy[1], -vy[0], 0);
-    vec3.normalize(vy, vy);
-    vec3.normalize(vx, vx);
-    vec3.cross(vz, vx, vy);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
 }
 
-function Calc_BILLBOARD_PERSP_Y(m: mat4, nodeMatrix: mat4, parentNodeMatrix: mat4 | null, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vz, vz);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vy, vz, vx);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+function Calc_BILLBOARD_PERSP_Y(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZSphere);
 }
 
 const matrixScratchArray = nArray(1, () => mat4.create());
@@ -590,8 +491,6 @@ export class MDL0ModelInstance {
         while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
             matrixScratchArray.push(mat4.create());
 
-        for (let i = 0; i < this.mdl0Model.materialData.length; i++)
-            this.materialInstances[i] = new MaterialInstance(this, this.mdl0Model.materialData[i]);
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawOpaOps, false);
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
     }
@@ -723,17 +622,17 @@ export class MDL0ModelInstance {
                     const parentNodeToWorldMatrix = parentNodeId >= 0 ? this.instanceStateData.jointToWorldMatrixArray[parentNodeId] : null;
 
                     if (billboardMode === BRRES.BillboardMode.BILLBOARD) {
-                        Calc_BILLBOARD_STD(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_STD(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_BILLBOARD) {
-                        Calc_BILLBOARD_PERSP_STD(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_STD(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.ROT) {
-                        Calc_BILLBOARD_ROT(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_ROT(dstDrawMatrix, dstDrawMatrix, parentNodeToWorldMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_ROT) {
-                        Calc_BILLBOARD_PERSP_ROT(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_ROT(dstDrawMatrix, dstDrawMatrix, parentNodeToWorldMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.Y) {
-                        Calc_BILLBOARD_Y(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_Y(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_Y) {
-                        Calc_BILLBOARD_PERSP_Y(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_Y(dstDrawMatrix, dstDrawMatrix);
                     }
                 }
             }
@@ -769,7 +668,7 @@ export class MDL0ModelInstance {
             const rootJoint = mdl0.nodes[0];
             if (rootJoint.bbox != null) {
                 bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-                depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
+                depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch), 0);
             } else {
                 depth = Math.max(depth, 0);
             }
@@ -792,18 +691,15 @@ export class MDL0ModelInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].destroy(device);
-    }
-
     private execDrawOpList(opList: BRRES.DrawOp[], translucent: boolean): void {
         const mdl0 = this.mdl0Model.mdl0;
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
-            const materialInstance = this.materialInstances[op.matId];
+            const materialData = this.mdl0Model.materialData[op.matId];
+            const materialInstance = new MaterialInstance(this, materialData);
+            this.materialInstances.push(materialInstance);
 
             const node = mdl0.nodes[op.nodeId];
             const shape = this.mdl0Model.mdl0.shapes[op.shpId];
@@ -813,7 +709,7 @@ export class MDL0ModelInstance {
                 shapeInstance.sortKeyBias = i;
 
             const usesSkinning = shape.mtxIdx < 0;
-            materialInstance.setSkinningEnabled(usesSkinning);
+            materialInstance.setUsesSkinning(usesSkinning);
 
             this.shapeInstances.push(shapeInstance);
         }
@@ -896,7 +792,7 @@ const matrixScratch = mat4.create();
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
-    constructor(device: GfxDevice, public material: BRRES.MDL0_MaterialEntry, public materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(cache: GfxRenderCache, public material: BRRES.MDL0_MaterialEntry, public materialHacks?: GX_Material.GXMaterialHacks) {
         for (let i = 0; i < 8; i++) {
             const sampler = this.material.samplers[i];
             if (!sampler)
@@ -907,7 +803,7 @@ class MaterialData {
 
             // In RRES, the minLOD / maxLOD are in the texture, not the sampler.
 
-            const gfxSampler = device.createSampler({
+            const gfxSampler = cache.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
                 minFilter, mipFilter, magFilter,
@@ -917,9 +813,5 @@ class MaterialData {
 
             this.gfxSamplers[i] = gfxSampler;
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.gfxSamplers.forEach((r) => device.destroySampler(r));
     }
 }

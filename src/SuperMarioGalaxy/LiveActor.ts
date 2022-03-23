@@ -1,10 +1,12 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT } from "../MathHelpers";
-import { assertExists, fallback } from "../util";
+import { J3DModelData, J3DModelInstance, MaterialInstance, TEX1Data } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { GfxDevice, GfxFormat, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from "../gx/gx_displaylist";
+import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix } from "../MathHelpers";
+import { align, assertExists, fallback, nArray, nullify } from "../util";
 import * as Viewer from '../viewer';
 import { calcGravity, connectToScene, invalidateCollisionPartsForActor, isBckExist, isBckPlaying, isBpkExist, isBpkPlaying, isBrkExist, isBrkPlaying, isBtkExist, isBtkPlaying, isBtpExist, isBtpPlaying, isBvaExist, isBvaPlaying, resetAllCollisionMtx, startBck, startBpk, startBrk, startBtk, startBtp, startBva, validateCollisionPartsForActor } from "./ActorUtil";
 import { BckCtrl, BrkPlayer, BtkPlayer, BtpPlayer, BvaPlayer, XanimePlayer } from "./Animation";
@@ -14,13 +16,17 @@ import { EffectKeeper } from "./EffectSystem";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { createCsvParser, getJMapInfoBool, getJMapInfoRotateLocal, getJMapInfoTransLocal, JMapInfoIter } from "./JMapInfo";
 import { ActorLightCtrl } from "./LightData";
-import { getDeltaTimeFrames, getObjectName, ResourceHolder, SceneObjHolder, SpecialTextureType } from "./Main";
+import { getObjectName, SceneObjHolder, SpecialTextureType } from "./Main";
 import { MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { RailRider } from "./RailRider";
 import { ShadowControllerList } from "./Shadow";
 import { Spine } from "./Spine";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
-
+import * as GX from '../gx/gx_enum';
+import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeDisplayFlags, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { MaterialParams, DrawParams } from "../gx/gx_render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -137,6 +143,261 @@ class ActorAnimKeeper {
     }
 }
 
+function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVertexData: LoadedVertexData, bufferStride: number, texMtxIdxBaseOffsets: number[]): void {
+    const vertexCount = loadedVertexData.totalVertexCount;
+
+    const buffer = new Uint8Array(vertexCount * bufferStride);
+    loadedVertexLayout.vertexBufferStrides[1] = bufferStride;
+    loadedVertexData.vertexBuffers[1] = buffer.buffer;
+
+    const view = new DataView(loadedVertexData.vertexBuffers[0]);
+    const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
+    let offs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.PNMTXIDX];
+
+    for (let i = 0; i < vertexCount; i++) {
+        const p = view.getFloat32(offs, true);
+        for (let j = 0; j < bufferStride; j++) {
+            if (texMtxIdxBaseOffsets[j] >= 0)
+                buffer[i*bufferStride + j] = p + (texMtxIdxBaseOffsets[j] / 3);
+        }
+        offs += loadedStride;
+    }
+}
+
+function mtxModeIsUsingEnvMap(mode: TexMtxMapMode): boolean {
+    return (mode === TexMtxMapMode.EnvmapBasic || mode === TexMtxMapMode.EnvmapOld || mode === TexMtxMapMode.Envmap);
+}
+
+function mtxModeIsUsingProjMap(mode: TexMtxMapMode): boolean {
+    return (mode === TexMtxMapMode.ProjmapBasic || mode === TexMtxMapMode.ViewProjmapBasic || mode === TexMtxMapMode.Projmap || mode === TexMtxMapMode.ViewProjmap);
+}
+
+function patchBMD(bmd: BMD): void {
+    for (let i = 0; i < bmd.shp1.shapes.length; i++) {
+        const shape = bmd.shp1.shapes[i];
+        if (shape.displayFlags !== ShapeDisplayFlags.MULTI)
+            continue;
+
+        const material = bmd.mat3.materialEntries[shape.materialIndex];
+        material.gxMaterial.useTexMtxIdx = nArray(8, () => false);
+
+        let bufferStride = 0;
+        let texMtxIdxBaseOffsets: number[] = nArray(8, () => -1);
+        let hasAnyEnvMap = false;
+        for (let j = 0; j < material.gxMaterial.texGens.length; j++) {
+            const texGen = material.gxMaterial.texGens[j];
+            if (texGen === null)
+                continue;
+            if (texGen.matrix === GX.TexGenMatrix.IDENTITY)
+                continue;
+
+            const texMtxIdx = (texGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+            const texMtx = assertExists(material.texMatrices[texMtxIdx]);
+
+            const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
+            const isUsingEnvMap = mtxModeIsUsingEnvMap(matrixMode);
+            const isUsingProjMap = mtxModeIsUsingProjMap(matrixMode);
+
+            if (isUsingEnvMap || isUsingProjMap) {
+                // Mark as requiring TexMtxIdx
+                material.gxMaterial.useTexMtxIdx[j] = true;
+                texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + (j * 3);
+
+                if (isUsingEnvMap)
+                    texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.TEXMTX0;
+                else if (isUsingProjMap)
+                    texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
+
+                bufferStride = Math.max(bufferStride, j + 1);
+                hasAnyEnvMap = hasAnyEnvMap || isUsingEnvMap;
+
+                // Disable optimizations
+                material.gxMaterial.hasPostTexMtxBlock = true;
+            }
+        }
+
+        // If we have an environment map, then all texture matrices are IDENTITY,
+        // as we're going to reuse the texture memory for normal environment matrices.
+        // Done in ShapeUserPacketData::init() with the GDSetCurrentMtx().
+        if (hasAnyEnvMap) {
+            for (let j = 0; j < material.gxMaterial.texGens.length; j++)
+                material.gxMaterial.texGens[j].matrix = GX.TexGenMatrix.IDENTITY;
+        }
+
+        if (bufferStride > 0) {
+            bufferStride = align(bufferStride, 4);
+
+            for (let j = 0; j < shape.mtxGroups.length; j++) {
+                const mtxGroup = shape.mtxGroups[j];
+                patchInTexMtxIdxBuffer(shape.loadedVertexLayout, mtxGroup.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
+            }
+
+            if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX0123MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
+            if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
+        }
+    }
+
+    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
+    // This should only be done on opaque objects.
+    // TODO(jstpierre): This was used to clear the shadows in NoShadowed pass, but that doesn't
+    // work anymore given that we moved shadows to their own alpha RT now. Likely need multiple
+    // draws. Boo :/
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        const mat = bmd.mat3.materialEntries[i];
+        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
+            continue;
+
+        mat.gxMaterial.ropInfo.alphaUpdate = true;
+        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
+    }
+}
+
+// This is roughly ShapePacketUserData::callDL().
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
+    const material = materialInstance.materialData.material;
+    let hasAnyEnvMap = false;
+
+    for (let i = 0; i < material.texMatrices.length; i++) {
+        const texMtx = material.texMatrices[i];
+        if (texMtx === null)
+            continue;
+
+        const matrixMode = texMtx.info & 0x3F;
+        const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
+
+        if (isUsingEnvMap)
+            hasAnyEnvMap = true;
+
+        const dst = materialParams.u_PostTexMtx[i];
+        const flipY = materialParams.m_TextureMapping[i].flipY;
+
+        materialInstance.calcPostTexMtxInput(dst, texMtx, viewMatrix);
+        const texSRT = scratchMatrix;
+        materialInstance.calcTexSRT(texSRT, i);
+        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
+    }
+
+    if (hasAnyEnvMap) {
+        // Fill texture memory with normal matrices.
+        for (let i = 0; i < 10; i++) {
+            const m = materialParams.u_TexMtx[i];
+            computeNormalMatrix(m, drawParams.u_PosMtx[i], true);
+        }
+    }
+}
+
+function patchModelData(bmdModel: J3DModelData): void {
+    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
+    // of its own sort, which needs to be RE'd.
+    for (let i = 0; i < bmdModel.shapeData.length; i++)
+        bmdModel.shapeData[i].sortKeyBias = 0;
+
+    const modelMaterialData = bmdModel.modelMaterialData.materialData!;
+    for (let i = 0; i < modelMaterialData.length; i++) {
+        const materialData = modelMaterialData[i];
+
+        const gxMaterial = materialData.material.gxMaterial;
+        if (gxMaterial.useTexMtxIdx !== undefined && gxMaterial.useTexMtxIdx.some((v) => v)) {
+            // Requires a callback.
+            materialData.fillMaterialParamsCallback = fillMaterialParamsCallback;
+        }
+    }
+}
+
+export type ResTable<T> = Map<string, T>;
+
+export function initEachResTable<T>(arc: JKRArchive, table: ResTable<T>, extensions: string[], constructor: (file: RARCFile, ext: string, filenameWithoutExtension: string) => T, includeExtension: boolean = false): void {
+    for (let i = 0; i < arc.files.length; i++) {
+        const file = arc.files[i];
+
+        for (let j = 0; j < extensions.length; j++) {
+            const ext = extensions[j];
+            if (file.name.endsWith(ext)) {
+                const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
+                const key = includeExtension ? file.name : filenameWithoutExtension;
+                table.set(key, constructor(file, ext, filenameWithoutExtension));
+            }
+        }
+    }
+}
+
+export class ResourceHolder {
+    public modelTable = new Map<string, J3DModelData>();
+    public motionTable = new Map<string, ANK1>();
+    public btkTable = new Map<string, TTK1>();
+    public bpkTable = new Map<string, TRK1>();
+    public btpTable = new Map<string, TPT1>();
+    public brkTable = new Map<string, TRK1>();
+    public bvaTable = new Map<string, VAF1>();
+    public banmtTable = new Map<string, BckCtrl>();
+    public viewerTextures: Viewer.Texture[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: JKRArchive) {
+        initEachResTable(this.arc, this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
+            const bmd = BMD.parse(file.buffer);
+            patchBMD(bmd);
+            const modelData = new J3DModelData(device, cache, bmd);
+            patchModelData(modelData);
+            this.addTEX1(modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
+            return modelData;
+        });
+
+        initEachResTable(this.arc, this.motionTable, ['.bck', '.bca'], (file, ext) => {
+            if (ext === '.bca')
+                debugger;
+
+            return BCK.parse(file.buffer);
+        });
+
+        // .blk
+        initEachResTable(this.arc, this.btkTable, ['.btk'], (file) => BTK.parse(file.buffer));
+        initEachResTable(this.arc, this.bpkTable, ['.bpk'], (file) => BPK.parse(file.buffer));
+        initEachResTable(this.arc, this.btpTable, ['.btp'], (file) => BTP.parse(file.buffer));
+        initEachResTable(this.arc, this.brkTable, ['.brk'], (file) => BRK.parse(file.buffer));
+        // .bas
+        // .bmt
+        initEachResTable(this.arc, this.bvaTable, ['.bva'], (file) => BVA.parse(file.buffer));
+        initEachResTable(this.arc, this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
+    }
+
+    private addTEX1(tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
+        if (tex1Data === null)
+            return;
+
+        const prefix = (filenameWithoutExtension.toLowerCase() === objectName.toLowerCase()) ? objectName : `${objectName}/${filenameWithoutExtension}`;
+        for (let i = 0; i < tex1Data.viewerTextures.length; i++) {
+            const texture = tex1Data.viewerTextures[i];
+            if (texture === null)
+                continue;
+            texture.name = `${prefix}/${texture.name}`;
+            this.viewerTextures.push(texture);
+        }
+    }
+
+    public getModel(name: string): J3DModelData {
+        return assertExists(this.modelTable.get(name.toLowerCase()));
+    }
+
+    public getArcName(): string {
+        return this.arc.name;
+    }
+
+    public getRes<T>(table: ResTable<T>, name: string): T | null {
+        return nullify(table.get(name.toLowerCase()));
+    }
+
+    public isExistRes<T>(table: ResTable<T>, name: string): boolean {
+        return table.has(name.toLowerCase());
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.modelTable.values())
+            v.destroy(device);
+    }
+}
+
 export class ModelManager {
     public resourceHolder: ResourceHolder;
     public modelInstance: J3DModelInstance;
@@ -148,7 +409,7 @@ export class ModelManager {
     public bvaPlayer: BvaPlayer | null = null;
     public bckCtrl: BckCtrl | null = null;
 
-    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
+    constructor(sceneObjHolder: SceneObjHolder, public objName: string) {
         this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
 
         const bmdModel = this.resourceHolder.getModel(objName);
@@ -498,7 +759,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     // HACK(jstpierre): For not having proper culling that stops movement
     public initWaitPhase: number = 0;
 
-    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
+    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, name: string) {
         super(sceneObjHolder, name);
     }
 
@@ -565,7 +826,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // disconnectToDrawTemporarily
     }
 
-    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
         if (this.visibleScenario === newVisibleScenario)
             return;
@@ -615,7 +876,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelInstance.modelMatrix;
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const modelCache = sceneObjHolder.modelCache;
 
         // By default, we request the object's name.
@@ -626,7 +887,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         this.modelManager = new ModelManager(sceneObjHolder, objName);
 
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+        this.modelManager.modelInstance.setBaseScale(this.scale);
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
@@ -715,7 +976,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive || !this.visibleScenario)
             return;
 
@@ -724,7 +985,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // calcAnmMtx
         if (this.modelManager !== null) {
-            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.modelManager.modelInstance.setBaseScale(this.scale);
             this.calcAndSetBaseMtx(sceneObjHolder);
             this.modelManager.calcAnim();
         }
@@ -733,7 +994,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             setCollisionMtx(this, this.collisionParts);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
+    public override calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
         if (this.modelInstance === null)
             return;
 
@@ -763,21 +1024,28 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 const areaLightInfo = sceneObjHolder.lightDirector.findDefaultAreaLight(sceneObjHolder);
                 const lightInfo = areaLightInfo.getActorLightInfo(lightType);
 
-                // The reason we don't setAmbient here is a bit funky -- normally how this works
-                // is that the J3DModel's DLs will set up the ambient, but when an actor has its
-                // own ActorLightCtrl, through a long series of convoluted of actions, the
-                // DrawBufferExecutor associated with that actor will stomp on the actor's ambient light
-                // configuration. Without this, we're left with the DrawBufferGroup's light configuration,
-                // and the actor's DL will override the ambient light there...
-                // Rather than emulate the whole DrawBufferGroup system, quirks and all, just hardcode
-                // this logic.
+                // The reason we pass setAmbient = false in the case where we don't have an ActorLightCtrl is a bit
+                // strange, and seems like an ordering bug in the game's original logic. The flow of the DrawBuffer
+                // system is that DrawBufferShapeDrawer will first load its associated material before drawing all
+                // of the shapes that it contains. However, the logic looks like this:
                 //
-                // Specifically, what's going on is that when an actor has an ActorLightCtrl, then the light
-                // is loaded in DrawBufferShapeDrawer, *after* the material packet DL has been run. Otherwise,
-                // it's loaded in either DrawBufferExecuter or DrawBufferGroup, which run before the material
-                // DL, so the actor will overwrite the ambient light. I'm quite sure this is a bug in the
-                // original game engine, honestly.
-                lightInfo.setOnModelInstance(this.modelInstance, camera, false);
+                // this->mpMaterial->loadMaterial();
+                // for each (pPacket in this->mpShapePackets):
+                //   if (pPacket->mpActorLightCtrl != nullptr) { pPacket->mpActorLightCtrl->load(); }
+                //   pPacket->drawShape();
+                //
+                // When an actor has an ActorLightCtrl, the actor's lights are loaded in the DrawBufferShapeDrawer
+                // *after* the material has run. But when it doesn't, it uses the group / executor's lights that
+                // are loaded in DrawBufferGroup::drawOpa / DrawBufferExecutor::drawOpa. While this normally works
+                // out OK -- objects without custom lights get their group's lighting, it breaks for the ambient
+                // color channel, since the J3D material will load its own ambient color when loadMaterial() is
+                // called. So objects with custom ActorLightCtrl's have their ActorLightCtrl being the last thing
+                // to set the ambient light, and objects without custom ActorLightCtrl's have the J3DMaterial be
+                // the last thing to set the ambient light.
+                //
+                // Rather than emulate this whole system, just hardcode the end result. So, setAmbient = false.
+                const setAmbient = false;
+                lightInfo.setOnModelInstance(this.modelInstance, camera, setAmbient);
             }
         }
     }
@@ -785,14 +1053,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
-    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder): void {
     }
 
     private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
                 this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
-                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+                vec3.add(this.translation, this.translation, scratchVec3a);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
                 this.binder.clear();
@@ -802,7 +1070,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
@@ -816,7 +1084,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
 
         if (this.modelManager !== null)
             this.modelManager.update(deltaTimeFrames);
@@ -835,7 +1103,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (!this.visibleAlive)
             return;
 
-        this.control(sceneObjHolder, viewerInput);
+        this.control(sceneObjHolder);
 
         if (!this.visibleAlive)
             return;
@@ -850,7 +1118,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // ActorPadAndCameraCtrl::update()
 
         if (this.actorLightCtrl !== null)
-            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+            this.actorLightCtrl.update(sceneObjHolder, sceneObjHolder.viewerInput.camera, false, deltaTimeFrames);
 
         // tryUpdateHitSensorsAll()
         if (this.hitSensorKeeper !== null)
@@ -912,8 +1180,8 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         if (this.pendingMessageType !== null) {
             for (let i = 0; i < this.objArray.length; i++) {

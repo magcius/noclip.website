@@ -12,8 +12,8 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexInputLocation } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
+import { MaterialParams, DrawParams, ColorKind } from "../../gx/gx_render";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderInstManager";
 import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
@@ -48,7 +48,7 @@ class OceanBowlBloomDrawer extends NameObj {
         connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanBowlBloomDrawer);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this.bowl))
@@ -63,7 +63,7 @@ class OceanBowlBloomDrawer extends NameObj {
 
 const scratchVec3 = vec3.create();
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 export class OceanBowl extends LiveActor {
     private points: OceanBowlPoint[] = [];
     private animationController = new AnimationController(60);
@@ -161,7 +161,7 @@ export class OceanBowl extends LiveActor {
         }
 
         const pointCount = this.points.length;
-        this.positionBuffer = device.createBuffer(pointCount * 3, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+        this.positionBuffer = device.createBuffer(pointCount * 3, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
         this.positionDataF32 = new Float32Array(pointCount * 3);
         this.positionDataU8 = new Uint8Array(this.positionDataF32.buffer);
 
@@ -173,7 +173,7 @@ export class OceanBowl extends LiveActor {
             colorData[colorIdx++] = 0xFF;
             colorData[colorIdx++] = this.points[i].heightScale * 0xFF;
         }
-        this.colorBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, colorData.buffer);
+        this.colorBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, colorData.buffer);
 
         // Texture coordinate buffer
         const texCoordData = new Int16Array(this.points.length * 2);
@@ -184,7 +184,7 @@ export class OceanBowl extends LiveActor {
                 texCoordData[texCoordIdx++] = (x / (gridAxisPointCount - 1)) * 0x7FFF;
             }
         }
-        this.texCoord0Buffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texCoordData.buffer);
+        this.texCoord0Buffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, texCoordData.buffer);
         assert(texCoordIdx === texCoordData.length);
 
         // Create the index buffer. We have (N-1)*(N-1) quads, N being gridAxisPointCount, and we have 6 indices per quad...
@@ -214,7 +214,7 @@ export class OceanBowl extends LiveActor {
         }
         assert(indexIdx === indexBufferCount);
 
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
@@ -222,12 +222,12 @@ export class OceanBowl extends LiveActor {
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = cache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -307,9 +307,9 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public override movement(sceneObjHolder: SceneObjHolder): void {
         // Every frame, we add -0.04 onto the counter.
-        this.animationController.setTimeFromViewerInput(viewerInput);
+        this.animationController.setTimeFromViewerInput(sceneObjHolder.viewerInput);
         const time = this.animationController.getTimeInFrames();
 
         const posTime = time * -0.04;
@@ -326,7 +326,7 @@ export class OceanBowl extends LiveActor {
         this.tex2Trans[1] = (1.0 + time * -0.001) % 1.0;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!isValidDraw(this))
@@ -335,7 +335,6 @@ export class OceanBowl extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 
-        const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.points.length; i++) {
             const p = this.points[i];
             let offs = i * 3;
@@ -343,8 +342,7 @@ export class OceanBowl extends LiveActor {
             this.positionDataF32[offs++] = p.drawPosition[1];
             this.positionDataF32[offs++] = p.drawPosition[2];
         }
-        hostAccessPass.uploadBufferData(this.positionBuffer, 0, this.positionDataU8);
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.positionBuffer, 0, this.positionDataU8);
 
         // Fill in our material params.
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -397,8 +395,8 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -430,13 +428,13 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelperBloom.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
+        this.materialHelperBloom.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         this.water.destroy(device);
         this.waterIndirect.destroy(device);
         this.mask.destroy(device);
@@ -447,7 +445,7 @@ export class OceanBowl extends LiveActor {
         device.destroyInputState(this.inputState);
     }
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
         WaterAreaHolder.requestArchives(sceneObjHolder);
     }

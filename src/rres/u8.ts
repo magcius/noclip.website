@@ -121,7 +121,7 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
 
         if (nodeType === NodeType.Directory) {
             const nodeParentIndex = view.getUint32(nodeOffs + 0x04, false);
-            assert(nodeParentIndex === parentIndex);
+            // assert(nodeParentIndex === parentIndex);
 
             // The index of the first node *not* in this directory.
             const nextNodeIndex = view.getUint32(nodeOffs + 0x08, false);

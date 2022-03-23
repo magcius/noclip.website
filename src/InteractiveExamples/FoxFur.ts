@@ -2,12 +2,12 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -15,12 +15,13 @@ import { DeviceProgram } from '../Program';
 import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { captureScene } from '../CaptureHelpers';
 import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
 import { dfRange, dfShow } from '../DebugFloaters';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `FoxFur`;
 
@@ -43,10 +44,9 @@ function fetchPNG(path: string): Promise<ImageData> {
 }
 
 function makeTextureFromImageData(device: GfxDevice, imageData: ImageData): GfxTexture {
-    const hostAccessPass = device.createHostAccessPass();
+
     const texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageData.width, imageData.height, 1));
-    hostAccessPass.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
     return texture;
 }
 
@@ -125,7 +125,7 @@ function parseObjFile(objText: string): ObjModel {
 class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_BoneMatrix[1];
@@ -145,10 +145,12 @@ layout(std140) uniform ub_ShapeParams {
 #define u_PoreMapIndScale (u_Misc[2].z)
 #define u_PoreMapIndAngle (u_Misc[2].w)
 
-uniform sampler2D u_Texture[3];
+uniform sampler2D u_TextureBody;
+uniform sampler2D u_TexturePore;
+uniform sampler2D u_TextureInd;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
@@ -162,7 +164,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 in vec2 v_TexCoord;
 
 vec2 rotateZ(vec2 v, float theta) {
@@ -176,24 +178,24 @@ void main() {
 
     // Trying out some ind stuff
     vec2 t_BodyIndCoord = v_TexCoord.xy + vec2(u_BodyIndMapOffsS, u_BodyIndMapOffsT);
-    vec2 t_BodyIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_BodyIndTex = (texture(SAMPLER_2D(u_TextureInd), t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_BodyIndTex = rotateZ(t_BodyIndTex, u_BodyMapIndAngle);
     t_BodyIndTex *= u_BodyMapIndScale;
     vec2 t_BodyTexCoord = (v_TexCoord.xy) + t_BodyIndTex;
 
-    vec4 t_BodyColor = texture(SAMPLER_2D(u_Texture[0]), t_BodyTexCoord);
+    vec4 t_BodyColor = texture(SAMPLER_2D(u_TextureBody), t_BodyTexCoord);
     gl_FragColor *= t_BodyColor;
 
     // Sample pore map.
     vec2 t_PoreIndCoord = v_TexCoord.xy + vec2(u_PoreIndMapOffsS, u_PoreIndMapOffsT);
-    vec2 t_PoreIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_PoreIndTex = (texture(SAMPLER_2D(u_TextureInd), t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_PoreIndTex = rotateZ(t_PoreIndTex, u_PoreMapIndAngle);
     t_PoreIndTex *= u_PoreMapIndScale;
 
     vec2 t_PoreTexCoord = (v_TexCoord.xy * u_PoreMapScale) + t_PoreIndTex;
-    vec4 t_PoreMask = texture(SAMPLER_2D(u_Texture[1]), t_PoreTexCoord).rrrg;
+    vec4 t_PoreMask = texture(SAMPLER_2D(u_TexturePore), t_PoreTexCoord).rrrg;
     t_PoreMask.a += u_PoreBaseAlpha;
     gl_FragColor *= t_PoreMask;
 }
@@ -214,9 +216,7 @@ function createPoreMapTexture(device: GfxDevice, width: number, height: number):
         data[i++] = clamp(Math.random() * 0xFF + 0x80, 0, 0xFF);
         data[i++] = Math.random() * 0xFF;
     }
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(poreTex, 0, [data]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(poreTex, 0, [data]);
     return poreTex;
 }
 
@@ -230,9 +230,7 @@ function createIndMapTexture(device: GfxDevice, width: number, height: number): 
         data[i++] = Math.random() * 0x10 + 0x40;
         data[i++] = Math.random() * 0x20 + 0x80;
     }
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(indTex, 0, [data]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(indTex, 0, [data]);
     return indTex;
 }
 
@@ -309,8 +307,8 @@ class FurObj {
         this.textureMapping[2].gfxTexture = this.indTex;
 
         const obj = parseObjFile(objText);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, obj.vertexBuffer.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, obj.indexBuffer.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, obj.vertexBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, obj.indexBuffer.buffer);
         this.indexCount = obj.indexBuffer.length;
 
         this.inputLayout = device.createInputLayout({
@@ -321,7 +319,7 @@ class FurObj {
                 { location: 2, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 6*0x04 },
             ],
             vertexBufferDescriptors: [
-                { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+                { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
             ]
         });
 
@@ -341,7 +339,7 @@ class FurObj {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         for (let i = 0; i < this.numLayers; i++) {
             const renderInst = renderInstManager.newRenderInst();
@@ -372,16 +370,16 @@ class FurObj {
                 renderInst.setMegaStateFlags({
                     attachmentsState: [
                         {
-                            colorWriteMask: GfxColorWriteMask.ALL,
+                            channelWriteMask: GfxChannelWriteMask.AllChannels,
                             rgbBlendState: {
-                                blendMode: GfxBlendMode.ADD,
-                                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                                blendMode: GfxBlendMode.Add,
+                                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                             },
                             alphaBlendState: {
-                                blendMode: GfxBlendMode.ADD,
-                                blendSrcFactor: GfxBlendFactor.ONE,
-                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                                blendMode: GfxBlendMode.Add,
+                                blendSrcFactor: GfxBlendFactor.One,
+                                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                             },
                         }
                     ],
@@ -400,9 +398,8 @@ class FurObj {
     }
 }
 
-const clearPass = makeClearRenderPassDescriptor(true, TransparentBlack);
-export class SceneRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
+const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
+class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
     public obj: GraphObjBase[] = [];
@@ -416,28 +413,39 @@ export class SceneRenderer implements SceneGfx {
         return new OrbitCameraController();
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
         for (let i = 0; i < this.obj.length; i++)
             this.obj[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearPass);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
-        return mainPassRenderer;
     }
 
     public async film() {
@@ -478,11 +486,11 @@ export class FoxFur implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
-        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer);
+        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer as ArrayBuffer);
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);
-        window.main.ui.debugFloaterHolder.bindSliders(o);
+        window.main.ui.debugFloaterHolder.bindPanel(o);
         r.fur = o;
         r.obj.push(o);
         return r;

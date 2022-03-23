@@ -216,5 +216,5 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
     if (lblen !== 3) /* Ensure terminating M4 was encountered */
         throw "LZO terminator not reached";
 
-    return new ArrayBufferSlice(outBuffer.buffer as ArrayBuffer, 0, outp);
+    return new ArrayBufferSlice(outBuffer.buffer, 0, outp);
 }

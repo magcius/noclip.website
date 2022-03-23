@@ -2,15 +2,15 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
-import { colorFromHSL, colorNewCopy, White, colorToCSS } from '../Color';
+import { colorFromHSL, colorNewCopy, White } from '../Color';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderInstManager';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
@@ -21,6 +21,7 @@ import { ObjectRenderer } from './objects';
 import { BINModelSectorData, KatamariDamacyProgram } from './render';
 import { fillSceneParamsData } from './scenes';
 import { setMatrixTranslation } from '../MathHelpers';
+import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -30,7 +31,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, nu
 class GalleryCircleProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ColorInner;
     vec4 u_ColorOuter;
@@ -38,7 +39,7 @@ layout(std140) uniform ub_Params {
 };
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -51,7 +52,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {
@@ -70,7 +71,7 @@ class GalleryCircleRenderer {
     public colors = nArray(2, () => colorNewCopy(White));
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxProgram = cache.createProgram(device, this.program);
+        this.gfxProgram = cache.createProgram(this.program);
     }
 
     public randomColor(): void {
@@ -100,10 +101,6 @@ class GalleryCircleRenderer {
 
         renderInstManager.submitRenderInst(renderInst);
     }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
-    }
 }
 
 interface GalleryObject {
@@ -114,8 +111,7 @@ interface GalleryObject {
 
 const scratchVec = vec3.create();
 export class GallerySceneRenderer implements SceneGfx {
-    private sceneTexture = new ColorTexture();
-    public renderTarget = new BasicRenderTarget();
+    private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -216,9 +212,15 @@ export class GallerySceneRenderer implements SceneGfx {
         this.rareBadge.style.visibility = objectDef.isRare ? '' : 'hidden';
 
         // XXX(jstpierre): Hax!
-        if (window.main.viewer.cameraController instanceof OrbitCameraController) {
+        const cameraController = window.main.viewer.cameraController;
+        if (cameraController instanceof OrbitCameraController) {
             const radius = objectModel.bbox.boundingSphereRadius();
-            window.main.viewer.cameraController.z = -radius * 4.5;
+            const z = -radius * 4.5;
+            cameraController.z = z;
+            cameraController.zTarget = z;
+            cameraController.sceneMoveSpeedMult = radius / 400.0;
+            cameraController.orbitSpeed = 0.5;
+            cameraController.shouldOrbit = true;
         }
     }
 
@@ -236,7 +238,7 @@ export class GallerySceneRenderer implements SceneGfx {
         return orbit;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
@@ -249,37 +251,53 @@ export class GallerySceneRenderer implements SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace, 0);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender();
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         if (this.context.inputManager.isKeyDownEventTriggered('Space'))
             this.setObjectRandom();
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        this.sceneTexture.setDescription(device, mainColorDesc);
 
-        this.framebufferTextureMapping.gfxTexture = this.sceneTexture!.gfxTexture;
-        renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
+                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
+        // Maybe have copyTextureToTexture as a native device method?
+        builder.pushPass((pass) => {
+            pass.setDebugName('Copy to Temporal Texture');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
-
-        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.sceneTexture.destroy(device);
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
-        this.circle.destroy(device);
+        this.renderHelper.destroy();
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);

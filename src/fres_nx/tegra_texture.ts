@@ -5,7 +5,6 @@ import { BRTI } from "./bntx";
 import { GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture";
 import { assert } from "../util";
-import { clamp } from "../MathHelpers";
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
@@ -107,67 +106,25 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     }
 }
 
-export function getBlockHeightLog2(heightInBlocks: number): number {
-    return clamp(Math.ceil(Math.log2(heightInBlocks / 8)), 0, 4);
-}
-
 export interface SwizzledSurface {
     width: number;
     height: number;
     channelFormat: ChannelFormat;
     buffer: ArrayBufferSlice;
+    blockHeightLog2: number; // The block height of mip0.
 }
 
-function ctz(n: number): number {
-    let i = 0;
-    while (!(n & 1)) ++i, n >>= 1;
-    return i;
-}
-
-// https://github.com/gdkchan/BnTxx/blob/master/BnTxx/BlockLinearSwizzle.cs
-// TODO(jstpierre): Integrate the proper algorithm from Yuzu
-export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
-    const formatBlockWidth = getFormatBlockWidth(swizzledSurface.channelFormat);
-    const formatBlockHeight = getFormatBlockHeight(swizzledSurface.channelFormat);
-
-    const widthInBlocks = ((swizzledSurface.width + formatBlockWidth - 1) / formatBlockWidth) | 0;
-    const heightInBlocks = ((swizzledSurface.height + formatBlockHeight - 1) / formatBlockHeight) | 0;
-
-    const blockHeight = 1 << getBlockHeightLog2(heightInBlocks);
-    const bpp = getFormatBytesPerPixel(swizzledSurface.channelFormat);
-    const bhMask = (blockHeight * 8) - 1;
-    const bhShift = ctz(blockHeight * 8);
-    const xShift = ctz(blockHeight * 512);
-    const bppShift = ctz(bpp);
-    const widthInGobs = Math.ceil(widthInBlocks * bpp / 64);
-    const gobStride = 512 * blockHeight * widthInGobs;
-
-    function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBufferSlice, srcOffs: number, length: number) {
-        dst.set(src.createTypedArray(Uint8Array, srcOffs, length), dstOffs);
-    }
-
-    const src = swizzledSurface.buffer;
-    const dst = new Uint8Array(widthInBlocks * heightInBlocks * bpp);
-    for (let y = 0; y < heightInBlocks; y++) {
-        for (let x = 0; x < widthInBlocks; x++) {
-            const nx = x << bppShift, ny = y;
-            let p = 0;
-
-            p += ((ny >>> bhShift)) * gobStride;
-            p += ((nx >>> 6)) << xShift;
-            p += ((ny & bhMask) >>> 3) << 9;
-            p += ((nx & 0x3F) >>> 5) << 8;
-            p += ((ny & 0x07) >>> 1) << 6;
-            p += ((nx & 0x1F) >>> 4) << 5;
-            p += ((ny & 0x01) >>> 0) << 4;
-            p += ((nx & 0x0F) >>> 0) << 0;
-
-            const srcOffs = p;
-            const dstOffs = ((y * widthInBlocks) + x) * bpp;
-            memcpy(dst, dstOffs, src, srcOffs, bpp);
-        }
-    }
-    return dst;
+export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {
+    const { tegra_deswizzle, CompressionType } = await import("../../rust/pkg/index");
+    const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
+    const compressionType =
+        channelFormat === ChannelFormat.Bc1 ? CompressionType.Bc1 :
+        channelFormat === ChannelFormat.Bc2 ? CompressionType.Bc2 :
+        channelFormat === ChannelFormat.Bc3 ? CompressionType.Bc3 :
+        channelFormat === ChannelFormat.Bc4 ? CompressionType.Bc4 :
+        channelFormat === ChannelFormat.Bc5 ? CompressionType.Bc5 :
+        undefined!;
+    return tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2);
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfaceSW {

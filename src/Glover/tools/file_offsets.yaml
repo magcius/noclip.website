@@ -1,0 +1,1023 @@
+############################################
+# Observations are only guaranteed valid for ROMs with
+# the following checksum:
+rom_checksum: 0x9661EFD7
+
+############################################
+# For each bank file, tableStartPtrOffset and tableEndPtrOffset
+# report the code address in ROM (as an offset from the table_base_address
+# in this file) of the instruction that saves a register into the corresponding
+# data[Start|End]Offset variable on the stack. In order to actually
+# modify this value in ROM, you have to modify the preceeding two
+# instructions that actually set the register value. Almost all of them take
+# the form:
+#     lui    $v0, {0xB0, addr[24:16]}
+#     addiu  $v0, $v0, addr[15:0]
+# though you can use whatever instructions you want, as long
+# as you save into the register specified by the corresponding
+# table[Start|End]PtrReg key.
+#
+# Note that in memory, the cartridge is mapped to page 0xB0______
+table_base_address:
+  - texture_bank: 0x00050564
+  - object_bank: 0x00051EF8
+
+# TODO: compare extracted FLAs with what is noted here,
+#       to find stray data in rom that is not explicitly
+#       referenced
+bank_files:
+  ######################################
+  ## Texture banks
+  - internal_id: 18
+    type: texture_bank
+    tableStartPtrOffset: 0x8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x14
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0025efc0
+    dataEndOffset: 0x002607c0
+    name: "RCDEMO_TEX_BANK"
+  - internal_id: 15
+    type: texture_bank
+    tableStartPtrOffset: 0x40
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x4C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00250880
+    dataEndOffset: 0x00251fc0
+    name: "CKBONUS_TEX_BANK"
+  - internal_id: 16
+    type: texture_bank
+    tableStartPtrOffset: 0x78
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x84
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00251fc0
+    dataEndOffset: 0x00253c00
+    name: "CKCHEAT1_TEX_BANK"
+  - internal_id: 17
+    type: texture_bank
+    tableStartPtrOffset: 0xB0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xBC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00253c00
+    dataEndOffset: 0x00255740
+    name: "CKCHEAT2_TEX_BANK"
+  - internal_id: 10
+    type: texture_bank
+    tableStartPtrOffset: 0xE8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xF4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x001e5f40
+    dataEndOffset: 0x001ea940
+    name: "FONT_TEX_BANK"
+  - internal_id: 9
+    type: texture_bank
+    tableStartPtrOffset: 0x124
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x130
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0018f800
+    dataEndOffset: 0x001b0ac0
+    name: "HUB_TEX_BANK"
+  - internal_id: 11
+    type: texture_bank
+    tableStartPtrOffset: 0x15C
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x168
+    tableEndPtrReg: v0
+    dataStartOffset: 0x001ea940
+    dataEndOffset: 0x00206500
+    name: "CAMEO_TEX_BANK"
+  - internal_id: 0
+    type: texture_bank
+    tableStartPtrOffset: 0x194
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x1A0
+    tableEndPtrReg: v0
+    dataStartOffset: 0x000f6780
+    dataEndOffset: 0x00115240
+    name: "TITLE_TEX_BANK"
+  - internal_id: 1
+    type: texture_bank
+    tableStartPtrOffset: 0x1CC
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x1D8
+    tableEndPtrReg: v0
+    dataStartOffset: 0x001b0ac0
+    dataEndOffset: 0x001e5f40
+    name: "LEVELEND_TEX_BANK"
+  - internal_id: 14
+    type: texture_bank
+    tableStartPtrOffset: 0x204
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x210
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00206500
+    dataEndOffset: 0x0023ab40
+    name: "LEVELEND_TEX_BANK"
+  - internal_id: 2
+    type: texture_bank
+    tableStartPtrOffset: 0x23C
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x248
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00115240
+    dataEndOffset: 0x001266c0
+    name: "GENERIC_TEX_BANK"
+  - internal_id: 3
+    type: texture_bank
+    tableStartPtrOffset: 0x274
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x280
+    tableEndPtrReg: v0
+    dataStartOffset: 0x001266c0
+    dataEndOffset: 0x001373c0
+    name: "ATLANTIS_TEX_BANK"
+  - internal_id: 4
+    type: texture_bank
+    tableStartPtrOffset: 0x2AC
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x2B8
+    tableEndPtrReg: v0
+    dataStartOffset: 0x001373c0
+    dataEndOffset: 0x00143b00
+    name: "CARNIVAL_TEX_BANK"
+  - internal_id: 6
+    type: texture_bank
+    tableStartPtrOffset: 0x2E4
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x2F0
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00143b00
+    dataEndOffset: 0x00157a80
+    name: "PIRATES_TEX_BANK"
+  - internal_id: 7
+    type: texture_bank
+    tableStartPtrOffset: 0x31C
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x328
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00157a80
+    dataEndOffset: 0x0016bec0
+    name: "PREHISTORIC_TEX_BANK"
+  - internal_id: 8
+    type: texture_bank
+    tableStartPtrOffset: 0x354
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x360
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0016bec0
+    dataEndOffset: 0x00180f00
+    name: "FORTRESS_TEX_BANK"
+  - internal_id: 5
+    type: texture_bank
+    tableStartPtrOffset: 0x38C
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x398
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00180f00
+    dataEndOffset: 0x0018f800
+    name: "OOTW_TEX_BANK"
+  - internal_id: 12
+    type: texture_bank
+    tableStartPtrOffset: 0x3C4
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x3D0
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0023ab40
+    dataEndOffset: 0x0024dec0
+    name: "PRESENT_TEX_BANK"
+  - internal_id: 13
+    type: texture_bank
+    tableStartPtrOffset: 0x3FC
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x408
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0024dec0
+    dataEndOffset: 0x00250880
+    name: "FLYTHRU_TEX_BANK"
+  ######################################
+  ## Object banks
+  - internal_id: 71
+    type: object_bank
+    tableStartPtrOffset: 0x8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x14
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003cb680
+    dataEndOffset: 0x003cfb40
+    name: "TWEEN"
+  - internal_id: 0
+    type: object_bank
+    tableStartPtrOffset: 0x40
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x4C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0047d680
+    dataEndOffset: 0x0047da80
+    name: "SYSTEM"
+  - internal_id: 67
+    type: object_bank
+    tableStartPtrOffset: 0x78
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x84
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00402540
+    dataEndOffset: 0x0040a540
+    name: "WAYROOM"
+  - internal_id: 66
+    type: object_bank
+    tableStartPtrOffset: 0xB0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xBC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0046b180
+    dataEndOffset: 0x0047d680
+    name: "OUTRO"
+  - internal_id: 68
+    type: object_bank
+    tableStartPtrOffset: 0xE8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xF4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0047da80
+    dataEndOffset: 0x00485880
+    name: "PRESENTATION"
+  - internal_id: 69
+    type: object_bank
+    tableStartPtrOffset: 0x120
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x12C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00485880
+    dataEndOffset: 0x00492500
+    name: "FLYTHRU"
+  - internal_id: 65
+    type: object_bank
+    tableStartPtrOffset: 0x158
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x164
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003e15c0
+    dataEndOffset: 0x00402540
+    name: "INTRO"
+  - internal_id: 64
+    type: object_bank
+    tableStartPtrOffset: 0x190
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x19C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0037a100
+    dataEndOffset: 0x0037ef00
+    name: "HUB_SHARED"
+  - internal_id: 2
+    type: object_bank
+    tableStartPtrOffset: 0x1C8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x1D4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0037ef00
+    dataEndOffset: 0x0038bc40
+    name: "HUB_PART1"
+  - internal_id: 3
+    type: object_bank
+    tableStartPtrOffset: 0x200
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x20C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0040a540
+    dataEndOffset: 0x00417340
+    name: "HUB_PART2"
+  - internal_id: 4
+    type: object_bank
+    tableStartPtrOffset: 0x238
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x244
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00417340
+    dataEndOffset: 0x004239c0
+    name: "HUB_PART3"
+  - internal_id: 5
+    type: object_bank
+    tableStartPtrOffset: 0x270
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x27C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x004239c0
+    dataEndOffset: 0x00430040
+    name: "HUB_PART4"
+  - internal_id: 6
+    type: object_bank
+    tableStartPtrOffset: 0x2A8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x2B4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00430040
+    dataEndOffset: 0x0043c6c0
+    name: "HUB_PART5"
+  - internal_id: 7
+    type: object_bank
+    tableStartPtrOffset: 0x2E0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x2EC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0043c6c0
+    dataEndOffset: 0x00448d00
+    name: "HUB_PART6"
+  - internal_id: 8
+    type: object_bank
+    tableStartPtrOffset: 0x318
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x324
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00448d00
+    dataEndOffset: 0x00455640
+    name: "HUB_PART7"
+  - internal_id: 9
+    type: object_bank
+    tableStartPtrOffset: 0x350
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x35C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00455640
+    dataEndOffset: 0x00462040
+    name: "HUB_PART8"
+  - internal_id: 10
+    type: object_bank
+    tableStartPtrOffset: 0x388
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x394
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003db380
+    dataEndOffset: 0x003e15c0
+    name: "CAVE"
+  - internal_id: 11
+    type: object_bank
+    tableStartPtrOffset: 0x3C0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x3CC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00462040
+    dataEndOffset: 0x00465dc0
+    name: "ASSAULT COURSE"
+  - internal_id: 1
+    type: object_bank
+    tableStartPtrOffset: 0x3F8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x404
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002607c0
+    dataEndOffset: 0x00282600
+    name: "GENERIC"
+  - internal_id: 12
+    type: object_bank
+    tableStartPtrOffset: 0x430
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x43C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00282600
+    dataEndOffset: 0x00287700
+    name: "ATLANTIS_SHARED"
+  - internal_id: 13
+    type: object_bank
+    tableStartPtrOffset: 0x468
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x474
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00287700
+    dataEndOffset: 0x0028c700
+    name: "ATLANTIS_L1"
+  - internal_id: 14
+    type: object_bank
+    tableStartPtrOffset: 0x4A0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x4AC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0028c700
+    dataEndOffset: 0x00293680
+    name: "ATLANTIS_L2"
+  - internal_id: 15
+    type: object_bank
+    tableStartPtrOffset: 0x4D8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x4E4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00293680
+    dataEndOffset: 0x002a0200
+    name: "ATLANTIS_L3A"
+  - internal_id: 17
+    type: object_bank
+    tableStartPtrOffset: 0x510
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x51C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002a0200
+    dataEndOffset: 0x002b0440
+    name: "ATLANTIS_BOSS"
+  - internal_id: 18
+    type: object_bank
+    tableStartPtrOffset: 0x548
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x554
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002b0440
+    dataEndOffset: 0x002b1b40
+    name: "ATLANTIS_BONUS"
+  - internal_id: 19
+    type: object_bank
+    tableStartPtrOffset: 0x580
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x58C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002b1b40
+    dataEndOffset: 0x002b92c0
+    name: "CARNIVAL_SHARED"
+  - internal_id: 20
+    type: object_bank
+    tableStartPtrOffset: 0x5B8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x5C4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002b92c0
+    dataEndOffset: 0x002c5980
+    name: "CARNIVAL_L1"
+  - internal_id: 21
+    type: object_bank
+    tableStartPtrOffset: 0x5F0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x5FC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002c5980
+    dataEndOffset: 0x002cca00
+    name: "CARNIVAL_L2A"
+  - internal_id: 23
+    type: object_bank
+    tableStartPtrOffset: 0x628
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x634
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002cca00
+    dataEndOffset: 0x002d6980
+    name: "CARNIVAL_L3A"
+  - internal_id: 25
+    type: object_bank
+    tableStartPtrOffset: 0x660
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x66C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002d6980
+    dataEndOffset: 0x002e6540
+    name: "CARNIVAL_BOSS"
+  - internal_id: 26
+    type: object_bank
+    tableStartPtrOffset: 0x698
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x6A4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002e6540
+    dataEndOffset: 0x002e8bc0
+    name: "CARNIVAL_BONUS"
+  - internal_id: 38
+    type: object_bank
+    tableStartPtrOffset: 0x6D0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x6DC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002e8bc0
+    dataEndOffset: 0x002ee880
+    name: "PIRATES_SHARED"
+  - internal_id: 39
+    type: object_bank
+    tableStartPtrOffset: 0x708
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x714
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002ee880
+    dataEndOffset: 0x002f8580
+    name: "PIRATES_L1"
+  - internal_id: 40
+    type: object_bank
+    tableStartPtrOffset: 0x740
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x74C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x002f8580
+    dataEndOffset: 0x00304800
+    name: "PIRATES_L2A"
+  - internal_id: 43
+    type: object_bank
+    tableStartPtrOffset: 0x778
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x784
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0038bc40
+    dataEndOffset: 0x00396d80
+    name: "PIRATES_L3B"
+  - internal_id: 44
+    type: object_bank
+    tableStartPtrOffset: 0x7B0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x7BC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00304800
+    dataEndOffset: 0x00314a40
+    name: "PIRATES_BOSS"
+  - internal_id: 45
+    type: object_bank
+    tableStartPtrOffset: 0x7E8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x7F4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00314a40
+    dataEndOffset: 0x00316400
+    name: "PIRATES_BONUS"
+  - internal_id: 46
+    type: object_bank
+    tableStartPtrOffset: 0x820
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x82C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00316400
+    dataEndOffset: 0x00320c80
+    name: "PREHISTORIC_SHARED"
+  - internal_id: 47
+    type: object_bank
+    tableStartPtrOffset: 0x858
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x864
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00320c80
+    dataEndOffset: 0x00327dc0
+    name: "PREHISTORIC_L1A"
+  - internal_id: 49
+    type: object_bank
+    tableStartPtrOffset: 0x890
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x89C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00327dc0
+    dataEndOffset: 0x00330840
+    name: "PREHISTORIC_L2A"
+  - internal_id: 52
+    type: object_bank
+    tableStartPtrOffset: 0x8C8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x8D4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00396d80
+    dataEndOffset: 0x0039e280
+    name: "PREHISTORIC_L3B"
+  - internal_id: 53
+    type: object_bank
+    tableStartPtrOffset: 0x900
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x90C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00330840
+    dataEndOffset: 0x00337d80
+    name: "PREHISTORIC_BOSS"
+  - internal_id: 54
+    type: object_bank
+    tableStartPtrOffset: 0x938
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x944
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00337d80
+    dataEndOffset: 0x0033c5c0
+    name: "PREHISTORIC_BONUS"
+  - internal_id: 55
+    type: object_bank
+    tableStartPtrOffset: 0x970
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x97C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0033c5c0
+    dataEndOffset: 0x003458c0
+    name: "FORTRESS_SHARED"
+  - internal_id: 56
+    type: object_bank
+    tableStartPtrOffset: 0x9A8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x9B4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003458c0
+    dataEndOffset: 0x00351400
+    name: "FORTRESS_L1A"
+  - internal_id: 58
+    type: object_bank
+    tableStartPtrOffset: 0x9E0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0x9EC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00351400
+    dataEndOffset: 0x0035ddc0
+    name: "FORTRESS_L2A"
+  - internal_id: 61
+    type: object_bank
+    tableStartPtrOffset: 0xA18
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xA24
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0035ddc0
+    dataEndOffset: 0x00369000
+    name: "FORTRESS_L3B"
+  - internal_id: 63
+    type: object_bank
+    tableStartPtrOffset: 0xA50
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xA5C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00369000
+    dataEndOffset: 0x0036cbc0
+    name: "FORTRESS_BONUS"
+  - internal_id: 62
+    type: object_bank
+    tableStartPtrOffset: 0xA88
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xA94
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0036cbc0
+    dataEndOffset: 0x0037a100
+    name: "FORTRESS_BOSS"
+  - internal_id: 27
+    type: object_bank
+    tableStartPtrOffset: 0xAC0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xACC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003d3d80
+    dataEndOffset: 0x003db380
+    name: "OOTW_SHARED"
+  - internal_id: 29
+    type: object_bank
+    tableStartPtrOffset: 0xAF8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xB04
+    tableEndPtrReg: v0
+    dataStartOffset: 0x0039e280
+    dataEndOffset: 0x003ab800
+    name: "OOTW_L2A"
+  - internal_id: 30
+    type: object_bank
+    tableStartPtrOffset: 0xB30
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xB3C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003ab800
+    dataEndOffset: 0x003b4540
+    name: "OOTW_L2B"
+  - internal_id: 31
+    type: object_bank
+    tableStartPtrOffset: 0xB68
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xB74
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003b4540
+    dataEndOffset: 0x003bf440
+    name: "OOTW_L3"
+  - internal_id: 33
+    type: object_bank
+    tableStartPtrOffset: 0xBA0
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xBAC
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003bf440
+    dataEndOffset: 0x003cb680
+    name: "OOTW_BOSS1"
+  - internal_id: 35
+    type: object_bank
+    tableStartPtrOffset: 0xBD8
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xBE4
+    tableEndPtrReg: v0
+    dataStartOffset: 0x003cfb40
+    dataEndOffset: 0x003d3d80
+    name: "OOTW_BONUS"
+  - internal_id: 70
+    type: object_bank
+    tableStartPtrOffset: 0xC10
+    tableStartPtrReg: v0
+    tableEndPtrOffset: 0xC1C
+    tableEndPtrReg: v0
+    dataStartOffset: 0x00465dc0
+    dataEndOffset: 0x0046b180
+    name: "TITLE_BANK"
+
+landscapes:
+  dataStartOffset: 0x00492500
+  dataEndOffset: 0x004d588f
+
+  # Unlike the bank pointer offsets, these are
+  # absolute ROM pointers to the start of a
+  # two-instruction couplet that specify the start/end
+  # of the landscape region of the ROM.
+  ptrStartAddress: 0x00534ac
+  ptrStartReg: v0
+  ptrEndAddress: 0x0053564
+  ptrEndReg: v1
+
+  # Landscape files are concatenated one after another
+  # into a big blob, and referenced directly by their
+  # index into this list.
+  files:
+    - idx: 0
+      name: 'HUB1.ln'
+      length: 5488
+      offset: 0x00492500
+    - idx: 1
+      name: 'HUB2.ln'
+      length: 4880
+      offset: 0x00493A70
+    - idx: 2
+      name: 'HUB3.ln'
+      length: 4816
+      offset: 0x00494D80
+    - idx: 3
+      name: 'HUB4.ln'
+      length: 4576
+      offset: 0x00496050
+    - idx: 4
+      name: 'HUB5.ln'
+      length: 4800
+      offset: 0x00497230
+    - idx: 5
+      name: 'HUB6.ln'
+      length: 5008
+      offset: 0x004984F0
+    - idx: 6
+      name: 'HUB7.ln'
+      length: 5008
+      offset: 0x00499880
+    - idx: 7
+      name: 'HUB8.ln'
+      length: 5440
+      offset: 0x0049AC10
+    - idx: 8
+      name: 'CAVE.ln'
+      length: 1392
+      offset: 0x0049C150
+    - idx: 9
+      name: 'ACOURSE' 
+      length: 504
+      offset: 0x0049C6C0
+    - idx: 10
+      name: 'AT1.lnd'
+      length: 4784
+      offset: 0x0049D470
+    - idx: 11
+      name: 'AT2.lnd'
+      length: 6256
+      offset: 0x0049E720
+    - idx: 12
+      name: 'AT3A.ln'
+      length: 10272
+      offset: 0x0049FF90
+    - idx: 13
+      name: 'ATBOSS.' 
+      length: 320
+      offset: 0x004A27B0
+    - idx: 14
+      name: 'ATBONUS' 
+      length: 880
+      offset: 0x004A30C0
+    - idx: 15
+      name: 'CK1.lnd'
+      length: 14768
+      offset: 0x004A43D0
+    - idx: 16
+      name: 'CK2A.ln'
+      length: 9488
+      offset: 0x004A7D80
+    - idx: 17
+      name: 'CK3A.ln'
+      length: 9712
+      offset: 0x004AA290
+    - idx: 18
+      name: 'CKBOSS.' 
+      length: 792
+      offset: 0x004AC880
+    - idx: 19
+      name: 'CKBONUS' 
+      length: 344
+      offset: 0x004ACF80
+    - idx: 20
+      name: 'PC1.lnd'
+      length: 12976
+      offset: 0x004AE460
+    - idx: 21
+      name: 'PC2A.ln'
+      length: 10480
+      offset: 0x004B1710
+    - idx: 22
+      name: 'PC3B.ln'
+      length: 9888
+      offset: 0x004B4000
+    - idx: 23
+      name: 'PCBOSS.' 
+      length: 720
+      offset: 0x004B66A0
+    - idx: 24
+      name: 'PCBONUS' 
+      length: 568
+      offset: 0x004B7140
+    - idx: 25
+      name: 'PH1A.ln'
+      length: 6592
+      offset: 0x004B7F30
+    - idx: 26
+      name: 'PH2A.ln'
+      length: 9744
+      offset: 0x004B98F0
+    - idx: 27
+      name: 'PH3B.ln'
+      length: 10000
+      offset: 0x004BBF00
+    - idx: 28
+      name: 'PHBOSS.' 
+      length: 312
+      offset: 0x004BE610
+    - idx: 29
+      name: 'PHBONUS' 
+      length: 384
+      offset: 0x004BEB30
+    - idx: 30
+      name: 'FF1A.ln'
+      length: 7344
+      offset: 0x004BFC50
+    - idx: 31
+      name: 'FF2A.ln'
+      length: 9328
+      offset: 0x004C1900
+    - idx: 32
+      name: 'FF3B.ln'
+      length: 9600
+      offset: 0x004C3D70
+    - idx: 33
+      name: 'FFBOSS.' 
+      length: 960
+      offset: 0x004C62F0
+    - idx: 34
+      name: 'FFBONUS' 
+      length: 952
+      offset: 0x004C6E80
+    - idx: 35
+      name: 'OW2A.ln'
+      length: 10992
+      offset: 0x004C7DF0
+    - idx: 36
+      name: 'OW2B.ln'
+      length: 9024
+      offset: 0x004CA8E0
+    - idx: 37
+      name: 'OW3.lnd'
+      length: 11280
+      offset: 0x004CCC20
+    - idx: 38
+      name: 'OWBOSS1' 
+      length: 232
+      offset: 0x004CF830
+    - idx: 39
+      name: 'TWEEN.l'
+      length: 2784
+      offset: 0x004CFD00
+    - idx: 40
+      name: 'OWBOSS3' 
+      length: 824
+      offset: 0x004D07E0
+    - idx: 41
+      name: 'OWBONUS' 
+      length: 944
+      offset: 0x004D0F00
+    - idx: 42
+      name: 'WAYROOM' 
+      length: 080
+      offset: 0x004D1A80
+    - idx: 43
+      name: 'PRESENT' 
+      length: 92
+      offset: 0x004D22A0
+    - idx: 44
+      name: 'FLYTHRU' 
+      length: 968
+      offset: 0x004D2680
+    - idx: 45
+      name: 'FLYTHRU' 
+      length: 080
+      offset: 0x004D3DD0
+    - idx: 46
+      name: 'INTRO.l'
+      length: 368
+      offset: 0x004D5590
+    - idx: 47
+      name: 'OUTRO.l'
+      length: 400
+      offset: 0x004D5700
+
+
+framesets:
+    # Framesets for flipbook sprites are specified in
+    # ROM as an array of these structures starting at the
+    # specified absolute offset:
+    #
+    # struct frameset {
+    #   uint32_t reserved1;
+    #   uint16_t reserved2;
+    #   uint16_t n_frames;
+    #   char[8] name;
+    # };
+    #
+    # The reserved fields are saved for runtime use.
+    # When loaded, the engine will look through all
+    # loaded texture banks for textures hashed with
+    # the following format:
+    #
+    # sprintf(tmp, "%s%02d.bmp", frameset.name, frameIdx);
+    # lookupTextureByID(hash_str(tmp));
+    #
+    # The engine will initialize frameIdx to 1 and
+    # increment it either up to and including the value
+    # of n_frames or, if n_frames is 0, until it fails to
+    # find a texture with the given id.
+    dataStartOffset: 0x000f2b24
+    dataEndOffset: 0x000f2d84
+    sets:
+      - name: smoke
+      - name: smk
+      - name: plat
+      - name: ai_spl
+      - name: bstar
+      - name: glow
+      - name: newisp
+      - name: photon
+      - name: sfair
+      - name: fardus
+      - name: score
+      - name: fardus
+        frames: 4
+      - name: acard00
+      - name: ballg2
+      - name: popa
+      - name: popb
+      - name: egg
+      - name: tear
+      - name: p
+      - name: marble
+      - name: firea
+      - name: fireb
+      - name: splat
+      - name: heart
+      - name: star
+      - name: balls
+      - name: bubble
+      - name: glob
+      - name: eolgb
+      - name: eolcl
+      - name: trop00
+      - name: puff
+      - name: cross
+      - name: horn00
+      - name: note00
+      - name: ohno
+      - name: rgarib
+      - name: traj
+
+mrtips:
+  # Tip messages are stored in a table whose records
+  # correspond to individual lines of text. The record's
+  # format is as follows:
+  #
+  # struct MsgLine {
+  #   char *text; // RAM address
+  #   uint32_t action;   
+  # }
+  # 
+  # The text itself is stored as a null-terminated string
+  # elsewhere in ROM. The record's text pointer is relative
+  # to the game's RAM layout, not ROM layout, so to work
+  # with text in the ROM you have to translate:
+  #   rom_address = (ram_address & 0xFFFFF) + 0x1000;
+  # and
+  #   ram_address = (rom_address - 0x1000) | 0x80100000;
+  #
+  # The action byte indicates what to do after printing
+  # a line of text to the screen:
+  #   0 - next line
+  #   1 - next page
+  #   2 - end message
+  #
+  # A message's ID is given by how many complete messages
+  # came before it in this table. Thus, an in-level Mr. Tip
+  # object that prints the message with ID 9 will search from
+  # the beginning of this table and start printing lines of
+  # text immediately following the ninth record with an action
+  # byte equalling 2 ("end message")
+  # 
+  # TODO: record the ASCII characters used to print
+  #       N64 button images
+  message_table:
+    en: 0xec538
+    fr: 0xecb30
+    de: 0xed130

@@ -1,21 +1,21 @@
 
-import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
+import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, fopAcM_create, fopAcIt_JudgeByID } from "./framework";
 import { dGlobals, dDlst_alphaModel__Type } from "./zww_scenes";
-import { vec3, mat4, quat, ReadonlyVec3, vec2 } from "gl-matrix";
+import { vec3, mat4, quat, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight, dKy_setLight__OnMaterialParams } from "./d_kankyo";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf } from "./m_do_ext";
-import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad } from "./SComponent";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight__OnMaterialParams } from "./d_kankyo";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf, mDoExt_modelEntryDL } from "./m_do_ext";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "./SComponent";
 import { dPath_GetRoomPath, dStage_Multi_c, dPath, dPath__Point } from "./d_stage";
-import { nArray, assertExists, assert } from "../util";
+import { nArray, assertExists, assert, hexzero0x } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, White, Green } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
-import { dLib_getWaterY, d_a_sea } from "./d_a_sea";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render";
+import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -28,6 +28,8 @@ import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle";
+import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 // Framework'd actors
 
@@ -57,22 +59,16 @@ export function mDoMtx_ZrotM(dst: mat4, n: number): void {
     mat4.rotateZ(dst, dst, n * kUshortTo2PI);
 }
 
-export function mDoMtx_ZYXrotM(dst: mat4, v: vec3): void {
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-}
-
 export function mDoMtx_ZXYrotM(dst: mat4, v: vec3): void {
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
     mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
+    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
+    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
 }
 
 export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
     mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
+    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
+    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
 }
 
 export const calc_mtx = mat4.create();
@@ -86,7 +82,7 @@ export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
 }
 
 export function MtxPosition(dst: vec3, src: ReadonlyVec3 = dst, m: mat4 = calc_mtx): void {
-    vec3.transformMat4(dst, src, m);
+    transformVec3Mat4w1(dst, m, src);
 }
 
 export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
@@ -197,7 +193,7 @@ class d_a_grass extends fopAc_ac_c {
         ]
     ];
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const enum FoliageType {
             Grass,
             Tree,
@@ -274,8 +270,10 @@ class d_a_ep extends fopAc_ac_c {
     private alphaModelScale: number = 0.0;
     private alphaModelScaleTarget: number = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `Ep`);
+    private static arcName = `Ep`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_ep.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -286,7 +284,7 @@ class d_a_ep extends fopAc_ac_c {
             this.type = 0;
 
         if (this.type === 0 || this.type === 3)
-            this.model = new J3DModelInstance(globals.resCtrl.getObjectRes(ResType.Model, `Ep`, this.hasObm ? 0x04 : 0x05));
+            this.model = new J3DModelInstance(globals.resCtrl.getObjectRes(ResType.Model, d_a_ep.arcName, this.hasObm ? 0x04 : 0x05));
 
         this.CreateInit();
 
@@ -311,7 +309,7 @@ class d_a_ep extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.type === 0 || this.type === 3) {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
@@ -325,7 +323,7 @@ class d_a_ep extends fopAc_ac_c {
         alphaModel0.set(dDlst_alphaModel__Type.Bonbori, this.alphaModelMtx, this.alphaModelAlpha);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         if (this.type === 0 || this.type === 3) {
@@ -369,7 +367,7 @@ class d_a_ep extends fopAc_ac_c {
         this.ep_move();
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy_plight_cut(globals.g_env_light, this.light);
     }
 
@@ -476,7 +474,7 @@ class d_a_bg extends fopAc_ac_c {
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
     private bgW = new dBgW();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
 
         const roomNo = this.parameters;
@@ -536,7 +534,7 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
                 this.bgBtkAnm[i]!.play(deltaTimeInFrames);
@@ -545,9 +543,9 @@ class d_a_bg extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // TODO(jstpierre): Proper culling check
-        // if (!this.cullingCheck(viewerInput))
+        // if (!this.cullingCheck(viewerInput.camera))
         //     return;
 
         // force far plane to 100000.0 ?
@@ -566,7 +564,7 @@ class d_a_bg extends fopAc_ac_c {
         settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         globals.scnPlay.bgS.Release(this.bgW);
     }
 }
@@ -575,7 +573,7 @@ class d_a_vrbox extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
     private model: J3DModelInstance;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
         const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`));
@@ -631,7 +629,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.dungeon_rain_proc(globals);
     }
 
@@ -655,7 +653,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         this.daVrbox_color_set(globals);
@@ -686,7 +684,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     private usoUmi: J3DModelInstance | null = null;
     private scrollSpeed = 0.0005;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const backCloudRes = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_back_cloud.bdl`));
         this.backCloud = new J3DModelInstance(backCloudRes);
 
@@ -766,11 +764,11 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiCol);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.daVrbox2_color_set(globals, deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
         let sum = 0;
@@ -835,7 +833,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private innerRadius = 0.0;
     private outerRadius = 0.0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         this.colpat = this.parameters & 0xFF;
         this.effectMode = (this.parameters >>> 8) & 0xFF;
         this.invert = !!((this.rot[0] >>> 8) & 0xFF);
@@ -875,7 +873,7 @@ class d_a_kytag00 extends fopAc_ac_c {
         // Moved inside wether_tag_move.
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.invert) {
             this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
         } else {
@@ -952,15 +950,15 @@ class d_a_kytag00 extends fopAc_ac_c {
             if (this.effectMode === Kytag00EffectMode.Rain) {
                 this.raincnt_set(globals, target);
             } else if (this.effectMode === Kytag00EffectMode.Thunder) {
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
             } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
             } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                 // TODO(jstpierre): moya
-                if (envLight.thunderMode === 0)
+                if (envLight.thunderMode === ThunderMode.Off)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
             } else {
@@ -982,15 +980,15 @@ class d_a_kytag00 extends fopAc_ac_c {
                     this.raincnt_cut(globals);
                 } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                 } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                     // TODO(jstpierre): moya
                     if (envLight.thunderMode === 2)
-                        envLight.thunderMode = 0;
+                        envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 }
             }
@@ -1003,7 +1001,7 @@ class d_a_kytag01 extends fopAc_ac_c {
 
     private influence = new WAVE_INFLUENCE();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         vec3.copy(this.influence.pos, this.pos);
 
         this.influence.innerRadius = this.scale[0] * 5000.0;
@@ -1046,7 +1044,7 @@ class d_a_kytag01 extends fopAc_ac_c {
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         dKy__waveinfl_cut(globals.g_env_light, this.influence);
     }
 }
@@ -1059,8 +1057,10 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
     private btkAnm = new mDoExt_btkAnm();
     private bckAnm = new mDoExt_bckAnm();
 
-    public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `Ygush00`);
+    private static arcName = `Ygush00`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_obj_Ygush00.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -1070,9 +1070,9 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         const bck_table = [0x06, 0x05, 0x05, 0x05];
 
         const resCtrl = globals.resCtrl;
-        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Ygush00`, mdl_table[this.type]));
-        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
-        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_obj_Ygush00.arcName, mdl_table[this.type]));
+        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, d_a_obj_Ygush00.arcName, btk_table[this.type]), true, LoopMode.REPEAT);
+        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, d_a_obj_Ygush00.arcName, bck_table[this.type]), true, LoopMode.REPEAT);
 
         this.cullMtx = this.model.modelMatrix;
         vec3.copy(this.model.baseScale, this.scale);
@@ -1084,7 +1084,7 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         if (this.type !== 3) {
             this.btkAnm.play(deltaTimeInFrames);
             this.bckAnm.play(deltaTimeInFrames);
@@ -1095,8 +1095,8 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG1, this.pos, this.tevStr);
@@ -1119,13 +1119,15 @@ class d_a_obj_lpalm extends fopAc_ac_c {
     private animWave = nArray(2, () => 0);
     private animMtxQuat = nArray(2, () => quat.create());
 
-    public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `Oyashi`);
+    private static arcName = `Oyashi`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_obj_lpalm.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
         const resCtrl = globals.resCtrl;
-        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Oyashi`, 0x04));
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_obj_lpalm.arcName, 0x04));
         this.model.jointMatrixCalcCallback = this.nodeCallBack;
 
         this.cullMtx = this.model.modelMatrix;
@@ -1133,7 +1135,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         this.setCullSizeBox(-350.0, -50.0, -350.0, 350.0, 1300.0, 350.0);
 
         mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
-        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
 
         return cPhs__Status.Next;
     }
@@ -1150,7 +1152,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     };
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const envLight = globals.g_env_light;
 
         const windVec = dKyw_get_wind_vec(envLight);
@@ -1184,8 +1186,8 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -1206,27 +1208,47 @@ function vecHalfAngle(dst: vec3, a: vec3, b: vec3): void {
         vec3.zero(dst);
 }
 
-class d_a_obj_zouK1 extends fopAc_ac_c {
-    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK1;
+function dDlst_texSpecmapST(dst: mat4, globals: dGlobals, pos: ReadonlyVec3, tevStr: dKy_tevstr_c, refl: number): void {
+    const scale = 1.0 / refl;
+    computeModelMatrixS(dst, scale, scale, 1.0);
+
+    // Remap.
+    buildEnvMtx(scratchMat4a, 1.0);
+    mat4.mul(dst, dst, scratchMat4a);
+
+    // Half-vector lookAt transform.
+    vec3.sub(scratchVec3a, pos, globals.cameraPosition);
+    dKyr_get_vectle_calc(tevStr.lightObj.Position, pos, scratchVec3b);
+    vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
+    mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
+    mat4.mul(dst, dst, scratchMat4a);
+
+    computeMatrixWithoutTranslation(dst, dst);
+}
+
+class d_a_obj_zouK extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK;
 
     private model: J3DModelInstance;
     private bckAnm = new mDoExt_bckAnm();
     private effectMtx = mat4.create();
 
-    public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `VzouK`);
+    private static arcName = `VzouK`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_obj_zouK.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
         const resCtrl = globals.resCtrl;
-        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `VzouK`, 0x08));
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_obj_zouK.arcName, 0x08));
 
-        const anm = resCtrl.getObjectRes(ResType.Bck, `VzouK`, 0x05);
+        const anm = resCtrl.getObjectRes(ResType.Bck, d_a_obj_zouK.arcName, 0x05);
         this.bckAnm.init(this.model.modelData, anm, true, LoopMode.ONCE, 0.0, anm.duration);
         this.bckAnm.play(0.0);
 
         for (let i = 0; i < this.model.materialInstances.length; i++)
-            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+            this.model.materialInstances[i].effectMtx = this.effectMtx;
 
         this.cullMtx = this.model.modelMatrix;
         this.setCullSizeBox(-1000.0, 0.0, -1000.0, 1000.0, 2800.0, 1000.0);
@@ -1234,40 +1256,22 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
-        mat4.copy(dst, this.effectMtx);
-    }
-
     private set_mtx(): void {
         vec3.copy(this.model.baseScale, this.scale);
         MtxTrans(this.pos, false, this.model.modelMatrix);
-        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+        mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.set_mtx();
     }
 
     private setEffectMtx(globals: dGlobals, pos: vec3, refl: number): void {
-        const scale = 1.0 / refl;
-        computeModelMatrixS(this.effectMtx, scale, scale, 1.0);
-
-        // Remap.
-        buildEnvMtx(scratchMat4a, 1.0);
-        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
-
-        // Half-vector lookAt transform.
-        vec3.sub(scratchVec3a, pos, globals.cameraPosition);
-        dKyr_get_vectle_calc(this.tevStr.lightObj.Position, pos, scratchVec3b);
-        vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
-        mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
-        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
-
-        computeMatrixWithoutTranslation(this.effectMtx, this.effectMtx);
+        dDlst_texSpecmapST(this.effectMtx, globals, pos, this.tevStr, refl);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -1289,7 +1293,7 @@ class d_a_swhit0 extends fopAc_ac_c {
     private static color1Hit = colorNewFromRGBA8(0xE6C8006E);
     private static color2Hit = colorNewFromRGBA8(0x78643264);
 
-    public subload(globals: dGlobals): cPhs__Status {
+    public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
 
@@ -1312,13 +1316,13 @@ class d_a_swhit0 extends fopAc_ac_c {
         mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.bckAnm.play(deltaTimeInFrames);
         this.btkAnm.play(deltaTimeInFrames);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -1464,7 +1468,7 @@ class daSeaFightGame_info_c {
 
 // TODO(jstpierre): This is a hack to put it in 3D.
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
+const drawParams = new DrawParams();
 
 // Simple quad shape & input.
 export class dDlst_2DStatic_c {
@@ -1489,7 +1493,7 @@ export class dDlst_2DStatic_c {
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.ddraw.end();
 
-        this.ddraw.endDraw(device, cache);
+        this.ddraw.endDraw(cache);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -1540,8 +1544,8 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
+        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1590,10 +1594,10 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
             vec3.set(scratchVec3a, x, 0, 0);
             mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
-            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+            mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
-            this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
 
             // No more digits.
@@ -1641,7 +1645,11 @@ class mgameboard_seres {
             return status;
 
         if (this.decodeState === cPhs__Status.Started) {
-            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer).then((buffer) => {
+            // Unfortunately, because the WebAudio API, in its infinite wisdom, detaches the original audio buffer,
+            // we have to make a copy here. Amazing stuff.
+            // https://github.com/WebAudio/web-audio-api/issues/1175
+            const buffer = globals.modelCache.getFileData(this.filename).copyToBuffer();
+            ctx.ctx.decodeAudioData(buffer).then((buffer) => {
                 this.buffer = buffer;
                 this.decodeState = cPhs__Status.Complete;
             });
@@ -1683,10 +1691,12 @@ class d_a_mgameboard extends fopAc_ac_c {
     private seres_kbm = new mgameboard_seres('Extra/shop_0.aw_0000000d.wav');
     private seres_spl = new mgameboard_seres('Extra/shop_0.aw_0000000e.wav');
 
-    public subload(globals: dGlobals): cPhs__Status {
+    private static arcName = `Kaisen_e`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
-        status = dComIfG_resLoad(globals, `Kaisen_e`);
+        status = dComIfG_resLoad(globals, d_a_mgameboard.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -1708,10 +1718,10 @@ class d_a_mgameboard extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
 
-        this.boardModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 0x08));
-        this.cursorModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 0x09));
-        this.highscorePad = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x11));
-        this.highscoreLabel = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0E));
+        this.boardModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x08));
+        this.cursorModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x09));
+        this.highscorePad = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x11));
+        this.highscoreLabel = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x0E));
 
         this.cullMtx = this.boardModel.modelMatrix;
         this.setCullSizeBox(-600.0, -300.0, -500.0, 600.0, 300.0, 100.0);
@@ -1742,18 +1752,18 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigame.init(24, 3);
 
         for (let i = this.missModels.length; i < this.minigame.bulletNum; i++)
-            this.missModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 10)));
+            this.missModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x0A)));
 
         for (let i = this.hitModels.length; i < this.minigame.bulletNum; i++)
-            this.hitModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 7)));
+            this.hitModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x07)));
 
-        const bulletData0 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0F);
-        const bulletData1 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x10);
+        const bulletData0 = resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x0F);
+        const bulletData1 = resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x10);
         for (let i = this.bullet.length; i < this.minigame.bulletNum; i++)
             this.bullet.push(new dDlst_2DObject_c(bulletData0, bulletData1));
 
-        const squidData0 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x12);
-        const squidData1 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x13);
+        const squidData0 = resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x12);
+        const squidData1 = resCtrl.getObjectRes(ResType.Bti, d_a_mgameboard.arcName, 0x13);
         for (let i = this.squid.length; i < this.minigame.ships.length; i++)
             this.squid.push(new dDlst_2DObject_c(squidData0, squidData1));
 
@@ -1762,11 +1772,11 @@ class d_a_mgameboard extends fopAc_ac_c {
             const ship = this.minigame.ships[i];
             const size = ship.numTotalParts;
             if (size === 2)
-                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 4)));
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x04)));
             else if (size === 3)
-                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 5)));
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x05)));
             else if (size === 4)
-                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 6)));
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_mgameboard.arcName, 0x06)));
             else
                 throw "whoops";
         }
@@ -1954,7 +1964,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigameResetTimer = 30;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
             this.minigameResetTimer -= deltaTimeInFrames;
@@ -1971,8 +1981,8 @@ class d_a_mgameboard extends fopAc_ac_c {
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -2287,7 +2297,7 @@ class dCloth_packet_c {
 
     private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
@@ -2316,8 +2326,8 @@ class dCloth_packet_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2325,7 +2335,7 @@ class dCloth_packet_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, ((this.flyGridSize - 1) * this.hoistGridSize) * 2 * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -2359,23 +2369,26 @@ class d_a_sie_flag extends fopAc_ac_c {
 
     public clothTevStr = new dKy_tevstr_c();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    private static arcName = `Eshata`;
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
-        status = dComIfG_resLoad(globals, 'Eshata');
+        status = dComIfG_resLoad(globals, d_a_sie_flag.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
-        status = dComIfG_resLoad(globals, 'Cloth');
+        status = dComIfG_resLoad(globals, d_a_sie_flag.arcNameCloth);
         if (status !== cPhs__Status.Complete)
             return status;
 
         const resCtrl = globals.resCtrl;
-        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, 'Eshata', 0x04));
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_sie_flag.arcName, 0x04));
 
         dKy_tevstr_init(this.clothTevStr, this.roomNo);
-        const toonTex = resCtrl.getObjectRes(ResType.Bti, 'Cloth', 0x03);
-        const flagTex = resCtrl.getObjectRes(ResType.Bti, 'Eshata', 0x07);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, d_a_sie_flag.arcNameCloth, 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, d_a_sie_flag.arcName, 0x07);
         this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 700.0, 360.0, this.clothTevStr);
 
         vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
@@ -2386,8 +2399,8 @@ class d_a_sie_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -2397,7 +2410,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2427,7 +2440,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2442,23 +2455,26 @@ class d_a_tori_flag extends fopAc_ac_c {
 
     public clothTevStr = new dKy_tevstr_c();
 
-    public subload(globals: dGlobals): cPhs__Status {
+    private static arcName = `Trflag`;
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
-        status = dComIfG_resLoad(globals, 'Trflag');
+        status = dComIfG_resLoad(globals, d_a_tori_flag.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
-        status = dComIfG_resLoad(globals, 'Cloth');
+        status = dComIfG_resLoad(globals, d_a_tori_flag.arcNameCloth);
         if (status !== cPhs__Status.Complete)
             return status;
 
         const resCtrl = globals.resCtrl;
-        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, 'Trflag', 0x04));
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_tori_flag.arcName, 0x04));
 
         dKy_tevstr_init(this.clothTevStr, this.roomNo);
-        const toonTex = resCtrl.getObjectRes(ResType.Bti, 'Cloth', 0x03);
-        const flagTex = resCtrl.getObjectRes(ResType.Bti, 'Trflag', 0x07);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, d_a_tori_flag.arcNameCloth, 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, d_a_tori_flag.arcName, 0x07);
         this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 210.0, 105.0, this.clothTevStr);
     
         vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
@@ -2469,8 +2485,8 @@ class d_a_tori_flag extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
@@ -2480,7 +2496,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.set_mtx();
@@ -2511,7 +2527,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.setMtx(calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         this.cloth.destroy(globals.modelCache.device);
     }
 }
@@ -2575,27 +2591,23 @@ class d_a_majuu_flag extends fopAc_ac_c {
     private windSpeed2 = 10.0;
     private drag = 0.85;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    private static arcNames = [null, `Matif`, `Vsvfg`, `Xhcf`];
+    private static arcNameCloth = `Cloth`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
         this.flagType = this.parameters & 0xFF;
         this.texType = (this.parameters >>> 24) & 0xFF;
 
         let status: cPhs__Status;
 
-        if (this.texType === 1) {
-            status = dComIfG_resLoad(globals, 'Matif');
-            if (status !== cPhs__Status.Complete)
-                return status;
-        } else if (this.texType === 2) {
-            status = dComIfG_resLoad(globals, 'Vsvfg');
-            if (status !== cPhs__Status.Complete)
-                return status;
-        } else if (this.texType === 3) {
-            status = dComIfG_resLoad(globals, 'Xhcf');
+        const arcName = d_a_majuu_flag.arcNames[this.texType];
+        if (arcName !== null) {
+            status = dComIfG_resLoad(globals, arcName);
             if (status !== cPhs__Status.Complete)
                 return status;
         }
 
-        status = dComIfG_resLoad(globals, 'Cloth');
+        status = dComIfG_resLoad(globals, d_a_majuu_flag.arcNameCloth);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -2636,11 +2648,11 @@ class d_a_majuu_flag extends fopAc_ac_c {
             this.rawTex = loadRawTexture(globals, rawTexData, 0x40, 0x40, GX.TexFormat.CMPR, GX.WrapMode.CLAMP, GX.WrapMode.CLAMP);
             this.flagTex = this.rawTex;
         } else if (this.texType === 1) {
-            this.flagTex = resCtrl.getObjectRes(ResType.Bti, `Matif`, 0x03);
+            this.flagTex = resCtrl.getObjectRes(ResType.Bti, arcName!, 0x03);
         } else if (this.texType === 2) {
-            this.flagTex = resCtrl.getObjectRes(ResType.Bti, `Vsvfg`, 0x03);
+            this.flagTex = resCtrl.getObjectRes(ResType.Bti, arcName!, 0x03);
         } else if (this.texType === 3) {
-            this.flagTex = resCtrl.getObjectRes(ResType.Bti, `Xhcf`, 0x03);
+            this.flagTex = resCtrl.getObjectRes(ResType.Bti, arcName!, 0x03);
         }
 
         if (this.texType === 0) {
@@ -2650,7 +2662,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
                 this.flagScale = 1.27;
                 this.usePlayerTevStr = true;
             } else if (this.flagType === 4) {
-                this.flagType = 0.3;
+                this.flagScale = 0.3;
             } else {
                 this.flagScale = 1.0;
             }
@@ -2659,7 +2671,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
             if (this.flagType !== 0xFF) {
                 // In this case, flagType is a scale parameter.
-                this.flagScale += (this.flagType * 0.05)
+                this.flagScale += (this.flagType * 0.05);
             }
         }
 
@@ -2770,14 +2782,14 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
-        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         // For reference.
@@ -2806,8 +2818,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2815,7 +2827,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, (11 + 9 + 7 + 5 + 3 + 1) * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
-        ddraw.endAndUpload(device, renderInstManager);
+        ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -2920,7 +2932,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
             this.setNrmVtx(this.nrmArr[i], i);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         const mMonotone = false;
@@ -2962,7 +2974,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         mat4.copy(this.mtx, calc_mtx);
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         const device = globals.modelCache.device;
         if (this.rawTex !== null)
             this.rawTex.destroy(device);
@@ -3005,10 +3017,13 @@ class d_a_kamome extends fopAc_ac_c {
     private rotVel: number = 0;
     private rotVelFade: number = 0;
 
-    public subload(globals: dGlobals): cPhs__Status {
+    private static arcName = 'Kamome';
+
+    public override subload(globals: dGlobals): cPhs__Status {
+
         let status: cPhs__Status;
 
-        status = dComIfG_resLoad(globals, 'Kamome');
+        status = dComIfG_resLoad(globals, d_a_kamome.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -3018,8 +3033,8 @@ class d_a_kamome extends fopAc_ac_c {
         this.switch_arg = (this.parameters >>> 0x18) & 0xFF;
 
         // createHeap
-        const modelData = globals.resCtrl.getObjectRes(ResType.Model, 'Kamome', 0x17);
-        const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, 'Kamome', 0x12);
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_kamome.arcName, 0x17);
+        const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, d_a_kamome.arcName, 0x12);
         this.morf = new mDoExt_McaMorf(modelData, null, null, anmRes, LoopMode.REPEAT);
 
         if (this.path_arg !== 0xFF) {
@@ -3059,7 +3074,7 @@ class d_a_kamome extends fopAc_ac_c {
     }
 
     private anm_init(globals: dGlobals, anmResIdx: number, morf: number, loopMode: LoopMode = LoopMode.REPEAT, speedInFrames: number = 1.0): void {
-        const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, 'Kamome', anmResIdx);
+        const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, d_a_kamome.arcName, anmResIdx);
         this.morf.setAnm(anmRes, loopMode, morf, speedInFrames);
     }
 
@@ -3158,7 +3173,7 @@ class d_a_kamome extends fopAc_ac_c {
         this.kamome_pos_move(globals, deltaTimeInFrames);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.noDraw = false;
 
         if (this.type === 6) {
@@ -3193,11 +3208,11 @@ class d_a_kamome extends fopAc_ac_c {
         this.daKamome_setMtx();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.noDraw || this.switch_id !== 0)
             return;
 
-        if (!this.cullingCheck(viewerInput))
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -3265,29 +3280,31 @@ function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: numb
     return pointIdxCurr;
 }
 
-const enum d_a_obj_ikada_mode { modeWait, modeStopTerry, modePathMoveTerry }
+const enum d_a_obj_ikada_mode { wait, stopTerry, pathMoveTerry }
 class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mode> {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_ikada;
 
     private type: number;
     private path_id: number;
     private model: J3DModelInstance;
+    private flagPcId: number | null = null;
     private bckAnm = new mDoExt_bckAnm();
     private path: dPath | null = null;
     private waveAnim1Timer = 0;
     private linkRideRockTimer = 0;
     private linkRideRockAmpl = 0;
+    private wave = new dLib_wave_c();
+
+    private craneMode: boolean = false;
     private velocityFwd: number = 0.0;
     private velocityFwdTarget: number = 0.0;
     private pathMovePos = vec3.create();
-
-    private craneMode: boolean = false;
     private curPathPointIdx: number = 0;
     private curPathP0 = vec3.create();
     private curPathP1 = vec3.create();
     private pathRotY: number;
 
-    public curMode = d_a_obj_ikada_mode.modeWait;
+    public curMode = d_a_obj_ikada_mode.wait;
 
     private splash: dPa_splashEcallBack | null = null;
     private waveL: dPa_waveEcallBack | null = null;
@@ -3297,8 +3314,10 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private track: dPa_trackEcallBack | null = null;
     private trackPos = vec3.create();
 
-    public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `IkadaH`);
+    private static arcName = `IkadaH`;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, d_a_obj_ikada.arcName);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -3314,20 +3333,19 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         // _createHeap
         const bdl = [0x08, 0x0B, 0x09, 0x0C, 0x0A];
-        const modelData = resCtrl.getObjectRes(ResType.Model, `IkadaH`, bdl[this.type]);
+        const modelData = resCtrl.getObjectRes(ResType.Model, d_a_obj_ikada.arcName, bdl[this.type]);
         this.model = new J3DModelInstance(modelData);
 
         if (this.type === 4) {
-            const bckRes = resCtrl.getObjectRes(ResType.Bck, `IkadaH`, 0x05);
+            const bckRes = resCtrl.getObjectRes(ResType.Bck, d_a_obj_ikada.arcName, 0x05);
             this.bckAnm.init(modelData, bckRes, true, LoopMode.REPEAT);
 
             this.model.jointMatrixCalcCallback = this.nodeControl_CB;
         }
 
-        this.setMtx(globals);
+        this.setMtx(globals, 0.0);
 
         // initialize BgW
-        // initialize rope / ropeEnd
 
         // createInit
         vec3.copy(this.pathMovePos, this.pos);
@@ -3338,7 +3356,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
 
         if (this.isTerry())
-            modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modeStopTerry);
+            modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.stopTerry);
 
         if (this.isShip()) {
             this.splash = new dPa_splashEcallBack(globals);
@@ -3352,6 +3370,16 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const scaleX = this.scale[0];
         this.setCullSizeBox(scaleX * -1000.0, scaleX * -50.0, scaleX * -1000.0, scaleX * 1000.0, scaleX * 1000.0, scaleX * 1000.0);
         this.cullFarDistanceRatio = 10.0;
+
+        if (this.type === 0 || this.type === 4) {
+            const flagParam = this.type === 0 ? 0x00000004 : 0x02000000;
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, flagParam, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+        }
+
+        dLib_waveInit(globals, this.wave, this.pos);
+
+        // initialize rope / ropeEnd
+
         return cPhs__Status.Next;
     }
 
@@ -3370,8 +3398,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         return this.isSv() || this.isTerry();
     }
 
-    private setMtx(globals: dGlobals): void {
-        // TODO(jstpierre): dLib_waveRot
+    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeInFrames);
         vec3.copy(this.model.baseScale, this.scale);
 
         const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
@@ -3383,8 +3411,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const rockAnimX = rockAnimAmpl * Math.cos(rockAnimTheta);
         const rockAnimZ = rockAnimAmpl * Math.sin(rockAnimTheta);
 
-        this.rot[0] = /* wave.rotX + */ waveAnim1X + rockAnimX;
-        this.rot[2] = /* wave.rotZ + */ waveAnim1Z + rockAnimZ;
+        this.rot[0] = this.wave.rotX + waveAnim1X + rockAnimX;
+        this.rot[2] = this.wave.rotZ + waveAnim1Z + rockAnimZ;
 
         MtxTrans(this.pos, false);
         mDoMtx_XrotM(calc_mtx, this.rot[0]);
@@ -3425,20 +3453,20 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             // attn/eye
 
             if (this.isTerry()) {
-                const waveOffsZ = 660.0 + (this.curMode === d_a_obj_ikada_mode.modePathMoveTerry ? 20.0 : 5.0);
+                const waveOffsZ = 660.0 + (this.curMode === d_a_obj_ikada_mode.pathMoveTerry ? 20.0 : 5.0);
                 const waveOffsY = 20.0;
                 vec3.set(this.wavePos, 0.0, waveOffsY, waveOffsZ);
-                transformVec3Mat4w1(this.wavePos, calc_mtx, this.wavePos);
+                MtxPosition(this.wavePos);
 
                 const trackOffsZ = -180.0;
                 vec3.set(this.trackPos, 0.0, 0.0, trackOffsZ);
-                transformVec3Mat4w1(this.trackPos, calc_mtx, this.trackPos);
+                MtxPosition(this.trackPos);
             }
         }
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.cullingCheck(viewerInput))
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
             return;
 
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
@@ -3467,7 +3495,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
     private modeStopTerry(globals: dGlobals, deltaTimeInFrames: number): void {
         // stop for player, check tg hit
-        modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modePathMoveTerry);
+        modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.pathMoveTerry);
     }
 
     private modePathMoveTerryInit(globals: dGlobals): void {
@@ -3508,14 +3536,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
-        vec3.sub(scratchVec3a, dst, this.curPathP1);
-        scratchVec3a[1] = 0.0;
-
-        if (vec3.length(scratchVec3a) < fwdSpeed) {
-            return true;
-        }
-
-        return false;
+        return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
     };
 
     private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -3535,7 +3556,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.modePathMoveTerryInit, this.modePathMoveTerry,
     ];
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
         this.waveAnim1Timer += 0x200 * deltaTimeInFrames;
@@ -3543,13 +3564,29 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
         this.pos[1] = dLib_getWaterY(globals, this.pos, null);
 
-        this.setMtx(globals);
+        this.setMtx(globals, deltaTimeInFrames);
         this.model.calcAnim();
 
         if (this.isShip()) {
-            // check culling box, and velocity and player distance, such
+            if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+                this.setWave(globals, deltaTimeInFrames);
+            } else {
+                this.waveL!.remove();
+                this.waveR!.remove();
+                this.splash!.remove();
+                this.track!.state = 1;
+            }
+        }
 
-            this.setWave(globals, deltaTimeInFrames);
+        if (this.flagPcId !== null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
+                flag.parentMtx = this.model.modelMatrix;
+                if (this.type === 0)
+                    flag.parentPos = vec3.fromValues(0.0, 700.0, 0.0);
+                else if (this.type === 4)
+                    flag.parentPos = vec3.fromValues(100.0, 530.0, 0.0);
+            }
         }
     }
 
@@ -3557,13 +3594,13 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         if (this.waveL !== null && this.waveL.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveL);
             if (emitter !== null)
-                vec3.set(emitter.emitterDir, 0.5, 1.0, -0.3);
+                vec3.set(emitter.localDirection, 0.5, 1.0, -0.3);
         }
 
         if (this.waveR !== null && this.waveR.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveR);
             if (emitter !== null)
-                vec3.set(emitter.emitterDir, -0.5, 1.0, -0.3);
+                vec3.set(emitter.localDirection, -0.5, 1.0, -0.3);
         }
 
         if (this.splash !== null && this.splash.emitter === null)
@@ -3573,7 +3610,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
             if (emitter !== null) {
                 vec3.set(emitter.globalScale, 1.0, 1.0, 1.0);
-                vec2.set(emitter.globalScale2D, 1.0, 1.0);
+                vec2.set(emitter.globalParticleScale, 1.0, 1.0);
             }
         }
     }
@@ -3596,16 +3633,15 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
                 this.track.state = 1;
         }
 
-        // this.wavePos[1] = dLib_getWaterY(this.wavePos, this.objAcch);
-        this.wavePos[1] = this.pos[1] + 25.0;
+        this.wavePos[1] = dLib_getWaterY(globals, this.wavePos, null);
         this.waveRot[1] = this.rot[1];
 
         if (this.track !== null && this.track.emitter !== null) {
             this.track.indTransY = -0.04;
             this.track.indScaleY = 4.0;
-
-            // mObjAcch
             this.track.vel = 300.0;
+            this.track.baseY = this.wavePos[1];
+            // mObjAcch
             this.track.minVel = 3.0;
         }
 
@@ -3635,7 +3671,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
     }
 
-    public delete(globals: dGlobals): void {
+    public override delete(globals: dGlobals): void {
         super.delete(globals);
 
         if (this.splash !== null)
@@ -3646,6 +3682,839 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             this.waveR.remove();
         if (this.track !== null)
             this.track.remove();
+    }
+}
+
+const enum d_a_oship_mode { wait, attack, damage, delete, rangeA, rangeB, rangeC, rangeD }
+class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_oship;
+
+    private subMode: number;
+    private model: J3DModelInstance;
+    private path: dPath | null = null;
+    private effectMtx = mat4.create();
+    private flagPcId: number | null = null;
+    private wave = new dLib_wave_c();
+    private splash: dPa_splashEcallBack;
+    private waveL: dPa_waveEcallBack;
+    private waveR: dPa_waveEcallBack;
+    private track: dPa_trackEcallBack;
+    private wavePos = vec3.create();
+    private waveRot = vec3.create();
+    private trackPos = vec3.create();
+
+    private attackSwayAmount = 0;
+    private attackSwayTimer = 0;
+    private attackTimer = 0;
+    private attackBadAimCounter = 0;
+    private targetPos = vec3.create();
+    private aimRotXTarget = 0;
+    private aimRotYTarget = 0;
+    private aimRotX = 0;
+    private aimRotY = 0;
+
+    private velocityFwd = 0.0;
+    private velocityFwdTarget = 0.0;
+    private pathMovePos = vec3.create();
+    private pathRotY = 0;
+    private curPathPointIdx = 0;
+    private curPathP0 = vec3.create();
+    private curPathP1 = vec3.create();
+
+    public curMode: d_a_oship_mode = d_a_oship_mode.wait;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const arcName = `Oship`;
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.subMode = this.parameters & 0xFF;
+        const triforce = (this.parameters >>> 8) & 0x0F;
+        const fmapIdx = (this.parameters >>> 12) & 0x0F;
+        const pathId = (this.parameters >>> 16) & 0xFF;
+        const switchA = (this.parameters >>> 24) & 0xFF;
+        const switchB = (this.rot[0] >>> 0) & 0xFF;
+        const modelType = (this.rot[0] >>> 8) & 0xFF;
+        this.rot[0] = 0;
+
+        let bdl = 3;
+        if (modelType !== 0xFF)
+            bdl = 4;
+
+        const resCtrl = globals.resCtrl;
+        const modelData = resCtrl.getObjectRes(ResType.Model, arcName, bdl);
+        this.model = new J3DModelInstance(modelData);
+        this.model.jointMatrixCalcCallback = this.nodeControl;
+
+        for (let i = 0; i < this.model.materialInstances.length; i++)
+            this.model.materialInstances[i].effectMtx = this.effectMtx;
+
+        if (modelType === 0xFF)
+            this.flagPcId = fopAcM_create(globals.frameworkGlobals, fpc__ProcessName.d_a_majuu_flag, 0x04, this.pos, this.roomNo, this.rot, null, 0xFF, this.processId);
+
+        if (pathId !== 0xFF)
+            this.path = assertExists(dPath_GetRoomPath(globals, pathId, this.roomNo));
+
+        this.changeModeByRange(globals);
+        dLib_waveInit(globals, this.wave, this.pos);
+        this.setMtx(globals, 0.0);
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-300.0, -100.0, -650.0, 300.0, 700.0, 800.0);
+        this.cullFarDistanceRatio = 10.0;
+
+        this.splash = new dPa_splashEcallBack(globals);
+        this.waveL = new dPa_waveEcallBack(globals);
+        this.waveR = new dPa_waveEcallBack(globals);
+        this.track = new dPa_trackEcallBack(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    private mode_tbl = [
+        this.modeWaitInit, this.modeWait,
+        this.modeAttackInit, this.modeAttack,
+        this.modeDamageInit, this.modeDamage,
+        this.modeDeleteInit, this.modeDelete,
+        this.modeRangeAInit, this.modeRangeA,
+        this.modeRangeBInit, this.modeRangeB,
+        this.modeRangeCInit, this.modeRangeC,
+        this.modeRangeDInit, this.modeRangeD,
+    ];
+
+    private changeModeByRange(globals: dGlobals): void {
+        const dist = cLib_distanceXZ(this.pos, globals.cameraPosition);
+        let mode = this.curMode;
+        if (dist < 2500.0)
+            mode = d_a_oship_mode.rangeA;
+        else if (dist < 6000.0)
+            mode = d_a_oship_mode.rangeB;
+        else if (dist < 12000.0)
+            mode = d_a_oship_mode.rangeC;
+        else
+            mode = d_a_oship_mode.rangeD;
+
+        if (mode !== this.curMode)
+            modeProcInit(globals, this, this.mode_tbl, mode);
+    }
+
+    private checkTgHit(globals: dGlobals): boolean {
+        return false;
+    }
+
+    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeInFrames: number): boolean => {
+        vec3.copy(this.curPathP0, curr.pos);
+        this.curPathP0[1] = this.pos[1];
+        vec3.copy(this.curPathP1, next.pos);
+        this.curPathP1[1] = this.pos[1];
+
+        vec3.sub(scratchVec3a, this.curPathP1, this.curPathP0);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
+        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeInFrames, 8);
+        const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
+
+        return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
+    };
+
+    private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeInFrames);
+        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeInFrames, this.pathMove_CB);
+
+        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeInFrames);
+        if (this.velocityFwd !== 0 && this.velocityFwdTarget !== 0) {
+            const rotTargetY = cLib_targetAngleY(this.pos, this.pathMovePos);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeInFrames);
+        }
+    }
+
+    private calcY(globals: dGlobals): void {
+        // TODO(jstpierre): Acch
+        this.pos[1] = dLib_getWaterY(globals, this.pos, null);
+    }
+
+    private rangePathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.path !== null) {
+            this.velocityFwdTarget = 20.0;
+            this.pathMove(globals, deltaTimeInFrames);
+        }
+    }
+
+    private plFireRepeat(globals: dGlobals): boolean {
+        return false;
+    }
+
+    private modeWaitInit(globals: dGlobals): void {
+        this.changeModeByRange(globals);
+    }
+
+    private modeWait(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.changeModeByRange(globals);
+    }
+
+    private modeAttackInit(globals: dGlobals): void {
+        this.attackTimer = -1;
+
+        vec3.copy(this.targetPos, globals.cameraPosition);
+
+        // Aim at our target.
+
+        const distXZ = cLib_distanceXZ(this.targetPos, this.pos);
+        const badAimStart = 3500.0;
+        let badAimRadius = 300.0 + Math.max((distXZ - badAimStart) * 0.5, 0.0);
+
+        if (cM_rndF(100.0) < 10.0) {
+            // 10% change of perfect aim.
+            badAimRadius = 0.0;
+        }
+
+        if (this.attackBadAimCounter < 6) {
+            // With each bullet the player fires, the aim gets better.
+            badAimRadius += (6 - this.attackBadAimCounter) * 500;
+        }
+
+        const angleY = cLib_targetAngleY(this.pos, this.targetPos);
+        // TODO(jstpierre): Figure out the bad aim system.
+        // this.targetPos[0] -= badAimRadius * Math.sin(cM__Short2Rad(angleY));
+        // this.targetPos[2] -= badAimRadius * Math.cos(cM__Short2Rad(angleY));
+    }
+
+    private attackCannon(globals: dGlobals): boolean {
+        // TODO(jstpierre): spawn bomb
+        return true;
+    }
+
+    private modeAttack(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.path !== null) {
+            this.velocityFwdTarget = 0.0;
+            this.pathMove(globals, deltaTimeInFrames);
+        }
+
+        if (this.checkTgHit(globals))
+            return;
+
+        this.calcY(globals);
+
+        if (this.attackTimer >= 0.0) {
+            this.attackTimer -= deltaTimeInFrames;
+            if (this.attackTimer <= 0.0) {
+                this.changeModeByRange(globals);
+            } else {
+                this.attackSwayTimer += 0x1830 * deltaTimeInFrames;
+                this.attackSwayAmount = cLib_addCalcAngleS2(this.attackSwayAmount, 0, 10, 10 * deltaTimeInFrames);
+            }
+        } else {
+            this.attackTimer = -1;
+
+            // lineCheck
+            if (this.velocityFwd <= 2.0) {
+                if (this.attackCannon(globals)) {
+                    this.attackTimer = 15;
+                    this.attackSwayAmount = 100;
+                }
+            }
+        }
+    }
+
+    private modeDamageInit(globals: dGlobals): void {
+    }
+
+    private modeDamage(globals: dGlobals, deltaTimeInFrames: number): void {
+    }
+
+    private modeDeleteInit(globals: dGlobals): void {
+    }
+
+    private modeDelete(globals: dGlobals, deltaTimeInFrames: number): void {
+    }
+
+    private modeRangeAInit(globals: dGlobals): void {
+        this.attackTimer = 30;
+    }
+
+    private rangeTargetCommon(globals: dGlobals, deltaTimeInFrames: number): void {
+        vec3.copy(this.targetPos, globals.cameraPosition);
+        this.calcY(globals);
+
+        if (this.checkTgHit(globals))
+            return;
+        if (this.plFireRepeat(globals))
+            return;
+
+        this.attackTimer -= deltaTimeInFrames;
+        if (this.attackTimer <= 0.0)
+            modeProcInit(globals, this, this.mode_tbl, d_a_oship_mode.attack);
+        else
+            this.changeModeByRange(globals);
+    }
+
+    private modeRangeA(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.subMode === 1 || this.subMode === 2)
+            this.rangePathMove(globals, deltaTimeInFrames);
+
+        this.rangeTargetCommon(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeBInit(globals: dGlobals): void {
+        this.attackTimer = this.subMode === 0 ? 30 : 200;
+    }
+
+    private modeRangeB(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.modeRangeA(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeCInit(globals: dGlobals): void {
+        this.attackTimer = 200;
+    }
+
+    private modeRangeC(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.subMode === 2)
+            this.rangePathMove(globals, deltaTimeInFrames);
+
+        this.rangeTargetCommon(globals, deltaTimeInFrames);
+    }
+
+    private modeRangeDInit(globals: dGlobals): void {
+    }
+
+    private modeRangeD(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (!this.checkTgHit(globals)) {
+            if (this.subMode === 2)
+                this.rangePathMove(globals, deltaTimeInFrames);
+            this.calcY(globals);
+            this.changeModeByRange(globals);
+        }
+    }
+
+    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
+        mat4.copy(dst, this.effectMtx);
+    };
+
+    private nodeControl = (dst: mat4, modelData: J3DModelData, i: number): void => {
+        if (i === 1)
+            mDoMtx_XrotM(dst, this.aimRotY);
+        else if (i === 2)
+            mDoMtx_ZrotM(dst, -this.aimRotX + 0x2800);
+    };
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput.camera))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        const specScale = 0.75;
+        dDlst_texSpecmapST(this.effectMtx, globals, this.pos, this.tevStr, specScale);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
+
+        /*
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `PId: ${this.processId}`, 0, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Mode: ${d_a_oship_mode[this.curMode]}`, 14, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Aim  : ${hexzero0x(this.aimRotX, 4)} ${hexzero0x(this.aimRotY, 4)}`, 14*2, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Aim T: ${hexzero0x(this.aimRotXTarget, 4)} ${hexzero0x(this.aimRotYTarget, 4)}`, 14*3, White, { outline: 2 });
+        drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, `Tgt  : ${this.targetPos[0].toFixed(2)} ${this.targetPos[1].toFixed(2)} ${this.targetPos[2].toFixed(2)}`, 14*4, White, { outline: 2 });
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.targetPos, Green, 10);
+        */
+    }
+
+    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeInFrames);
+
+        const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.cameraPosition);
+        const swayAmount = Math.sin(cM__Short2Rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
+
+        if (this.curMode !== d_a_oship_mode.delete) {
+            this.rot[0] = this.wave.rotX + Math.cos(angleY) * swayAmount;
+            this.rot[2] = this.wave.rotZ + Math.sin(angleY) * swayAmount;
+        }
+
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false);
+        mDoMtx_XrotM(calc_mtx, this.rot[0]);
+        mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+        mDoMtx_YrotM(calc_mtx, this.rot[1]);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+
+        const waveOffsZ = 380.0;
+        vec3.set(this.wavePos, 0.0, 0.0, waveOffsZ);
+        MtxPosition(this.wavePos);
+
+        const trackOffsZ = 0.0;
+        vec3.set(this.trackPos, 0.0, 0.0, trackOffsZ);
+        MtxPosition(this.trackPos);
+    }
+
+    private createWave(globals: dGlobals): void {
+        if (this.waveL.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveL);
+            if (emitter !== null)
+                vec3.set(emitter.localDirection, 0.5, 1.0, -0.3);
+        }
+
+        if (this.waveR.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveR);
+            if (emitter !== null)
+                vec3.set(emitter.localDirection, -0.5, 1.0, -0.3);
+        }
+
+        if (this.splash.emitter === null)
+            globals.particleCtrl.set(globals, 0, 0x0035, this.wavePos, this.waveRot, null, 1.0, this.splash);
+
+        if (this.track.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
+            if (emitter !== null) {
+                vec3.set(emitter.globalScale, 3.0, 3.0, 3.0);
+                vec2.set(emitter.globalParticleScale, 3.0, 3.0);
+            }
+        }
+    }
+
+    private static waveCollapsePos = [
+        vec3.fromValues(-80.0, -50.0, -150.0),
+        vec3.fromValues(-40.0, -100.0, -350.0),
+    ];
+
+    private setWave(globals: dGlobals, deltaTimeInFrames: number): void {
+        let splashScaleTarget = 200.0;
+        let waveVelFade = 2.0;
+
+        if (this.velocityFwd > 2.0 && this.curMode !== d_a_oship_mode.delete) {
+            this.createWave(globals);
+        } else {
+            splashScaleTarget = 0.0;
+            waveVelFade = 0.0;
+            if (this.track !== null)
+                this.track.state = 1;
+        }
+
+        this.wavePos[1] = dLib_getWaterY(globals, this.wavePos, null);
+        this.waveRot[1] = this.rot[1];
+
+        if (this.track.emitter !== null) {
+            this.track.indTransY = -0.04;
+            this.track.indScaleY = 4.0;
+            this.track.vel = 300.0;
+            this.track.baseY = this.wavePos[1];
+            // mObjAcch
+            this.track.minVel = 3.0;
+        }
+
+        this.waveL.velFade1 = waveVelFade;
+        this.waveL.velFade2 = 1.0;
+        this.waveL.velSpeed = 2.0;
+        this.waveL.maxParticleVelocity = 15.0;
+        vec3.copy(this.waveL.collapsePos[0], d_a_oship.waveCollapsePos[0]);
+        vec3.copy(this.waveL.collapsePos[1], d_a_oship.waveCollapsePos[1]);
+
+        this.waveR.velFade1 = waveVelFade;
+        this.waveR.velFade2 = 1.0;
+        this.waveR.velSpeed = 2.0;
+        this.waveR.maxParticleVelocity = 15.0;
+        vec3.copy(this.waveR.collapsePos[0], d_a_oship.waveCollapsePos[0]);
+        vec3.copy(this.waveR.collapsePos[1], d_a_oship.waveCollapsePos[1]);
+        this.waveR.collapsePos[0][0] *= -1.0;
+        this.waveR.collapsePos[1][0] *= -1.0;
+
+        this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeInFrames);
+        this.splash.maxScaleTimer = 300.0;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        // TODO(jstpierre): smoke
+        // TODO(jstpierre): bomb
+
+        this.aimRotYTarget = cLib_targetAngleY(this.pos, this.targetPos) - this.rot[1];
+        this.aimRotXTarget = cLib_targetAngleX(this.pos, this.targetPos);
+        // TODO(jstpierre): Add on bad aim rot
+
+        this.aimRotX = cLib_addCalcAngleS2(this.aimRotX, this.aimRotXTarget, 6, 0x300 * deltaTimeInFrames);
+        this.aimRotY = cLib_addCalcAngleS2(this.aimRotY, this.aimRotYTarget, 6, 0x300 * deltaTimeInFrames);
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
+
+        this.model.calcAnim();
+        this.setMtx(globals, deltaTimeInFrames);
+
+        this.visible
+        if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
+            this.setWave(globals, deltaTimeInFrames);
+        } else {
+            this.waveL.remove();
+            this.waveR.remove();
+            this.splash.remove();
+            this.track.state = 1;
+        }
+
+        if (this.flagPcId !== null) {
+            const flag = fopAcIt_JudgeByID<d_a_majuu_flag>(globals.frameworkGlobals, this.flagPcId);
+            if (flag !== null && flag.parentMtx === null) {
+                flag.parentMtx = this.model.modelMatrix;
+                flag.parentPos = vec3.fromValues(0.0, 800.0, 0.0);
+            }
+        }
+    }
+}
+
+const enum d_a_obj_flame_mode { wait, wait2, l_before, l_u, u, u_l, l_after }
+const enum d_a_obj_em_state { Off, TurnOn, On, TurnOff }
+class d_a_obj_flame extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_flame;
+
+    private type: number;
+    private model: J3DModelInstance;
+    private btkAnm = new mDoExt_btkAnm();
+    private brkAnm: mDoExt_brkAnm | null = null;
+    private timerAdv: number;
+    private useSimpleEm: boolean;
+    private scaleY: number;
+    private eyePosY: number;
+    private extraScaleY: number;
+    private bubblesParticleID: number;
+
+    private rotY = 0;
+    private timer = 0;
+    private hasEmitter = false;
+    private height = 0.0;
+
+    private em0State = d_a_obj_em_state.Off;
+    private em1State = d_a_obj_em_state.Off;
+    private em2State = d_a_obj_em_state.Off;
+    private em0: JPABaseEmitter | null = null;
+    private em1: JPABaseEmitter | null = null;
+    private em2: JPABaseEmitter | null = null;
+    private em01Scale: vec3 | null = null;
+    private em2Scale: vec3 | null = null;
+
+    private eyePos = vec3.create();
+
+    private mode = d_a_obj_flame_mode.wait;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const arcName = `Yfire_00`;
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.type = (this.parameters >>> 28) & 0x03;
+
+        // create_heap
+        const resCtrl = globals.resCtrl;
+        const bmd_res_idx = [0x06, 0x05, 0x05, 0x06][this.type];
+
+        const mdl_data = resCtrl.getObjectRes(ResType.Model, arcName, bmd_res_idx);
+        this.model = new J3DModelInstance(mdl_data);
+
+        const btk_res_idx = [0x0D, 0x0C, 0x0C, 0x0D][this.type];
+        const btk_res = resCtrl.getObjectRes(ResType.Btk, arcName, btk_res_idx);
+
+        const anim_speed = 1.0; // [1.0, 1.0, 1.0, 1.0][this.type];
+        this.btkAnm.init(this.model.modelData, btk_res, true, LoopMode.REPEAT, anim_speed);
+
+        const brk_res_idx = [0x09, -1, -1, 0x09][this.type];
+        if (brk_res_idx >= 0) {
+            const brk_res = resCtrl.getObjectRes(ResType.Brk, arcName, brk_res_idx);
+            this.brkAnm = new mDoExt_brkAnm();
+            this.brkAnm.init(this.model.modelData, brk_res, true, LoopMode.REPEAT, anim_speed);
+        }
+
+        if (this.type === 1)
+            this.extraScaleY = 1.000442;
+        else
+            this.extraScaleY = 1.0;
+
+        const scale_xz = [1.0, 1.0, 1.0, 0.5][this.type];
+        this.scaleY    = [1.0, 0.815, 1.0, 0.5][this.type];
+        this.scale[0] *= scale_xz;
+        this.scale[1] *= this.extraScaleY * this.scaleY;
+        this.scale[2] *= scale_xz;
+
+        this.timerAdv = [1.0, 0.5, 0.5, 1.0][this.type];
+        this.useSimpleEm = [true, false, false, false][this.type];
+
+        if (!this.useSimpleEm) {
+            const em01ScaleXZ = [-1, 13.0/3.0, 7.5, 0.5][this.type];
+            const em01ScaleY  = [-1, 2.716,    7.5, 0.5][this.type];
+            assert(em01ScaleXZ >= 0.0 && em01ScaleY >= 0.0);
+            this.em01Scale = vec3.fromValues(em01ScaleXZ, this.extraScaleY * em01ScaleY, em01ScaleXZ);
+
+            const em2Scale   = [-1, 0.866666, 1.0, 0.5][this.type];
+            assert(em2Scale >= 0.0);
+            this.em2Scale = vec3.fromValues(em2Scale, em2Scale, em2Scale);
+        }
+
+        this.eyePosY = [1.0, 10.0/3.0, 7.5, 0.5][this.type];
+        this.bubblesParticleID = [0x805C, 0x808A, 0x808A, 0x805C][this.type];
+
+        // create_mode_init
+        //   setups up timers based on global schBit
+
+        // this.set_switch(globals);
+
+        this.cullMtx = this.model.modelMatrix;
+        this.set_mtx(globals);
+
+        // dCcD_Stts / dCcD_Cps
+
+        // em_position
+        //   positions our particle emitter
+
+        return cPhs__Status.Next;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(globals, renderInstManager, viewerInput);
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        this.btkAnm.entry(this.model);
+        if (this.brkAnm !== null)
+            this.brkAnm.entry(this.model);
+
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.wetherEffectSet);
+    }
+
+    private mode_wait(globals: dGlobals): void {
+        const sch = this.parameters & 0xFF;
+        // TODO(jstpierre): sch
+
+        let shouldFire = false;
+
+        if (this.timer <= 0.0) {
+            shouldFire = true;
+        }
+
+        if (shouldFire) {
+            if (this.type === 1) {
+                this.to_l_before(globals);
+            } else {
+                this.mode = d_a_obj_flame_mode.wait2;
+                this.timer = 127.0;
+            }
+
+            this.em0State = d_a_obj_em_state.TurnOn;
+            this.em1State = d_a_obj_em_state.TurnOn;
+            this.em2State = d_a_obj_em_state.TurnOn;
+            this.hasEmitter = true;
+        }
+    }
+
+    private to_l_before(globals: dGlobals): void {
+        this.btkAnm.frameCtrl.currentTimeInFrames = 0.0;
+        if (this.brkAnm !== null)
+            this.brkAnm.frameCtrl.currentTimeInFrames = 0.0;
+
+        this.mode = d_a_obj_flame_mode.l_before;
+        this.timer += 23.0;
+        // this.ki_init();
+    }
+
+    private mode_wait2(globals: dGlobals): void {
+        // this.se_fireblast_omen();
+
+        if (this.timer <= 0.0) {
+            this.to_l_before(globals);
+        }
+    }
+
+    private mode_l_before(globals: dGlobals): void {
+        this.hasEmitter = false;
+
+        if (this.timer <= 0.0) {
+            this.mode = d_a_obj_flame_mode.l_u;
+            this.timer += 22.0;
+        }
+    }
+
+    private mode_l_u(globals: dGlobals): void {
+        this.height = (22.0 - this.timer) / 22.0;
+        this.hasEmitter = true;
+
+        if (this.timer <= 0.0) {
+            this.mode = d_a_obj_flame_mode.u;
+            this.timer += 90.0;
+        }
+    }
+
+    private mode_u(globals: dGlobals): void {
+        if (this.timer <= 0.0) {
+            this.mode = d_a_obj_flame_mode.u_l;
+            this.timer += 25.0;
+            this.em0State = d_a_obj_em_state.TurnOff;
+        }
+    }
+
+    private mode_u_l(globals: dGlobals): void {
+        this.height = this.timer / 25.0;
+        this.hasEmitter = true;
+
+        if (this.timer <= 0.0) {
+            this.mode = d_a_obj_flame_mode.l_after;
+            this.timer += 20.0;
+            this.em1State = d_a_obj_em_state.TurnOff;
+            this.em2State = d_a_obj_em_state.TurnOff;
+        }
+    }
+
+    private mode_l_after(globals: dGlobals): void {
+        if (this.timer <= 0.0) {
+            this.mode = d_a_obj_flame_mode.wait;
+
+            const sch = this.parameters & 0xFF;
+            if (sch === 0)
+                this.timer += 120.0;
+            else
+                this.timer = 0.0;
+        }
+    }
+
+    private mode_proc_tbl = [
+        this.mode_wait,
+        this.mode_wait2,
+        this.mode_l_before,
+        this.mode_l_u,
+        this.mode_u,
+        this.mode_u_l,
+        this.mode_l_after,
+    ];
+
+    private isWaiting(): boolean {
+        return (this.mode === d_a_obj_flame_mode.wait || this.mode === d_a_obj_flame_mode.wait2);
+    }
+
+    private em_position(globals: dGlobals): void {
+        if (!this.hasEmitter)
+            return;
+
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+
+        if (!this.useSimpleEm) {
+            if (this.em0 !== null) {
+                vec3.zero(scratchVec3a);
+                const scaleY = this.extraScaleY * this.scaleY;
+                scratchVec3a[1] = (this.height * 1500.0 - 300.0) * scaleY;
+                mat4.translate(scratchMat4a, calc_mtx, scratchVec3a);
+                JPASetRMtxSTVecFromMtx(null, this.em0.globalRotation, this.em0.globalTranslation, scratchMat4a);
+            }
+
+            if (this.em1 !== null)
+                JPASetRMtxSTVecFromMtx(null, this.em1.globalRotation, this.em1.globalTranslation, calc_mtx);
+        }
+
+        vec3.zero(scratchVec3a);
+        scratchVec3a[1] = this.height * 1500.0 * this.eyePosY;
+        MtxTrans(scratchVec3a, true);
+        transformVec3Mat4w1(this.eyePos, calc_mtx, Vec3Zero);
+    }
+
+    private em_manual_set(globals: dGlobals): void {
+        if (this.em0State === d_a_obj_em_state.TurnOn && this.type !== 1) {
+            this.em0 = globals.particleCtrl.set(globals, 0, 0x805A, this.pos, this.rot, this.em01Scale);
+            this.em0State = d_a_obj_em_state.On;
+        }
+
+        if (this.em1State === d_a_obj_em_state.TurnOn) {
+            this.em1 = globals.particleCtrl.set(globals, 0, 0x805B, this.pos, this.rot, this.em01Scale);
+            this.em1State = d_a_obj_em_state.On;
+        }
+
+        if (this.em2State === d_a_obj_em_state.TurnOn) {
+            this.em2 = globals.particleCtrl.set(globals, 0, this.bubblesParticleID, this.pos, this.rot, this.em2Scale);
+            this.em2State = d_a_obj_em_state.On;
+        }
+    }
+
+    private em_manual_inv(globals: dGlobals): void {
+        const forceKillEm = false;
+        if (forceKillEm) {
+            if (this.em0State === d_a_obj_em_state.On)
+                this.em0State = d_a_obj_em_state.TurnOff;
+            if (this.em2State === d_a_obj_em_state.On)
+                this.em2State = d_a_obj_em_state.TurnOff;
+        }
+
+        if (this.em0State === d_a_obj_em_state.TurnOff && this.em0 !== null) {
+            this.em0.becomeInvalidEmitterImmediate();
+            this.em0 = null;
+        }
+
+        if (this.em1State === d_a_obj_em_state.TurnOff && this.em1 !== null) {
+            this.em1.becomeInvalidEmitterImmediate();
+            this.em1 = null;
+        }
+
+        if (this.em2State === d_a_obj_em_state.TurnOff && this.em2 !== null) {
+            this.em2.becomeInvalidEmitterImmediate();
+            this.em2 = null;
+        }
+    }
+
+    private em_simple_set(globals: dGlobals): void {
+        /*
+        if (this.em0State === d_a_obj_em_state.TurnOn) {
+            vec3.copy(scratchVec3a, this.eyePos);
+            scratchVec3a[1] += this.extraScaleY * this.eyePosY * -300.0;
+            globals.particleCtrl.setSimple(globals, 0x805A, scratchVec3a, 1.0, White, White, false);
+        }
+
+        if (this.em1State === d_a_obj_em_state.TurnOn)
+            globals.particleCtrl.setSimple(globals, 0x805B, this.eyePos, 1.0, White, White, false);
+
+        if (this.em2State === d_a_obj_em_state.TurnOn)
+            globals.particleCtrl.setSimple(globals, this.bubblesParticleID, this.eyePos, 1.0, White, White, false);
+        */
+    }
+
+    private mode_proc_call(globals: dGlobals, deltaTimeInFrames: number): void {
+        const timerAdv = this.isWaiting() ? 1.0 : this.timerAdv;
+
+        this.timer -= deltaTimeInFrames * timerAdv;
+
+        this.mode_proc_tbl[this.mode].call(this, globals);
+
+        // TODO(jstpierre): Simple particle system
+        if (false && this.useSimpleEm) {
+            this.em_position(globals);
+            this.em_simple_set(globals);
+            // this.em_simple_inv(globals);
+        } else {
+            this.em_manual_set(globals);
+            this.em_manual_inv(globals);
+            this.em_position(globals);
+        }
+
+        if (!this.isWaiting()) {
+            this.btkAnm.play(deltaTimeInFrames);
+            if (this.brkAnm !== null)
+                this.brkAnm.play(deltaTimeInFrames);
+        }
+
+        // hitbox
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.mode_proc_call(globals, deltaTimeInFrames);
+
+        this.rotY += 400 * deltaTimeInFrames;
+
+        // this.set_switch(globals);
+        this.set_mtx(globals);
+    }
+
+    private set_mtx(globals: dGlobals): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mDoMtx_YrotM(calc_mtx, this.rotY);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+
+        // TODO(jstpierre): this.setCullSizeBox();
     }
 }
 
@@ -3668,7 +4537,7 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_kytag01);
     R(d_a_obj_Ygush00);
     R(d_a_obj_lpalm);
-    R(d_a_obj_zouK1);
+    R(d_a_obj_zouK);
     R(d_a_swhit0);
     R(d_a_mgameboard);
     R(d_a_sie_flag);
@@ -3676,4 +4545,6 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_majuu_flag);
     R(d_a_kamome);
     R(d_a_obj_ikada);
+    R(d_a_oship);
+    R(d_a_obj_flame);
 }
