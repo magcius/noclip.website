@@ -1,7 +1,7 @@
 import { vec3, mat4 } from 'gl-matrix';
 import { Color, colorFromHSL, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceBasis, drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BasicGXRendererHelper } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import * as SD from './stagedef';
@@ -36,7 +36,7 @@ class Mkb2Renderer extends BasicGXRendererHelper {
         super(device);
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         for (let coliHeader of this.stagedef.coliHeaders) {
             for (let i = 0; i < coliHeader.coliTris.length; i++) {
                 const coliTri = coliHeader.coliTris[i];
@@ -61,22 +61,22 @@ class Mkb2Renderer extends BasicGXRendererHelper {
                 drawWorldSpaceLine(
                     getDebugOverlayCanvas2D(),
                     viewerInput.camera.clipFromWorldMatrix,
-                    point1, 
-                    point2, 
+                    point1,
+                    point2,
                     color,
                 );
                 drawWorldSpaceLine(
                     getDebugOverlayCanvas2D(),
                     viewerInput.camera.clipFromWorldMatrix,
-                    point2, 
-                    point3, 
+                    point2,
+                    point3,
                     color,
                 );
                 drawWorldSpaceLine(
                     getDebugOverlayCanvas2D(),
                     viewerInput.camera.clipFromWorldMatrix,
-                    point3, 
-                    point1, 
+                    point3,
+                    point1,
                     color,
                 );
             }
@@ -89,7 +89,7 @@ class Mkb2SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const lzBuffer = await context.dataFetcher.fetchData(`${PATH_CASE}/files/stage/STAGE319.lz`);
+        const lzBuffer = await context.dataFetcher.fetchData(`${PATH_CASE}/stage/STAGE319.lz`);
         const stagedef = parseStagedefLz(lzBuffer);
         const renderer = new Mkb2Renderer(device, stagedef);
         return renderer;
