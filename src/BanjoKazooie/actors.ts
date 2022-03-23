@@ -27,7 +27,7 @@ export class ClankerBolt extends GeometryRenderer {
     public clankerVector: vec3;
     private boltState = BoltState.InClanker;
 
-    protected movement(): void {
+    protected override movement(): void {
         let timer = this.animationController.getTimeInSeconds();
         vec3.copy(scratchVec, this.clankerVector);
         let newState = this.boltState;
@@ -79,7 +79,7 @@ class ShinyObject extends GeometryRenderer {
         }
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         mat4.rotateY(this.modelMatrix, this.modelMatrix, viewerInput.deltaTime / 1000 * this.turnRate * MathConstants.DEG_TO_RAD);
     }
 }
@@ -105,7 +105,7 @@ class MovingJumpPad extends GeometryRenderer {
         emitters.flipbookManager.emitters.push(...this.emitters);
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         if (this.center[0] === 0 && this.center[2] === 0) {
             // store the center, can't do in constructor because we don't know the position until later...
             mat4.getTranslation(this.center, this.modelMatrix);
@@ -127,9 +127,9 @@ const chunkVelMax = vec3.fromValues(220, 460, 220);
 
 const chunkScratch = nArray(2, () => vec3.create());
 export class SnowballChunk extends GeometryRenderer {
-    public movementController: Projectile = new Projectile(800);
+    public override movementController: Projectile = new Projectile(800);
     public timer = -1;
-    public sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Particles);
+    public override sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Particles);
 
     public init(start: mat4) {
         this.timer = .8;
@@ -147,7 +147,7 @@ export class SnowballChunk extends GeometryRenderer {
         this.setEnvironmentAlpha(1);
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         super.movement(viewerInput);
         if (this.timer < .4)
             this.setEnvironmentAlpha(this.timer / .4);
@@ -166,7 +166,7 @@ export class Snowball extends GeometryRenderer {
     private target = vec3.create();
     public state = SnowballState.Dead;
 
-    public movementController: Projectile = new Projectile(1800);
+    public override movementController: Projectile = new Projectile(1800);
 
     private sparkleEmitter = new StreamEmitter(30, ParticleType.SnowSparkle);
     private chunkEmitter = new SnowballChunkEmitter();
@@ -193,7 +193,7 @@ export class Snowball extends GeometryRenderer {
         this.animationController.resetPhase();
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         const flightTime = this.animationController.getTimeInSeconds();
         if (flightTime < 1 / 30)
             return;
@@ -259,11 +259,11 @@ export class SirSlush extends GeometryRenderer {
         this.animationMode = AnimationMode.Loop;
     }
 
-    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): void {
+    public override additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): void {
         this.snowball = spawner(0x125)[0] as Snowball;
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         mat4.getTranslation(sirSlushScratch[0], this.modelMatrix);
         mat4.getTranslation(sirSlushScratch[1], viewerInput.camera.worldMatrix);
         vec3.sub(sirSlushScratch[0], sirSlushScratch[1], sirSlushScratch[0]);
@@ -307,7 +307,7 @@ export class SirSlush extends GeometryRenderer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public override prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.prepareToRender(device, renderInstManager, viewerInput);
         if (this.snowball.state !== SnowballState.Dead)
             this.snowball.prepareToRender(device, renderInstManager, viewerInput);
@@ -762,7 +762,7 @@ export class RailRider extends GeometryRenderer {
             this.speed = keyframe.distToEnd / keyframe.timeToEnd;
     }
 
-    protected movement(viewerInput: ViewerRenderInput): void {
+    protected override movement(viewerInput: ViewerRenderInput): void {
         const deltaSeconds = viewerInput.deltaTime / 1000;
         if (this.rail === null)
             return;
@@ -823,7 +823,7 @@ class Gloop extends RailRider {
         emitters.flipbookManager.emitters.push(this.bubbler);
     }
 
-    protected movement(viewerInput: ViewerRenderInput): void {
+    protected override movement(viewerInput: ViewerRenderInput): void {
         super.movement(viewerInput);
         let anim = GloopState.Swim;
         let mode = AnimationMode.Loop;
@@ -851,8 +851,8 @@ function triangleWave(t: number, min: number, max: number, halfPeriod: number): 
 }
 
 class MagicCarpet extends RailRider {
-    public currAnimation = CarpetState.Normal;
-    public animationMode = AnimationMode.Loop;
+    public override currAnimation = CarpetState.Normal;
+    public override animationMode = AnimationMode.Loop;
     private blinkTimer = 0;
 
     private emitter = new StreamEmitter(30, ParticleType.Carpet);
@@ -863,12 +863,12 @@ class MagicCarpet extends RailRider {
         emitters.flipbookManager.emitters.push(this.emitter);
     }
 
-    protected applyKeyframe(keyframe: RailKeyframe): void {
+    protected override applyKeyframe(keyframe: RailKeyframe): void {
         super.applyKeyframe(keyframe);
         this.railPitch = false; // actually sets pitch to 0
     }
 
-    protected movement(viewerInput: ViewerRenderInput): void {
+    protected override movement(viewerInput: ViewerRenderInput): void {
         let opacity = 1;
         switch (this.currAnimation) {
             case CarpetState.Normal:
@@ -911,7 +911,7 @@ const lavaRockScratch = nArray(2, () => vec3.create());
 export class LavaRock extends GeometryRenderer {
     public static g = 1000;
 
-    public movementController: Projectile = new Projectile(LavaRock.g);
+    public override movementController: Projectile = new Projectile(LavaRock.g);
 
     public timer = -1;
     private explode = false;
@@ -980,7 +980,7 @@ export class LavaRock extends GeometryRenderer {
         this.flameEmitter.modelMatrix[14] = emitter.modelMatrix[14];
     }
 
-    protected movement(viewerInput: ViewerRenderInput) {
+    protected override movement(viewerInput: ViewerRenderInput) {
         super.movement(viewerInput);
         // move these along, but respect their existing emit logic
         emitAt(this.bigTrail, this.modelMatrix, 0);

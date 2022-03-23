@@ -22,7 +22,7 @@ class IVProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
 
-    public both = `
+    public override both = `
 precision mediump float;
 
 layout(std140) uniform ub_SceneParams {

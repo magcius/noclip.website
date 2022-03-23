@@ -1,5 +1,6 @@
 
-precision mediump float; precision lowp sampler2DArray;
+precision mediump float;
+precision lowp sampler2DArray;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;

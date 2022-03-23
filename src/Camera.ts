@@ -2,16 +2,13 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
+import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
-import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
-import { StudioPanel } from './Studio';
-import { Blue, Color, Green, Magenta } from './Color';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -98,10 +95,10 @@ export class Camera {
 
     public updateProjectionMatrix(): void {
         if (this.isOrthographic)
-            computeProjectionMatrixFromCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+            projectionMatrixForCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
         else
-            computeProjectionMatrixFromFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
-        reverseDepthForProjectionMatrix(this.projectionMatrix);
+            projectionMatrixForFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
+        projectionMatrixReverseDepth(this.projectionMatrix);
         projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.updateClipFromWorld();
@@ -297,6 +294,17 @@ export interface CameraControllerClass {
 
 // Movement speeds have been designed for a 60fps experience.
 const FPS = 1000 / 60;
+
+function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
+    // Quantize to nearest world axis.
+    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
+    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
+        vec3.set(dst, speed * Math.sign(x), 0, 0);
+    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
+        vec3.set(dst, 0, speed * Math.sign(y), 0);
+    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
+        vec3.set(dst, 0, 0, speed * Math.sign(z));
+}
 
 export class FPSCameraController implements CameraController {
     public camera: Camera;
@@ -503,20 +511,12 @@ export class FPSCameraController implements CameraController {
 export class StudioCameraController extends FPSCameraController {
     public isAnimationPlaying: boolean = false;
     private interpStep: InterpolationStep = new InterpolationStep();
-    private scratchVec: vec3 = vec3.create();
-    private scratchVecUp: vec3 = vec3.create();
-    private scratchMat: mat4 = mat4.create();
-
-    public previewPath: boolean = true;
-    public previewLineColor: Color = Magenta;
-    public previewLineLookAtColor: Color = Blue;
-    public previewLineYAxisColor: Color = Green;
 
     constructor(private animationManager: CameraAnimationManager, private studioPanel: StudioPanel) {
         super();
     }
 
-    public update(inputManager: InputManager, dt: number): CameraUpdateResult {
+    public override update(inputManager: InputManager, dt: number): CameraUpdateResult {
         let result;
 
         if (this.isAnimationPlaying) {
@@ -525,42 +525,12 @@ export class StudioCameraController extends FPSCameraController {
                 mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
                 this.camera.worldMatrixUpdated();
             }
-            if (inputManager.isKeyDownEventTriggered('Escape'))
-                this.stopAnimation();
             // Set result to unchanged to prevent needless savestate creation during playback.
             result = CameraUpdateResult.Unchanged;
         } else {
-            // TODO(jstpierre): Move these controls / path drawing to Studio.
-
-            if (inputManager.isKeyDownEventTriggered('Enter'))
-                this.studioPanel.addKeyframesFromMat4(mat4.clone(this.camera.worldMatrix));
-
-            if (inputManager.isKeyDownEventTriggered('Escape'))
-                this.studioPanel.endEditKeyframePosition();
-
             result = super.update(inputManager, dt);
 
-            if (this.previewPath) {
-                for (let i = 0; i <= this.studioPanel.animationPreviewSteps.length - 2; i++) {
-                    drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i + 1].pos, this.previewLineColor);
-                    if (i % 30 === 0) {
-                        drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i].lookAtPos, this.previewLineLookAtColor);
-
-                        mat4.targetTo(this.scratchMat, this.studioPanel.animationPreviewSteps[i].pos, this.studioPanel.animationPreviewSteps[i].lookAtPos, Vec3UnitY);
-                        mat4.rotateZ(this.scratchMat, this.scratchMat, -this.studioPanel.animationPreviewSteps[i].bank);
-                        computeEulerAngleRotationFromSRTMatrix(this.scratchVec, this.scratchMat);
-                        vec3.copy(this.scratchVecUp, Vec3UnitY);
-                        vec3.rotateZ(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[2]);
-                        vec3.rotateY(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[1]);
-                        vec3.rotateX(this.scratchVecUp, this.scratchVecUp, Vec3Zero, -this.scratchVec[0]);
-                        this.scratchVecUp[2] = 0;
-                        vec3.normalize(this.scratchVecUp, this.scratchVecUp);
-                        vec3.scaleAndAdd(this.scratchVecUp, this.studioPanel.animationPreviewSteps[i].pos, this.scratchVecUp, 100);
-                        drawWorldSpaceLine(getDebugOverlayCanvas2D(), this.camera.clipFromWorldMatrix, this.studioPanel.animationPreviewSteps[i].pos, this.scratchVecUp, this.previewLineYAxisColor);
-                        // TODO - draw arrow head lines or cone to better communicate direction?
-                    }
-                }
-            }
+            this.studioPanel.drawWorldHelpers(this.camera.clipFromWorldMatrix);
         }
 
         return result;
@@ -568,7 +538,7 @@ export class StudioCameraController extends FPSCameraController {
 
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isAnimationFinished()) {
-            this.stopAnimation();
+            this.studioPanel.stopAnimation();
             return CameraUpdateResult.Unchanged;
         }
 
@@ -587,14 +557,6 @@ export class StudioCameraController extends FPSCameraController {
         this.camera.worldMatrixUpdated();
     }
 
-    public playAnimation() {
-        this.isAnimationPlaying = true;
-    }
-
-    public stopAnimation() {
-        this.isAnimationPlaying = false;
-        this.studioPanel.onAnimationStopped();
-    }
 }
 
 export class XRCameraController {
@@ -690,7 +652,7 @@ export class XRCameraController {
             camera.aspect = aspect;
 
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            reverseDepthForProjectionMatrix(camera.projectionMatrix);
+            projectionMatrixReverseDepth(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
 

@@ -22,7 +22,7 @@ const backgroundBindingLayouts: GfxBindingLayoutDescriptor[] = [
 class SkyBackgroundProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public both: string = `
+    public override both: string = `
 layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
     vec4 u_Misc[1];
@@ -33,7 +33,7 @@ layout(std140) uniform ub_Params {
 uniform sampler2D u_Texture;
 `;
 
-    public vert: string = `
+    public override vert: string = `
 out vec2 v_TexCoord;
 
 void main() {
@@ -54,7 +54,7 @@ void main() {
 }
 `;
 
-    public frag: string = `
+    public override frag: string = `
 in vec2 v_TexCoord;
 
 void main() {

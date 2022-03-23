@@ -3,7 +3,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { decodeString } from "../util";
-import { CustomMount, SourceFileSystem } from "./Main";
+import { CustomMount, SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 class TheStanleyParableDesc implements SceneDesc {
@@ -14,8 +14,8 @@ class TheStanleyParableDesc implements SceneDesc {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await Promise.all([
-                filesystem.createVPKMount(`${pathBase2}/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase2}/hl2_misc`),
+                filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+                filesystem.createVPKMount(`HalfLife2/hl2_misc`),
             ]);
             const dir = decodeString(await context.dataFetcher.fetchData(`${pathBase}/thestanleyparable/dir.txt`));
             const files = dir.split('\n');
@@ -23,12 +23,12 @@ class TheStanleyParableDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/thestanleyparable/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/thestanleyparable/maps/${this.id}.bsp`);
     }
 }
 
 const pathBase = `TheStanleyParable`;
-const pathBase2 = `HalfLife2`;
 
 const id = 'TheStanleyParable';
 const name = 'The Stanley Parable';

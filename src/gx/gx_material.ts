@@ -12,7 +12,7 @@ import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
 import { DeviceProgram } from '../Program';
-import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -357,7 +357,6 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-// TODO(jstpierre): Rename from ub_DrawParams.
 layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];
@@ -407,7 +406,7 @@ export class GX_Program extends DeviceProgram {
     public static ub_MaterialParams = 1;
     public static ub_DrawParams = 2;
 
-    public name: string;
+    public override name: string;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
         super();
@@ -855,8 +854,8 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private stageUsesSimpleCoords(stage: TevStage): boolean {
-        // This is a bit of a hack. If there's no indirect stage, we use simple normalized texture coordinates,
-        // designed renderers where injecting the texture size might be difficult.
+        // This is a bit of a hack. If there's no indirect stage, we use simple normalized texture coordinates;
+        // this is for game renderers where injecting the texture size might be difficult.
         return stage.indTexMatrix === GX.IndTexMtxID.OFF && !stage.indTexAddPrev;
     }
 
@@ -999,7 +998,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (clamp)
             return `saturate(${expr})`;
         else
-            return expr;
+            return `clamp(${expr}, -4.0, 4.0)`;
     }
 
     private generateColorOp(stage: TevStage) {
@@ -1077,6 +1076,18 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID.S0:
+        case GX.IndTexMtxID.S1:
+        case GX.IndTexMtxID.S2:
+            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
+            // This assumes scale_exp is 0.
+            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+        case GX.IndTexMtxID.T0:
+        case GX.IndTexMtxID.T1:
+        case GX.IndTexMtxID.T2:
+            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
+            // This assumes scale_exp is 0.
+            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
         default:
             console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
@@ -1085,11 +1096,10 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length) {
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length)
             return `${this.generateTevTexCoordIndirectMtx(stage)}`;
-        } else {
+        else
             return ``;
-    }
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
@@ -1371,15 +1381,14 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
         return u_TexMtx[(t_MtxIdx - 10u)];
     else
         return u_PosMtx[t_MtxIdx];
+    // Workaround for https://github.com/gfx-rs/naga/issues/1053
+    return u_PosMtx[0u];
 }
 
+${GfxShaderLibrary.MulNormalMatrix}
+
 vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
-    // Pull out the squared scaling.
-    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
-    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
-    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
-    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
-    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
+    return MulNormalMatrix(t_Matrix, t_Value.xyz);
 }
 
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
@@ -1451,6 +1460,8 @@ ${this.generateFog()}
 ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
+
+        // console.log(`vertex shader:\n${this.vert}\nfragment shader:\n${this.frag}`);
     }
 }
 // #endregion
@@ -1780,7 +1791,7 @@ export function parseLightChannels(r: DisplayListRegisters): LightChannelControl
     for (let i = 0; i < numColors; i++) {
         const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
         const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
-        const colorChannel = parseColorChannelControlRegister(colorCntrl); 
+        const colorChannel = parseColorChannelControlRegister(colorCntrl);
         const alphaChannel = parseColorChannelControlRegister(alphaCntrl);
         lightChannels.push({ colorChannel, alphaChannel });
     }

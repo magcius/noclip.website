@@ -136,7 +136,7 @@ export class OdysseyRenderer extends BasicFRESRenderer {
         super(device, resourceSystem.textureHolder);
     }
 
-    public destroy(device: GfxDevice): void {
+    public override destroy(device: GfxDevice): void {
         super.destroy(device);
         this.resourceSystem.destroy(device);
     }

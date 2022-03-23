@@ -262,5 +262,5 @@ export class dRes_info_c {
 }
 
 export function dComIfG_resLoad(globals: dGlobals, archiveName: string): cPhs__Status {
-    return globals.modelCache.requestObjectData(archiveName);
+    return globals.modelCache.requestObjectData(assertExists(archiveName));
 }

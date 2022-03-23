@@ -995,7 +995,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         dstIdx += loadedVertexLayout.vertexBufferStrides[0];
                     }
 
-                    const indexBuffer = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, vertexId, vertexCount);
+                    const indexBuffer = makeTriangleIndexBuffer(GfxTopology.TriStrips, vertexId, vertexCount);
                     vertexId += vertexCount;
                     const totalIndexCount = indexBuffer.length;
                     const indexData = indexBuffer.buffer;

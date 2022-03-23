@@ -5,7 +5,7 @@ import * as rw from "librw";
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
@@ -188,7 +188,7 @@ class GTA3Program extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     private static program = program_glsl;
-    public both = GTA3Program.program;
+    public override both = GTA3Program.program;
 
     constructor(def: GTA3ProgramDef = {}) {
         super();
@@ -316,7 +316,7 @@ class RWMeshFragData implements MeshFragData {
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
         this.indices = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(
-            tristrip ? GfxTopology.TRISTRIP : GfxTopology.TRIANGLES,
+            tristrip ? GfxTopology.TriStrips : GfxTopology.Triangles,
             mesh.indices!.map(index => this.indexMap.indexOf(index))));
     }
 
@@ -601,7 +601,9 @@ export class AreaRenderer {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 1, numSamplers: 1 },
+    { numUniformBuffers: 1, numSamplers: 1, samplerEntries: [
+        { formatKind: GfxSamplerFormatKind.Float, dimension: GfxTextureDimension.n2DArray, },
+    ] },
 ];
 
 export class GTA3Renderer implements Viewer.SceneGfx {

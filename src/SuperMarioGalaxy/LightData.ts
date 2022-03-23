@@ -398,7 +398,7 @@ export class LightAreaHolder extends AreaObjMgr<LightArea> {
         sceneObjHolder.lightDirector.lightAreaHolder = this;
     }
 
-    public initAfterPlacement(): void {
+    public override initAfterPlacement(): void {
         this.sort();
     }
 
@@ -446,7 +446,7 @@ export class LightArea extends AreaObj {
         this.priority = fallback(getJMapInfoArg1(infoIter), -1);
     }
 
-    public getManagerName(): string {
+    public override getManagerName(): string {
         return 'LightArea';
     }
 }

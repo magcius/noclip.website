@@ -229,7 +229,7 @@ export function transformVec3Mat4w0(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3)
 
 const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
 
-function compareEpsilon(a: number, b: number) {
+export function compareEpsilon(a: number, b: number) {
     return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
 }
 
@@ -356,7 +356,7 @@ export function angleDist(v0: number, v1: number, maxAngle: number = MathConstan
 }
 
 // Similar to mat4.frustum, except it can handle infinite far planes.
-export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+export function projectionMatrixForFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
     const rl = 1 / (right - left);
     const tb = 1 / (top - bottom);
     m[0] = near * 2 * rl;
@@ -384,7 +384,7 @@ export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right:
     }
 }
 
-export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+export function projectionMatrixForCuboid(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
     const rl = 1 / (right - left);
     const tb = 1 / (top - bottom);
     const nf = 1 / (near - far);
@@ -554,17 +554,6 @@ export function float32AsBits(x: number): number {
 export function reflectVec3(dst: vec3, source: ReadonlyVec3, normal: ReadonlyVec3): void {
     const dot = -2.0 * vec3.dot(source, normal);
     vec3.scaleAndAdd(dst, source, normal, dot);
-}
-
-export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
-    // Quantize to nearest world axis.
-    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
-    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
-        vec3.set(dst, speed * Math.sign(x), 0, 0);
-    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
-        vec3.set(dst, 0, speed * Math.sign(y), 0);
-    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
-        vec3.set(dst, 0, 0, speed * Math.sign(z));
 }
 
 export function vec3SetAll(dst: vec3, v: number): void {

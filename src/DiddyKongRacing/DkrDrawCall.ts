@@ -10,7 +10,6 @@ import { ViewerRenderInput } from '../viewer';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { DkrTexture } from './DkrTexture';
 import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch';
-import { isFlagSet } from './DkrUtil';
 import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program';
 import { DkrObjectAnimation } from './DkrObjectAnimation';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
@@ -211,7 +210,7 @@ export class DkrDrawCall {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, params: DkrDrawCallParams): void {
-        if(!DkrControlGlobals.SHOW_INVISIBLE_GEOMETRY.on && isFlagSet(this.flags, FLAG_IS_INVISIBLE_GEOMETRY)) {
+        if(!DkrControlGlobals.SHOW_INVISIBLE_GEOMETRY.on && !!(this.flags & FLAG_IS_INVISIBLE_GEOMETRY)) {
             return;
         }
         if(params.overrideAlpha === 0.0) {
@@ -220,7 +219,7 @@ export class DkrDrawCall {
 
         if(this.isBuilt) {
             const template = renderInstManager.pushTemplateRenderInst();
-            template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
+            template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1, },]);
             template.setInputLayoutAndState(this.defaultInputLayout, this.defaultInputState);
     
             let texLayer;
@@ -250,7 +249,7 @@ export class DkrDrawCall {
                         }));
                     } else if(texLayer == GfxRendererLayer.TRANSLUCENT) {
                         template.setMegaStateFlags(setAttachmentStateSimple({
-                            depthWrite: isFlagSet(this.flags, FLAG_ENABLE_DEPTH_WRITE)
+                            depthWrite: !!(this.flags & FLAG_ENABLE_DEPTH_WRITE),
                         }, {
                             blendMode: GfxBlendMode.Add,
                             blendSrcFactor: GfxBlendFactor.SrcAlpha,

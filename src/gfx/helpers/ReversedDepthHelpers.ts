@@ -14,7 +14,7 @@ const reverseDepthMatrix = mat4.fromValues(
     0, 0, 0, 1,
 );
 
-export function reverseDepthForProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
+export function projectionMatrixReverseDepth(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
     if (isDepthReversed)
         mat4.mul(m, reverseDepthMatrix, m);
 }

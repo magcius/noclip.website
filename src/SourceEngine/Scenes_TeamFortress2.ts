@@ -1,8 +1,9 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem } from "./Main";
+import { SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
+import { createKitchenSinkSourceFilesytem } from "./Scenes_FileDrops";
 
 const pathBase = `TeamFortress2`;
 
@@ -23,7 +24,8 @@ class TeamFortress2SceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
     }
 }
 
@@ -32,20 +34,14 @@ class GarrysModSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const pathBase2 = `GarrysMod`;
+        const gmPathBase = `GarrysMod`;
 
-        const filesystem = await context.dataShare.ensureObject(`${pathBase2}/SourceFileSystem`, async () => {
-            const filesystem = new SourceFileSystem(context.dataFetcher);
-            await Promise.all([
-                filesystem.createVPKMount(`${pathBase2}/garrysmod`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
-                filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
-            ]);
-
-            return filesystem;
+        const filesystem = await context.dataShare.ensureObject(`${gmPathBase}/SourceFileSystem`, async () => {
+            return createKitchenSinkSourceFilesytem(context.dataFetcher);
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase2}/maps/${this.id}.bsp`);
+        const loadContext = new SourceLoadContext(filesystem);
+        return createScene(context, loadContext, this.id, `${gmPathBase}/maps/${this.id}.bsp`);
     }
 }
 
@@ -191,6 +187,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('itemtest'),
     "Garry's Mod",
     new GarrysModSceneDesc('gm_construct'),
+    new GarrysModSceneDesc('gm_fork'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

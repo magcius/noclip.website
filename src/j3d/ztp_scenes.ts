@@ -23,6 +23,7 @@ import { mat4 } from 'gl-matrix';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -143,14 +144,14 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         return [layers, renderHacksPanel];
     }
 
-    private setIndirectTextureOverride(): void {
+    private setIndirectTextureOverride(device: GfxDevice): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             const m = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
             if (m !== null) {
                 m.lateBinding = 'opaque-scene-texture';
                 m.width = EFB_WIDTH;
                 m.height = EFB_HEIGHT;
-                m.flipY = true;
+                m.flipY = gfxDeviceNeedsFlipY(device);
             }
         }
     }
@@ -159,7 +160,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.setIndirectTextureOverride();
+        this.setIndirectTextureOverride(device);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);

@@ -93,6 +93,12 @@ export function cM__Rad2Short(v: number): number {
     return v * (0x8000 / Math.PI);
 }
 
+export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
+    const dy = p1[1] - p0[1];
+    const dist = cLib_distanceXZ(p0, p1);
+    return cM_atan2s(dy, dist);
+}
+
 export function cLib_targetAngleY(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
     const dx = p1[0] - p0[0];
     const dz = p1[2] - p0[2];
@@ -124,4 +130,13 @@ export function cLib_chasePosXZ(dst: vec3, target: ReadonlyVec3, maxVel: number)
         normToLength(scratchVec3a, maxVel);
         vec3.add(dst, dst, scratchVec3a);
     }
+}
+
+export function cLib_distanceSqXZ(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
+    const dx = p1[0] - p0[0], dz = p1[2] - p0[2];
+    return dx*dx + dz*dz;
+}
+
+export function cLib_distanceXZ(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
+    return Math.sqrt(cLib_distanceSqXZ(p0, p1));
 }

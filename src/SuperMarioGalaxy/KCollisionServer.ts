@@ -156,21 +156,13 @@ export class KCollisionServer {
         this.farthestVertexDistance = Math.sqrt(bestDistSqr);
     }
 
-    public getAttributes(idx: number): JMapInfoIter | null {
+    public getAttributes(prismData: KC_PrismData): JMapInfoIter | null {
         if (this.params !== null) {
-            this.params.setRecord(this.prisms[idx].attrib);
+            this.params.setRecord(prismData.attrib);
             return this.params;
         } else {
             return null;
         }
-    }
-
-    public toIndex(prism: KC_PrismData): number {
-        return this.prisms.indexOf(prism);
-    }
-
-    public getPrismData(idx: number): KC_PrismData {
-        return this.prisms[idx];
     }
 
     public getFaceNormal(dst: vec3, prism: KC_PrismData): void {
@@ -263,7 +255,7 @@ export class KCollisionServer {
         return true;
     }
 
-    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, thickness: number): boolean {
+    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, scale: number): boolean {
         // Local space.
         this.loadPosition(scratchVec3d, prism.positionIdx);
         vec3.sub(scratchVec3d, pos, scratchVec3d);
@@ -428,7 +420,7 @@ export class KCollisionServer {
             throw "whoops";
         }
 
-        const maxDist = this.prismThickness * thickness;
+        const maxDist = this.prismThickness * scale;
         if (dst.distance < 0.0 || dst.distance > maxDist)
             return false;
 

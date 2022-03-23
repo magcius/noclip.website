@@ -9,6 +9,7 @@ import { UI, Slider } from "./ui";
 import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX, lerp } from "./MathHelpers";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils";
+import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -280,8 +281,8 @@ export function drawViewportSpacePoint(ctx: CanvasRenderingContext2D, x: number,
     ctx.fillRect(x - rad, ctx.canvas.height - y - rad, size, size);
 }
 
-function shouldCull(p: vec4): boolean {
-    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < -1 || p[2] > 1;
+function shouldCull(p: ReadonlyVec4, clipSpaceNearZ = window.main.viewer.gfxDevice.queryVendorInfo().clipSpaceNearZ): boolean {
+    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < clipSpaceNearZ || p[2] > 1;
 }
 
 export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: ReadonlyVec3, color: Color = Magenta, size: number = 4): void {
@@ -372,7 +373,7 @@ interface TextOptions {
 export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: Color = Magenta, options: TextOptions = {}): void {
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
-    ctx.textAlign = 'start';
+    ctx.textAlign = options.align ?? 'start';
     ctx.font = options.font ?? '14pt monospace';
 
     if (options.outline) {
@@ -385,7 +386,6 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
 
     ctx.shadowColor = options.shadowColor ?? colorToCSS(OpaqueBlack, color.a);
     ctx.shadowBlur = options.shadowBlur ?? 0;
-    ctx.textAlign = options.align ?? 'start';
     ctx.fillText(text, x, y);
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 0;

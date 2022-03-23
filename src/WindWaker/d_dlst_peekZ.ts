@@ -1,13 +1,15 @@
 
-import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { assert, assertExists } from "../util";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
+// TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {
     public normalizedX: number;
     public normalizedY: number;
@@ -86,28 +88,28 @@ export class PeekZManager {
         this.ensureCurrentFrame(device);
     }
 
-    private ensureResources(device: GfxDevice): void {
+    private ensureResources(cache: GfxRenderCache): void {
         // Kick off pipeline compilation ASAP.
         if (this.fullscreenCopyProgram === null) {
             const fullscreenFS: string = `
-uniform sampler2D u_Texture;
+uniform sampler2D u_TextureFramebufferDepth;
 in vec2 v_TexCoord;
 
 out uint o_Output;
 
 void main() {
-    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord);
     o_Output = uint(color.r * 4294967295.0);
 }
 `;
-            const fullscreenProgramDescriptor = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, fullscreenFS);
-            this.fullscreenCopyProgram = device.createProgramSimple(fullscreenProgramDescriptor);
+            const fullscreenProgramDescriptor = preprocessProgram_GLSL(cache.device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, fullscreenFS);
+            this.fullscreenCopyProgram = cache.createProgramSimple(fullscreenProgramDescriptor);
         }
 
         if (this.depthSampler === null) {
             // According to the GLES spec, depth textures *must* be filtered as NEAREST.
             // https://github.com/google/angle/blob/49a53d684affafc0bbaa2d4c2414113fe95329ce/src/libANGLE/Texture.cpp#L362-L383
-            this.depthSampler = device.createSampler({
+            this.depthSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
                 mipFilter: GfxMipFilterMode.NoMip,
@@ -119,14 +121,14 @@ void main() {
         }
     }
 
-    private stealCurrentFrameAndCheck(device: GfxDevice): PeekZFrame | null {
+    private stealCurrentFrameAndCheck(cache: GfxRenderCache): PeekZFrame | null {
         const frame = this.currentFrame;
         this.currentFrame = null;
 
         if (frame === null)
             return null;
 
-        this.ensureResources(device);
+        this.ensureResources(cache);
 
         if (this.submittedFrames.length >= this.maxSubmittedFrames) {
             // Too many frames in flight, discard this one.
@@ -159,8 +161,9 @@ void main() {
         this.submittedFrames.push(frame);
     }
 
-    public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
-        const frame = this.stealCurrentFrameAndCheck(device);
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: GfxrRenderTargetID): void {
+        const cache = renderInstManager.gfxRenderCache, device = cache.device;
+        const frame = this.stealCurrentFrameAndCheck(cache);
         if (frame === null)
             return;
 
@@ -171,10 +174,11 @@ void main() {
         const colorTargetID = builder.createRenderTargetID(this.colorTargetDesc, 'PeekZ Color Buffer');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('PeekZ');
+            pass.setDebugName('PeekZ Copy Depth => Color');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, colorTargetID);
             const resolvedDepthTextureID = builder.resolveRenderTarget(depthTargetID);
             pass.attachResolveTexture(resolvedDepthTextureID);
+            pass.addExtraRef(GfxrAttachmentSlot.Color0);
             pass.exec((passRenderer, scope) => {
                 const resolvedDepthTexture = scope.getResolveTextureForID(resolvedDepthTextureID);
 
@@ -182,7 +186,11 @@ void main() {
                 renderInst.setAllowSkippingIfPipelineNotReady(false);
                 renderInst.setGfxProgram(this.fullscreenCopyProgram!);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
-                renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 0 }]);
+                renderInst.setBindingLayouts([{
+                    numUniformBuffers: 0,
+                    numSamplers: 1,
+                    samplerEntries: [{ dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, }],
+                }]);
                 renderInst.drawPrimitives(3);
 
                 const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler, lateBinding: null }];
@@ -221,9 +229,5 @@ void main() {
             this.submittedFrames[i].destroy(device);
         for (let i = 0; i < this.framePool.length; i++)
             this.framePool[i].destroy(device);
-        if (this.fullscreenCopyProgram !== null)
-            device.destroyProgram(this.fullscreenCopyProgram);
-        if (this.depthSampler !== null)
-            device.destroySampler(this.depthSampler);
     }
 }

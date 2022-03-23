@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -147,6 +147,7 @@ export interface GfxSamplerDescriptor {
     minLOD?: number;
     maxLOD?: number;
     maxAnisotropy?: number;
+    compareMode?: GfxCompareMode;
 }
 
 export interface GfxRenderTargetDescriptor {
@@ -167,9 +168,23 @@ export interface GfxSamplerBinding {
     lateBinding: string | null;
 }
 
+export const enum GfxSamplerFormatKind {
+    Float,
+    Uint,
+    Sint,
+    Depth,
+}
+
+export interface GfxBindingLayoutSamplerDescriptor {
+    dimension: GfxTextureDimension;
+    formatKind: GfxSamplerFormatKind;
+};
+
 export interface GfxBindingLayoutDescriptor {
     numUniformBuffers: number;
+    // TODO(jstpierre): Remove / make optional?
     numSamplers: number;
+    samplerEntries?: GfxBindingLayoutSamplerDescriptor[];
 }
 
 export interface GfxBindingsDescriptor {
@@ -243,16 +258,22 @@ export interface GfxRenderPassDescriptor {
     colorAttachment: (GfxRenderTarget | null)[];
     colorClearColor: (GfxColor | 'load')[];
     colorResolveTo: (GfxTexture | null)[];
+    colorStore: boolean[];
     depthStencilAttachment: GfxRenderTarget | null;
     depthStencilResolveTo: GfxTexture | null;
+    depthStencilStore: boolean;
     depthClearValue: number | 'load';
     stencilClearValue: number | 'load';
+
+    // Query system.
+    occlusionQueryPool: GfxQueryPool | null;
 }
 
 export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
     uniformBufferMaxPageWordSize: number;
     readonly supportedSampleCounts: number[];
+    occlusionQueriesRecommended: boolean;
 }
 
 export interface GfxDebugGroup {
@@ -269,8 +290,8 @@ export const enum GfxViewportOrigin {
 }
 
 export const enum GfxClipSpaceNearZ {
-    NegativeOne,
-    Zero,
+    NegativeOne = -1.0,
+    Zero = 0.0,
 }
 
 export interface GfxVendorInfo {
@@ -292,6 +313,10 @@ export interface GfxNormalizedViewportCoords {
     h: number;
 }
 
+export const enum GfxQueryPoolType {
+    OcclusionConservative,
+}
+
 export interface GfxSwapChain {
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
@@ -311,12 +336,19 @@ export interface GfxRenderPass {
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;
     setStencilRef(value: number): void;
-    setDebugPointer(value: any): void;
 
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
+
+    // Query system.
+    beginOcclusionQuery(dstOffs: number): void;
+    endOcclusionQuery(dstOffs: number): void;
+
+    // Debug.
+    beginDebugGroup(name: string): void;
+    endDebugGroup(): void;
 };
 
 export type GfxPass = GfxRenderPass;
@@ -348,13 +380,12 @@ export interface GfxDevice {
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
-    createReadback(elemCount: number): GfxReadback;
+    createReadback(byteCount: number): GfxReadback;
+    createQueryPool(type: GfxQueryPoolType, elemCount: number): GfxQueryPool;
 
-    /**
-     * Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
-     * to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
-     * set loadSceneDelta to 0 and switch scenes).
-     */
+    // Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
+    // to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
+    // set loadSceneDelta to 0 and switch scenes).
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
@@ -365,6 +396,7 @@ export interface GfxDevice {
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
+    destroyQueryPool(o: GfxQueryPool): void;
 
     // Render pipeline compilation control.
     pipelineQueryReady(o: GfxRenderPipeline): boolean;
@@ -385,7 +417,17 @@ export interface GfxDevice {
     // Readback system.
     readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
     submitReadback(o: GfxReadback): void;
+    /**
+     * Checks if the readback object {@param o} is ready. If so, this will write the full set of readback
+     * values to {@param dst}, starting at index {@param dstOffs}, and returns true. If the readback is
+     * not ready, false is returned, and the array is untouched.
+     */
     queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
+
+    // Query system
+    // Returns null if the query results are still pending. Returns true if any samples passed.
+    // TODO(jstpierre): Check the pool as a whole?
+    queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null;
 
     // Information queries.
     queryLimits(): GfxDeviceLimits;

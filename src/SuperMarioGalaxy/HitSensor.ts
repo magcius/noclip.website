@@ -369,8 +369,8 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.characterGroup;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
 
         this.clearGroup(this.playerGroup);
         this.clearGroup(this.rideGroup);
@@ -490,8 +490,16 @@ export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: H
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
 }
 
+export function sendMsgEnemyAttackStrong(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackStrong, sendSensor);
+}
+
 export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
+}
+
+export function sendMsgEnemyAttackElectric(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackElectric, sendSensor);
 }
 
 export function sendMsgPush(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
@@ -579,6 +587,10 @@ export function addHitSensorMtxEnemy(sceneObjHolder: SceneObjHolder, actor: Live
 
 export function addHitSensorMtxEnemyAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, mtx, offset);
+}
+
+export function clearHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.clear();
 }
 
 export function invalidateHitSensor(actor: LiveActor, name: string): void {

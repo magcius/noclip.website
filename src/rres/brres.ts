@@ -49,16 +49,13 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     mat4.identity(dst);
 
-    const sinP = 0.5 * sinR - 0.5;
-    const cosP = -0.5 * cosR;
-
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS *  sinR;
-    dst[12] = scaleS * (cosP - sinP - translationS);
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * (cosP + sinP + translationT) + 1.0;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1.0;
 }
 
 function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -1899,17 +1896,10 @@ function parsePAT0(buffer: ArrayBufferSlice): PAT0 {
 }
 
 function findFrameData<T extends { frame: number }>(frames: T[], frame: number): T {
-    if (frames.length === 1)
-        return frames[0];
-
-    // Find the left-hand frame.
-    let idx0 = frames.length;
-    while (idx0-- > 0) {
-        if (frame >= frames[idx0].frame)
-            break;
-    }
-
-    return frames[idx0];
+    for (let i = 0; i < frames.length; i++)
+        if (frame < frames[i].frame)
+            return frames[i];
+    return frames[frames.length - 1];
 }
 
 export class PAT0TexAnimator {

@@ -22,12 +22,13 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { FloatingPanel } from "../DebugFloaters";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
-function setLateTextureMapping(m: TextureMapping, lateBinding: string): void {
+function setLateTextureMapping(m: TextureMapping, lateBinding: string, flipY: boolean): void {
     m.lateBinding = lateBinding;
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
-    m.flipY = true;
+    m.flipY = flipY;
 }
 
 class BasicEffectSystem {
@@ -43,13 +44,14 @@ class BasicEffectSystem {
     ];
 
     constructor(device: GfxDevice, private jpac: JPA.JPAC) {
+        const flipY = gfxDeviceNeedsFlipY(device);
         this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
         this.jpacData = new JPA.JPACData(this.jpac);
 
         for (let i = 0; i < this.fbTextureNames.length; i++) {
             const m = this.jpacData.getTextureMappingReference(this.fbTextureNames[i]);
             if (m !== null)
-                setLateTextureMapping(m, 'opaque-scene-texture');
+                setLateTextureMapping(m, 'opaque-scene-texture', flipY);
         }
     }
 
@@ -254,7 +256,7 @@ export class Explorer implements SceneGfx {
     private createUI(): void {
         const panel = new FloatingPanel();
         panel.setTitle(LAYER_ICON, `Particle Explorer`);
-        panel.setWidth(600);
+        panel.setWidth('600px');
         this.uiContainer.appendChild(panel.elem);
 
         const effectIndexList = makeDataList(this.jpac.effects.map((r, i) => '' + i));

@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial } from './materials';
+import { MapLight, SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
 import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
@@ -18,7 +18,9 @@ import { Shape } from './shapes';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
-import { transformVec3Mat4w0 } from '../MathHelpers';
+import { computeNormalMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
+import { LightType } from './WorldLights';
+import { ObjectInstance } from './objects';
 
 interface Joint {
     parent: number;
@@ -48,11 +50,14 @@ interface Water {
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
+    ambienceIdx: number;
     outdoorAmbientColor: Color;
-    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+    object?: ObjectInstance;
+    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
+    mapLights?: MapLight[];
 }
 
-const FUR_RENDER_LAYER = 7;
+const BLOCK_FUR_RENDER_LAYER = 23;
 
 export class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
@@ -72,56 +77,63 @@ export class ModelShapes {
         }
     }
 
-    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number, overrideSortDepth?: number, overrideSortLayer?: number) {
-        if (drawStep < 0 || drawStep >= this.shapes.length)
-            return;
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        for (let i = 0; i < 3; i++) {
+            if (this.shapes[i] !== undefined) {
+                if (renderLists !== null)
+                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
+                for (const shape of this.shapes[i]) {
+                    if (shape.isDevGeometry && !modelCtx.showDevGeometry)
+                        continue;
 
-        const shapes = this.shapes[drawStep];
-        for (let i = 0; i < shapes.length; i++) {
-            if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry)
-                continue;
-
-            mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
-            mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            shapes[i].addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices, overrideSortDepth, overrideSortLayer);
+                    mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
+                    mat4.mul(scratchMtx0, matrix, scratchMtx0);
+                    shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
+                }
+            }
         }
-    }
-    
-    public addWaterRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
-        for (let i = 0; i < this.waters.length; i++) {
-            const water = this.waters[i];
-
+        
+        if (renderLists !== null)
+            renderInstManager.setCurrentRenderInstList(renderLists.waters);
+        for (const water of this.waters) {
             mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
             water.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
         }
-    }
-
-    public addFurRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
-        for (let i = 0; i < this.furs.length; i++) {
-            const fur = this.furs[i];
-
+        
+        if (renderLists !== null)
+            renderInstManager.setCurrentRenderInstList(renderLists.furs);
+        for (const fur of this.furs) {
             for (let j = 0; j < fur.numLayers; j++) {
                 mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
-                const m00 = (j + 1) / 16 * 0.5;
-                const m11 = m00;
-                mat4SetRowMajor(scratchMtx1,
-                    m00, 0.0, 0.0, 0.0,
-                    0.0, m11, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 1.0
-                );
-                mat4.multiplyScalar(scratchMtx1, scratchMtx1, 1 / 4); // scale_exp -2
                 // Caution: a different scale_exp may be used when drawing objects
                 fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
-                    overrideIndMtx: [scratchMtx1],
                     furLayer: j,
-                }, matrixPalette, undefined, FUR_RENDER_LAYER);
+                }, matrixPalette, undefined, BLOCK_FUR_RENDER_LAYER);
             }
         }
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let shapes of this.shapes) {
+            for (let shape of shapes) {
+                shape.destroy(device);
+            }
+        }
+        this.shapes = [];
+
+        for (let fur of this.furs) {
+            fur.shape.destroy(device);
+        }
+        this.furs = [];
+
+        for (let water of this.waters) {
+            water.shape.destroy(device);
+        }
+        this.waters = [];
     }
 }
 
@@ -153,7 +165,8 @@ export class Model {
 
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
-    public fineSkinQuantizeScale: number = 0; // factor = 2 ^^ fineSkinQuantizeScale
+    public fineSkinPositionQuantizeScale: number = 0; // factor = 2 ^^ fineSkinQuantizeScale
+    public fineSkinNormalQuantizeScale: number = 0;
     public fineSkinNBTNormals: boolean = false;
     public posFineSkins: FineSkin[] = [];
     public nrmFineSkins: FineSkin[] = [];
@@ -178,6 +191,13 @@ export class Model {
     public getMaterials() {
         return this.materials;
     }
+
+    public destroy(device: GfxDevice) {
+        if (this.sharedModelShapes !== null) {
+            this.sharedModelShapes.destroy(device);
+            this.sharedModelShapes = null;
+        }
+    }
 }
 
 const scratchMtx0 = mat4.create();
@@ -185,6 +205,8 @@ const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
+const scratchVec2 = vec3.create();
 
 export class ModelInstance {
     private modelShapes: ModelShapes;
@@ -240,26 +262,7 @@ export class ModelInstance {
     
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, overrideSortDepth?: number, overrideSortLayer?: number) {
         this.updateSkinning();
-
-        if (this.modelShapes.shapes.length !== 0) {
-            for (let i = 0; i < 3; i++) {
-                if (renderLists !== null)
-                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
-                this.modelShapes.addRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i, overrideSortDepth, overrideSortLayer);
-            }
-        }
-
-        if (this.modelShapes.waters.length !== 0) {
-            if (renderLists !== null)
-                renderInstManager.setCurrentRenderInstList(renderLists.waters);
-            this.modelShapes.addWaterRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-        }
-
-        if (this.modelShapes.furs.length !== 0) {
-            if (renderLists !== null)
-                renderInstManager.setCurrentRenderInstList(renderLists.furs);
-            this.modelShapes.addFurRenderInsts(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-        }
+        this.modelShapes.addRenderInsts(device, renderInstManager, modelCtx, renderLists, matrix, this.matrixPalette, overrideSortDepth, overrideSortLayer);
     }
     
     private updateSkinning() {
@@ -304,8 +307,8 @@ export class ModelInstance {
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
-        const quant = 1 << this.model.fineSkinQuantizeScale;
-        const dequant = 1 / quant;
+        let quant = 1 << this.model.fineSkinPositionQuantizeScale;
+        let dequant = 1 / quant;
         for (let i = 0; i < this.model.posFineSkins.length; i++) {
             const skin = this.model.posFineSkins[i];
 
@@ -329,9 +332,9 @@ export class ModelInstance {
                 const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
-                vec3.transformMat4(pos, pos, scratchMtx0);
+                transformVec3Mat4w1(pos, scratchMtx0, pos);
 
-                setInt16Clamped(dst, bufferOffs, pos[0] * quant);
+                setInt16Clamped(dst, bufferOffs + 0, pos[0] * quant);
                 setInt16Clamped(dst, bufferOffs + 2, pos[1] * quant);
                 setInt16Clamped(dst, bufferOffs + 4, pos[2] * quant);
 
@@ -340,6 +343,8 @@ export class ModelInstance {
             }
         }
 
+        quant = 1 << this.model.fineSkinNormalQuantizeScale;
+        dequant = 1 / quant;
         for (let i = 0; i < this.model.nrmFineSkins.length; i++) {
             const skin = this.model.nrmFineSkins[i];
 
@@ -357,29 +362,27 @@ export class ModelInstance {
             let bufferOffs = skin.bufferOffset;
             let weightOffs = 0;
             for (let j = 0; j < skin.vertexCount; j++) {
-                pos[0] = src.getInt8(bufferOffs);
-                pos[1] = src.getInt8(bufferOffs + 1);
-                pos[2] = src.getInt8(bufferOffs + 2);
+                pos[0] = src.getInt8(bufferOffs + 0) * dequant;
+                pos[1] = src.getInt8(bufferOffs + 1) * dequant;
+                pos[2] = src.getInt8(bufferOffs + 2) * dequant;
 
                 const weight0 = skin.weights.getUint8(weightOffs) / 128;
                 const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
+                // The output normal is not scaled to magnitude 1. This doesn't matter, since the GX
+                // allegedly rescales normals automatically.
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
-                // Clear the translation column to produce a normal matrix from
-                // the position matrix.
-                // This method only works if the position matrix has no scaling
-                // in the X, Y or Z direction; only rotation and translation are
-                // allowed. Although this method appears to be used by the original
-                // game, it is not generally correct.
-                // Additionally, the original game does not rescale normals to
-                // magnitude 1, which is required for full accuracy.
-                // For the correct and general formula to produce a normal matrix from a
-                // position matrix, see: <https://github.com/graphitemaster/normals_revisited>
                 transformVec3Mat4w0(pos, scratchMtx0, pos);
 
-                setInt8Clamped(dst, bufferOffs + 0, pos[0]);
-                setInt8Clamped(dst, bufferOffs + 1, pos[1]);
-                setInt8Clamped(dst, bufferOffs + 2, pos[2]);
+                // XXX: the following might be more accurate to the game?
+                // transformVec3Mat4w0(nrm0, boneMtx0, pos);
+                // transformVec3Mat4w0(nrm1, boneMtx1, pos);
+                // vec3.scale(pos, nrm0, weight0);
+                // vec3.scaleAndAdd(pos, pos, nrm1, weight1);
+
+                setInt8Clamped(dst, bufferOffs + 0, pos[0] * quant);
+                setInt8Clamped(dst, bufferOffs + 1, pos[1] * quant);
+                setInt8Clamped(dst, bufferOffs + 2, pos[2] * quant);
 
                 bufferOffs += 3;
                 weightOffs += 2;
@@ -389,12 +392,19 @@ export class ModelInstance {
         // Rerun all display lists
         this.modelShapes.reloadVertices();
     }
+
+    public destroy(device: GfxDevice) {
+        // Destroy our shapes only if they are not shared
+        if (this.model.sharedModelShapes === null) {
+            this.modelShapes.destroy(device);
+        }
+    }
 }
 
 class ModelsFile {
     private tab: DataView;
     private bin: ArrayBufferSlice;
-    private models: Model[] = [];
+    private models: (Model | undefined)[] = [];
 
     private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
@@ -439,7 +449,13 @@ class ModelsFile {
             this.models[num] = loadModel(modelData.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
         }
 
-        return this.models[num];
+        return this.models[num]!;
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let model of this.models)
+            if (model !== undefined)
+                model.destroy(device);
     }
 }
 
@@ -507,5 +523,12 @@ export class ModelFetcher {
         if (model === null)
             throw Error(`Model ${num} not found`);
         return new ModelInstance(model);
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let file in this.files) {
+            this.files[file].destroy(device);
+        }
+        this.files = {};
     }
 }

@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, nullify } from "../util";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable } from "./Entity";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster } from "./Entity";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -599,7 +599,7 @@ class Entity_Type_Cloud extends Portable_Type {
         m.add_float('emissive_scale', { minimum_revision_number: 0x7e });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -618,6 +618,10 @@ class Entity_Type_Cluster extends Portable_Type {
         m.add_float('bounding_radius', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_vector3('bounding_center', { minimum_revision_number: 0x51, maximum_revision_number: 0x5d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
         m.add_integer('cluster_flags', { minimum_revision_number: 0x50, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Cluster(portable_id, revision_number);
     }
 }
 
@@ -777,7 +781,7 @@ class Entity_Type_Door extends Portable_Type {
         m.add_color4('color', { predicated_upon: color_override, minimum_revision_number: 0x7f, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.LINEAR_COLOR });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -815,7 +819,7 @@ class Entity_Type_Double_Ramp extends Portable_Type {
         m.add_integer('cosmetic_id_b3', { minimum_revision_number: 0x70, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1035,7 +1039,7 @@ class Entity_Type_Inanimate extends Portable_Type {
         m.add_color4('color', { predicated_upon: color_override, minimum_revision_number: 0x50, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.LINEAR_COLOR });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1212,7 +1216,7 @@ class Entity_Type_Light extends Portable_Type {
         m.add_integer('volume_marker', { minimum_revision_number: 0x81, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1350,7 +1354,7 @@ class Entity_Type_Machine_Panel extends Portable_Type {
         m.add_integer('has_ever_been_solved', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI, integer_info: make_boolean_integer_info() });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1386,7 +1390,7 @@ class Entity_Type_Marker extends Portable_Type {
         m.add_vector3_path('hull_perimeter', { minimum_revision_number: 0x7d, flags: Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1418,7 +1422,7 @@ class Entity_Type_Multipanel extends Portable_Type {
         m.add_integer('master_multipanel', { minimum_revision_number: 0x67, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1465,7 +1469,7 @@ class Entity_Type_Obelisk extends Portable_Type {
         m.add_float('brightness_scale_when_dim', { minimum_revision_number: 0x86 });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1662,7 +1666,7 @@ class Entity_Type_Pattern_Point extends Portable_Type {
         m.add_integer('fill_segment_on_broken_link', { minimum_revision_number: 0x7f, integer_info: make_boolean_integer_info() });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Pattern_Point(portable_id, revision_number);
     }
 }
@@ -1710,7 +1714,7 @@ class Entity_Type_Power_Cable extends Portable_Type {
 
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Power_Cable(portable_id, revision_number);
     }
 }
@@ -1759,7 +1763,7 @@ class Entity_Type_Pressure_Plate extends Portable_Type {
         m.add_float('glow_scale', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.ADJUSTABLE_WITHOUT_RECREATE | Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1791,7 +1795,7 @@ class Entity_Type_Pylon extends Portable_Type {
         m.add_float('on_t_target', { minimum_revision_number: 0x71 });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1813,7 +1817,7 @@ class Entity_Type_Radar_Item extends Portable_Type {
         m.add_integer('sound_id', { minimum_revision_number: 0x80, flags: Metadata_Item_Flags.IS_A_PORTABLE_ID | Metadata_Item_Flags.DO_NOT_DISPLAY_IN_UI });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1879,7 +1883,7 @@ class Entity_Type_Speaker extends Portable_Type {
         m.add_string('mesh_name', { minimum_revision_number: 0x60, flags: Metadata_Item_Flags.IS_MESH });
     }
 
-    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
         return new Entity_Inanimate(portable_id, revision_number);
     }
 }
@@ -1902,7 +1906,7 @@ class Entity_Type_Terrain_Guide extends Portable_Type {
         m.add_integer('for_collision', { minimum_revision_number: 0x5f, integer_info: make_boolean_integer_info() });
     }
 
-    public unserialize_proc(stream: Stream, portable: Portable, revision_number: number): void {
+    public override unserialize_proc(stream: Stream, portable: Portable, revision_number: number): void {
         if (revision_number > 0x48) {
             const count = stream.readUint32();
             portable.control_points = [];

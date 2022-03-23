@@ -17,6 +17,7 @@ import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -91,7 +92,8 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(opaqueSceneTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+                    const flipY = gfxDeviceNeedsFlipY(device);
+                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY };
                     this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
                     executeOnPass(renderInstManager, passRenderer, KlonoaPass.INDIRECT);
                 });

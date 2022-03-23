@@ -162,7 +162,7 @@ class ModelExhibitRenderer extends SFARenderer {
         }
     }
     
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
+    protected override update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }
@@ -245,8 +245,9 @@ class ModelExhibitRenderer extends SFARenderer {
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: true,
+            ambienceIdx: 0,
             outdoorAmbientColor: White,
-            setupLights: () => {},
+            setupPointLights: () => {},
         };
 
         modelInst.addRenderInsts(device, renderInstManager, modelCtx, null, matrix);

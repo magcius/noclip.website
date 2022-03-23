@@ -155,7 +155,7 @@ layout(std140) uniform ub_ShapeParams {
 uniform sampler2D u_Samplers[8];
 `;
 
-    public both = AglProgram.globalDefinitions;
+    public override both = AglProgram.globalDefinitions;
 
     public lookupSamplerIndex(shadingModelSamplerBindingName: string) {
         // Translate to a local sampler by looking in the sampler map, and then that's the index we use.
@@ -274,7 +274,7 @@ uniform sampler2D u_Samplers[8];
             return true;
     }
 
-    public vert = `
+    public override vert = `
 layout(location = ${AglProgram._p0}) in vec3 _p0;
 layout(location = ${AglProgram._c0}) in vec4 _c0;
 layout(location = ${AglProgram._u0}) in vec2 _u0;

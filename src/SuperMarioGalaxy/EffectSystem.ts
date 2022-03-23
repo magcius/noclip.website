@@ -1,15 +1,14 @@
 
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
-import { SceneObjHolder } from "./Main";
+import { ModelCache, SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
+import { computeModelMatrixR, computeRotationMatrixFromSRTMatrix, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
@@ -27,7 +26,8 @@ export class ParticleResourceHolder {
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
     public autoEffectList: JMapInfoIter;
 
-    constructor(effectArc: RARC.JKRArchive) {
+    constructor(modelCache: ModelCache) {
+        const effectArc = modelCache.getArchive('ParticleData/Effect.arc')!;
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`)!);
         effectNames.mapRecords((iter, i) => {
             const name = assertExists(iter.getValueString('name'));
@@ -151,6 +151,16 @@ class ParticleEmitter {
     public setGlobalTranslation(v: ReadonlyVec3): void {
         if (this.baseEmitter !== null)
             this.baseEmitter.setGlobalTranslation(v);
+    }
+
+    public setGlobalSRTMatrix(v: ReadonlyMat4): void {
+        if (this.baseEmitter !== null) {
+            getMatrixTranslation(this.baseEmitter.globalTranslation, v);
+            this.baseEmitter.globalScale[0] = Math.hypot(v[0], v[4], v[8]);
+            this.baseEmitter.globalScale[1] = Math.hypot(v[1], v[5], v[9]);
+            this.baseEmitter.globalScale[2] = Math.hypot(v[2], v[6], v[10]);
+            computeRotationMatrixFromSRTMatrix(this.baseEmitter.globalRotation, v);
+        }
     }
 
     public setGlobalScale(v: ReadonlyVec3): void {
@@ -277,11 +287,11 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
     public drawParticle: boolean = true;
 
     public hostMtx: mat4 | null = null;
-    public hostTranslation: vec3 | null = null;
-    public hostRotation: vec3 | null = null;
-    public hostScale: vec3 | null = null;
+    public hostTranslation: ReadonlyVec3 | null = null;
+    public hostRotation: ReadonlyVec3 | null = null;
+    public hostScale: ReadonlyVec3 | null = null;
 
-    private setEffectSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: mat4 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
+    private setEffectSRT(emitter: JPA.JPABaseEmitter, scale: ReadonlyVec3 | null, rot: ReadonlyMat4 | null, trans: ReadonlyVec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
         if (!!(srtFlags & SRTFlags.T)) {
             // Bizarrely enough, whether rotation for offset is respect seems to differ between setSRTFromHostMtx
             // and setSRTFromHostSRT. It's always applied in setSRTFromHostMtx, regardless of FlagSRT, and but it
@@ -318,7 +328,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         }
     }
 
-    private setSRTFromHostMtx(emitter: JPA.JPABaseEmitter, mtx: mat4, srtFlags: SRTFlags, isInit: boolean): void {
+    private setSRTFromHostMtx(emitter: JPA.JPABaseEmitter, mtx: ReadonlyMat4, srtFlags: SRTFlags, isInit: boolean): void {
         const scale = scratchVec3a;
         const rot = scratchMatrix;
         const trans = scratchVec3b;
@@ -326,7 +336,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         this.setEffectSRT(emitter, scale, rot, trans, srtFlags, isInit);
     }
 
-    private setSRTFromHostSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: vec3 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
+    private setSRTFromHostSRT(emitter: JPA.JPABaseEmitter, scale: ReadonlyVec3 | null, rot: ReadonlyVec3 | null, trans: ReadonlyVec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
         let rotMatrix: mat4 | null;
         if (!!(srtFlags & SRTFlags.R)) {
             rotMatrix = scratchMatrix;
@@ -377,7 +387,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         colorCopy(emitter.globalColorPrm, this.globalColorPrm);
     }
 
-    public execute(emitter: JPA.JPABaseEmitter): void {
+    public override execute(emitter: JPA.JPABaseEmitter): void {
         this.followSRT(emitter, false);
         // this.effectLight(emitter);
         this.setColor(emitter);
@@ -395,7 +405,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
         this.hostMtx = hostMtx;
     }
 
-    public setHostSRT(hostTranslation: vec3 | null, hostRotation: vec3 | null, hostScale: vec3 | null): void {
+    public setHostSRT(hostTranslation: ReadonlyVec3 | null, hostRotation: ReadonlyVec3 | null, hostScale: ReadonlyVec3 | null): void {
         this.hostTranslation = hostTranslation;
         this.hostRotation = hostRotation;
         this.hostScale = hostScale;
@@ -586,6 +596,20 @@ export class MultiEmitter {
             const emitter = this.singleEmitters[emitterIndex];
             if (emitter.isValid())
                 emitter.particleEmitter!.setGlobalTranslation(v);
+        }
+    }
+
+    public setGlobalSRTMatrix(v: ReadonlyMat4, emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.setGlobalSRTMatrix(v);
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.setGlobalSRTMatrix(v);
         }
     }
 
@@ -920,7 +944,7 @@ export class EffectKeeper {
         this.updateFloorCode(sceneObjHolder);
     }
 
-    private updateFloorCodeTriangle(sceneObjHolder: SceneObjHolder, triangle: Triangle): void {
+    public updateFloorCodeTriangle(sceneObjHolder: SceneObjHolder, triangle: Triangle): void {
         this.oldFloorCode = this.floorCode;
         this.floorCode = getFloorCodeIndex(sceneObjHolder, triangle);
     }
@@ -985,6 +1009,27 @@ export class ParticleEmitterHolder {
         return null;
     }
 
+    public printSummary(): void {
+        const countMap = new Map<string, number>();
+        for (let i = 0; i < this.particleEmitters.length; i++) {
+            const emitter = this.particleEmitters[i].baseEmitter;
+            const name = emitter !== null ? emitter.resData.name : `!Free`;
+            countMap.set(name, fallbackUndefined(countMap.get(name), 0) + 1);
+        }
+        const entries = [...countMap.entries()];
+        entries.sort((a, b) => b[1] - a[1]);
+        for (let i = 0; i < entries.length; i++)
+            console.log(entries[i]);
+    }
+
+    public calcFreeEmitters(): number {
+        let count = 0;
+        for (let i = 0; i < this.particleEmitters.length; i++)
+            if (this.particleEmitters[i].baseEmitter === null)
+                ++count;
+        return count;
+    }
+
     public update(): void {
         for (let i = 0; i < this.particleEmitters.length; i++) {
             const emitter = this.particleEmitters[i];
@@ -1010,14 +1055,12 @@ export class EffectSystem extends NameObj {
     public particleEmitterHolder: ParticleEmitterHolder;
     public emitterManager: JPA.JPAEmitterManager;
     public drawInfo = new JPA.JPADrawInfo();
-    private emitterCount = 0;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'EffectSystem');
 
         const device = sceneObjHolder.modelCache.device;
-        const effectArc = sceneObjHolder.modelCache.getArchive('ParticleData/Effect.arc')!;
-        this.particleResourceHolder = new ParticleResourceHolder(effectArc);
+        this.particleResourceHolder = sceneObjHolder.modelCache.ensureParticleResourceHolder();
 
         // These numbers are from GameScene::initEffect.
         const maxParticleCount = 0x1800;
@@ -1106,8 +1149,7 @@ export class EffectSystem extends NameObj {
         }
     }
 
-    public destroy(device: GfxDevice): void {
-        this.particleResourceHolder.destroy(device);
+    public override destroy(device: GfxDevice): void {
         this.emitterManager.destroy(device);
     }
 }
@@ -1137,7 +1179,7 @@ export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, nam
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
 }
 
-export function emitEffectHit(sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: ReadonlyVec3, name: string | null = null): void {
+export function emitEffectHitPos(sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: ReadonlyVec3, name: string | null = null): void {
     if (actor.effectKeeper === null)
         return;
     if (name === null)
@@ -1145,6 +1187,16 @@ export function emitEffectHit(sceneObjHolder: SceneObjHolder, actor: LiveActor, 
     const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
     if (emitter !== null)
         emitter.setGlobalTranslation(pos);
+}
+
+export function emitEffectHitMtx(sceneObjHolder: SceneObjHolder, actor: LiveActor, mtx: ReadonlyMat4, name: string | null = null): void {
+    if (actor.effectKeeper === null)
+        return;
+    if (name === null)
+        name = 'HitMarkNormal';
+    const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
+    if (emitter !== null)
+        emitter.setGlobalSRTMatrix(mtx);
 }
 
 export function isEffectValid(actor: LiveActor, name: string): boolean {

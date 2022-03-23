@@ -125,7 +125,7 @@ function parseObjFile(objText: string): ObjModel {
 class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
-    public both = `
+    public override both = `
 layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_BoneMatrix[1];
@@ -150,7 +150,7 @@ uniform sampler2D u_TexturePore;
 uniform sampler2D u_TextureInd;
 `;
 
-    public vert = `
+    public override vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
@@ -164,7 +164,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public override frag = `
 in vec2 v_TexCoord;
 
 vec2 rotateZ(vec2 v, float theta) {
@@ -399,7 +399,7 @@ class FurObj {
 }
 
 const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
-export class SceneRenderer implements SceneGfx {
+class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
     public obj: GraphObjBase[] = [];

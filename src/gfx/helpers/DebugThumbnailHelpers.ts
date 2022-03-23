@@ -1,15 +1,16 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
 import { GfxColor, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
-import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
+import { GfxShaderLibrary } from './GfxShaderLibrary';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../render/GfxRenderGraph';
 
 import { lerp, saturate, smoothstep } from '../../MathHelpers';
 import { GfxRenderHelper } from '../render/GfxRenderHelper';
 import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer';
+import { gfxDeviceNeedsFlipY } from './GfxDeviceHelpers';
 
 interface MouseLocation {
     mouseX: number;
@@ -89,7 +90,7 @@ export class DebugThumbnailDrawer {
         return smoothstep(this.anim[i]);
     }
 
-    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mouseLocation: MouseLocation): void {
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID, mouseLocation: MouseLocation): void {
         if (!this.enabled)
             return;
 
@@ -100,8 +101,8 @@ export class DebugThumbnailDrawer {
         const inputPasses = builderDebug.getPasses();
 
         // Add our passes.
-        const resolveTextureIDs: number[] = [];
-        const renderTargetIDs: number[] = [];
+        const resolveTextureIDs: GfxrResolveTextureID[] = [];
+        const renderTargetIDs: GfxrRenderTargetID[] = [];
         const debugLabels: [string, string][] = [];
 
         for (let i = 0; i < inputPasses.length; i++) {
@@ -139,7 +140,7 @@ export class DebugThumbnailDrawer {
             const thumbnailDesc = builder.getRenderTargetDescription(renderTargetIDs[i]);
 
             const slotIndex = resolveTextureIDs.length - 1 - i;
-            const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding;
+            const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding - 50;
             const x1 = x2 - this.thumbnailWidth;
 
             const location = { x1, y1, x2, y2 };
@@ -147,11 +148,13 @@ export class DebugThumbnailDrawer {
             rectLerp(location, location, fullscreenRect, t);
 
             // y-flip will never die!!
-            rectFlipY(location, desc.height);
+            if (gfxDeviceNeedsFlipY(renderInstManager.gfxRenderCache.device))
+                rectFlipY(location, desc.height);
 
             const viewport = this.computeViewport(thumbnailDesc, location);
-            const vw = viewport.x2 - viewport.x1, vh = viewport.y2 - viewport.y1;
-            return { t, viewport, location, vw, vh };
+            const vx = Math.max(0, Math.ceil(viewport.x1)), vy = Math.max(0, Math.ceil(viewport.y1));
+            const vw = Math.min(desc.width, Math.floor(viewport.x2 - viewport.x1)), vh = Math.min(desc.height, Math.floor(viewport.y2 - viewport.y1));
+            return { t, location, vx, vy, vw, vh };
         };
 
         const prepareText = (textDrawer: TextDrawer, i: number, anim: ReturnType<typeof prepareAnim>) => {
@@ -182,8 +185,8 @@ export class DebugThumbnailDrawer {
             const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
             this.textureMapping[0].gfxTexture = gfxTexture;
 
-            const { viewport, location, vw, vh } = anim;
-            passRenderer.setViewport(viewport.x1, viewport.y1, vw, vh);
+            const { location, vx, vy, vw, vh } = anim;
+            passRenderer.setViewport(vx, vy, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);

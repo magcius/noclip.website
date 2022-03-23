@@ -1,6 +1,6 @@
 
 import CodeEditor from "./CodeEditor";
-import { assertExists } from "./util";
+import { assert, assertExists, nullify } from "./util";
 import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
 
@@ -38,6 +38,17 @@ export class DeviceProgram {
 
     public setDefineBool(name: string, v: boolean): boolean {
         return this.setDefineString(name, v ? '1' : null);
+    }
+
+    public getDefineString(name: string): string | null {
+        return nullify(this.defines.get(name));
+    }
+
+    public getDefineBool(name: string): boolean {
+        const str = this.getDefineString(name);
+        if (str !== null)
+            assert(str === '1');
+        return str !== null;
     }
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {

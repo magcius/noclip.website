@@ -1,18 +1,19 @@
-
 // Implements Retro's CMDL format as seen in Metroid Prime 1.
 
-import { assert, align, hexzero } from "../util";
+import { assert, align } from '../util';
 
-import { ResourceSystem } from "./resource";
-import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from "./mrea";
-import { AABB } from "../Geometry";
-import { InputStream } from "./stream";
+import { ResourceSystem } from './resource';
+import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from './mrea';
+import { AABB } from '../Geometry';
+import { InputStream } from './stream';
+import { CSKR } from './cskr';
 
 export interface CMDL {
     bbox: AABB;
     assetID: string;
     materialSets: MaterialSet[];
     geometry: Geometry;
+    cskr: CSKR | null;
 }
 
 enum ModelVersion {
@@ -40,13 +41,13 @@ function modelVersionToGameVersion(modelVersion: ModelVersion): GameVersion {
     else if (modelVersion === ModelVersion.DKCR)
         return GameVersion.DKCR;
     else
-        throw "whoops";
+        throw 'whoops';
 }
 
-export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CMDL {
+export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string, loadDetails?: { cskrId: string }): CMDL {
     const magic = stream.readUint32();
     let version: number;
-    
+
     if (magic === 0x9381000A) {
         version = ModelVersion.DKCR;
     } else {
@@ -103,15 +104,26 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         const materialSet = parseMaterialSet(stream, resourceSystem, modelVersionToGameVersion(version));
         materialSets.push(materialSet);
 
-        if (version <= ModelVersion.MP2 && i+1 < materialSetCount) {
+        if (version <= ModelVersion.MP2 && i + 1 < materialSetCount) {
             stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
         }
     }
 
     const hasPosShort = (!!(flags & Flags.POS_SHORT));
     const hasUVShort = (!!(flags & Flags.UV_SHORT) || version === ModelVersion.DKCR);
-    let geometry;
-    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasPosShort, hasUVShort, version >= ModelVersion.MP2, version >= ModelVersion.DKCR, dataSectionIndex, -1);
 
-    return { bbox, assetID, materialSets, geometry };
+    // If loaded via ANCS, MP1 CSKRs are also loaded to create skinning indices during geometry parsing.
+    // MP2 and MP3 CSKRs are loaded because they contain pre-generated PNMTXIDX envelopes.
+    let cskr: CSKR | null = null;
+    const cskrId = loadDetails?.cskrId;
+    if (cskrId) {
+        const cskrObj = resourceSystem.loadAssetByID<CSKR>(cskrId, 'CSKR');
+        if (cskrObj)
+            cskr = cskrObj;
+    }
+
+    let geometry;
+    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasPosShort, hasUVShort, version >= ModelVersion.MP2, version >= ModelVersion.DKCR, dataSectionIndex, -1, cskr);
+
+    return { bbox, assetID, materialSets, geometry, cskr };
 }

@@ -49,7 +49,7 @@ class BFBBProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    public both = program_glsl;
+    public override both = program_glsl;
 
     constructor(def: BFBBProgramDef = {}) {
         super();
@@ -219,7 +219,7 @@ class RWMeshFragData implements MeshFragData {
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
         this.indices = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(
-            tristrip ? GfxTopology.TRISTRIP : GfxTopology.TRIANGLES,
+            tristrip ? GfxTopology.TriStrips : GfxTopology.Triangles,
             mesh.indices!.map(index => this.indexMap.indexOf(index))));
     }
 
@@ -659,7 +659,7 @@ export class FragRenderer extends BaseRenderer {
         }
 
         this.program = new BFBBProgram(defines);
-        this.gfxProgram = device.createProgram(this.program);
+        this.gfxProgram = cache.createProgram(this.program);
 
         this.sortKey = makeSortKey(renderLayer);
         this.filterKey = defines.SKY ? BFBBPass.SKYDOME : BFBBPass.MAIN;
@@ -692,7 +692,7 @@ export class FragRenderer extends BaseRenderer {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
@@ -703,13 +703,12 @@ export class FragRenderer extends BaseRenderer {
             this.prepareRenderInst(renderState.instManager, depth, true);
     }
 
-    public destroy(device: GfxDevice) {
+    public override destroy(device: GfxDevice) {
         super.destroy(device);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        device.destroyProgram(this.gfxProgram);
         if (this.frag.textureData !== undefined)
             this.frag.textureData.destroy(device);
     }
@@ -738,7 +737,7 @@ export class MeshRenderer extends BaseRenderer {
         this.isAtomicVisible = (this.mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         if (!this.visible || (!this.isAtomicVisible && !renderState.hacks.invisibleAtomics)) return;
 
         super.prepareToRender(renderState);
@@ -767,7 +766,7 @@ export class ModelRenderer extends BaseRenderer {
         }
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         if (this.color.a === 0) return;
 
         super.prepareToRender(renderState);
@@ -798,7 +797,7 @@ export class JSPRenderer extends BaseRenderer {
         this.addRenderer(this.modelRenderer);
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
@@ -854,7 +853,7 @@ export class EntRenderer extends BaseRenderer {
         }
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         this.update(renderState);
 
         if (this.color.a === 0) return;
@@ -869,7 +868,7 @@ export class EntRenderer extends BaseRenderer {
         }
     }
 
-    public destroy(device: GfxDevice) {
+    public override destroy(device: GfxDevice) {
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
     }
@@ -907,7 +906,7 @@ export class PickupRenderer extends BaseRenderer {
         this.modelMatrix[14] = z;
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         this.update(renderState);
 
         super.prepareToRender(renderState);
@@ -977,7 +976,7 @@ export class PlayerRenderer extends BaseRenderer {
         mat4.copy(this.modelMatrix, this.entRenderer.modelMatrix);
     }
 
-    public prepareToRender(renderState: RenderState) {
+    public override prepareToRender(renderState: RenderState) {
         if (!renderState.hacks.player) return;
         super.prepareToRender(renderState);
         if (this.isCulled) return;

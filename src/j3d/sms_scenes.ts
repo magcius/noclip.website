@@ -7,20 +7,22 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
 
-import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, BMDModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { colorNewCopy, OpaqueBlack } from '../Color';
+import { colorFromRGBA, colorNewCopy, OpaqueBlack } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { createModelInstance } from './scenes';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { Camera } from '../Camera';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 
@@ -271,12 +273,28 @@ export const enum SMSPass {
     TRANSPARENT = 1 << 3,
 }
 
+function setGXLight(dst: Light, src: SceneBinObjLight, camera: Camera): void {
+    lightSetWorldPosition(dst, camera, src.x, src.y, src.z);
+    colorFromRGBA(dst.Color, src.r/0xFF, src.g/0xFF, src.b/0xFF, src.a/0xFF);
+}
+
+class LightConfig {
+    public lightObj: SceneBinObjLight[] = [];
+
+    public setOnModelInstance(modelInstance: J3DModelInstance, camera: Camera): void {
+        for (let i = 0; i < 3; i++)
+            setGXLight(modelInstance.getGXLightReference(i), this.lightObj[i], camera);
+    }
+}
+
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
     private clearDescriptor = makeAttachmentClearDescriptor(colorNewCopy(OpaqueBlack));
+
+    public objLightConfig: LightConfig | null = null;
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -302,7 +320,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    private setIndirectTextureOverride(): void {
+    private setIndirectTextureOverride(device: GfxDevice): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             // In options.szs, the seaindirect appears to have more than one sampler named "indirectdummy". WTF?
             const samplers = this.modelInstances[i].tex1Data.tex1.samplers;
@@ -312,7 +330,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
                     m.lateBinding = 'opaque-scene-texture';
                     m.width = EFB_WIDTH;
                     m.height = EFB_HEIGHT;
-                    m.flipY = true;
+                    m.flipY = gfxDeviceNeedsFlipY(device);
                 }
             }
         }
@@ -321,6 +339,9 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
+        if (this.objLightConfig !== null)
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.objLightConfig.setOnModelInstance(this.modelInstances[i], viewerInput.camera);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -330,7 +351,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.setIndirectTextureOverride();
+        this.setIndirectTextureOverride(device);
         this.prepareToRender(device, viewerInput);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
@@ -399,8 +420,13 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             v.destroy(device);
     }
 }
+        
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
+    private ambAry: SceneBinObjGroup;
+    private playerAmbIndex = -1;
+    private objectsAmbIndex = -1;
+    
     public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.JKRArchive, basename: string, isSkybox: boolean): J3DModelInstanceSimple | null {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
@@ -455,6 +481,16 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObj): void {
         if (obj.type === 'Group') {
             obj.children.forEach(c => this.createSceneBinObjects(device, cache, renderer, rarc, c));
+            if (obj.klass === 'LightAry') {
+                renderer.objLightConfig = new LightConfig();
+                renderer.objLightConfig.lightObj[0] = assertExists(obj.children.find((light) => light.name === "太陽（オブジェクト）")) as SceneBinObjLight;
+                renderer.objLightConfig.lightObj[1] = assertExists(obj.children.find((light) => light.name === "太陽サブ（オブジェクト）")) as SceneBinObjLight;
+                renderer.objLightConfig.lightObj[2] = assertExists(obj.children.find((light) => light.name === "太陽スペキュラ（オブジェクト）")) as SceneBinObjLight;
+            } else if (obj.klass === 'AmbAry') {
+                this.ambAry = obj;
+                this.objectsAmbIndex = obj.children.findIndex((ambColor) => ambColor.name === "太陽アンビエント（オブジェクト）");
+                this.playerAmbIndex = obj.children.findIndex((ambColor) => ambColor.name === "太陽アンビエント（プレイヤー）");
+            }
         } else if (obj.type === 'Model') {
             this.createRendererForSceneBinModel(device, cache, renderer, rarc, obj);
         }
@@ -617,6 +653,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         if (scene === null)
             return null;
 
+        if (this.objectsAmbIndex !== -1 && scene.modelMaterialData.materialData !== null) {
+            const ambColor = this.ambAry.children[this.objectsAmbIndex] as SceneBinObjAmbColor;
+            scene.modelMaterialData.materialData.forEach(matData => colorFromRGBA(matData.material.colorAmbRegs[0], ambColor.r/255, ambColor.g/255, ambColor.b/255, ambColor.a/255));
+        }
+
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
         mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
@@ -629,105 +670,37 @@ const id = "sms";
 const name = "Super Mario Sunshine";
 
 const sceneDescs = [
-    "Main Scenes",
-    new SunshineSceneDesc("dolpic0", "Delfino Plaza"),
-    new SunshineSceneDesc("airport0", "Delfino Airport"),
-    new SunshineSceneDesc("bianco0", "Bianco Hills"),
-    new SunshineSceneDesc("ricco0", "Ricco Harbor"),
-    new SunshineSceneDesc("mamma0", "Gelato Beach"),
-    new SunshineSceneDesc("pinnaBeach0", "Pinna Park Beach"),
-    new SunshineSceneDesc("pinnaParco0", "Pinna Park"),
-    new SunshineSceneDesc("sirena0", "Sirena Beach"),
-    new SunshineSceneDesc("delfino0", "Delfino Hotel"),
-    new SunshineSceneDesc("mare0", "Noki Bay"),
-    new SunshineSceneDesc("monte3", "Pianta Village"),
-    "Variations",
+    "Delfino Airstrip",
     new SunshineSceneDesc("airport0", "airport0"),
     new SunshineSceneDesc("airport1", "airport1"),
-    new SunshineSceneDesc("bia_ex1", "bia_ex1"),
-    new SunshineSceneDesc("bianco0", "bianco0"),
-    new SunshineSceneDesc("bianco1", "bianco1"),
-    new SunshineSceneDesc("bianco2", "bianco2"),
-    new SunshineSceneDesc("bianco3", "bianco3"),
-    new SunshineSceneDesc("bianco4", "bianco4"),
-    new SunshineSceneDesc("bianco5", "bianco5"),
-    new SunshineSceneDesc("bianco6", "bianco6"),
-    new SunshineSceneDesc("bianco7", "bianco7"),
-    new SunshineSceneDesc("biancoBoss", "biancoBoss"),
-    new SunshineSceneDesc("casino0", "casino0"),
-    new SunshineSceneDesc("casino1", "casino1"),
-    new SunshineSceneDesc("coro_ex0", "coro_ex0"),
-    new SunshineSceneDesc("coro_ex1", "coro_ex1"),
-    new SunshineSceneDesc("coro_ex2", "coro_ex2"),
-    new SunshineSceneDesc("coro_ex4", "coro_ex4"),
-    new SunshineSceneDesc("coro_ex5", "coro_ex5"),
-    new SunshineSceneDesc("coro_ex6", "coro_ex6"),
-    new SunshineSceneDesc("coronaBoss", "coronaBoss"),
-    new SunshineSceneDesc("delfino0", "delfino0"),
-    new SunshineSceneDesc("delfino1", "delfino1"),
-    new SunshineSceneDesc("delfino2", "delfino2"),
-    new SunshineSceneDesc("delfino3", "delfino3"),
-    new SunshineSceneDesc("delfino4", "delfino4"),
-    new SunshineSceneDesc("delfinoBoss", "delfinoBoss"),
-    new SunshineSceneDesc("dolpic_ex0", "dolpic_ex0"),
-    new SunshineSceneDesc("dolpic_ex1", "dolpic_ex1"),
-    new SunshineSceneDesc("dolpic_ex2", "dolpic_ex2"),
-    new SunshineSceneDesc("dolpic_ex3", "dolpic_ex3"),
-    new SunshineSceneDesc("dolpic_ex4", "dolpic_ex4"),
+    "Delfino Plaza",
     new SunshineSceneDesc("dolpic0", "dolpic0"),
     new SunshineSceneDesc("dolpic1", "dolpic1"),
-    new SunshineSceneDesc("dolpic10", "dolpic10"),
     new SunshineSceneDesc("dolpic5", "dolpic5"),
     new SunshineSceneDesc("dolpic6", "dolpic6"),
     new SunshineSceneDesc("dolpic7", "dolpic7"),
     new SunshineSceneDesc("dolpic8", "dolpic8"),
     new SunshineSceneDesc("dolpic9", "dolpic9"),
-    new SunshineSceneDesc("mam_ex0", "mam_ex0"),
-    new SunshineSceneDesc("mam_ex1", "mam_ex1"),
-    new SunshineSceneDesc("mamma0", "mamma0"),
-    new SunshineSceneDesc("mamma1", "mamma1"),
-    new SunshineSceneDesc("mamma2", "mamma2"),
-    new SunshineSceneDesc("mamma3", "mamma3"),
-    new SunshineSceneDesc("mamma4", "mamma4"),
-    new SunshineSceneDesc("mamma5", "mamma5"),
-    new SunshineSceneDesc("mamma6", "mamma6"),
-    new SunshineSceneDesc("mamma7", "mamma7"),
-    new SunshineSceneDesc("mare_ex0", "mare_ex0"),
-    new SunshineSceneDesc("mare0", "mare0"),
-    new SunshineSceneDesc("mare1", "mare1"),
-    new SunshineSceneDesc("mare2", "mare2"),
-    new SunshineSceneDesc("mare3", "mare3"),
-    new SunshineSceneDesc("mare4", "mare4"),
-    new SunshineSceneDesc("mare5", "mare5"),
-    new SunshineSceneDesc("mare6", "mare6"),
-    new SunshineSceneDesc("mare7", "mare7"),
-    new SunshineSceneDesc("mareBoss", "mareBoss"),
-    new SunshineSceneDesc("mareUndersea", "mareUndersea"),
-    new SunshineSceneDesc("monte_ex0", "monte_ex0"),
-    new SunshineSceneDesc("monte0", "monte0"),
-    new SunshineSceneDesc("monte1", "monte1"),
-    new SunshineSceneDesc("monte2", "monte2"),
-    new SunshineSceneDesc("monte3", "monte3"),
-    new SunshineSceneDesc("monte4", "monte4"),
-    new SunshineSceneDesc("monte5", "monte5"),
-    new SunshineSceneDesc("monte6", "monte6"),
-    new SunshineSceneDesc("monte7", "monte7"),
-    new SunshineSceneDesc("option", "option"),
-    new SunshineSceneDesc("pinnaBeach0", "pinnaBeach0"),
-    new SunshineSceneDesc("pinnaBeach1", "pinnaBeach1"),
-    new SunshineSceneDesc("pinnaBeach2", "pinnaBeach2"),
-    new SunshineSceneDesc("pinnaBeach3", "pinnaBeach3"),
-    new SunshineSceneDesc("pinnaBeach4", "pinnaBeach4"),
-    new SunshineSceneDesc("pinnaBoss0", "pinnaBoss0"),
-    new SunshineSceneDesc("pinnaBoss1", "pinnaBoss1"),
-    new SunshineSceneDesc("pinnaParco0", "pinnaParco0"),
-    new SunshineSceneDesc("pinnaParco1", "pinnaParco1"),
-    new SunshineSceneDesc("pinnaParco2", "pinnaParco2"),
-    new SunshineSceneDesc("pinnaParco3", "pinnaParco3"),
-    new SunshineSceneDesc("pinnaParco4", "pinnaParco4"),
-    new SunshineSceneDesc("pinnaParco5", "pinnaParco5"),
-    new SunshineSceneDesc("pinnaParco6", "pinnaParco6"),
-    new SunshineSceneDesc("pinnaParco7", "pinnaParco7"),
+    new SunshineSceneDesc("dolpic10", "dolpic10"),
+    new SunshineSceneDesc("dolpic_ex0", "dolpic_ex0"),
+    new SunshineSceneDesc("dolpic_ex1", "dolpic_ex1"),
+    new SunshineSceneDesc("dolpic_ex2", "dolpic_ex2"),
+    new SunshineSceneDesc("dolpic_ex3", "dolpic_ex3"),
+    new SunshineSceneDesc("dolpic_ex4", "dolpic_ex4"),
+    "Bianco Hills",
+    new SunshineSceneDesc("bianco0", "Road to the Big Windmill"),
+    new SunshineSceneDesc("bianco1", "Down with Petey Piranha!"),
+    new SunshineSceneDesc("bianco2", "The Hillside Cave Secret"),
+    new SunshineSceneDesc("bianco3", "Red Coins of Windmill Village"),
+    new SunshineSceneDesc("bianco4", "Petey Piranha Strikes Back"),
+    new SunshineSceneDesc("bianco5", "The Red Coins of the Lake"),
+    new SunshineSceneDesc("bianco6", "Shadow Mario on the Loose"),
+    new SunshineSceneDesc("bianco7", "The Secret of the Dirty Lake"),
+    new SunshineSceneDesc("bia_ex1", "bia_ex1"),
+    new SunshineSceneDesc("biancoBoss", "biancoBoss"),
+    new SunshineSceneDesc("coro_ex0", "coro_ex0"),
+    new SunshineSceneDesc("coro_ex1", "coro_ex1"),
+    "Ricco Harbor",
     new SunshineSceneDesc("ricco0", "ricco0"),
     new SunshineSceneDesc("ricco1", "ricco1"),
     new SunshineSceneDesc("ricco2", "ricco2"),
@@ -739,8 +712,37 @@ const sceneDescs = [
     new SunshineSceneDesc("ricco8", "ricco8"),
     new SunshineSceneDesc("rico_ex0", "rico_ex0"),
     new SunshineSceneDesc("rico_ex1", "rico_ex1"),
-    new SunshineSceneDesc("sirena_ex0", "sirena_ex0"),
-    new SunshineSceneDesc("sirena_ex1", "sirena_ex1"),
+    new SunshineSceneDesc("coro_ex2", "coro_ex2"),
+    "Gelato Beach",
+    new SunshineSceneDesc("mamma0", "mamma0"),
+    new SunshineSceneDesc("mamma1", "mamma1"),
+    new SunshineSceneDesc("mamma2", "mamma2"),
+    new SunshineSceneDesc("mamma3", "mamma3"),
+    new SunshineSceneDesc("mamma4", "mamma4"),
+    new SunshineSceneDesc("mamma5", "mamma5"),
+    new SunshineSceneDesc("mamma6", "mamma6"),
+    new SunshineSceneDesc("mamma7", "mamma7"),
+    new SunshineSceneDesc("mam_ex0", "mam_ex0"),
+    new SunshineSceneDesc("mam_ex1", "mam_ex1"),
+    "Pinna Park Beach",
+    new SunshineSceneDesc("pinnaBeach0", "pinnaBeach0"),
+    new SunshineSceneDesc("pinnaBeach1", "pinnaBeach1"),
+    new SunshineSceneDesc("pinnaBeach2", "pinnaBeach2"),
+    new SunshineSceneDesc("pinnaBeach3", "pinnaBeach3"),
+    new SunshineSceneDesc("pinnaBeach4", "pinnaBeach4"),
+    "Pinna Park",
+    new SunshineSceneDesc("pinnaParco0", "pinnaParco0"),
+    new SunshineSceneDesc("pinnaParco1", "pinnaParco1"),
+    new SunshineSceneDesc("pinnaParco2", "pinnaParco2"),
+    new SunshineSceneDesc("pinnaParco3", "pinnaParco3"),
+    new SunshineSceneDesc("pinnaParco4", "pinnaParco4"),
+    new SunshineSceneDesc("pinnaParco5", "pinnaParco5"),
+    new SunshineSceneDesc("pinnaParco6", "pinnaParco6"),
+    new SunshineSceneDesc("pinnaParco7", "pinnaParco7"),
+    new SunshineSceneDesc("pinnaBoss0", "pinnaBoss0"),
+    new SunshineSceneDesc("pinnaBoss1", "pinnaBoss1"),
+    new SunshineSceneDesc("coro_ex4", "coro_ex4"),
+    "Sirena Beach",
     new SunshineSceneDesc("sirena0", "sirena0"),
     new SunshineSceneDesc("sirena1", "sirena1"),
     new SunshineSceneDesc("sirena2", "sirena2"),
@@ -749,7 +751,47 @@ const sceneDescs = [
     new SunshineSceneDesc("sirena5", "sirena5"),
     new SunshineSceneDesc("sirena6", "sirena6"),
     new SunshineSceneDesc("sirena7", "sirena7"),
+    new SunshineSceneDesc("sirena_ex0", "sirena_ex0"),
+    new SunshineSceneDesc("sirena_ex1", "sirena_ex1"),
+    new SunshineSceneDesc("coro_ex5", "coro_ex5"),
+    "Delfino Hotel",
+    new SunshineSceneDesc("delfino0", "delfino0"),
+    new SunshineSceneDesc("delfino1", "delfino1"),
+    new SunshineSceneDesc("delfino2", "delfino2"),
+    new SunshineSceneDesc("delfino3", "delfino3"),
+    new SunshineSceneDesc("delfino4", "delfino4"),
+    new SunshineSceneDesc("casino0", "casino0"),
+    new SunshineSceneDesc("casino1", "casino1"),
+    new SunshineSceneDesc("delfinoBoss", "delfinoBoss"),
+    "Pianta Village",
+    new SunshineSceneDesc("monte0", "monte0"),
+    new SunshineSceneDesc("monte1", "monte1"),
+    new SunshineSceneDesc("monte2", "monte2"),
+    new SunshineSceneDesc("monte3", "monte3"),
+    new SunshineSceneDesc("monte4", "monte4"),
+    new SunshineSceneDesc("monte5", "monte5"),
+    new SunshineSceneDesc("monte6", "monte6"),
+    new SunshineSceneDesc("monte7", "monte7"),
+    new SunshineSceneDesc("monte_ex0", "monte_ex0"),
+    "Noki Bay",
+    new SunshineSceneDesc("mare0", "mare0"),
+    new SunshineSceneDesc("mare1", "mare1"),
+    new SunshineSceneDesc("mare2", "mare2"),
+    new SunshineSceneDesc("mare3", "mare3"),
+    new SunshineSceneDesc("mare4", "mare4"),
+    new SunshineSceneDesc("mare5", "mare5"),
+    new SunshineSceneDesc("mare6", "mare6"),
+    new SunshineSceneDesc("mare7", "mare7"),
+    new SunshineSceneDesc("mareBoss", "mareBoss"),
+    new SunshineSceneDesc("mareUndersea", "mareUndersea"),
+    new SunshineSceneDesc("mare_ex0", "mare_ex0"),
+    "Corona Mountain",
+    new SunshineSceneDesc("coro_ex6", "coro_ex6"),
+    new SunshineSceneDesc("coronaBoss", "coronaBoss"),
+    "Test Map 1",
     new SunshineSceneDesc("test11", "test11"),
+    "Main Menu",
+    new SunshineSceneDesc("option", "option"),
 ];
 
 // Backwards compatibility

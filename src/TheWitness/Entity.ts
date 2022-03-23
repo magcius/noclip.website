@@ -5,24 +5,32 @@ import { Color, colorNewCopy, Magenta } from "../Color";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { scaleMatrix } from "../MathHelpers";
 import { leftPad } from "../util";
-import { Asset_Type, Lightmap_Asset } from "./Assets";
+import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets";
 import { TheWitnessGlobals } from "./Globals";
 import { Mesh_Instance } from "./Render";
 
 export class Entity_Manager {
+    public flat_entity_list: Entity[] = [];
     public entity_list: Entity[] = [];
     public universe_name = `save`;
 
-    public register_portable(entity: Entity): void {
-        this.entity_list.push(entity);
-    }
-
     public load_world(globals: TheWitnessGlobals): void {
         const world = globals.asset_manager.load_asset(Asset_Type.World, this.universe_name)!;
-        for (let i = 0; i < world.length; i++)
-            this.register_portable(world[i]);
-        for (let i = 0; i < this.entity_list.length; i++)
-            this.entity_list[i].transport_create_hook(globals);
+
+        for (let i = 0; i < world.length; i++) {
+            const entity = world[i];
+            this.flat_entity_list.push(entity);
+            this.entity_list[entity.portable_id] = entity;
+        }
+
+        // Go through and register clusters.
+        for (let i = 0; i < this.flat_entity_list.length; i++)
+            if (this.flat_entity_list[i] instanceof Entity_Cluster)
+                (this.flat_entity_list[i] as Entity_Cluster).validate(globals);
+        for (let i = 0; i < this.flat_entity_list.length; i++)
+            this.flat_entity_list[i].transport_create_hook(globals);
+
+        globals.occlusion_manager.init(globals);
     }
 }
 
@@ -63,6 +71,10 @@ export class Lightmap_Table {
     }
 }
 
+const enum Entity_Flags {
+    Invisible = 0x8000,
+}
+
 export class Entity implements Portable {
     public visible = true;
     public debug_color = colorNewCopy(Magenta);
@@ -72,7 +84,7 @@ export class Entity implements Portable {
     public position: vec3;
     public scale: number;
     public orientation: quat;
-    public entity_flags: number;
+    public entity_flags: Entity_Flags;
     public entity_name: string;
     public group_id: number;
     public mount_parent_id: number;
@@ -82,15 +94,20 @@ export class Entity implements Portable {
     public mount_bone_name?: string;
     public version: number;
     public root_z: number;
-    public cluster_id: number;
+    public cluster_id?: number;
     public lod_distance: number;
     public lightmap_table: Lightmap_Table | null;
     public bounding_radius: number;
     public bounding_center: vec3;
 
-    public model_matrix = mat4.create();
     public bounding_center_world = vec3.create();
     public bounding_radius_world = 0;
+
+    public mesh_instance: Mesh_Instance | null = null;
+
+    // Mesh_Params
+    public model_matrix = mat4.create();
+    public color: Color | null;
 
     constructor(public portable_id: number, public revision_number: number) {
     }
@@ -98,6 +115,8 @@ export class Entity implements Portable {
     public transport_create_hook(globals: TheWitnessGlobals): void {
         if (this.lightmap_table !== null)
             this.lightmap_table.load_pages(globals, this);
+
+        this.visible = !(this.entity_flags & Entity_Flags.Invisible);
 
         this.updateModelMatrix();
     }
@@ -110,16 +129,23 @@ export class Entity implements Portable {
     }
 
     public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
+        if (!this.visible)
+            return;
+
+        if (this.cluster_id !== undefined && !globals.occlusion_manager.clusterIsVisible(this.cluster_id))
+            return;
+
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, this.bounding_center_world);
+        if (this.mesh_instance !== null)
+            this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
     }
 }
 
 export class Entity_Inanimate extends Entity {
-    public mesh_instance: Mesh_Instance | null = null;
     public mesh_name: string = '';
     public color_override: number = 0;
-    public color: Color | null;
 
-    public transport_create_hook(globals: TheWitnessGlobals): void {
+    public override transport_create_hook(globals: TheWitnessGlobals): void {
         super.transport_create_hook(globals);
 
         if (!(this.color_override))
@@ -131,14 +157,38 @@ export class Entity_Inanimate extends Entity {
                 this.mesh_instance = new Mesh_Instance(globals, mesh_data);
         }
     }
+}
 
-    public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
-        if (!this.visible)
+export class Entity_Cluster extends Entity {
+    public elements: number[];
+    public elements_static: number[];
+    public elements_detail: number[];
+    public elements_combined_meshes: number[];
+    public override bounding_radius: number;
+    public override bounding_center: vec3;
+    public cluster_flags: number;
+
+    public cluster_mesh_data: Mesh_Asset | null = null;
+    public cluster_mesh_instance: Mesh_Instance | null = null;
+
+    public override transport_create_hook(globals: TheWitnessGlobals): void {
+        super.transport_create_hook(globals);
+
+        const mesh_name = `${globals.entity_manager.universe_name}_${this.portable_id}`;
+        const mesh_data = globals.asset_manager.load_asset(Asset_Type.Mesh, mesh_name);
+        this.cluster_mesh_data = mesh_data;
+        if (mesh_data !== null && mesh_data.device_mesh_array.length > 0)
+            this.cluster_mesh_instance = new Mesh_Instance(globals, mesh_data);
+    }
+
+    public validate(globals: TheWitnessGlobals): void {
+        if (!!(this.cluster_flags & 0x02))
             return;
 
-        const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, this.bounding_center_world);
-        if (this.mesh_instance !== null)
-            this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
+        for (let i = 0; i < this.elements.length; i++) {
+            const entity = globals.entity_manager.entity_list[this.elements[i]];
+            entity.cluster_id = this.portable_id;
+        }
     }
 }
 
@@ -148,7 +198,9 @@ export class Entity_Pattern_Point extends Entity {
 export class Entity_Power_Cable extends Entity_Inanimate {
 }
 
-export function register_entities(manager: Entity_Manager, entities: Entity[]): void {
-    for (let i = 0; i < entities.length; i++)
-        manager.register_portable(entities[i]);
+export class Entity_World extends Entity {
+    public world_center: vec3;
+    public world_z_min: number;
+    public world_z_max: number;
+    public shadow_render_count: number;
 }

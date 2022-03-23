@@ -6,11 +6,11 @@ import * as GX from '../gx/gx_enum';
 
 import * as Script from './script';
 import * as Collision from './collision';
-import { InputStream } from './stream'
+import { InputStream } from './stream';
 import { TXTR } from './txtr';
 
-import { ResourceSystem } from "./resource";
-import { assert, align, assertExists } from "../util";
+import { ResourceSystem } from './resource';
+import { assert, align, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
@@ -19,6 +19,8 @@ import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { AABB } from '../Geometry';
 import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';
+import { CSKR } from './cskr';
+import { TexGenMatrix } from '../gx/gx_enum';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -95,7 +97,8 @@ export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_R
 
 export interface Material {
     isOccluder: boolean;
-    isTransparent: boolean;
+    isDepthSorted: boolean;
+    sortBias: number;
     isUVShort: boolean;
     isWhiteAmb: boolean;
     groupIndex: number;
@@ -116,7 +119,7 @@ export interface MaterialSet {
 
 export const enum MaterialFlags {
     HAS_KONST      = 0x00000008,
-    IS_TRANSPARENT = 0x00000010,
+    DEPTH_SORTING  = 0x00000010,
     ALPHA_TEST     = 0x00000020,
     HAS_SAMUS_REFL = 0x00000040,
     DEPTH_WRITE    = 0x00000080,
@@ -373,7 +376,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             texGens.push({ type, source, matrix, normalize, postMatrix });
         }
 
-        const uvAnimationsSize = stream.readUint32(); - 0x04;
+        const uvAnimationsSize = stream.readUint32() - 0x04;
         const uvAnimationsCount = stream.readUint32();
 
         const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, uvAnimationsCount);
@@ -382,7 +385,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const name = `PrimeGen_${i}`;
         const cullMode = GX.CullMode.FRONT;
 
-        const isTransparent = !!(flags & MaterialFlags.IS_TRANSPARENT);
+        const isDepthSorted = !!(flags & MaterialFlags.DEPTH_SORTING);
         const isOccluder = !!(flags & MaterialFlags.OCCLUDER);
         const depthWrite = !!(flags & MaterialFlags.DEPTH_WRITE);
         const useAlphaTest = !!(flags & MaterialFlags.ALPHA_TEST);
@@ -404,13 +407,13 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const ropInfo: GX_Material.RopInfo = {
             fogType: GX.FogType.NONE,
             fogAdjEnabled: false,
-            blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
+            blendMode: blendDstFactor !== GX.BlendFactor.ZERO ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
             blendSrcFactor,
             blendDstFactor,
             blendLogicOp: GX.LogicOp.CLEAR,
             depthTest: true,
-            depthFunc: GX.CompareType.LESS,
-            depthWrite: depthWrite && !isTransparent,
+            depthFunc: GX.CompareType.LEQUAL,
+            depthWrite: depthWrite && !isDepthSorted,
             colorUpdate: true,
             alphaUpdate: false,
         };
@@ -429,9 +432,13 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const isUVShort = !!(flags & MaterialFlags.UV_SHORT);
         const isWhiteAmb = false;
 
+        // Alpha-blending is biased so that additive blending always appears on top
+        const sortBias = blendSrcFactor == GX.BlendFactor.SRCALPHA && blendDstFactor == GX.BlendFactor.INVSRCALPHA ? 0 : 1;
+
         materials.push({
             isOccluder,
-            isTransparent,
+            isDepthSorted,
+            sortBias,
             isUVShort,
             isWhiteAmb,
             groupIndex,
@@ -475,6 +482,7 @@ export interface Surface {
     loadedVertexData: LoadedVertexData;
     loadedVertexLayout: LoadedVertexLayout;
     worldModelIndex: number;
+    skinIndexData: number[] | null;
 }
 
 export interface WorldModel {
@@ -532,7 +540,7 @@ function parseWorldModels_MP1(stream: InputStream, worldModelCount: number, sect
         const worldModelIndex = worldModels.length;
         let geometry: Geometry;
 
-        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, false, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex);
+        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, false, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex, null);
 
         worldModels.push({ geometry, modelMatrix, bbox });
     }
@@ -562,7 +570,7 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
     return worldModels;
 }
 
-function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number | null, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean): [Surface[], number] {
+function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number | null, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean, cskr: CSKR | null): [Surface[], number] {
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
@@ -599,8 +607,10 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         const normalY = stream.readFloat32();
         const normalZ = stream.readFloat32();
 
+        let sourceEnvelopeIdx: number | null = null;
         if (isEchoes) {
-            stream.skip(4);
+            sourceEnvelopeIdx = stream.readUint16();
+            stream.skip(2);
         }
 
         stream.skip(extraDataSize);
@@ -619,7 +629,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <= 0x00FFFFFF) };
+            vcd[format.vtxAttrib] = { type: format.type, enableOutput: true };
         }
 
         // GX_VTXFMT0 | GX_VA_NRM = GX_F32
@@ -659,11 +669,38 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
 
         const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
+        // If MP1 and a CSKR is available, extract POS indices for CPU skinning.
+        let skinIndexData: number[] | null = null;
+        if (!isEchoes && cskr) {
+            skinIndexData = [];
+            const vcd: GX_VtxDesc[] = [];
+            for (const format of vtxAttrFormats) {
+                if (!(vtxAttrFormat & format.mask))
+                    continue;
+                if (format.vtxAttrib === GX.Attr.POS)
+                    vcd[format.vtxAttrib] = { type: GX.AttrType.UNRESOLVED_INDEX16, enableOutput: true };
+                else
+                    vcd[format.vtxAttrib] = { type: format.type, enableOutput: false };
+            }
+            const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+            const loadedPosIndexData = vtxLoader.runVertices([], dlData);
+            assert(loadedVertexData.totalVertexCount === loadedPosIndexData.totalVertexCount);
+            const posIndices = new Uint32Array(loadedPosIndexData.vertexBuffers[0]);
+            for (let v = 0; v < loadedVertexData.totalVertexCount; ++v) {
+                skinIndexData[v] = cskr.vertexIndexToSkinIndex(posIndices[v]);
+            }
+        } else if (sourceEnvelopeIdx !== null && cskr) {
+            // MP2 already has generated envelope sets for skinning - resolve the matrices via the CSKR
+            const draw = loadedVertexData.draws[0];
+            draw.posMatrixTable = assertExists(cskr.envelopeSets).slice(sourceEnvelopeIdx * 10, (sourceEnvelopeIdx + 1) * 10);
+        }
+
         const surface: Surface = {
             materialIndex,
             worldModelIndex,
             loadedVertexData,
             loadedVertexLayout,
+            skinIndexData,
         };
         surfaces.push(surface);
 
@@ -737,13 +774,13 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
         const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
-        surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
+        surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout, skinIndexData: null });
     }
 
     return [surfaces, sectionIndex];
 }
 
-export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasPosShort: boolean, hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
+export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasPosShort: boolean, hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number, cskr: CSKR | null): [Geometry, number] {
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
     const clrSectionOffs = sectionOffsTable[sectionIndex++];
@@ -759,7 +796,7 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
     if (isDKCR) {
         [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, hasPosShort);
     } else {
-        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
+        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes, cskr);
     }
 
     const geometry: Geometry = { surfaces };
@@ -783,7 +820,7 @@ export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: Materia
     if (isDKCR) {
         [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, false);
     } else {
-        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
+        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true, null);
     }
 
     const geometry: Geometry = { surfaces };
@@ -887,7 +924,7 @@ export function parseLightLayer(stream: InputStream, version: number): AreaLight
                     vec3.set(light.gxLight.CosAtten, 1, 0, 0);
                 }
             }
-            
+
             // Calculate radius
             if (light.gxLight.DistAtten[1] < epsilon && light.gxLight.DistAtten[2] < epsilon) {
                 // No distance attenuation curve, so the light is effectively a directional.
@@ -1037,14 +1074,14 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
     if (version >= AreaVersion.MP3) {
         for (let i = 0; i < numSectionNumbers; i++) {
             const sectionID = stream.readFourCC();
-            const sectionNum = stream.  readUint32();
+            const sectionNum = stream.readUint32();
 
             switch (sectionID) {
-                case "WOBJ": worldGeometrySectionIndex = sectionNum; break;
-                case "GPUD": worldGeometryGPUDataSectionIndex = sectionNum; break;
-                case "SOBJ": scriptLayersSectionIndex = sectionNum; break;
-                case "COLI": collisionSectionIndex = sectionNum; break;
-                case "LITE": lightsSectionIndex = sectionNum; break;
+            case "WOBJ": worldGeometrySectionIndex = sectionNum; break;
+            case "GPUD": worldGeometryGPUDataSectionIndex = sectionNum; break;
+            case "SOBJ": scriptLayersSectionIndex = sectionNum; break;
+            case "COLI": collisionSectionIndex = sectionNum; break;
+            case "LITE": lightsSectionIndex = sectionNum; break;
             }
         }
         stream.align(32);
@@ -1089,7 +1126,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
     if (version === AreaVersion.MP1) {
         const scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
         stream.goTo(scriptLayerOffs);
-        
+
         const sclyMagic = stream.readFourCC();
         const sclyVersion = stream.readUint32();
         assert(sclyMagic === 'SCLY');
@@ -1319,7 +1356,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                     const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, 1);
                     if (uvAnimations.length !== 0)
                         uvAnimation = uvAnimations[0];
-                    
+
                     stream.goTo(uvAnimationEnd);
                 }
                 assert(stream.tell() === passEnd);
@@ -1471,7 +1508,8 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
 
         materials.push({
             isOccluder,
-            isTransparent,
+            isDepthSorted: isTransparent,
+            sortBias: 0,
             isUVShort,
             isWhiteAmb,
             groupIndex,

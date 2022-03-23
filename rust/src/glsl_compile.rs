@@ -14,7 +14,7 @@ fn show_error(place: &str, error: impl Error) {
 }
 
 #[wasm_bindgen]
-pub fn glsl_compile(source: &str, stage: &str) -> String {
+pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> String {
     let naga_stage = match stage {
         "vertex" => Ok(naga::ShaderStage::Vertex),
         "fragment" => Ok(naga::ShaderStage::Fragment),
@@ -36,7 +36,8 @@ pub fn glsl_compile(source: &str, stage: &str) -> String {
         },
     };
 
-    let info = match naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module) {
+    let validation_flags = if validation_enabled { naga::valid::ValidationFlags::all() } else { naga::valid::ValidationFlags::empty() };
+    let info = match naga::valid::Validator::new(validation_flags, naga::valid::Capabilities::all()).validate(&module) {
         Ok(v) => v,
         Err(e) => {
             show_error(&"validator", e);
@@ -44,7 +45,8 @@ pub fn glsl_compile(source: &str, stage: &str) -> String {
         }
     };
 
-    match naga::back::wgsl::write_string(&module, &info) {
+    let writer_flags = naga::back::wgsl::WriterFlags::all();
+    match naga::back::wgsl::write_string(&module, &info, writer_flags) {
         Ok(v) => v,
         Err(e) => {
             show_error(&"wgsl::write_string", e);

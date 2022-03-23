@@ -3,7 +3,7 @@ import { SceneGroup, SceneDesc, SceneGfx } from "../viewer";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
 import * as ZipFile from '../ZipFile';
-import { Asset_Manager, Asset_Type } from "./Assets";
+import { Asset_Manager } from "./Assets";
 import { TheWitnessGlobals } from "./Globals";
 import { TheWitnessRenderer } from "./Render";
 

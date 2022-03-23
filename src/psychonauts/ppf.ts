@@ -117,6 +117,17 @@ function calcTextureByteSize(fmt: TextureFormat, width: number, height: number):
     }
 }
 
+function autoDetectMipCount(width: number, height: number): number {
+    let count = 0;
+    while (width > 0 && height > 0) {
+        count++;
+        width >>= 1;
+        height >>= 1;
+    }
+
+    return count;
+}
+
 export const enum TextureType {
     NORMAL       = 0,
     CUBEMAP      = 1,
@@ -142,13 +153,15 @@ export function parsePPAKTexture(buffer: ArrayBufferSlice): PPAK_Texture {
         stream.offs += 0x18;
     }
 
-    const a0 = stream.readUint32();
+    const dataId = stream.readUint32();
     const format: TextureFormat = stream.readUint32();
     const type: TextureType = stream.readUint32();
     const flags = stream.readUint32();
     const width = stream.readUint32();
     const height = stream.readUint32();
-    const numMips = stream.readUint32();
+    let numMips = stream.readUint32();
+    if (numMips === 0)
+        numMips = autoDetectMipCount(width, height);
     stream.offs += 0x10;
 
     const mipData: ArrayBufferSlice[] = [];
@@ -207,26 +220,23 @@ function EGameTextureManager_ReadPackFile(stream: DataStream): PPAK_Texture[] {
 }
 
 function EScriptVM_ReadPackFile(stream: DataStream): void {
-    let scriptCount = stream.readUint16();
-    let v22 = 0;
+    let scriptObjectCount = stream.readUint16();
+    let scriptFilesHaveNames = 0;
 
-    if (scriptCount === 0xFCFC) {
-        v22 = stream.readUint16();
-        scriptCount = stream.readUint16();
+    if (scriptObjectCount === 0xFCFC) {
+        scriptFilesHaveNames = stream.readUint16();
+        scriptObjectCount = stream.readUint16();
     }
 
-    for (let i = 0; i < scriptCount; i++) {
+    for (let i = 0; i < scriptObjectCount; i++) {
         const name = stream.readStringStream_2b();
         const scriptSize = stream.readUint32();
         stream.offs += scriptSize;
     }
 
-    const scriptCount2 = stream.readUint16();
-    for (let i = 0; i < scriptCount2; i++) {
-        if (v22) {
-            const name = stream.readStringStream_2b();
-        }
-
+    const scriptFileCount = stream.readUint16();
+    for (let i = 0; i < scriptFileCount; i++) {
+        const filename = scriptFilesHaveNames ? stream.readStringStream_2b() : null;
         const scriptSize = stream.readUint32();
         stream.offs += scriptSize;
     }
