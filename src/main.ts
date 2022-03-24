@@ -75,7 +75,6 @@ import * as Scenes_Infra from './SourceEngine/Scenes_Infra';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
-import * as Scenes_SuperMonkeyBall2 from './SuperMonkeyBall2/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 import * as Scenes_SpongebobRevengeOfTheFlyingDutchman from "./SpongebobRevengeOfTheFlyingDutchman/scenes";
@@ -84,9 +83,8 @@ import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
 import * as Scenes_Subnautica from './Subnautica/scenes';
 import * as Scenes_Glover from './Glover/scenes';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife';
-import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/scenes_AmusementVision';
+import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/scenes_SuperMonkeyBall';
 
-import * as Scenes_FZEROGX from './FZEROGX/Scenes_FZEROGX';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
@@ -180,14 +178,12 @@ const sceneGroups = [
     Scenes_Elebits.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
-    Scenes_FZEROGX.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SpongebobRevengeOfTheFlyingDutchman.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
-    Scenes_SuperMonkeyBall2.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_GoldenEye007.sceneGroup,
