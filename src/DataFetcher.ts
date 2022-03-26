@@ -99,7 +99,7 @@ class DataFetcherRequest {
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
             const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
         }
         this.request.send();
