@@ -2335,10 +2335,10 @@ export class StudioPanel extends FloatingPanel {
 
                     countdownCtx.beginPath();
                     countdownCtx.save();
-                    countdownCtx.translate(x,y);
+                    countdownCtx.translate(x + 3, y + 3);
                     countdownCtx.rotate(-Math.PI / 2);
-                    countdownCtx.translate(-x,-y);
-                    countdownCtx.arc(x - 3, y + 4, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
+                    countdownCtx.translate(-(x + 3),-(y + 3));
+                    countdownCtx.arc(x + 3, y + 3, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
                     countdownCtx.stroke();
                     countdownCtx.restore();
                     countdownCtx.fillText(Math.ceil(seconds).toFixed(0), x + 3, y + 3);
