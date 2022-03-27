@@ -18,9 +18,10 @@ import { TextureMapping } from '../TextureHolder';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { GfxRenderInstManager, setSortKeyDepth, setSortKeyBias, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
 import { computeNormalMatrix } from '../MathHelpers';
-
+import * as SD from './stagedef';
 
 export class GMAData {
+    public stagedef?: SD.Stage;
     public gma: GMA.GMA;
     public tpl: AVTpl;
 }

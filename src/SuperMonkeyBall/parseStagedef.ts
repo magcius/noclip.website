@@ -316,28 +316,28 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // };
 
 
-    const coliHeaderCount = view.getUint32(0x8);
-    const coliHeaderListOffs = view.getUint32(0xC);
+    const itemgroupCount = view.getUint32(0x8);
+    const itemgroupListOffs = view.getUint32(0xC);
     const itemgroups: SD.Itemgroup[] = [];
-    for (let i = 0; i < coliHeaderCount; i++) {
-        const coliHeaderOffs = coliHeaderListOffs + i * COLI_HEADER_SIZE;
-        const origin = parseVec3f(view, coliHeaderOffs + 0x0);
-        const initialRot = parseVec3s(view, coliHeaderOffs + 0xC);
+    for (let i = 0; i < itemgroupCount; i++) {
+        const coliHeaderOffs = itemgroupListOffs + i * COLI_HEADER_SIZE;
+        const initPos = parseVec3f(view, coliHeaderOffs + 0x0);
+        const initRot = parseVec3s(view, coliHeaderOffs + 0xC);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as SD.AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
         const animHeader = parseAnimHeader(view, animHeaderOffs);
-        const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
+        // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,
         // as the tri list does not indicate its length
-        const coliTriListOffs = view.getUint32(coliHeaderOffs + 0x24);
-        const coliTriIdxsOffs = view.getUint32(coliHeaderOffs + 0x28);
-        const coliGridStartX = view.getFloat32(coliHeaderOffs + 0x2C);
-        const coliGridStartZ = view.getFloat32(coliHeaderOffs + 0x30);
-        const coliGridStepX = view.getFloat32(coliHeaderOffs + 0x34);
-        const coliGridStepZ = view.getFloat32(coliHeaderOffs + 0x38);
-        const coliGridCellsX = view.getUint32(coliHeaderOffs + 0x3C);
-        const coliGridCellsZ = view.getUint32(coliHeaderOffs + 0x40);
+        const coliTriListOffs = view.getUint32(coliHeaderOffs + 0x1C);
+        const coliTriIdxsOffs = view.getUint32(coliHeaderOffs + 0x20);
+        const coliGridStartX = view.getFloat32(coliHeaderOffs + 0x24);
+        const coliGridStartZ = view.getFloat32(coliHeaderOffs + 0x28);
+        const coliGridStepX = view.getFloat32(coliHeaderOffs + 0x2C);
+        const coliGridStepZ = view.getFloat32(coliHeaderOffs + 0x30);
+        const coliGridCellsX = view.getUint32(coliHeaderOffs + 0x34);
+        const coliGridCellsZ = view.getUint32(coliHeaderOffs + 0x38);
 
         const coliTriIdxs: number[][] = [];
 
@@ -408,11 +408,11 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         // const textureScroll: SD.TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
 
         itemgroups.push({
-            initPos: origin,
-            initRot: initialRot,
+            initPos: initPos,
+            initRot: initRot,
             animType: animType,
             animHeader: animHeader,
-            conveyorVel: conveyorVel,
+            // conveyorVel: conveyorVel,
 
             coliTris: coliTris,
             gridCellTris: coliTriIdxs,

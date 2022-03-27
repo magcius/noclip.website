@@ -146,7 +146,7 @@ export type Itemgroup = {
     initRot: vec3;
     animType: AnimType;
     animHeader: AnimHeader;
-    conveyorVel: vec3;
+    // conveyorVel: vec3;
 
     coliTris: ColiTri[];
     // Given cell coord (x, z), coliTriIdxs[z * coliGridCellsX + x] gives you
