@@ -26,51 +26,51 @@ export const enum GoalType {
     Red,
 }
 
-export const enum Easing {
+export const enum EaseType {
     Constant,
     Linear,
     Smooth,
 }
 
-export type AnimKeyframe = {
-    easing: number; // integer (enum?)
-    time: number; // float
-    value: number; // float
+export type Keyframe = {
+    easeType: EaseType;
+    time: number; // Percent of total animation duration (1-100)?
+    value: number; // Translation or rotation in degrees
 }
 
 export type AnimHeader = {
-    rotXKeyframes: AnimKeyframe[];
-    rotYKeyframes: AnimKeyframe[];
-    rotZKeyframes: AnimKeyframe[];
-    posXKeyframes: AnimKeyframe[];
-    posYKeyframes: AnimKeyframe[];
-    posZKeyframes: AnimKeyframe[];
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
 }
 
-export type BackgroundAnim2Header = {
-    loopPointSeconds: number;
-    unk1Keyframes: AnimKeyframe[];
-    unk2Keyframes: AnimKeyframe[];
-    posXKeyframes: AnimKeyframe[];
-    posYKeyframes: AnimKeyframe[];
-    posZKeyframes: AnimKeyframe[];
-    rotXKeyframes: AnimKeyframe[];
-    rotYKeyframes: AnimKeyframe[];
-    rotZKeyframes: AnimKeyframe[];
-    unk9Keyframes: AnimKeyframe[];
-    unk10Keyframes: AnimKeyframe[];
-    unk11Keyframes: AnimKeyframe[];
-}
+// export type BackgroundAnim2Header = {
+//     loopPointSeconds: number;
+//     unk1Keyframes: AnimKeyframe[];
+//     unk2Keyframes: AnimKeyframe[];
+//     posXKeyframes: AnimKeyframe[];
+//     posYKeyframes: AnimKeyframe[];
+//     posZKeyframes: AnimKeyframe[];
+//     rotXKeyframes: AnimKeyframe[];
+//     rotYKeyframes: AnimKeyframe[];
+//     rotZKeyframes: AnimKeyframe[];
+//     unk9Keyframes: AnimKeyframe[];
+//     unk10Keyframes: AnimKeyframe[];
+//     unk11Keyframes: AnimKeyframe[];
+// }
 
-export type BackgroundAnimHeader = {
-    loopPointSeconds: number,
-    posXKeyframes: AnimKeyframe[];
-    posYKeyframes: AnimKeyframe[];
-    posZKeyframes: AnimKeyframe[];
-    rotXKeyframes: AnimKeyframe[];
-    rotYKeyframes: AnimKeyframe[];
-    rotZKeyframes: AnimKeyframe[];
-}
+// export type BackgroundAnimHeader = {
+//     loopPointSeconds: number,
+//     posXKeyframes: AnimKeyframe[];
+//     posYKeyframes: AnimKeyframe[];
+//     posZKeyframes: AnimKeyframe[];
+//     rotXKeyframes: AnimKeyframe[];
+//     rotYKeyframes: AnimKeyframe[];
+//     rotZKeyframes: AnimKeyframe[];
+// }
 
 // export type EffectHeader = {
 //     fx1Keyframes: Effect1[];
@@ -86,15 +86,15 @@ export type BackgroundAnimHeader = {
 //     // ??
 // }
 
-export type BgModel = {
-    modelName: string;
-    pos: vec3;
-    rot: vec3;
-    scale: vec3;
-    backgroundAnimHeader: BackgroundAnimHeader;
-    backgroundAnim2Header: BackgroundAnim2Header;
-    // effectHeader: EffectHeader;
-}
+// export type BgModel = {
+//     modelName: string;
+//     pos: vec3;
+//     rot: vec3;
+//     scale: vec3;
+//     backgroundAnimHeader: BackgroundAnimHeader;
+//     backgroundAnim2Header: BackgroundAnim2Header;
+//     // effectHeader: EffectHeader;
+// }
 
 export type Banana = {
     pos: vec3;
@@ -109,12 +109,12 @@ export type StageModelInstance = {
 }
 
 export type FogAnimHeader = {
-    startDistanceKeyframes: AnimKeyframe[];
-    endDistanceKeyframes: AnimKeyframe[];
-    redKeyframes: AnimKeyframe[];
-    blueKeyframes: AnimKeyframe[];
-    greenKeyframes: AnimKeyframe[];
-    unkKeyframes: AnimKeyframe[];
+    startDistanceKeyframes: Keyframe[];
+    endDistanceKeyframes: Keyframe[];
+    redKeyframes: Keyframe[];
+    blueKeyframes: Keyframe[];
+    greenKeyframes: Keyframe[];
+    unkKeyframes: Keyframe[];
 }
 
 export type ColiCone = {
@@ -129,9 +129,9 @@ export type Bumper = {
     scale: vec3;
 }
 
-export type ReflectiveModel = {
-    modelName: string;
-}
+// export type ReflectiveModel = {
+//     modelName: string;
+// }
 
 export type FalloutPlane = {
     y: number;
@@ -172,14 +172,14 @@ export type StageModelPtrA = {
     stageModel: StageModel;
 }
 
-export type FgModel = {
-    // Some other unknown fields are here...
-    modelName: string;
-    pos: vec3;
-    rot: vec3;
-    scale: vec3;
-    backgroundAnim2Header: BackgroundAnim2Header;
-}
+// export type FgModel = {
+//     // Some other unknown fields are here...
+//     modelName: string;
+//     pos: vec3;
+//     rot: vec3;
+//     scale: vec3;
+//     backgroundAnim2Header: BackgroundAnim2Header;
+// }
 
 export type StageModelPtrB = {
     stageModelA: StageModelPtrA;
@@ -200,9 +200,9 @@ export type Stage = {
     bumpers: Bumper[];
     jamabars: Jamabar[];
     bananas: Banana[];
-    bgModels: BgModel[];
-    fgModels: FgModel[];
-    reflectiveModels: ReflectiveModel[];
+    // bgModels: BgModel[];
+    // fgModels: FgModel[];
+    // reflectiveModels: ReflectiveModel[];
 }
 
 export type Jamabar = {

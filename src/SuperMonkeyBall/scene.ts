@@ -15,6 +15,7 @@ import * as GMA from './gma';
 import { parseStagedefLz } from './parseStagedef';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData as StageData } from './render';
 import {debugDrawColi} from './debugDraw';
+import { isOnGround } from '../SuperMarioGalaxy/Collision';
 
 enum Pass {
     SKYBOX = 0x01,
@@ -49,6 +50,7 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
     public modelData: GcmfModel[] = [];
 
     public modelCache = new ModelChache();
+    private drawColi: boolean = false;
 
     constructor(private device: GfxDevice, private stageData: StageData) {
         super(device);
@@ -66,6 +68,7 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
                 this.modelInstances[i].setVertexColorsEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
         // Enable Texture
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
@@ -74,6 +77,13 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
                 this.modelInstances[i].setTexturesEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        // Debug draw collision (eventually do it with polys)
+        const drawColi = new UI.Checkbox('Draw Collision', false);
+        drawColi.onchanged = () => {
+            this.drawColi = drawColi.checked;
+        };
+        renderHacksPanel.contents.appendChild(drawColi.elem);
 
         return [renderHacksPanel];
     }
@@ -90,7 +100,7 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
-        if (this.stageData.stagedef !== undefined) {
+        if (this.stageData.stagedef !== undefined && this.drawColi) {
             debugDrawColi(this.stageData.stagedef, viewerInput.camera);
         }
     }

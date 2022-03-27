@@ -5,7 +5,7 @@ import * as SD from './stagedef';
 import * as GX from '../gx/gx_enum';
 import * as LZSS from '../Common/Compression/LZSS'
 
-const COLI_HEADER_SIZE = 0x49C
+const ITEMGROUP_SIZE = 0xC4
 const GOAL_SIZE = 0x14;
 const BUMPER_SIZE = 0x20;
 const JAMABAR_SIZE = 0x20;
@@ -13,11 +13,9 @@ const BANANA_SIZE = 0x10;
 const COLI_CONE_SIZE = 0x20;
 const COLI_SPHERE_SIZE = 0x14;
 const COLI_CYLINDER_SIZE = 0x1C;
-const FALLOUT_VOLUME_SIZE = 0x20;
-const BACKGROUND_MODEL_SIZE = 0x38;
+// const FALLOUT_VOLUME_SIZE = 0x20;
+// const BACKGROUND_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
-const WORMHOLE_SIZE = 0x1C;
-const BUTTON_SIZE = 0x18;
 const COLI_TRI_SIZE = 0x40;
 
 function parseVec3f(view: DataView, offset: number): vec3 {
@@ -40,27 +38,27 @@ function parseVec3s(view: DataView, offset: number): vec3 {
     return vec3.fromValues(x, y, z);
 }
 
-function parseAnimKeyframeList(view: DataView, offset: number): SD.AnimKeyframe[] {
-    const keyframes: SD.AnimKeyframe[] = [];
+function parseKeyframeList(view: DataView, offset: number): SD.Keyframe[] {
+    const keyframes: SD.Keyframe[] = [];
     const keyframeCount = view.getUint32(offset);
     const keyframeListOffs = view.getUint32(offset + 0x4);
     for (let i = 0; i < keyframeCount; i++) {
         const keyframeOffs = keyframeListOffs + i * ANIM_KEYFRAME_SIZE;
-        const easing = view.getUint32(keyframeOffs + 0x0) as SD.Easing;
+        const easeType = view.getUint32(keyframeOffs + 0x0) as SD.EaseType;
         const time = view.getFloat32(keyframeOffs + 0x4);
         const value = view.getFloat32(keyframeOffs + 0x8);
-        keyframes.push({ easing, time, value });
+        keyframes.push({ easeType: easeType, time, value });
     }
     return keyframes;
 }
 
 function parseAnimHeader(view: DataView, offset: number): SD.AnimHeader {
-    const rotXKeyframes = parseAnimKeyframeList(view, offset + 0x0);
-    const rotYKeyframes = parseAnimKeyframeList(view, offset + 0x8);
-    const rotZKeyframes = parseAnimKeyframeList(view, offset + 0x10);
-    const posXKeyframes = parseAnimKeyframeList(view, offset + 0x18);
-    const posYKeyframes = parseAnimKeyframeList(view, offset + 0x20);
-    const posZKeyframes = parseAnimKeyframeList(view, offset + 0x28);
+    const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
+    const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
+    const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
+    const posXKeyframes = parseKeyframeList(view, offset + 0x18);
+    const posYKeyframes = parseKeyframeList(view, offset + 0x20);
+    const posZKeyframes = parseKeyframeList(view, offset + 0x28);
     return {
         rotXKeyframes,
         rotYKeyframes,
@@ -320,7 +318,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     const itemgroupListOffs = view.getUint32(0xC);
     const itemgroups: SD.Itemgroup[] = [];
     for (let i = 0; i < itemgroupCount; i++) {
-        const coliHeaderOffs = itemgroupListOffs + i * COLI_HEADER_SIZE;
+        const coliHeaderOffs = itemgroupListOffs + i * ITEMGROUP_SIZE;
         const initPos = parseVec3f(view, coliHeaderOffs + 0x0);
         const initRot = parseVec3s(view, coliHeaderOffs + 0xC);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as SD.AnimType;
@@ -448,8 +446,8 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         bumpers,
         jamabars,
         bananas,
-        bgModels: [],
-        fgModels: [],
-        reflectiveModels: [],
+        // bgModels: [],
+        // fgModels: [],
+        // reflectiveModels: [],
     };
 }
