@@ -84,5 +84,5 @@ export enum NodeType {
 
 function isDirectory(type: number) {
     // Checks if highest bit is set to 1
-    return (type >> 0) < 0;
+    return (type & 0x80000000) != 0;
 }

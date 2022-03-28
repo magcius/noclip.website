@@ -31,5 +31,5 @@ const sceneDescs = [
 const id = 'nfsmw';
 const name = "Need for Speed: Most Wanted (2005)";
 export const sceneGroup: SceneGroup = {
-    id, name, sceneDescs,
+    id, name, sceneDescs, hidden: true
 };

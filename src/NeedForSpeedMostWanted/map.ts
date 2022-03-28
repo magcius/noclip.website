@@ -168,7 +168,7 @@ export class NfsMap {
     }
 
     public getClosestPathVertex(pos: vec2): PathVertex {
-        // The game decides which to regions to load based on the current camera position.
+        // The game decides which regions to load based on the current camera position.
         // However, moving out of bounds leads to weird behaviour since the camera is usually not supposed to be there.
         // Therefore I snap the assumed camera position to the nearest AI pathfinding vertex (which will always be on a road).
 

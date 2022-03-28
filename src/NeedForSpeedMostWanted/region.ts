@@ -368,8 +368,8 @@ export enum InstanceType {
 }
 
 export interface NfsBoundingVolume {
-    boundingBox: AABB,
-    collectInstancesToRender: (collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) => void
+    boundingBox: AABB;
+    collectInstancesToRender: (collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) => void;
 }
 
 export class NfsBoundingVolumeGroup {
@@ -417,8 +417,8 @@ export class NfsModel {
         const meshDataNode = modelNode.children.filter((node) => node.type == NodeType.Mesh)[0];
         const meshHeaderNode = meshDataNode.children[0];
         const dataView = meshHeaderNode.dataView;
-        const submeshCount = dataView.getInt32(16, true);
-        const indexCount = dataView.getInt32(44, true);
+        const submeshCount = dataView.getInt32(0x10, true);
+        const indexCount = dataView.getInt32(0x2C, true);
 
         this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, meshDataNode.children[2].dataBuffer.slice(0, indexCount * 2));
 
@@ -434,10 +434,10 @@ export class NfsModel {
         let currentVertexListIndex = 0;
         let submeshBaseOffset = 0x18;
         for(let i = 0; i < submeshCount; i++) {
-            const shaderType = submeshDataView.getInt32(submeshBaseOffset + 24, true);
-            const vertexCount = submeshDataView.getInt32(submeshBaseOffset + 36, true);
-            const indexCount = 3 * submeshDataView.getInt32(submeshBaseOffset + 40, true);
-            const indexOffset = submeshDataView.getInt32(submeshBaseOffset + 44, true);
+            const shaderType = submeshDataView.getInt32(submeshBaseOffset + 0x18, true);
+            const vertexCount = submeshDataView.getInt32(submeshBaseOffset + 0x24, true);
+            const indexCount = 3 * submeshDataView.getInt32(submeshBaseOffset + 0x28, true);
+            const indexOffset = submeshDataView.getInt32(submeshBaseOffset + 0x2C, true);
             const byteStride = shaderType == 0 || shaderType == 6 || shaderType == 5 ? 0x24 : shaderType == 19 ? 0x2c : 0x3c;
             const diffuseTexture = textureList[submeshDataView.getUint8(submeshBaseOffset)];
             const normalMap = textureList[submeshDataView.getUint8(submeshBaseOffset + 1)];
@@ -470,7 +470,7 @@ export class NfsModel {
                 {location: 2, format: GfxFormat.U8_RGBA_NORM, bufferByteOffset:0x18, bufferIndex:0},                    // vertex colors
                 {location: 3, format: GfxFormat.F32_RGB, bufferByteOffset:0xC, bufferIndex:0}                           // normals
             ];
-            if(byteStride > 0x24) {
+            if(byteStride >= 0x38) {
                 vertAttDesc.push({location: 4, format: GfxFormat.F32_RGB, bufferByteOffset:0x2C, bufferIndex:0});         // tangents
                 textureMappings.push(normalMap, specularMap);
             }

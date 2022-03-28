@@ -1,28 +1,28 @@
 import { mat4, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix } from "../Camera";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxProgram, GfxSamplerBinding, GfxTexture, } from "../gfx/platform/GfxPlatform";
+import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxProgram, GfxSamplerBinding } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInst, makeSortKey } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region";
-import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import * as UI from '../ui';
 import { NfsMap, PathVertex } from "./map";
 import { TextureMapping } from "../TextureHolder";
 
 export interface VertexInfo {
-    inputLayout: GfxInputLayout,
-    inputState: GfxInputState,
-    drawCall: DrawCall,
-    textureMappings: NfsTexture[]
+    inputLayout: GfxInputLayout;
+    inputState: GfxInputState;
+    drawCall: DrawCall;
+    textureMappings: NfsTexture[];
 }
 
 interface DrawCall {
-    indexOffset: number,
-    indexCount: number
+    indexOffset: number;
+    indexCount: number;
 }
 
 export class NfsRenderer implements SceneGfx {
@@ -97,17 +97,13 @@ export class NfsRenderer implements SceneGfx {
             const model = instance.model;
             if(model === undefined)
                 return;
-            let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
-            const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
-            fillMatrix4x4(d, offs, instance.worldMatrix);
             model.vertInfos.forEach(vInfo => {
                 template.setInputLayoutAndState(vInfo.inputLayout, vInfo.inputState);
+                let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
+                const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
                 const renderInst = renderInstManager.newRenderInst();
-                offs = renderInst.allocateUniformBuffer(NfsProgram.ub_DrawParams, 4);
-                const dFrag = renderInst.mapUniformBufferF32(NfsProgram.ub_DrawParams);
                 const texMappings: GfxSamplerBinding[] = vInfo.textureMappings.slice();
-
-                fillVec4v(dFrag, offs, [0, 0, 0, 0]);
+                fillMatrix4x3(d, offs, instance.worldMatrix);
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
                 renderInst.drawIndexes(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
                 renderInstManager.submitRenderInst(renderInst);
@@ -145,14 +141,12 @@ export class NfsRenderer implements SceneGfx {
             const model = instance.model;
             if(model === undefined)
                 return;
-            let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
-            const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
-            fillMatrix4x4(d, offs, instance.worldMatrix);
             model.vertInfos.forEach(vInfo => {
                 template.setInputLayoutAndState(vInfo.inputLayout, vInfo.inputState);
+                let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
+                const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
                 const renderInst = renderInstManager.newRenderInst();
-                offs = renderInst.allocateUniformBuffer(NfsProgram.ub_DrawParams, 4);
-                const dFrag = renderInst.mapUniformBufferF32(NfsProgram.ub_DrawParams);
+                offs += fillMatrix4x3(d, offs, instance.worldMatrix);
                 let texMappings: GfxSamplerBinding[] = vInfo.textureMappings.slice();
                 const diffuseTexture: NfsTexture = texMappings[0] as NfsTexture;
                 if(diffuseTexture.cycleAnimation != undefined) {
@@ -188,10 +182,10 @@ export class NfsRenderer implements SceneGfx {
                 if(diffuseTexture.scrollAnimation != undefined) {
                     const anim = diffuseTexture.scrollAnimation;
                     const animFactor = anim.interval == -1 ? viewerInput.time / 1000 : Math.floor(viewerInput.time / anim.interval / 1000);
-                    fillVec4v(dFrag, offs, [(anim.scrollSpeed[0] * animFactor) % 1, (anim.scrollSpeed[1] * animFactor) % 1, 0, 0]);
+                    fillVec4v(d, offs, [(anim.scrollSpeed[0] * animFactor) % 1, (anim.scrollSpeed[1] * animFactor) % 1, 0, 0]);
                 }
                 else {
-                    fillVec4v(dFrag, offs, [0, 0, 0, 0]);
+                    fillVec4v(d, offs, [0, 0, 0, 0]);
                 }
                 texMappings[3] = this.shadowPassTexture;
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
@@ -285,7 +279,7 @@ export class NfsRenderer implements SceneGfx {
         this.sortKeySky = makeSortKey(GfxRendererLayer.BACKGROUND);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 4}]);
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 4}]);
 
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.popTemplateRenderInst();
@@ -379,10 +373,7 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_ObjectParams {
-    Mat4x4 u_ObjectWorldMat;
-};
-
-layout(std140) uniform ub_DrawParams {
+    Mat4x3 u_ObjectWorldMat;
     vec4 u_uvOffset;
 };
 
@@ -418,7 +409,7 @@ out vec3 v_Bitangent;
 #endif
 
 void main() {
-    vec4 worldPos = Mul(u_ObjectWorldMat, vec4(a_Position, 1.0));
+    vec4 worldPos = vec4(Mul(u_ObjectWorldMat, vec4(a_Position, 1.0)), 1.0);
     v_ViewDir = normalize(u_CameraPos.xyz - worldPos.xyz);
     worldPos = worldPos.xzyw;
     worldPos.x *= -1.0;
@@ -459,7 +450,7 @@ void main() {
 #else
 
 #ifdef SHADOW
-    float linearDepth = 1.0 - (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - u_ShadowRange) / gl_FragCoord.w;
+    float linearDepth = 1.0 - (2.0 * gl_FragCoord.z - 1.0) / (1.0 - u_ShadowRange) / gl_FragCoord.w;
     gl_FragColor.xy = vec2(linearDepth, 1.0 - (gl_FragColor.a * v_Color.a * 0.7 * clamp(linearDepth * 10.0, 0.0, 1.0)));
     return;
 #endif
@@ -475,7 +466,7 @@ void main() {
 
     vec3 devCoords = gl_FragCoord.xyz / vec3(u_ViewportSize.x, -u_ViewportSize.y, 1.0) * vec3(1.0, -1.0, 1.0);
     vec4 shadow = texture(SAMPLER_2D(u_Shadow), devCoords.xy);
-    float depth = (2.0 * gl_FragCoord.w - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - u_ShadowRange);
+    float depth = (2.0 * gl_FragCoord.w - 1.0) / (1.0 - u_ShadowRange);
     depth = 1.0 - depth / gl_FragCoord.w;
     float lightAmount = 1.0;
     bool isInShadow = depth <= shadow.x + u_ShadowBias && shadow.x > 0.0;
