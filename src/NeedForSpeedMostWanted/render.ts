@@ -103,7 +103,8 @@ export class NfsRenderer implements SceneGfx {
                 const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
                 const renderInst = renderInstManager.newRenderInst();
                 const texMappings: GfxSamplerBinding[] = vInfo.textureMappings.slice();
-                fillMatrix4x3(d, offs, instance.worldMatrix);
+                offs += fillMatrix4x3(d, offs, instance.worldMatrix);
+                fillVec4v(d, offs, [0, 0, 0, 0]);
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
                 renderInst.drawIndexes(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
                 renderInstManager.submitRenderInst(renderInst);
