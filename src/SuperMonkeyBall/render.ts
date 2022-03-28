@@ -1,23 +1,21 @@
-﻿import * as GMA from './gma';
-import * as GX from "../gx/gx_enum";
-import * as GX_Material from '../gx/gx_material';
-import { AVTexture, AVTpl } from './AVtpl';
-
-import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
+﻿import { mat4 } from 'gl-matrix';
+import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { Color, colorCopy } from '../Color';
+import { AABB, IntersectionState } from '../Geometry';
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice, GfxMipFilterMode, GfxNormalizedViewportCoords, GfxSampler, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, DrawParams, translateWrapModeGfx } from "../gx/gx_render";
-import { mat4 } from 'gl-matrix';
-import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { Color, colorCopy } from '../Color';
-import { nArray } from '../util';
-import { AABB, IntersectionState } from '../Geometry';
-import { ViewerRenderInput } from '../viewer';
-import { TextureMapping } from '../TextureHolder';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { GfxRenderInstManager, setSortKeyDepth, setSortKeyBias, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
-import { computeNormalMatrix } from '../MathHelpers';
+import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
+import * as GX from "../gx/gx_enum";
+import * as GX_Material from '../gx/gx_material';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, translateWrapModeGfx } from "../gx/gx_render";
+import { TextureMapping } from '../TextureHolder';
+import { nArray } from '../util';
+import { ViewerRenderInput } from '../viewer';
+import { AVTexture, AVTpl } from './AVtpl';
+import * as GMA from './gma';
 import * as SD from './stagedef';
 
 export class GMAData {

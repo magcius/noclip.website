@@ -1,5 +1,5 @@
-import { SuperMonkeyBallSceneDesc } from './scene';
 import * as Viewer from '../viewer';
+import { SuperMonkeyBallSceneDesc } from './scene';
 
 const id = 'supermonkeyball'
 const name = 'Super Monkey Ball'

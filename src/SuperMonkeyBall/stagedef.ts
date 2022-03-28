@@ -1,5 +1,4 @@
 import { vec2, vec3 } from 'gl-matrix';
-import * as GX from '../gx/gx_enum';
 
 export const enum BananaType {
     Single,

@@ -11,11 +11,10 @@ import { assertExists } from '../util';
 import * as Viewer from '../viewer';
 import { AVLZ_Type, decompressLZSS } from './AVLZ';
 import * as AVtpl from './AVtpl';
+import { debugDrawColi } from './debugDraw';
 import * as GMA from './gma';
 import { parseStagedefLz } from './parseStagedef';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData as StageData } from './render';
-import {debugDrawColi} from './debugDraw';
-import { isOnGround } from '../SuperMarioGalaxy/Collision';
 
 enum Pass {
     SKYBOX = 0x01,

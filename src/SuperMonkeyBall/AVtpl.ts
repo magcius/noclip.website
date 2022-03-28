@@ -1,8 +1,11 @@
-// AmusementVision's Texture format
-
-import * as GX from '../gx/gx_enum';
+/*
+ * AmusementVision's Texture format
+ *
+ * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
+ */
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import * as GX from '../gx/gx_enum';
 import { assert } from '../util';
 
 export interface AVTexture {
@@ -17,11 +20,11 @@ export interface AVTexture {
     paletteData: ArrayBufferSlice | null;
 }
 
-export interface AVTpl{
+export interface AVTpl {
     textures: AVTexture[];
 }
 
-function parseAvTplHeader(buffer: ArrayBufferSlice, prefix: number, idx:number, basebuffer: ArrayBufferSlice): AVTexture {
+function parseAvTplHeader(buffer: ArrayBufferSlice, prefix: number, idx: number, basebuffer: ArrayBufferSlice): AVTexture {
     let view = buffer.createDataView();
 
     assert(view.getUint16(0x0E) == 0x1234);
@@ -32,26 +35,26 @@ function parseAvTplHeader(buffer: ArrayBufferSlice, prefix: number, idx:number, 
     const height = view.getUint16(0x0A);
     const mipCount = view.getUint16(0x0C);
     const data = basebuffer.slice(offs);
-    
-    const paletteFormat:GX.TexPalette  | null = null;
-    const paletteData:ArrayBufferSlice | null = null;
+
+    const paletteFormat: GX.TexPalette | null = null;
+    const paletteData: ArrayBufferSlice | null = null;
 
     return { name, format, offs, width, height, mipCount, data, paletteFormat, paletteData };
 }
 
-export function parseAvTpl(buffer: ArrayBufferSlice, prefix: number):AVTpl {
+export function parseAvTpl(buffer: ArrayBufferSlice, prefix: number): AVTpl {
     let view = buffer.createDataView();
     const textures: AVTexture[] = [];
 
     let entryCount = view.getUint32(0x00);
     let offs = 0x04;
-    for (let i = 0; i < entryCount; i++){
+    for (let i = 0; i < entryCount; i++) {
         const texture = parseAvTplHeader(buffer.slice(offs), prefix, i, buffer);
         offs += 0x10;
-        if (texture.offs === 0 && texture.width === 0 && texture.height === 0 && texture.mipCount === 0){
+        if (texture.offs === 0 && texture.width === 0 && texture.height === 0 && texture.mipCount === 0) {
             continue;
         }
-        textures.push( texture );
+        textures.push(texture);
     }
 
     return { textures };

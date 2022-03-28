@@ -1,9 +1,15 @@
+/*
+ * Decompresses and parses SMB1 stagedef files (.lz in stage directories).
+ *
+ * SMB1 stagedef format: https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=stagedefFormat2#spec-stagedefFormat2-section-collisionHeader
+ * SMB1 decompilation (potentially more up to date): https://github.com/camthesaxman/smb-decomp
+ */
+
 import { vec2, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import * as LZSS from '../Common/Compression/LZSS';
 import { readString } from '../util';
 import * as SD from './stagedef';
-import * as GX from '../gx/gx_enum';
-import * as LZSS from '../Common/Compression/LZSS'
 
 const ITEMGROUP_SIZE = 0xC4
 const GOAL_SIZE = 0x14;
