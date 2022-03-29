@@ -1038,7 +1038,7 @@ export class CameraAnimationManager {
         return duration;
     }
 
-    private getCurrentTrackValue(track: KeyframeTrack, time: number, normalizeAngleValue: boolean = false): number {
+    private getCurrentTrackValue(track: KeyframeTrack, time: number, normalizeBankForLoop?: boolean): number {
         const idx1 = this.findKeyframe(track.keyframes, time);
         if (idx1 === 0)
             return track.keyframes[0].value;
@@ -1052,14 +1052,8 @@ export class CameraAnimationManager {
         
         let p0 = k0.value;
         let p1 = k1.value;
-        if (normalizeAngleValue && track.keyframes.length > 1) {
-            p0 = track.keyframes[0].value;
-            p1 = p0 + angleDist(p0, track.keyframes[1].value);
-            for (let i = 2; i <= idx1; i++) {
-                p0 = p1;
-                p1 = p1 + angleDist(p1, track.keyframes[i].value);
-            }
-        }
+        if (normalizeBankForLoop && idx1 === track.keyframes.length - 1)
+            p0 %= MathConstants.TAU;
         let tOut = k0.tangentOut;
         let tIn = k1.tangentIn;
         let interpType = k0.interpOutType;
@@ -1100,7 +1094,7 @@ export class CameraAnimationManager {
         const lookAtZ = this.getCurrentTrackValue(animation.lookAtZTrack, time);
         vec3.set(dst.pos, posX, posY, posZ);
         vec3.set(dst.lookAtPos, lookAtX, lookAtY, lookAtZ);
-        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time, true);
+        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time, animation.loop);
     }
 
     public initAnimationPlayback(animation: Readonly<CameraAnimation>, startTimeMs: number) {
@@ -2792,12 +2786,12 @@ export class StudioPanel extends FloatingPanel {
         const innerRadius = 23;
 
         this.bankRotationValCanvasCtx.beginPath();
-        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, outerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, outerRadius, 0, MathConstants.TAU);
         this.bankRotationValCanvasCtx.fill();
 
         this.bankRotationValCanvasCtx.strokeStyle = '#a9a9a9';
         this.bankRotationValCanvasCtx.beginPath();
-        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, innerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, innerRadius, 0, MathConstants.TAU);
         this.bankRotationValCanvasCtx.stroke();
         this.bankRotationValCanvasCtx.save();
 
@@ -3090,10 +3084,32 @@ export class StudioPanel extends FloatingPanel {
         vec3.rotateX(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[0]);
         this.scratchVecLook[2] = 0;
         vec3.normalize(this.scratchVecLook, this.scratchVecLook);
-        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY)
+        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY);
         if (this.scratchVecLook[0] < 0) {
             bank *= -1;
         }
+
+        let prevBankVal = 0;
+        let relativePrevBankVal = 0;
+        let halfRotations = 0;
+        if (this.animation.bankTrack.keyframes.length > 0) {
+            let prevIndex = this.animation.bankTrack.getNextKeyframeIndexAtTime(time);
+            if (prevIndex === -1)
+                prevIndex = this.animation.bankTrack.keyframes.length - 1;
+            else
+                prevIndex -= 1;
+
+            prevBankVal = this.animation.bankTrack.keyframes[prevIndex].value;
+            halfRotations = (prevBankVal / Math.PI) | 0;
+            relativePrevBankVal = prevBankVal % MathConstants.TAU;
+            if (prevBankVal > 0 && bank < relativePrevBankVal - Math.PI )
+                bank += MathConstants.TAU;
+            else if (prevBankVal <= 0 && bank > relativePrevBankVal + Math.PI )
+                bank -= MathConstants.TAU;
+
+            bank += ((halfRotations / 2) | 0) * MathConstants.TAU;
+        }
+
         const bankKf: Keyframe = { time, value: bank, tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
 
         if (editingKf) {
