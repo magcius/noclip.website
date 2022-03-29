@@ -5,7 +5,6 @@ export const enum BananaType {
     Bunch,
 }
 
-// TODO these are bitflags, not enum (although I suppose it's still correct)
 export const enum AnimType {
     Loop,
     Once,
@@ -37,7 +36,7 @@ export type Keyframe = {
     value: number; // Translation or rotation in degrees
 }
 
-export type AnimHeader = {
+export type ItemgroupAnim = {
     rotXKeyframes: Keyframe[];
     rotYKeyframes: Keyframe[];
     rotZKeyframes: Keyframe[];
@@ -46,30 +45,40 @@ export type AnimHeader = {
     posZKeyframes: Keyframe[];
 }
 
-// export type BackgroundAnim2Header = {
-//     loopPointSeconds: number;
-//     unk1Keyframes: AnimKeyframe[];
-//     unk2Keyframes: AnimKeyframe[];
-//     posXKeyframes: AnimKeyframe[];
-//     posYKeyframes: AnimKeyframe[];
-//     posZKeyframes: AnimKeyframe[];
-//     rotXKeyframes: AnimKeyframe[];
-//     rotYKeyframes: AnimKeyframe[];
-//     rotZKeyframes: AnimKeyframe[];
-//     unk9Keyframes: AnimKeyframe[];
-//     unk10Keyframes: AnimKeyframe[];
-//     unk11Keyframes: AnimKeyframe[];
-// }
+export type BgAnim = {
+    loopPointSeconds: number,
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+}
 
-// export type BackgroundAnimHeader = {
-//     loopPointSeconds: number,
-//     posXKeyframes: AnimKeyframe[];
-//     posYKeyframes: AnimKeyframe[];
-//     posZKeyframes: AnimKeyframe[];
-//     rotXKeyframes: AnimKeyframe[];
-//     rotYKeyframes: AnimKeyframe[];
-//     rotZKeyframes: AnimKeyframe[];
-// }
+export type BgAnim2 = {
+    loopPointSeconds: number;
+    unk1Keyframes: Keyframe[];
+    unk2Keyframes: Keyframe[];
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+    unk9Keyframes: Keyframe[];
+    unk10Keyframes: Keyframe[];
+    unk11Keyframes: Keyframe[];
+}
+
+export type BgModel = {
+    modelName: string;
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+    backgroundAnimHeader: BgAnim;
+    backgroundAnim2Header: BgAnim2;
+    // effectHeader: EffectHeader;
+}
 
 // export type EffectHeader = {
 //     fx1Keyframes: Effect1[];
@@ -83,6 +92,10 @@ export type AnimHeader = {
 
 // export type Effect2 = {
 //     // ??
+// }
+
+// export type TextureScroll = {
+//     speed: vec3;
 // }
 
 // export type BgModel = {
@@ -107,7 +120,7 @@ export type StageModelInstance = {
     scale: vec3;
 }
 
-export type FogAnimHeader = {
+export type FogAnim = {
     startDistanceKeyframes: Keyframe[];
     endDistanceKeyframes: Keyframe[];
     redKeyframes: Keyframe[];
@@ -144,7 +157,7 @@ export type Itemgroup = {
     initPos: vec3;
     initRot: vec3;
     animType: AnimType;
-    animHeader: AnimHeader;
+    animHeader: ItemgroupAnim;
     // conveyorVel: vec3;
 
     coliTris: ColiTri[];
@@ -199,7 +212,7 @@ export type Stage = {
     bumpers: Bumper[];
     jamabars: Jamabar[];
     bananas: Banana[];
-    // bgModels: BgModel[];
+    bgModels: BgModel[];
     // fgModels: FgModel[];
     // reflectiveModels: ReflectiveModel[];
 }

@@ -20,7 +20,7 @@ const COLI_CONE_SIZE = 0x20;
 const COLI_SPHERE_SIZE = 0x14;
 const COLI_CYLINDER_SIZE = 0x1C;
 // const FALLOUT_VOLUME_SIZE = 0x20;
-// const BACKGROUND_MODEL_SIZE = 0x38;
+const BG_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
 
@@ -58,7 +58,7 @@ function parseKeyframeList(view: DataView, offset: number): SD.Keyframe[] {
     return keyframes;
 }
 
-function parseAnimHeader(view: DataView, offset: number): SD.AnimHeader {
+function parseAnimHeader(view: DataView, offset: number): SD.ItemgroupAnim {
     const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
     const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
     const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
@@ -207,79 +207,79 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // }
 
     // Background models
-    // const backgroundModelCount = view.getUint32(0x58);
-    // const backgroundModelListOffs = view.getUint32(0x5C);
-    // const bgModels: SD.BgModel[] = [];
-    // for (let i = 0; i < backgroundModelCount; i++) {
-    //     const backgroundModelOffs = backgroundModelListOffs + i * BACKGROUND_MODEL_SIZE;
-    //     const modelName = readString(buffer, view.getUint32(backgroundModelOffs + 0x4));
-    //     const pos = parseVec3f(view, backgroundModelOffs + 0xC);
-    //     const rot = parseVec3s(view, backgroundModelOffs + 0x18);
-    //     const scale = parseVec3s(view, backgroundModelOffs + 0x20);
+    const bgModelCount = view.getUint32(0x68);
+    const bgModelListOffs = view.getUint32(0x6C);
+    const bgModels: SD.BgModel[] = [];
+    for (let i = 0; i < bgModelCount; i++) {
+        const backgroundModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
+        const modelName = readString(buffer, view.getUint32(backgroundModelOffs + 0x4));
+        const pos = parseVec3f(view, backgroundModelOffs + 0xC);
+        const rot = parseVec3s(view, backgroundModelOffs + 0x18);
+        const scale = parseVec3s(view, backgroundModelOffs + 0x20);
 
-    //     // Background anim header
-    //     const backgroundAnimHeaderOffs = view.getUint32(backgroundModelOffs + 0x2C);
-    //     const bgLoopPointSeconds = view.getFloat32(backgroundAnimHeaderOffs + 0x4);
-    //     const bgRotXKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x10);
-    //     const bgRotYKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x18);
-    //     const bgRotZKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x20);
-    //     const bgPosXKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x28);
-    //     const bgPosYKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x30);
-    //     const bgPosZKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x38);
-    //     const backgroundAnimHeader: SD.BackgroundAnimHeader = {
-    //         loopPointSeconds: bgLoopPointSeconds,
-    //         rotXKeyframes: bgRotXKeyframes,
-    //         rotYKeyframes: bgRotYKeyframes,
-    //         rotZKeyframes: bgRotZKeyframes,
-    //         posXKeyframes: bgPosXKeyframes,
-    //         posYKeyframes: bgPosYKeyframes,
-    //         posZKeyframes: bgPosZKeyframes,
-    //     };
+        // Background anim header
+        const backgroundAnimHeaderOffs = view.getUint32(backgroundModelOffs + 0x2C);
+        const bgLoopPointSeconds = view.getFloat32(backgroundAnimHeaderOffs + 0x4);
+        const bgRotXKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x10);
+        const bgRotYKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x18);
+        const bgRotZKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x20);
+        const bgPosXKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x28);
+        const bgPosYKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x30);
+        const bgPosZKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x38);
+        const backgroundAnimHeader: SD.BgAnim = {
+            loopPointSeconds: bgLoopPointSeconds,
+            rotXKeyframes: bgRotXKeyframes,
+            rotYKeyframes: bgRotYKeyframes,
+            rotZKeyframes: bgRotZKeyframes,
+            posXKeyframes: bgPosXKeyframes,
+            posYKeyframes: bgPosYKeyframes,
+            posZKeyframes: bgPosZKeyframes,
+        };
 
-    //     // Background anim 2 header
-    //     const backgroundAnim2HeaderOffs = view.getUint32(backgroundModelOffs + 0x30);
-    //     const bg2LoopPointSeconds = view.getFloat32(backgroundAnim2HeaderOffs + 0x4);
-    //     const bg2Unk1Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x8);
-    //     const bg2Unk2Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x10);
-    //     const bg2RotXKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x18);
-    //     const bg2RotYKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x20);
-    //     const bg2RotZKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x28);
-    //     const bg2PosXKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x30);
-    //     const bg2PosYKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x38);
-    //     const bg2PosZKeyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x40);
-    //     const bg2Unk9Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x48);
-    //     const bg2Unk10Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x50);
-    //     const bg2Unk11Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x58);
-    //     const backgroundAnim2Header: SD.BackgroundAnim2Header = {
-    //         loopPointSeconds: bg2LoopPointSeconds,
-    //         unk1Keyframes: bg2Unk1Keyframes,
-    //         unk2Keyframes: bg2Unk2Keyframes,
-    //         rotXKeyframes: bg2RotXKeyframes,
-    //         rotYKeyframes: bg2RotYKeyframes,
-    //         rotZKeyframes: bg2RotZKeyframes,
-    //         posXKeyframes: bg2PosXKeyframes,
-    //         posYKeyframes: bg2PosYKeyframes,
-    //         posZKeyframes: bg2PosZKeyframes,
-    //         unk9Keyframes: bg2Unk9Keyframes,
-    //         unk10Keyframes: bg2Unk10Keyframes,
-    //         unk11Keyframes: bg2Unk11Keyframes,
-    //     };
+        // Background anim 2 header
+        const backgroundAnim2HeaderOffs = view.getUint32(backgroundModelOffs + 0x30);
+        const bg2LoopPointSeconds = view.getFloat32(backgroundAnim2HeaderOffs + 0x4);
+        const bg2Unk1Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x8);
+        const bg2Unk2Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x10);
+        const bg2RotXKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x18);
+        const bg2RotYKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x20);
+        const bg2RotZKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x28);
+        const bg2PosXKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x30);
+        const bg2PosYKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x38);
+        const bg2PosZKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x40);
+        const bg2Unk9Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x48);
+        const bg2Unk10Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x50);
+        const bg2Unk11Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x58);
+        const backgroundAnim2Header: SD.BgAnim2 = {
+            loopPointSeconds: bg2LoopPointSeconds,
+            unk1Keyframes: bg2Unk1Keyframes,
+            unk2Keyframes: bg2Unk2Keyframes,
+            rotXKeyframes: bg2RotXKeyframes,
+            rotYKeyframes: bg2RotYKeyframes,
+            rotZKeyframes: bg2RotZKeyframes,
+            posXKeyframes: bg2PosXKeyframes,
+            posYKeyframes: bg2PosYKeyframes,
+            posZKeyframes: bg2PosZKeyframes,
+            unk9Keyframes: bg2Unk9Keyframes,
+            unk10Keyframes: bg2Unk10Keyframes,
+            unk11Keyframes: bg2Unk11Keyframes,
+        };
 
-    //     // Effect header
-    //     const effectHeaderOffs = view.getUint32(backgroundModelOffs + 0x34);
-    //     // TODO fx1 and fx2 keyfranmes
-    //     const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
+        // Effect header
+        const effectHeaderOffs = view.getUint32(backgroundModelOffs + 0x34);
+        // TODO fx1 and fx2 keyfranmes
+        // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
 
-    //     const backgroundModel: SD.BgModel = {
-    //         modelName,
-    //         pos,
-    //         rot,
-    //         scale,
-    //         backgroundAnimHeader,
-    //         backgroundAnim2Header,
-    //     };
-    //     bgModels.push(backgroundModel);
-    // }
+        const backgroundModel: SD.BgModel = {
+            modelName,
+            pos,
+            rot,
+            scale,
+            backgroundAnimHeader,
+            backgroundAnim2Header,
+        };
+        bgModels.push(backgroundModel);
+    }
 
     // // Foreground models
     // const foregroundModelCount = view.getUint32(0x60);
@@ -304,12 +304,12 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
 
     // // Fog animation headers
     // const fogAnimHeaderOffs = view.getUint32(0xB0);
-    // const fogStartDistanceKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x0);
-    // const fogEndDistanceKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x8);
-    // const fogRedKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x10);
-    // const fogGreenKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x18);
-    // const fogBlueKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x20);
-    // const fogUnkKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x28);
+    // const fogStartDistanceKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x0);
+    // const fogEndDistanceKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x8);
+    // const fogRedKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x10);
+    // const fogGreenKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x18);
+    // const fogBlueKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x20);
+    // const fogUnkKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x28);
     // const fogAnimHeader: SD.FogAnimHeader = {
     //     startDistanceKeyframes: fogStartDistanceKeyframes,
     //     endDistanceKeyframes: fogEndDistanceKeyframes,
@@ -452,7 +452,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         bumpers,
         jamabars,
         bananas,
-        // bgModels: [],
+        bgModels,
         // fgModels: [],
         // reflectiveModels: [],
     };
