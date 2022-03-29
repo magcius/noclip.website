@@ -585,12 +585,13 @@ class Timeline {
         targetX = clamp(targetX, Playhead.HALF_WIDTH, this.width - Playhead.HALF_WIDTH);
         targetX -= Playhead.HALF_WIDTH;
 
-        const snappingEnabled = this.snappingEnabled || e.shiftKey;
+        const prevSnapping = this.snappingEnabled;
+        this.snappingEnabled = this.snappingEnabled || e.shiftKey;
 
         if (this.playheadGrabbed) {
             const snapKfIndex = this.getClosestSnappingIconIndex(targetX);
             if (snapKfIndex > -1) {
-                if (snappingEnabled)
+                if (this.snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
 
                 // If the playhead is directly on a keyframe, highlight it and any others at the same position.
@@ -615,12 +616,12 @@ class Timeline {
                     targetX = clamp(targetX, this.keyframeIcons[0].getX() + Timeline.SNAP_DISTANCE_PX, this.keyframeIcons[this.keyframeIcons.length - 1].getX() - Timeline.SNAP_DISTANCE_PX);
                 }
 
-                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                if (this.snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], this.playhead.getX());
                 else
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], targetX);
             } else {
-                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                if (this.snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                     targetX = this.playhead.getX();
                 // Moving multiple icons. Check if moving all of them will cause
                 // any of them to be in an illegal position.
@@ -681,6 +682,7 @@ class Timeline {
                 
             }
         }
+        this.snappingEnabled = prevSnapping;
 
         this.draw();
     }
