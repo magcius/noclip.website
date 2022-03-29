@@ -23,6 +23,7 @@ const COLI_CYLINDER_SIZE = 0x1C;
 const BG_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
+const LEVEL_MODEL_SIZE = 0xC;
 
 function parseVec3f(view: DataView, offset: number): vec3 {
     const x = view.getFloat32(offset);
@@ -206,27 +207,38 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     //     falloutVolumes.push({ pos, size, rot });
     // }
 
+    // Level models
+    const levelModelCount = view.getUint32(0x58);
+    const levelModelListOffs = view.getUint32(0x5C);
+    const levelModels: SD.LevelModel[] = [];
+    for (let i = 0; i < levelModelCount; i++) {
+        const levelModelOffs = levelModelListOffs + i * LEVEL_MODEL_SIZE;
+        const flags = view.getUint32(levelModelOffs + 0x0);
+        const modelName = readString(buffer, view.getUint32(levelModelOffs + 0x4));
+        levelModels.push({ flags, modelName });
+    }
+
     // Background models
     const bgModelCount = view.getUint32(0x68);
     const bgModelListOffs = view.getUint32(0x6C);
     const bgModels: SD.BgModel[] = [];
     for (let i = 0; i < bgModelCount; i++) {
-        const backgroundModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
-        const modelName = readString(buffer, view.getUint32(backgroundModelOffs + 0x4));
-        const pos = parseVec3f(view, backgroundModelOffs + 0xC);
-        const rot = parseVec3s(view, backgroundModelOffs + 0x18);
-        const scale = parseVec3s(view, backgroundModelOffs + 0x20);
+        const bgModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
+        const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
+        const pos = parseVec3f(view, bgModelOffs + 0xC);
+        const rot = parseVec3s(view, bgModelOffs + 0x18);
+        const scale = parseVec3s(view, bgModelOffs + 0x20);
 
         // Background anim header
-        const backgroundAnimHeaderOffs = view.getUint32(backgroundModelOffs + 0x2C);
-        const bgLoopPointSeconds = view.getFloat32(backgroundAnimHeaderOffs + 0x4);
-        const bgRotXKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x10);
-        const bgRotYKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x18);
-        const bgRotZKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x20);
-        const bgPosXKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x28);
-        const bgPosYKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x30);
-        const bgPosZKeyframes = parseKeyframeList(view, backgroundAnimHeaderOffs + 0x38);
-        const backgroundAnimHeader: SD.BgAnim = {
+        const bgAnimOffs = view.getUint32(bgModelOffs + 0x2C);
+        const bgLoopPointSeconds = view.getFloat32(bgAnimOffs + 0x4);
+        const bgRotXKeyframes = parseKeyframeList(view, bgAnimOffs + 0x10);
+        const bgRotYKeyframes = parseKeyframeList(view, bgAnimOffs + 0x18);
+        const bgRotZKeyframes = parseKeyframeList(view, bgAnimOffs + 0x20);
+        const bgPosXKeyframes = parseKeyframeList(view, bgAnimOffs + 0x28);
+        const bgPosYKeyframes = parseKeyframeList(view, bgAnimOffs + 0x30);
+        const bgPosZKeyframes = parseKeyframeList(view, bgAnimOffs + 0x38);
+        const bgAnim: SD.BgAnim = {
             loopPointSeconds: bgLoopPointSeconds,
             rotXKeyframes: bgRotXKeyframes,
             rotYKeyframes: bgRotYKeyframes,
@@ -237,20 +249,20 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         };
 
         // Background anim 2 header
-        const backgroundAnim2HeaderOffs = view.getUint32(backgroundModelOffs + 0x30);
-        const bg2LoopPointSeconds = view.getFloat32(backgroundAnim2HeaderOffs + 0x4);
-        const bg2Unk1Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x8);
-        const bg2Unk2Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x10);
-        const bg2RotXKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x18);
-        const bg2RotYKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x20);
-        const bg2RotZKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x28);
-        const bg2PosXKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x30);
-        const bg2PosYKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x38);
-        const bg2PosZKeyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x40);
-        const bg2Unk9Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x48);
-        const bg2Unk10Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x50);
-        const bg2Unk11Keyframes = parseKeyframeList(view, backgroundAnim2HeaderOffs + 0x58);
-        const backgroundAnim2Header: SD.BgAnim2 = {
+        const bgAnim2Offs = view.getUint32(bgModelOffs + 0x30);
+        const bg2LoopPointSeconds = view.getFloat32(bgAnim2Offs + 0x4);
+        const bg2Unk1Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x8);
+        const bg2Unk2Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x10);
+        const bg2RotXKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x18);
+        const bg2RotYKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x20);
+        const bg2RotZKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x28);
+        const bg2PosXKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x30);
+        const bg2PosYKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x38);
+        const bg2PosZKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x40);
+        const bg2Unk9Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x48);
+        const bg2Unk10Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x50);
+        const bg2Unk11Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x58);
+        const bgAnim2: SD.BgAnim2 = {
             loopPointSeconds: bg2LoopPointSeconds,
             unk1Keyframes: bg2Unk1Keyframes,
             unk2Keyframes: bg2Unk2Keyframes,
@@ -266,19 +278,19 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         };
 
         // Effect header
-        const effectHeaderOffs = view.getUint32(backgroundModelOffs + 0x34);
+        // const effectHeaderOffs = view.getUint32(bgModelOffs + 0x34);
         // TODO fx1 and fx2 keyfranmes
         // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
 
-        const backgroundModel: SD.BgModel = {
+        const bgModel: SD.BgModel = {
             modelName,
             pos,
             rot,
             scale,
-            backgroundAnimHeader,
-            backgroundAnim2Header,
+            bgAnim,
+            bgAnim2,
         };
-        bgModels.push(backgroundModel);
+        bgModels.push(bgModel);
     }
 
     // // Foreground models
@@ -386,13 +398,13 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
             const tangent = parseVec2f(view, triOffs + 0x30);
             const bitangent = parseVec2f(view, triOffs + 0x38);
             coliTris.push({
-                point1Pos,
+                pos: point1Pos,
                 normal,
-                rotFromXY,
-                point2Point1Delta,
-                point3Point1Delta,
-                tangent,
-                bitangent,
+                rot: rotFromXY,
+                vert2: point2Point1Delta,
+                vert3: point3Point1Delta,
+                edge2Normal: tangent,
+                edge3Normal: bitangent,
             });
         }
 
@@ -452,6 +464,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         bumpers,
         jamabars,
         bananas,
+        levelModels,
         bgModels,
         // fgModels: [],
         // reflectiveModels: [],

@@ -75,8 +75,8 @@ export type BgModel = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
-    backgroundAnimHeader: BgAnim;
-    backgroundAnim2Header: BgAnim2;
+    bgAnim: BgAnim;
+    bgAnim2: BgAnim2;
     // effectHeader: EffectHeader;
 }
 
@@ -107,6 +107,12 @@ export type BgModel = {
 //     backgroundAnim2Header: BackgroundAnim2Header;
 //     // effectHeader: EffectHeader;
 // }
+
+// Visual model for the stage itself, parented to itemgroups
+export type LevelModel = {
+    flags: number,
+    modelName: string,
+};
 
 export type Banana = {
     pos: vec3;
@@ -212,6 +218,7 @@ export type Stage = {
     bumpers: Bumper[];
     jamabars: Jamabar[];
     bananas: Banana[];
+    levelModels: LevelModel[];
     bgModels: BgModel[];
     // fgModels: FgModel[];
     // reflectiveModels: ReflectiveModel[];
@@ -230,13 +237,19 @@ export type FalloutVolume = {
 }
 
 export type ColiTri = {
-    point1Pos: vec3;
-    normal: vec3;
-    rotFromXY: vec3;
-    point2Point1Delta: vec2;
-    point3Point1Delta: vec2;
-    tangent: vec2;
-    bitangent: vec2;
+    // Transform from triangle space to itemgroup space
+    pos: vec3;  // Position of vertex 1
+    normal: vec3;  // Normal in itemgroup space
+    rot: vec3;  // Rotation from XY plane
+
+    // Triangle space (tri in XY plane, vertex 1 on origin, vertex 2 on (+)X axis)
+
+    // Vertex 1 in triangle space is (0, 0)
+    vert2: vec2;
+    vert3: vec2;
+    // Edge 1 normal in triangle space is (0, 1)
+    edge2Normal: vec2; // Normal of edge from vertex 2 -> vertex 3, in triangle space
+    edge3Normal: vec2; // Normal of edge from vertex 3 -> vertex 1, in triangle space
 }
 
 export type Goal = {
