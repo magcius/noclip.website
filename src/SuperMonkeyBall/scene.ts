@@ -7,14 +7,15 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import * as UI from '../ui';
-import { assertExists } from '../util';
+import { assertExists, leftPad } from '../util';
 import * as Viewer from '../viewer';
 import { AVLZ_Type, decompressLZSS } from './AVLZ';
 import * as AVtpl from './AVtpl';
 import { debugDrawColi } from './debugDraw';
 import * as GMA from './gma';
 import { parseStagedefLz } from './parseStagedef';
-import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData as StageData } from './render';
+import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, StageData as StageData } from './render';
+import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from './stageInfo';
 
 enum Pass {
     SKYBOX = 0x01,
@@ -26,10 +27,10 @@ export class ModelChache {
     public modelIDChace = new Map<string, number>();
 
     public registGcmf(device: GfxDevice, renderer: SuperMonkeyBallSceneRenderer, gmaData: StageData, modelID: number) {
-        renderer.textureHolder.addAVtplTextures(device, gmaData.tpl);
+        renderer.textureHolder.addAVtplTextures(device, gmaData.stageTpl);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        for (let i = 0; i < gmaData.gma.gcmfEntrys.length; i++) {
-            const gcmf = new GcmfModel(device, cache, gmaData.gma.gcmfEntrys[i]);
+        for (let i = 0; i < gmaData.stageGma.gcmfEntrys.length; i++) {
+            const gcmf = new GcmfModel(device, cache, gmaData.stageGma.gcmfEntrys[i]);
             this.gcmfChace.set(gcmf.gcmfEntry.name, gcmf);
             this.modelIDChace.set(gcmf.gcmfEntry.name, modelID);
         }
@@ -146,9 +147,15 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
         c.setKeyMoveSpeed(1);
     }
 }
-
 export class SuperMonkeyBallSceneDesc {
-    constructor(public id: string, public name: string, public type: AVLZ_Type = AVLZ_Type.NONE) {
+    public id: string;
+    public name: string;
+    private stageId: StageId;
+
+    constructor(stageId: StageId, name: string) {
+        this.stageId = stageId;
+        this.id = name;
+        this.name = name;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -157,12 +164,12 @@ export class SuperMonkeyBallSceneDesc {
 
         //load stage
         let prefix = 0;
-        const stageDefn = await this.loadStage(dataFetcher, `${this.id}`, this.name, prefix, this.type);
+        const stageDefn = await this.loadStage(dataFetcher, this.stageId);
         const sceneRender = new SuperMonkeyBallSceneRenderer(device, stageDefn);
         sceneRender.modelCache.registGcmf(device, sceneRender, stageDefn, prefix++);
 
         // only show gma
-        stageDefn.gma.gcmfEntrys.forEach(gcmfEntry => {
+        stageDefn.stageGma.gcmfEntrys.forEach(gcmfEntry => {
             const name = gcmfEntry.name;
             this.instanceModel(sceneRender, name);
         });
@@ -170,38 +177,31 @@ export class SuperMonkeyBallSceneDesc {
         return sceneRender;
     }
 
-    public async loadStage(dataFetcher: DataFetcher, dirPath: string, stageName: string, prefix: number, type: AVLZ_Type = AVLZ_Type.NONE): Promise<StageData> {
-        // TODO cleanup
+    public async loadStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
+        const gameFilesPath = 'SuperMonkeyBall/test';
+        const stageIdStr = leftPad(stageId.toString(), 3, '0');
+        const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
+        const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
+        const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
+        const bgFilename = BG_TO_FILENAME_MAP[STAGE_TO_BG_MAP[stageId]];
+        const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
+        const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
 
-        let gmaPath = `${dirPath}/${stageName}.gma`;
-        let tplPath = `${dirPath}/${stageName}.tpl`;
-        const compress = type !== AVLZ_Type.NONE;
-        if (compress) {
-            tplPath += ".lz";
-            gmaPath += ".lz";
-        }
-        const [tplData, gmaData] = await Promise.all([
-            dataFetcher.fetchData(tplPath),
-            dataFetcher.fetchData(gmaPath),
+        const [stagedefBuf, stageGmaBuf, stageTplBuf, bgGmaBuf, bgTplBuf] = await Promise.all([
+            dataFetcher.fetchData(stagedefPath),
+            dataFetcher.fetchData(stageGmaPath),
+            dataFetcher.fetchData(stageTplPath),
+            dataFetcher.fetchData(bgGmaPath),
+            dataFetcher.fetchData(bgTplPath),
         ]);
-        let rawTpl = tplData.slice(0x00);
-        let rawGma = gmaData.slice(0x00);
-        if (compress) {
-            rawTpl = decompressLZSS(tplData, type);
-            rawGma = decompressLZSS(gmaData, type);
-        }
-        const tpl = AVtpl.parseAvTpl(rawTpl, prefix);
-        const gma = GMA.parse(rawGma);
 
-        let stagedef = undefined;
-        if (!stageName.startsWith("bg_")) {
-            const stageIdStr = stageName.slice(-3);
-            const stagedefPath = `${dirPath}/STAGE${stageIdStr}.lz`;
-            const stagedefData = await dataFetcher.fetchData(stagedefPath);
-            stagedef = parseStagedefLz(stagedefData);
-        }
+        const stagedef = parseStagedefLz(stagedefBuf);
+        const stageGma = GMA.parse(stageGmaBuf);
+        const stageTpl = AVtpl.parseAvTpl(stageTplBuf, 0);
+        const bgGma = GMA.parse(bgGmaBuf);
+        const bgTpl = AVtpl.parseAvTpl(bgTplBuf, 0);
 
-        return { gma, tpl, stagedef }
+        return { stagedef, stageGma, stageTpl, bgGma, bgTpl };
     }
 
     public instanceModel(sceneRender: SuperMonkeyBallSceneRenderer, name: string): GcmfModelInstance {

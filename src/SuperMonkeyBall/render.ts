@@ -18,11 +18,14 @@ import { AVTexture, AVTpl } from './AVtpl';
 import * as GMA from './gma';
 import * as SD from './stagedef';
 
-export class GMAData {
-    public stagedef?: SD.Stage;
-    public gma: GMA.GMA;
-    public tpl: AVTpl;
-}
+// Immutable stage/background definition
+export type StageData = {
+    stagedef: SD.Stage;
+    stageGma: GMA.GMA;
+    stageTpl: AVTpl;
+    bgGma: GMA.GMA;
+    bgTpl: AVTpl;
+};
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
     public addAVtplTextures(device: GfxDevice, avtpl: AVTpl): void {
