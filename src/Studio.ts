@@ -964,7 +964,7 @@ class Timeline {
 
     public playheadIsOnIcon(): boolean {
         for (const kfIcon of this.keyframeIcons) {
-            if (this.playhead.getX() === kfIcon.getX())
+            if (this.playhead.getT() === kfIcon.getT())
                 return true;
         }
         return false;
@@ -3139,6 +3139,8 @@ export class StudioPanel extends FloatingPanel {
                 }
                 
                 kfIcon.keyframesMap.forEach((kf, track) => {
+                    if ((tracks & track) === 0)
+                        return;
                     tracks ^= track;
                     if (track === KeyframeTrackType.posXTrack)
                         kf.value = posXKf.value;
