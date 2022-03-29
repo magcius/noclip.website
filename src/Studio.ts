@@ -4,7 +4,7 @@ import { FloatingPanel } from './DebugFloaters';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
 import { StudioCameraController } from './Camera';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants, angleDist } from './MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 import { getPointHermite } from './Spline';
@@ -975,10 +975,6 @@ class Timeline {
         return Math.max(...this.keyframeIcons.map((k) => { return k.keyframesMap.values().next().value.time }));
     }
 
-    public getLastKeyframeTimeSeconds(): string {
-        return (this.getLastKeyframeTimeMs() * MILLISECONDS_IN_SECOND).toFixed(2);
-    }
-
     public playheadIsOnIcon(): boolean {
         for (const kfIcon of this.keyframeIcons) {
             if (this.playhead.getT() === kfIcon.getT())
@@ -1003,8 +999,7 @@ class Timeline {
                     return kf;
             }
         }
-        // Should never happen... obviously.
-        throw 'No start keyframe icon exists for track.';
+        throw 'No end loop keyframe icon exists for track.';
     }
 
     public getStartKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
@@ -1015,7 +1010,8 @@ class Timeline {
                     return kf;
             }
         }
-        throw 'No end loop keyframe icon exists for track.';
+        // Should never happen... obviously.
+        throw 'No start keyframe icon exists for track.';
     }
 }
 
@@ -1026,7 +1022,6 @@ export class CameraAnimationManager {
 
     // The animation's duration.
     public durationMs: number;
-
 
     private findKeyframe(frames: Readonly<Keyframe[]>, time: number): number {
         for (let i = 0; i < frames.length; i++)
@@ -1267,7 +1262,6 @@ export class StudioPanel extends FloatingPanel {
     private previewLineKfDotSelectedColor: Color = Red;
 
     private selectedNumericInput: HTMLInputElement | undefined;
-    private bankRotationLinGrad: CanvasGradient;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
@@ -1998,9 +1992,10 @@ export class StudioPanel extends FloatingPanel {
         this.bankValueInput = this.contents.querySelector('#bankValueInput') as HTMLInputElement;
         this.bankRotationValCanvas = this.contents.querySelector('#bankRotationValCanvas') as HTMLCanvasElement;
         this.bankRotationValCanvasCtx = this.bankRotationValCanvas.getContext('2d') as CanvasRenderingContext2D;
-        this.bankRotationLinGrad = this.bankRotationValCanvasCtx.createLinearGradient(20,20,20,60);
-        this.bankRotationLinGrad.addColorStop(0, '#494949');
-        this.bankRotationLinGrad.addColorStop(1, '#2f2f2f');
+        const bankRotationLinGrad = this.bankRotationValCanvasCtx.createLinearGradient(20,20,20,60);
+        bankRotationLinGrad.addColorStop(0, '#494949');
+        bankRotationLinGrad.addColorStop(1, '#2f2f2f');
+        this.bankRotationValCanvasCtx.fillStyle = bankRotationLinGrad
         this.bankRotationValCanvasCtx.save();
 
         this.lockPerspectiveDiv = this.contents.querySelector('#lockPerspective') as HTMLElement;
@@ -2796,7 +2791,6 @@ export class StudioPanel extends FloatingPanel {
 
     private drawBankRotationWheel(angleRads: number, prevAngleRads?: number) {
         this.bankRotationValCanvasCtx.clearRect(0, 0, this.bankRotationValCanvas.width, this.bankRotationValCanvas.height);
-        this.bankRotationValCanvasCtx.fillStyle = this.bankRotationLinGrad;
         const width = this.bankRotationValCanvas.width;
         const height = this.bankRotationValCanvas.height;
         const outerRadius = 30;
@@ -2966,9 +2960,17 @@ export class StudioPanel extends FloatingPanel {
         this.timeline.draw();
     }
 
-    private getPreviewSteps(): InterpolationStep[] {
-        const steps: InterpolationStep[] = [];
+    private updatePreviewSteps() {
+        this.animationManager.initAnimationPlayback(this.animation, 0);
+        this.animation.posXTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.posYTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.posZTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtXTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtYTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtZTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.bankTrack.setAllCatmullRomTangents(this.animation.loop);
 
+        const steps: InterpolationStep[] = [];
         if (this.timeline.keyframeIcons.length > 1) {
             // TODO(jstpierre): Don't rely on animationManager for this.
             for (let time = 0; time <= this.animationManager.durationMs; time += StudioPanel.PREVIEW_STEP_TIME_MS) {
@@ -2977,25 +2979,7 @@ export class StudioPanel extends FloatingPanel {
                 steps.push(step);
             }
         }
-
-        return steps;
-    }
-
-    private updatePreviewSteps() {
-        this.animationManager.initAnimationPlayback(this.animation, 0);
-        this.updateAutoTangents();
-
-        this.animationPreviewSteps = this.getPreviewSteps();
-    }
-
-    private updateAutoTangents() {
-        this.animation.posXTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.posYTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.posZTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtXTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtYTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtZTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.bankTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animationPreviewSteps = steps;
     }
 
     private goToPreviewStepAtTime(t: number) {
