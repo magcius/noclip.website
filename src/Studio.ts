@@ -507,6 +507,15 @@ class Timeline {
         }
     }
 
+    public moveLoopEndframeIcons(t: number): void {
+        let x = (t / MILLISECONDS_IN_SECOND) * this.pixelsPerSecond / this.timelineScaleFactor
+        for (const kfIcon of this.keyframeIcons) {
+            if (kfIcon.type === KeyframeIconType.Loop_End) {
+                kfIcon.updatePosition(x, t);
+            }
+        }
+    }
+
     public onMouseDown(e: MouseEvent) {
         e.stopPropagation();
         // Check if click landed on playhead, or the part of the timeline where markers are displayed
@@ -1942,14 +1951,7 @@ export class StudioPanel extends FloatingPanel {
             if (this.animation.loop) {
                 this.addLoopEndFrames();
             } else {
-                this.animation.posXTrack.keyframes.pop();
-                this.animation.posYTrack.keyframes.pop();
-                this.animation.posZTrack.keyframes.pop();
-                this.animation.lookAtXTrack.keyframes.pop();
-                this.animation.lookAtYTrack.keyframes.pop();
-                this.animation.lookAtZTrack.keyframes.pop();
-                this.animation.bankTrack.keyframes.pop();
-                this.timeline.deleteEndframeIcons();
+                this.deleteLoopEndFrames();
             }
             this.updatePreviewSteps();
             this.timeline.draw();
@@ -3145,6 +3147,11 @@ export class StudioPanel extends FloatingPanel {
             }
         }
 
+        if (this.animation.loop && time > this.timeline.getLastKeyframeTimeMs()) {
+            this.ensureTimelineLength(time + 5000);
+            this.timeline.moveLoopEndframeIcons(time + 5000);
+        }
+
         if (tracks & KeyframeTrackType.posXTrack)
             this.animation.posXTrack.addKeyframe(posXKf);
         if (tracks & KeyframeTrackType.posYTrack)
@@ -3232,7 +3239,7 @@ export class StudioPanel extends FloatingPanel {
         this.saveState();
     }
 
-    private addLoopEndFrames() {
+    private addLoopEndFrames(): void {
         const time = this.timeline.getLastKeyframeTimeMs() + 5000;
 
         function makeLoopKeyframe(track: KeyframeTrack): Keyframe {
@@ -3273,10 +3280,25 @@ export class StudioPanel extends FloatingPanel {
             throw "Bad timelineMode";
         }
 
-        if (time > this.timeline.getTimelineLengthMs()) {
-            this.timelineLengthInput.value = (time / MILLISECONDS_IN_SECOND).toFixed(2);
+        this.ensureTimelineLength(time);
+    }
+
+    private ensureTimelineLength(timeMs: number): void {
+        if (timeMs > this.timeline.getTimelineLengthMs()) {
+            this.timelineLengthInput.value = (timeMs / MILLISECONDS_IN_SECOND).toFixed(2);
             this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
+    }
+
+    private deleteLoopEndFrames(): void {
+        this.animation.posXTrack.keyframes.pop();
+        this.animation.posYTrack.keyframes.pop();
+        this.animation.posZTrack.keyframes.pop();
+        this.animation.lookAtXTrack.keyframes.pop();
+        this.animation.lookAtYTrack.keyframes.pop();
+        this.animation.lookAtZTrack.keyframes.pop();
+        this.animation.bankTrack.keyframes.pop();
+        this.timeline.deleteEndframeIcons();
     }
 
     private newAnimation(): void {
