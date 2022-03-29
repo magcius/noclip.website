@@ -607,11 +607,13 @@ class Timeline {
             if (this.selectedKeyframeIcons.length === 1) {
                 // Don't allow a loop keyframe icon to be moved before any other keyframes.
                 if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End) {
-                    let boundIdx = this.keyframeIcons.length - 2;
-                    while (this.keyframeIcons[boundIdx].type === KeyframeIconType.Loop_End)
-                        boundIdx--;
+                    let minAllowedX = 0;
+                    for (const kfIcon of this.keyframeIcons) {
+                        if (kfIcon.type !== KeyframeIconType.Loop_End && kfIcon.getX() > minAllowedX)
+                            minAllowedX = kfIcon.getX();
+                    }
 
-                    targetX = clamp(targetX, this.keyframeIcons[boundIdx].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
+                    targetX = clamp(targetX, minAllowedX + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
                 } else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.Loop_End) {
                     targetX = clamp(targetX, this.keyframeIcons[0].getX() + Timeline.SNAP_DISTANCE_PX, this.keyframeIcons[this.keyframeIcons.length - 1].getX() - Timeline.SNAP_DISTANCE_PX);
                 }
@@ -627,8 +629,13 @@ class Timeline {
                 // any of them to be in an illegal position.
                 if (this.canMoveGroupTo(targetX)) {
                     const grabbedX = this.grabbedIcon.getX();
+                    let movedLoopEndIcons = false;
                     for (const kfIcon of this.selectedKeyframeIcons) {
+                        if (kfIcon.type === KeyframeIconType.Loop_End && movedLoopEndIcons)
+                            continue;
                         this.updateKeyframeIconPosition(kfIcon, targetX + (kfIcon.getX() - grabbedX));
+                        if (kfIcon.type === KeyframeIconType.Loop_End)
+                            movedLoopEndIcons = true;
                     }
                 }
             }
@@ -704,16 +711,18 @@ class Timeline {
             // range, or results in any keyframe moving past a loop keyframe icon,
             // prevent the update.
             for (const kfIcon of this.keyframeIcons) {
-                if (kfIcon.selected || kfIcon.getY() !== selectedIcon.getY())
+                if (selectedIcon.type === KeyframeIconType.Loop_End && !kfIcon.selected
+                    && kfIcon.type !== KeyframeIconType.Loop_End
+                    && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX)
+                    return false;
+                else if (kfIcon.selected || kfIcon.getY() !== selectedIcon.getY())
                     continue;
                 if (newX < Timeline.SNAP_DISTANCE_PX
                     || (newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX
                         && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX)
                     || (kfIcon.type === KeyframeIconType.Loop_End
                         && newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX)
-                    || (newX > this.width - Playhead.HALF_WIDTH)
-                    || (selectedIcon.type === KeyframeIconType.Loop_End 
-                        && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX))
+                    || (newX > this.width - Playhead.HALF_WIDTH))
                     return false;
             }
         }
