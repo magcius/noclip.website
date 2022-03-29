@@ -605,10 +605,16 @@ class Timeline {
         } else if (this.grabbedIcon && this.selectedKeyframeIcons.length) {
             if (this.selectedKeyframeIcons.length === 1) {
                 // Don't allow a loop keyframe icon to be moved before any other keyframes.
-                if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End)
-                    targetX = clamp(targetX, this.keyframeIcons[this.keyframeIcons.length - 2].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
-                else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.Loop_End)
+                if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End) {
+                    let boundIdx = this.keyframeIcons.length - 2;
+                    while (this.keyframeIcons[boundIdx].type === KeyframeIconType.Loop_End)
+                        boundIdx--;
+
+                    targetX = clamp(targetX, this.keyframeIcons[boundIdx].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
+                } else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.Loop_End) {
                     targetX = clamp(targetX, this.keyframeIcons[0].getX() + Timeline.SNAP_DISTANCE_PX, this.keyframeIcons[this.keyframeIcons.length - 1].getX() - Timeline.SNAP_DISTANCE_PX);
+                }
+
                 if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], this.playhead.getX());
                 else
@@ -723,14 +729,6 @@ class Timeline {
             return;
         kfIcon.selected = true;
         this.selectedKeyframeIcons.push(kfIcon);
-        if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
-            for (const icon of this.keyframeIcons) {
-                if (icon.type === kfIcon.type && !this.selectedKeyframeIcons.includes(icon)) {
-                    icon.selected = true;
-                    this.selectedKeyframeIcons.push(icon);
-                }
-            }
-        }
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
 
@@ -813,7 +811,15 @@ class Timeline {
                 t = this.keyframeIcons[snapKfIndex].getT();
             }
         }
-        icon.updatePosition(x, t);
+        if (icon.type === KeyframeIconType.Loop_End) {
+            for (const kfIcon of this.keyframeIcons) {
+                if (kfIcon.type === KeyframeIconType.Loop_End) {
+                    kfIcon.updatePosition(x, t);
+                }
+            }
+        } else {
+            icon.updatePosition(x, t);
+        }
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeIconMovedEvent', { bubbles: false }));
     }
 
