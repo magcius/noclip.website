@@ -2759,8 +2759,13 @@ export class StudioPanel extends FloatingPanel {
                 if (linkedKf)
                     this.getTrackByType(this.animation, trackType).setValue(linkedKf, val);
                 
-                if (trackType === KeyframeTrackType.bankTrack)
-                    this.drawBankRotationWheel(-val);
+                if (trackType === KeyframeTrackType.bankTrack) {
+                    const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
+                    let prevBank: number | undefined = undefined;
+                    if (prevIndex > -1)
+                        prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
+                    this.drawBankRotationWheel(-val, prevBank);
+                }
                 
                 this.updatePreviewSteps();
                 if (this.livePreviewCheckbox.checked)
@@ -2817,6 +2822,21 @@ export class StudioPanel extends FloatingPanel {
         this.bankRotationValCanvasCtx.lineTo(width / 2, (height / 2) - innerRadius + 15);
         this.bankRotationValCanvasCtx.stroke();
         this.bankRotationValCanvasCtx.restore();
+
+        if (prevAngleRads !== undefined && angleRads !== prevAngleRads) {
+            prevAngleRads *= -1;
+            this.bankRotationValCanvasCtx.save();
+            this.bankRotationValCanvasCtx.strokeStyle = '#ebb23c';
+            this.bankRotationValCanvasCtx.lineWidth = 2;
+            this.bankRotationValCanvasCtx.beginPath();
+            this.bankRotationValCanvasCtx.translate(width / 2, height / 2);
+            this.bankRotationValCanvasCtx.rotate(-Math.PI / 2);
+            this.bankRotationValCanvasCtx.rotate(prevAngleRads);
+            this.bankRotationValCanvasCtx.translate(-width / 2, -height / 2);
+            this.bankRotationValCanvasCtx.arc(width / 2, height / 2, (innerRadius + outerRadius) / 2, 0, (angleRads - prevAngleRads) % MathConstants.TAU, angleRads < prevAngleRads);
+            this.bankRotationValCanvasCtx.stroke();
+            this.bankRotationValCanvasCtx.restore();
+        }
     }
 
     private onKeyframeIconSelected() {
@@ -2826,12 +2846,16 @@ export class StudioPanel extends FloatingPanel {
         let commonEaseOutVal = 1;
         let commonInterpInType = 0;
         let commonInterpOutType = 0;
+        let prevBank: number | undefined = undefined;
 
         const updateValueInputs = (kf: Keyframe, trackType: KeyframeTrackType) => {
             keyframeTracks |= trackType;
             const input = this.getValueInput(trackType);
             if (trackType === KeyframeTrackType.bankTrack) {
                 input.value = (kf.value * MathConstants.RAD_TO_DEG).toFixed(0).toString();
+                const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
+                if (prevIndex > -1)
+                    prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
             } else {
                 input.value = kf.value.toFixed(0).toString();
             }
@@ -2902,7 +2926,7 @@ export class StudioPanel extends FloatingPanel {
                 this.lookAtZValueInputContainer.style.visibility = '';
                 
             if ((keyframeTracks & KeyframeTrackType.bankTrack)) {
-                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD);
+                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD, prevBank);
                 this.bankValueInputContainer.style.visibility = '';
             }
         }
