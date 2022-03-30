@@ -23,21 +23,21 @@ enum Pass {
 }
 
 export class ModelChache {
-    public gcmfChace = new Map<string, GcmfModel>();
-    public modelIDChace = new Map<string, number>();
+    public gcmfCache = new Map<string, GcmfModel>();
+    public modelIdCache = new Map<string, number>();
 
     public registGcmf(device: GfxDevice, renderer: SuperMonkeyBallSceneRenderer, gmaData: StageData, modelID: number) {
         renderer.textureHolder.addAVtplTextures(device, gmaData.stageTpl);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        for (let i = 0; i < gmaData.stageGma.gcmfEntrys.length; i++) {
-            const gcmf = new GcmfModel(device, cache, gmaData.stageGma.gcmfEntrys[i]);
-            this.gcmfChace.set(gcmf.gcmfEntry.name, gcmf);
-            this.modelIDChace.set(gcmf.gcmfEntry.name, modelID);
+        for (let i = 0; i < gmaData.stageGma.gcmfEntries.length; i++) {
+            const gcmf = new GcmfModel(device, cache, gmaData.stageGma.gcmfEntries[i]);
+            this.gcmfCache.set(gcmf.gcmfEntry.name, gcmf);
+            this.modelIdCache.set(gcmf.gcmfEntry.name, modelID);
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (const [, v] of this.gcmfChace.entries())
+        for (const [, v] of this.gcmfCache.entries())
             v.destroy(device);
     }
 }
@@ -159,7 +159,6 @@ export class SuperMonkeyBallSceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-
         const dataFetcher = context.dataFetcher;
 
         //load stage
@@ -169,7 +168,7 @@ export class SuperMonkeyBallSceneDesc {
         sceneRender.modelCache.registGcmf(device, sceneRender, stageDefn, prefix++);
 
         // only show gma
-        stageDefn.stageGma.gcmfEntrys.forEach(gcmfEntry => {
+        stageDefn.stageGma.gcmfEntries.forEach(gcmfEntry => {
             const name = gcmfEntry.name;
             this.instanceModel(sceneRender, name);
         });
@@ -205,10 +204,10 @@ export class SuperMonkeyBallSceneDesc {
     }
 
     public instanceModel(sceneRender: SuperMonkeyBallSceneRenderer, name: string): GcmfModelInstance {
-        const modelChace = sceneRender.modelCache;
-        const gcmfModel = assertExists(modelChace.gcmfChace.get(name));
-        const modelID = assertExists(modelChace.modelIDChace.get(name));
-        const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel, modelID);
+        const modelCache = sceneRender.modelCache;
+        const gcmfModel = assertExists(modelCache.gcmfCache.get(name));
+        const modelId = assertExists(modelCache.modelIdCache.get(name));
+        const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel, modelId);
         modelInstance.passMask = Pass.MAIN;
 
         sceneRender.modelData.push(gcmfModel);

@@ -16,16 +16,16 @@ import * as GX from "../gx/gx_enum";
 import { assert, hexzero, readString } from "../util";
 
 // GCMF Attribute
-export interface GcmfAttribute {
+export type GcmfAttribute = {
     value16Bit: Boolean, // vertex length is 16bit (VTXFMT1)
     unk0x01: Boolean,    // maybe not exist
     stiching: Boolean,
     skin: Boolean,
     effective: Boolean
-}
+};
 
 // GCMF Material
-export interface GcmfMaterial {
+export type GcmfMaterial = {
     unk0x02: number,
     unk0x03: number,
     colors: Color[]
@@ -37,54 +37,54 @@ export interface GcmfMaterial {
     unk0x14: number, // sort index?? shader index?
     unk0x15: number,
     unk0x40: number // relates "TEV"
-}
+};
 
 // GCMF VertexControlHeader
-interface GcmfVertexControl {
+type GcmfVertexControl  = {
     count: number;
     vtxCon1: VtxConType1,
     vtxCon2: VtxConType2,
     vtxCon3: VtxConType3,
     vtxCon4: VtxConType4
-}
+};
 
-interface VtxConType1 {
+type VtxConType1 = {
     position: vec3,
     normal: vec3,
     unk0x1C: number
-}
+};
 
-interface VtxConType2 {
+type VtxConType2 = {
     buffer: ArrayBuffer
-}
+};
 
-interface VtxConType3 {
+type VtxConType3 = {
     count: number,
     offs: number[]
-}
+};
 
-interface VtxConType4 {
+type VtxConType4 = {
     offs: number[]
 }
 
 // GCMF Submesh
-export interface GcmfShape {
+export type GcmfShape = {
     material: GcmfMaterial,
     boundingSphere: vec3,
     dlistHeaders: GcmfDisplaylistHeader[],
     loadedVertexLayout: LoadedVertexLayout,
     loadedVertexDatas: LoadedVertexData[]
-}
+};
 
 // GCMF DisplaylistHeader
-interface GcmfDisplaylistHeader {
+type GcmfDisplaylistHeader = {
     mtxIdxs: number[],
     dlistSizes: number[],
     submesh_end_offs: number
-}
+};
 
 // GCMF Sampler
-export interface GcmfSampler {
+export type GcmfSampler = {
     unk0x00: number,
     mipmapAV: number,
     uvWrap: number,
@@ -96,14 +96,14 @@ export interface GcmfSampler {
     unk0x10: number // TEV
     alphaType: number,
     colorType: number
-}
+};
 
-interface GcmfEntryOffset {
+type GcmfEntryOffset = {
     gcmfOffs: number,
     nameOffs: number
 }
 
-interface Gcmf {
+type Gcmf = {
     attribute: GcmfAttribute,
     origin: vec3,
     boundingRadius: number,
@@ -116,13 +116,13 @@ interface Gcmf {
     shapes: GcmfShape[]
 }
 
-export interface GcmfEntry {
+export type GcmfEntry = {
     gcmf: Gcmf,
     name: string
 }
 
-export interface GMA {
-    gcmfEntrys: GcmfEntry[]
+export type GMA = {
+    gcmfEntries: GcmfEntry[]
 }
 
 function parseSampler(buffer: ArrayBufferSlice): GcmfSampler {
@@ -424,7 +424,7 @@ export function parse(buffer: ArrayBufferSlice): GMA {
     const view = buffer.createDataView();
     const count = view.getInt32(0x00);
     const gcmfEntryOffs: GcmfEntryOffset[] = [];
-    const gcmfEntrys: GcmfEntry[] = [];
+    const gcmfEntries: GcmfEntry[] = [];
 
     const gcmfBaseOffs = view.getUint32(0x04);
 
@@ -465,8 +465,8 @@ export function parse(buffer: ArrayBufferSlice): GMA {
             // ignore invaild gcmf
             continue;
         }
-        gcmfEntrys.push({ gcmf, name });
+        gcmfEntries.push({ gcmf, name });
     }
 
-    return { gcmfEntrys };
+    return { gcmfEntries };
 }

@@ -399,7 +399,6 @@ class MaterialInstance {
     }
 }
 
-
 const matrixScratchArray = nArray(1, () => mat4.create());
 export class GcmfModelInstance {
     public shapeInstances: ShapeInstance[] = [];
