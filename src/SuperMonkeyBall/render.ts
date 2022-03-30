@@ -66,10 +66,10 @@ export class GcmfModel {
         }
 
         for (let i = 0; i < gcmf.shapes.length; i++) {
-            for(let j = 0; j < 1; j++){
+            for (let j = 0; j < 1; j++) {
                 const GcmfMaterial = gcmf.shapes[i].material;
                 const samplerIdx = GcmfMaterial.samplerIdxs[j];
-                if (samplerIdx < 0){
+                if (samplerIdx < 0) {
                     break;
                 }
                 const sampler = gcmf.samplers[samplerIdx];
@@ -89,7 +89,7 @@ export class GcmfModel {
 }
 
 const bboxScratch = new AABB();
-const packetParams = new DrawParams();
+const drawParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
@@ -111,22 +111,22 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
 
-        for(let i = 0; i < this.shape.material.samplerIdxs.length; i++){
-            if (this.shape.material.samplerIdxs[i] < 0){
+        for (let i = 0; i < this.shape.material.samplerIdxs.length; i++) {
+            if (this.shape.material.samplerIdxs[i] < 0) {
                 break;
             }
             materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.samplerIdxs[i], null, camera, viewport);
         }
 
-        packetParams.clear();
+        drawParams.clear();
         for (let d = 0; d < this.shape.loadedVertexDatas[this.shape_idx].draws.length; d++) {
             const draw = this.shape.loadedVertexDatas[this.shape_idx].draws[d];
 
-            mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
+            mat4.copy(drawParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, draw);
-            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, packetParams);
+            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -143,15 +143,6 @@ function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.Light
     const colorChannel = colorChannelCopy(o.colorChannel);
     const alphaChannel = colorChannelCopy(o.alphaChannel);
     return { colorChannel, alphaChannel };
-}
-
-type CopyFunc<T> = (a: T) => T;
-
-function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
-    const b = Array(a.length);
-    for (let i = 0; i < a.length; i++)
-        b[i] = copyFunc(a[i]);
-    return b;
 }
 
 const matrixScratch = mat4.create();
@@ -175,7 +166,7 @@ class MaterialInstance {
         const mb = new GXMaterialBuilder();
         const matCount = material.matCount;
         let i = 0;
-        for(i = 0; i < matCount; i++){
+        for (i = 0; i < matCount; i++) {
             mb.setTevDirect(i);
             let ambSrc = GX.ColorSrc.VTX;
             let matSrc = GX.ColorSrc.VTX;
@@ -190,7 +181,7 @@ class MaterialInstance {
 
             // Color
             let colorInA = GX.CC.ZERO;
-            let colorInB = ( (material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ? GX.CC.RASC : GX.CC.KONST;
+            let colorInB = ((material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0) ? GX.CC.RASC : GX.CC.KONST;
             let colorInC = GX.CC.TEXC;
             let colorInD = GX.CC.ZERO;
             let colorOp = GX.TevOp.ADD;
@@ -199,39 +190,39 @@ class MaterialInstance {
             let colorRegId = GX.Register.PREV;
             let sel = GX.KonstColorSel.KCSEL_1; // Konst value
 
-            if (i > 0){
+            if (i > 0) {
                 // tev stage more than 1
                 colorInB = GX.CC.CPREV;
             }
-            if ( colorType === 0x1 ){
+            if (colorType === 0x1) {
                 // 0x1
                 colorInC = GX.CC.ONE;
                 colorInD = GX.CC.TEXC;
             }
-            if ( colorType === 0x2 ){
+            if (colorType === 0x2) {
                 // 0x2 sub
                 colorInD = colorInB;
                 colorInB = GX.CC.ONE;
                 colorOp = GX.TevOp.SUB;
             }
-            if ( colorType === 0x3 ){
+            if (colorType === 0x3) {
                 // 0x3
                 colorInC = colorInB;
                 colorInB = GX.CC.ONE;
             }
 
-            if ( colorType === 0x4 ){
+            if (colorType === 0x4) {
                 // 0x4
                 colorInA = GX.CC.CPREV;
                 colorInB = GX.CC.TEXC;
                 colorInC = GX.CC.TEXA;
                 colorInD = GX.CC.ZERO;
             }
-            
+
             mb.setTevKColorSel(i, sel);
             mb.setTevColorIn(i, colorInA, colorInB, colorInC, colorInD);
             mb.setTevColorOp(i, colorOp, TevOp, colorScale, true, colorRegId);
-            
+
             sel = GX.KonstColorSel.KCSEL_1;
             // Alpha
             let alphaInA = GX.CA.TEXA;
@@ -242,14 +233,14 @@ class MaterialInstance {
             let alphaScale = GX.TevScale.SCALE_1;
             let alphaRegId = GX.Register.PREV;
 
-            if ( (alphaType & (1 << 0)) !== 0 ){
+            if ((alphaType & (1 << 0)) !== 0) {
                 alphaInD = GX.CA.APREV;
             }
-            if ( (alphaType & (1 << 1)) !== 0 ){
+            if ((alphaType & (1 << 1)) !== 0) {
                 // colorInD = GX.CC.CPREV;
                 alphaInD = GX.CA.APREV;
             }
-            if ( (alphaType & (1 << 2)) !== 0 ){
+            if ((alphaType & (1 << 2)) !== 0) {
                 // input swap?
                 alphaOp = GX.TevOp.SUB;
             }
@@ -300,7 +291,7 @@ class MaterialInstance {
         // 0x65
         mb.setZMode(true, GX.CompareType.LEQUAL, (mat_unk0x03 & (1 << 5)) !== 0 ? false : true);
 
-        if (transparent){
+        if (transparent) {
             // texture conatins "alpha" value
             mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x80, GX.AlphaOp.AND, GX.CompareType.LEQUAL, 0xFF);
         } else {
@@ -308,7 +299,7 @@ class MaterialInstance {
         }
 
         let dstFactor = GX.BlendFactor.INVSRCALPHA;
-        if ((mat_unk0x03 & (1 << 6)) !== 0){
+        if ((mat_unk0x03 & (1 << 6)) !== 0) {
             // Blend Dsetination Factor?
             dstFactor = GX.BlendFactor.ONE;
         }
@@ -366,7 +357,7 @@ class MaterialInstance {
         const material = this.materialData.material;
         dst.reset();
         let samplerIdx = material.samplerIdxs[i];
-        if(samplerIdx < 0){
+        if (samplerIdx < 0) {
             return;
         }
         let texIdx = 0;
@@ -376,7 +367,7 @@ class MaterialInstance {
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
         let lodBias = 0;
-        switch (sampler.anisotropy){
+        switch (sampler.anisotropy) {
             case 1:
                 lodBias = -2;
                 break;
@@ -430,7 +421,7 @@ export class GcmfModelInstance {
 
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
         this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
-        for (let i = 0; i < this.gcmfModel.materialData.length; i++){
+        for (let i = 0; i < this.gcmfModel.materialData.length; i++) {
             const transparent = i >= this.gcmfModel.gcmfEntry.gcmf.materialCount;
             this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers, modelID, transparent);
         }
@@ -440,7 +431,7 @@ export class GcmfModelInstance {
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const materialInstance = this.materialInstances[i];
             const shape = gcmf.shapes[i];
-            for (let j = 0; j < shape.loadedVertexDatas.length; j++){
+            for (let j = 0; j < shape.loadedVertexDatas.length; j++) {
                 const shapeData = this.gcmfModel.shapeHelperGfx[idx];
                 const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance, j);
                 this.shapeInstances.push(shapeInstance);
@@ -473,31 +464,38 @@ export class GcmfModelInstance {
     }
 
     private calcView(camera: Camera): void {
+        // todo(complexplane): Function seems to do nothing atm
+
         const viewMatrix = matrixScratch;
 
-        if (this.isSkybox){
+        if (this.isSkybox) {
+            // todo(complexplane): Just copies view matrix out of camera with 0 translation,
+            // but skyboxes in SMB1 don't seem parented to the camera position?
             computeViewMatrixSkybox(viewMatrix, camera);
-
-        } else{
+        } else {
+            // Just copies view matrix out of camera
             computeViewMatrix(viewMatrix, camera);
         }
 
         const dstDrawMatrix = this.instanceStateData.drawViewMatrixArray[0];
 
+        // todo(complexplane): dstDrawMatrix is unused
         mat4.mul(dstDrawMatrix, viewMatrix, this.modelMatrix);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
         const camera = viewerInput.camera;
+
+        // todo(complexplane): modelVisibility currently unused (and probably should be boolean or early return or something?)
+        let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
 
         if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
             if (this.isSkybox) {
                 modelVisibility = IntersectionState.FULLY_INSIDE;
             } else {
                 let bbox = new AABB();
-                bbox.set(-gcmf.boundSpeher, -gcmf.boundSpeher, -gcmf.boundSpeher, gcmf.boundSpeher, gcmf.boundSpeher, gcmf.boundSpeher);
+                bbox.set(-gcmf.boundingRadius, -gcmf.boundingRadius, -gcmf.boundingRadius, gcmf.boundingRadius, gcmf.boundingRadius, gcmf.boundingRadius);
                 bboxScratch.transform(bbox, this.modelMatrix);
                 if (!viewerInput.camera.frustum.contains(bboxScratch))
                     modelVisibility = IntersectionState.FULLY_OUTSIDE;
@@ -523,7 +521,6 @@ export class GcmfModelInstance {
 
 }
 
-
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
@@ -539,12 +536,12 @@ class MaterialData {
             let texFilter = GfxTexFilterMode.Bilinear;
             let MipFilter = GfxMipFilterMode.NoMip;
 
-            if ((mipmapAV & (1 << 1)) !== 0){
-                texFilter = GfxTexFilterMode.Bilinear;
+            if ((mipmapAV & (1 << 1)) !== 0) {
+                texFilter = GfxTexFilterMode.Bilinear;  // todo(complexplane): Redundant?
                 MipFilter = GfxMipFilterMode.Linear;
             }
 
-            return [ texFilter, MipFilter ]
+            return [texFilter, MipFilter]
         }
 
         for (let i = 0; i < 8; i++) {
@@ -553,7 +550,7 @@ class MaterialData {
             const wrapT = (uvWrap >> 4) & 0x03 as GX.WrapMode;
 
             const [minFilter, mipFilter] = translateAVTexFilterGfx(sampler.mipmapAV);
-            const [magFilter]            = translateAVTexFilterGfx(sampler.mipmapAV);
+            const [magFilter] = translateAVTexFilterGfx(sampler.mipmapAV);
 
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(wrapS),

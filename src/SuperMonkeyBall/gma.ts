@@ -106,7 +106,7 @@ interface GcmfEntryOffset {
 interface Gcmf {
     attribute: GcmfAttribute,
     origin: vec3,
-    boundSpeher: number,
+    boundingRadius: number,
     texCount: number,
     materialCount: number,
     traslucidMaterialCount: number,
@@ -124,7 +124,6 @@ export interface GcmfEntry {
 export interface GMA {
     gcmfEntrys: GcmfEntry[]
 }
-
 
 function parseSampler(buffer: ArrayBufferSlice): GcmfSampler {
     const view = buffer.createDataView();
@@ -418,7 +417,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
         shapeOffs += offs;
     }
 
-    return { attribute, origin, boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
+    return { attribute, origin, boundingRadius: boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
 export function parse(buffer: ArrayBufferSlice): GMA {
