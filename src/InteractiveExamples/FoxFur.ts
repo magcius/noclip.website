@@ -4,7 +4,7 @@ import { OrbitCameraController } from '../Camera';
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
 import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { getDataURLForPath } from "../DataFetcher";
+import { DataFetcher } from "../DataFetcher";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
@@ -25,8 +25,8 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `FoxFur`;
 
-function fetchPNG(path: string): Promise<ImageData> {
-    path = getDataURLForPath(path);
+function fetchPNG(dataFetcher: DataFetcher, path: string): Promise<ImageData> {
+    path = dataFetcher.getDataURLForPath(path);
     const img = document.createElement('img');
     img.crossOrigin = 'anonymous';
     img.src = path;
@@ -44,7 +44,6 @@ function fetchPNG(path: string): Promise<ImageData> {
 }
 
 function makeTextureFromImageData(device: GfxDevice, imageData: ImageData): GfxTexture {
-
     const texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageData.width, imageData.height, 1));
     device.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
     return texture;
@@ -487,7 +486,7 @@ export class FoxFur implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
         const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer as ArrayBuffer);
-        const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
+        const bodyTex = await fetchPNG(context.dataFetcher, `${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);
         window.main.ui.debugFloaterHolder.bindPanel(o);
