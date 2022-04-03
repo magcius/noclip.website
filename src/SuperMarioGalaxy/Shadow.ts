@@ -370,7 +370,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.material.allocatedrawParamsDataOnInst(template, drawParams);
+        this.material.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
@@ -442,7 +442,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.loadDrawModelMtx(drawParams, viewerInput);
-        this.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialFront.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
         renderInstManager.popTemplateRenderInst();
@@ -1097,7 +1097,7 @@ class AlphaShadow extends NameObj {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(drawParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelperDrawAlpha.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

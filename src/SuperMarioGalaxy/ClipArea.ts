@@ -58,7 +58,7 @@ abstract class ClipAreaShape {
         const template = renderInstManager.pushTemplateRenderInst();
         this.calcVolumeMatrix(drawParams.u_PosMtx[0], mtx, scale);
         mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, drawParams.u_PosMtx[0]);
-        sceneObjHolder.clipAreaHolder!.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
+        sceneObjHolder.clipAreaHolder!.materialFront.allocateDrawParamsDataOnInst(template, drawParams);
         drawSimpleModel(renderInstManager, this.modelData!);
         renderInstManager.popTemplateRenderInst();
     }
@@ -473,7 +473,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         this.materialLaser.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialLaser.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialLaser.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

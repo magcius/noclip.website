@@ -243,7 +243,7 @@ class FakeWaterModelInstance {
 
         // Calc our draw params.
         mat4.copy(drawParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
-        this.materialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialInstance.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         // Push our material instance.
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
