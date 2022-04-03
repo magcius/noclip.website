@@ -126,7 +126,7 @@ class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, draw);
-            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
             renderInstManager.submitRenderInst(renderInst);
         }
