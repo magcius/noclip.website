@@ -3591,6 +3591,10 @@ export class StudioPanel extends FloatingPanel {
             e.setAttribute('disabled', '');
             e.classList.add('disabled');
         });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.setAttribute('disabled', '');
+            e.classList.add('disabled');
+        });
     }
 
     private enableControls(): void {
@@ -3599,6 +3603,10 @@ export class StudioPanel extends FloatingPanel {
                 e.removeAttribute('disabled');
                 e.classList.remove('disabled');
             }
+        });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.removeAttribute('disabled');
+            e.classList.remove('disabled');
         });
     }
 
