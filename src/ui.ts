@@ -1914,15 +1914,6 @@ class StudioSidePanel extends Panel {
         };
         setElementHighlighted(this.disableStudioBtn, true);
         setElementHighlighted(this.enableStudioBtn, false);
-
-        const showPanel = window.localStorage.getItem('show-studio-side-panel');
-        if (!showPanel)
-            this.elem.style.display = 'none';
-    }
-
-    public v(): void {
-        this.elem.style.display = '';
-        window.localStorage.setItem('show-studio-side-panel', 'true');
     }
 }
 
