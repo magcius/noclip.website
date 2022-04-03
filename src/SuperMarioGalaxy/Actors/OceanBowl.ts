@@ -396,7 +396,7 @@ export class OceanBowl extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -429,7 +429,7 @@ export class OceanBowl extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         mat4.copy(drawParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelperBloom.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelperBloom.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

@@ -406,7 +406,7 @@ export class FlowerPacket {
             const renderInst = renderInstManager.newRenderInst();
             model.shapes[0].setOnRenderInst(renderInst);
             mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
-            model.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            model.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -766,7 +766,7 @@ export class TreePacket {
                 const shadowRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shadow.shapes[0].setOnRenderInst(shadowRenderInst);
                 mat4.mul(drawParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
-                this.treeModel.shadow.materialHelper.allocatedrawParamsDataOnInst(shadowRenderInst, drawParams);
+                this.treeModel.shadow.materialHelper.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
         }
@@ -794,13 +794,13 @@ export class TreePacket {
                 const trunkRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[0].setOnRenderInst(trunkRenderInst);
                 mat4.mul(drawParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
-                this.treeModel.main.materialHelper.allocatedrawParamsDataOnInst(trunkRenderInst, drawParams);
+                this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(trunkRenderInst, drawParams);
                 renderInstManager.submitRenderInst(trunkRenderInst);
 
                 const topRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.main.shapes[1].setOnRenderInst(topRenderInst);
                 mat4.mul(drawParams.u_PosMtx[0], worldToView, data.topModelMtx);
-                this.treeModel.main.materialHelper.allocatedrawParamsDataOnInst(topRenderInst, drawParams);
+                this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(topRenderInst, drawParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
         }
@@ -1060,7 +1060,7 @@ export class GrassPacket {
                 const renderInst = renderInstManager.newRenderInst();
                 this.grassModel.shapes[0].setOnRenderInst(renderInst);
                 mat4.mul(drawParams.u_PosMtx[0], worldToView, data.modelMtx);
-                this.grassModel.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+                this.grassModel.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }

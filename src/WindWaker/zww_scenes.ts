@@ -242,7 +242,7 @@ class dDlst_alphaModel_c {
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
                 mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
-                this.materialHelperBackRevZ.allocatedrawParamsDataOnInst(template, drawParams);
+                this.materialHelperBackRevZ.allocateDrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
@@ -270,7 +270,7 @@ class dDlst_alphaModel_c {
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(drawParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelperDrawAlpha.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
 
         this.reset();

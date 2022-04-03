@@ -21,7 +21,7 @@ import { World } from './world';
 import { LightType } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
-const scratchdrawParams = new DrawParams();
+const scratchDrawParams = new DrawParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
@@ -294,7 +294,7 @@ export class SphereMapManager {
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
 
-        scratchdrawParams.clear();
+        scratchDrawParams.clear();
         scratchMaterialParams.clear();
 
         const ambParams = this.params[mapIdx]; // TODO: selectable per object
@@ -304,7 +304,7 @@ export class SphereMapManager {
         else // SphereMapType.ReflectiveProbe
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 

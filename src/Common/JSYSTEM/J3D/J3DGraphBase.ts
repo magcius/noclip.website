@@ -157,7 +157,7 @@ export class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[i]);
-            materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, drawParams);

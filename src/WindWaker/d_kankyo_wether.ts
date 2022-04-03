@@ -166,7 +166,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
     mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams_);
+    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 

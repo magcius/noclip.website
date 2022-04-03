@@ -466,7 +466,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         const template = renderInstManager.pushTemplateRenderInst();
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelperEnvBack.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialHelperEnvBack.allocateDrawParamsDataOnInst(template, drawParams);
 
         if (this.isStartPosCamera && !this.isCameraInside) {
             // TODO(jstpierre)
