@@ -186,7 +186,7 @@ class SurfaceInstance {
             this.materialGroupInstance.prepareToRender(renderHelper.renderInstManager, viewerInput, uvAnimationModelMatrix, isSkybox, actorLights, OpaqueBlack);
             this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
             this.surfaceData.shapeHelper.setOnRenderInst(renderInst, packet);
-            this.materialGroupInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, this.drawParams);
+            this.materialGroupInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, this.drawParams);
 
             renderHelper.renderInstManager.submitRenderInst(renderInst);
         }

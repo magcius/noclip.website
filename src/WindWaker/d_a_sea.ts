@@ -570,7 +570,7 @@ export class d_a_sea extends fopAc_ac_c {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

@@ -485,7 +485,7 @@ class FurCtrl {
 
                 const renderInst = renderInstManager.newRenderInst();
                 shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[j]);
-                this.furDrawer.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+                this.furDrawer.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
                 renderInstManager.submitRenderInst(renderInst);
             }

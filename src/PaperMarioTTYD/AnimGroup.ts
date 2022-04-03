@@ -642,7 +642,7 @@ class AnimGroupInstance_Shape {
             materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
-            materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
             for (let j = 0; j < draw.texId.length; j++) {
                 const texId = draw.texId[j];

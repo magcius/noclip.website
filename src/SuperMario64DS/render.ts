@@ -30,7 +30,7 @@ export class NITRO_Program extends DeviceProgram {
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_drawParams = 2;
+    public static ub_DrawParams = 2;
 
     public static both = `
 precision mediump float;
@@ -364,8 +364,8 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_drawParams, 12*32);
-        const d = template.mapUniformBufferF32(NITRO_Program.ub_drawParams);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
+        const d = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
             const matrixId = this.batchData.batch.matrixTable[i];
