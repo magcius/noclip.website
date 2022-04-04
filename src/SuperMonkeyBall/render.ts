@@ -67,13 +67,13 @@ export class GcmfModel {
 
         for (let i = 0; i < gcmf.shapes.length; i++) {
             for (let j = 0; j < 1; j++) {
-                const GcmfMaterial = gcmf.shapes[i].material;
-                const samplerIdx = GcmfMaterial.samplerIdxs[j];
+                const gcmfMaterial = gcmf.shapes[i].material;
+                const samplerIdx = gcmfMaterial.samplerIdxs[j];
                 if (samplerIdx < 0) {
                     break;
                 }
                 const sampler = gcmf.samplers[samplerIdx];
-                const material = new MaterialData(device, GcmfMaterial, sampler, this.materialHacks);
+                const material = new MaterialData(device, gcmfMaterial, sampler, this.materialHacks);
                 this.materialData.push(material);
             }
         }
@@ -135,15 +135,6 @@ class ShapeInstance {
     }
 }
 
-function colorChannelCopy(o: GX_Material.ColorChannelControl): GX_Material.ColorChannelControl {
-    return Object.assign({}, o);
-}
-
-function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.LightChannelControl {
-    const colorChannel = colorChannelCopy(o.colorChannel);
-    const alphaChannel = colorChannelCopy(o.alphaChannel);
-    return { colorChannel, alphaChannel };
-}
 
 const matrixScratch = mat4.create();
 const materialParams = new MaterialParams();
@@ -353,10 +344,10 @@ class MaterialInstance {
         }
     }
 
-    private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, i: number): void {
+    private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, samplerIdxIdx: number): void {
         const material = this.materialData.material;
         dst.reset();
-        let samplerIdx = material.samplerIdxs[i];
+        let samplerIdx = material.samplerIdxs[samplerIdxIdx];
         if (samplerIdx < 0) {
             return;
         }
@@ -365,7 +356,7 @@ class MaterialInstance {
         texIdx = sampler.texIdx;
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
-        dst.gfxSampler = this.materialData.gfxSamplers[i];
+        dst.gfxSampler = this.materialData.gfxSamplers[samplerIdxIdx];
         let lodBias = 0;
         switch (sampler.anisotropy) {
             case 1:
@@ -463,8 +454,6 @@ export class GcmfModelInstance {
     }
 
     private calcView(camera: Camera): void {
-        // todo(complexplane): Function seems to do nothing atm
-
         const viewMatrix = matrixScratch;
 
         if (this.isSkybox) {
@@ -478,7 +467,6 @@ export class GcmfModelInstance {
 
         const dstDrawMatrix = this.instanceStateData.drawViewMatrixArray[0];
 
-        // todo(complexplane): dstDrawMatrix is unused
         mat4.mul(dstDrawMatrix, viewMatrix, this.modelMatrix);
     }
 
@@ -505,6 +493,8 @@ export class GcmfModelInstance {
         this.calcView(camera);
 
         const template = renderInstManager.pushTemplateRenderInst();
+        // todo(complexplane): filterKey and using a single list of render insts in general should be considered deprecated,
+        // instead use multiple lists
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeInstance = this.shapeInstances[i];

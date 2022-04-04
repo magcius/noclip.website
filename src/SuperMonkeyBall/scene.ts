@@ -22,7 +22,7 @@ enum Pass {
     MAIN = 0x02,
 }
 
-export class ModelChache {
+export class ModelCache {
     public gcmfCache = new Map<string, GcmfModel>();
     public modelIdCache = new Map<string, number>();
 
@@ -49,7 +49,7 @@ export class SuperMonkeyBallSceneRenderer extends BasicGXRendererHelper {
     public modelInstances: GcmfModelInstance[] = [];
     public modelData: GcmfModel[] = [];
 
-    public modelCache = new ModelChache();
+    public modelCache = new ModelCache();
     private drawColi: boolean = false;
 
     constructor(private device: GfxDevice, private stageData: StageData) {

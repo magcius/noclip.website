@@ -6,9 +6,11 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as GX from '../gx/gx_enum';
+import { TextureInputGX } from '../gx/gx_texture';
 import { assert } from '../util';
 
-export interface AVTexture {
+// todo(complexplane): Just use TextureInputGX?
+export interface AVTexture extends TextureInputGX {
     name: string;
     format: GX.TexFormat;
     offs: number;
