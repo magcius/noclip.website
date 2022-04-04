@@ -68,6 +68,7 @@ type VtxConType4 = {
 }
 
 // GCMF Submesh
+// todo(complexplane): GPU data probably belongs in ShapeInstance or similar
 export type GcmfShape = {
     material: GcmfMaterial,
     boundingSphere: vec3,

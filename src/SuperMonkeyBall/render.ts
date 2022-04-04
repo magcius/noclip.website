@@ -33,6 +33,7 @@ export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
     }
 }
 
+// todo(complexplane): Remove
 class InstanceStateData {
     public jointToWorldMatrixVisibility: IntersectionState[] = [];
     public jointToWorldMatrixArray: mat4[] = [];
@@ -93,6 +94,7 @@ const drawParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
+    // todo(complexplane): Shape should own its own LoadedVertexData instead of referencing in GcmfShape by index
     constructor(public shape: GMA.GcmfShape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance, public shape_idx: number) {
     }
 
@@ -310,29 +312,6 @@ class MaterialInstance {
         this.materialHelper.setMaterialHacks(materialHacks);
     }
 
-    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        const material = this.materialData.material;
-        const flipY = materialParams.m_TextureMapping[texIdx].flipY;
-        const flipYScale = flipY ? -1.0 : 1.0;
-        const dstPost = materialParams.u_PostTexMtx[texIdx];
-
-        mat4.identity(dstPost);
-
-        mat4.mul(dstPost, matrixScratch, dstPost);
-    }
-
-    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
-        const dst = materialParams.u_Color[i];
-        let color: Color;
-        if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
-            color = this.modelInstance.colorOverrides[i];
-        } else {
-            color = fallbackColor;
-        }
-
-        colorCopy(dst, color);
-    }
-
     private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
@@ -357,23 +336,23 @@ class MaterialInstance {
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[samplerIdxIdx];
-        let lodBias = 0;
-        switch (sampler.anisotropy) {
-            case 1:
-                lodBias = -2;
-                break;
-            case 2:
-                lodBias = -4;
-                break;
-            case 4:
-                lodBias = -8;
-                break;
-            case 0:
-            default:
-                lodBias = 0;
-                break;
-        }
-        dst.lodBias = lodBias;
+        // let lodBias = 0;
+        // switch (sampler.anisotropy) {
+        //     case 1:
+        //         lodBias = -2;
+        //         break;
+        //     case 2:
+        //         lodBias = -4;
+        //         break;
+        //     case 4:
+        //         lodBias = -8;
+        //         break;
+        //     case 0:
+        //     default:
+        //         lodBias = 0;
+        //         break;
+        // }
+        // dst.lodBias = lodBias;
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -390,7 +369,6 @@ class MaterialInstance {
     }
 }
 
-const matrixScratchArray = nArray(1, () => mat4.create());
 export class GcmfModelInstance {
     public shapeInstances: ShapeInstance[] = [];
     public materialInstances: MaterialInstance[] = [];
@@ -399,6 +377,7 @@ export class GcmfModelInstance {
 
     public colorOverrides: Color[] = [];
 
+    // todo(complexplane): Remove most of this stuff
     public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
     public name: string;
@@ -430,10 +409,13 @@ export class GcmfModelInstance {
         }
     }
 
+    // todo(complexplane): Shouldn't this be done on shapes or models (need z depth) instead of materials?
     public setSortKeyLayer(layer: GfxRendererLayer): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setSortKeyLayer(layer);
     }
+
+    // todo(complexplane): Should we just have one method that sets from a MaterialHacks object?
 
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -445,14 +427,17 @@ export class GcmfModelInstance {
             this.materialInstances[i].setMaterialHacks({ disableTextures: !v });
     }
 
+    // todo(complexplane): Remove
     public setColorOverride(i: ColorKind, color: Color): void {
         this.colorOverrides[i] = color;
     }
 
+    // todo(complexplane): Remove
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
+    // todo(complexplane): Remove
     private calcView(camera: Camera): void {
         const viewMatrix = matrixScratch;
 
@@ -510,6 +495,9 @@ export class GcmfModelInstance {
 
 }
 
+// todo(complexplane): I'm thinking we associate a GfxSampler directly with the GfxTexture / GXTexture it references,
+// then stick a list of these bundles in the Material instance. Materials just own a list of "sampler instances" which
+// can be bound at render time easily (eliminates GXTextureHolder too).
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
