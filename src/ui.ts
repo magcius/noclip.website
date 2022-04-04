@@ -1839,6 +1839,7 @@ class StatisticsPanel extends Panel {
 }
 
 class StudioSidePanel extends Panel {
+    private studioSidePanelHelpBtn: HTMLButtonElement;
     private enableStudioBtn: HTMLElement;
     private disableStudioBtn: HTMLElement;
 
@@ -1858,17 +1859,40 @@ class StudioSidePanel extends Panel {
                     background-color: rgb(64, 64, 64);
                     cursor: pointer;
                 }
+                #studioSidePanelHelpBtn {
+                    width: 32px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    margin-left: 1rem;
+                    background: transparent;
+                    border: none;
+                    cursor: pointer;
+                }
             </style>
             `);
         this.contents.insertAdjacentHTML('beforeend', `
             <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
-                <div style="font-weight: bold;">Studio Mode</div>
+                <div style="display: flex;">
+                    <span>Studio Mode</span>
+                    <button class="SettingsButton" id="studioSidePanelHelpBtn"></button>
+                </div>
                 <button id="enableStudioBtn" class="SettingsButton">Enable</button>
                 <button id="disableStudioBtn" class="SettingsButton">Disable</button>
             </div>
             <div id="studioPanelContents" hidden></div>
         `);
         this.contents.style.lineHeight = '36px';
+
+        this.studioSidePanelHelpBtn = this.contents.querySelector('#studioSidePanelHelpBtn') as HTMLButtonElement;
+        this.studioSidePanelHelpBtn.appendChild(createDOMFromString(ABOUT_ICON).querySelector('svg')!);
+        this.studioSidePanelHelpBtn.onclick = () => {
+            const helpLink = document.createElement('a') as HTMLAnchorElement;
+            helpLink.rel = 'noopener noreferrer';
+            helpLink.target = '_blank';
+            helpLink.href = 'https://github.com/magcius/noclip.website/wiki/Studio';
+            helpLink.click();
+        }
 
         this.enableStudioBtn = this.contents.querySelector('#enableStudioBtn') as HTMLInputElement;
         this.disableStudioBtn = this.contents.querySelector('#disableStudioBtn') as HTMLInputElement;
@@ -1890,15 +1914,6 @@ class StudioSidePanel extends Panel {
         };
         setElementHighlighted(this.disableStudioBtn, true);
         setElementHighlighted(this.enableStudioBtn, false);
-
-        const showPanel = window.localStorage.getItem('show-studio-side-panel');
-        if (!showPanel)
-            this.elem.style.display = 'none';
-    }
-
-    public v(): void {
-        this.elem.style.display = '';
-        window.localStorage.setItem('show-studio-side-panel', 'true');
     }
 }
 

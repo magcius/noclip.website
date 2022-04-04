@@ -1228,72 +1228,54 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
 
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeSphere(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeOval(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     vec3.set(drawer.size, 100.0, 100.0, 100.0);
     getJMapInfoV3f(drawer.size, infoIter, `Size`);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeOvalPoleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeOvalPole(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     vec3.set(drawer.size, 100.0, 100.0, 100.0);
     getJMapInfoV3f(drawer.size, infoIter, `Size`);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeCylinder(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeBoxFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeBox(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     getJMapInfoV3f(drawer.size, infoIter, 'Size');
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.fromController = actor.shadowControllerList!.getController(infoIter.getValueString('LineStart'));
     drawer.toController = actor.shadowControllerList!.getController(infoIter.getValueString('LineEnd'));
     drawer.fromWidth = fallback(infoIter.getValueNumber('LineStartRadius'), 100.0);
     drawer.toWidth = fallback(infoIter.getValueNumber('LineEndRadius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 

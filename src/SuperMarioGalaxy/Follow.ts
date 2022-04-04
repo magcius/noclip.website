@@ -2,7 +2,6 @@
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { assert, assertExists } from "../util";
-import { ViewerRenderInput } from "../viewer";
 import { connectToSceneMapObjMovement } from "./ActorUtil";
 import { JMapInfoIter, JMapLinkInfo } from "./JMapInfo";
 import { getJMapInfoRotate, getJMapInfoTrans, LiveActor } from "./LiveActor";

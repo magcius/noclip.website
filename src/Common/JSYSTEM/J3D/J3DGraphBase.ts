@@ -291,24 +291,10 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
-type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
-
-function shapeInstancesUsePnMtxIdx(shapeInstances: ShapeInstance[]): boolean | undefined {
-    // If we have no shapes, then we're undetermined.
-    if (shapeInstances.length === 0)
-        return undefined;
-
-    for (let i = 0; i < shapeInstances.length; i++)
-        if (shapeInstances[i].shapeData.shape.displayFlags === ShapeDisplayFlags.MULTI)
-            return true;
-
-    return false;
-}
-
 const enum ColorRegType { S10, U8, }
 
 const materialParams = new MaterialParams();
-const scratchMat4a = mat4.create(), scratchMat4b = mat4.create(), scratchMat4c = mat4.create(), scratchMat4d = mat4.create();
+const scratchMat4a = mat4.create(), scratchMat4b = mat4.create(), scratchMat4c = mat4.create();
 export class MaterialInstance {
     public colorCalc: (ColorCalc | null)[] = [];
     public texMtxCalc: (TexMtxCalc | null)[] = [];
@@ -329,11 +315,9 @@ export class MaterialInstance {
     public setMaterialData(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks): void {
         this.materialData = materialData;
         const material = this.materialData.material;
-        if (material.gxMaterial.usePnMtxIdx === undefined)
-            material.gxMaterial.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
-        let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        const layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
     }
 
@@ -451,9 +435,9 @@ export class MaterialInstance {
 
     public calcTexSRT(dst: mat4, i: number): void {
         const texMtx = this.materialData.material.texMatrices[i]!;
-        const ttk1Animator = this.texMtxCalc[i];
-        if (ttk1Animator) {
-            ttk1Animator.calcTexMtx(dst);
+        const texMtxCalc = this.texMtxCalc[i];
+        if (texMtxCalc) {
+            texMtxCalc.calcTexMtx(dst);
         } else {
             mat4.copy(dst, texMtx.matrix);
         }
@@ -695,8 +679,6 @@ export class MaterialInstance {
     }
 }
 
-// TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
-// based on hashing texture data?
 export class TEX1Data {
     private realized: boolean = true;
 
@@ -758,7 +740,7 @@ interface MaterialRes {
     tex1: TEX1 | null;
 }
 
-export class BMDModelMaterialData {
+export class J3DModelMaterialData {
     public materialData: MaterialData[] | null = null;
     public tex1Data: TEX1Data | null = null;
 
@@ -793,7 +775,7 @@ export class J3DModelData {
 
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
-    public modelMaterialData: BMDModelMaterialData;
+    public modelMaterialData: J3DModelMaterialData;
     public shapeData: ShapeData[] = [];
     public rootJointTreeNode: JointTreeNode;
     // Reference joint indices for all materials.
@@ -824,7 +806,7 @@ export class J3DModelData {
             this.shapeData.push(new ShapeData(device, cache, shp1, this.bufferCoalescer.coalescedBuffers));
         }
 
-        this.modelMaterialData = new BMDModelMaterialData(device, cache, bmd);
+        this.modelMaterialData = new J3DModelMaterialData(device, cache, bmd);
         this.loadHierarchy(bmd.inf1);
         this.realized = true;
     }
@@ -916,7 +898,7 @@ export class J3DModelInstance {
     public materialInstances: MaterialInstance[] = [];
     public shapeInstanceState = new ShapeInstanceState();
 
-    public modelMaterialData: BMDModelMaterialData;
+    public modelMaterialData: J3DModelMaterialData;
     public tex1Data: TEX1Data;
 
     private jointVisibility: boolean[];
@@ -975,7 +957,7 @@ export class J3DModelInstance {
         vec3.copy(this.baseScale, v);
     }
 
-    public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {
+    public setModelMaterialData(modelMaterialData: J3DModelMaterialData): void {
         this.modelMaterialData = modelMaterialData;
 
         // Set on our material instances.
@@ -1057,19 +1039,6 @@ export class J3DModelInstance {
     }
 
     /**
-     * Fills the {@link TextureMapping} {@param m} with the default values for the given
-     * sampler referenced by the name {@param samplerName}.
-     */
-    public fillDefaultTextureMapping(m: TextureMapping, samplerName: string): void {
-        // Find the correct slot for the texture name.
-        const samplers = this.tex1Data.tex1.samplers;
-        const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
-        if (samplerIndex < 0)
-            throw new Error(`Cannot find texture by name ${samplerName}`);
-        this.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
-    }
-
-    /**
      * Sets whether a certain material with name {@param materialName} should be shown ({@param v} is
      * {@constant true}), or hidden ({@param v} is {@constant false}). All materials are shown
      * by default.
@@ -1083,9 +1052,6 @@ export class J3DModelInstance {
      * Sets whether color write is enabled. This is equivalent to the native GX function
      * GXSetColorUpdate. There is no MAT3 material flag for this, so some games have special
      * engine hooks to enable and disable color write at runtime.
-     *
-     * Specifically, Wind Waker turns off color write when drawing a specific part of character's
-     * eyes so it can draw them on top of the hair.
      */
     public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
         const materialInstance = assertExists(this.materialInstances.find((matInst) => matInst.name === materialName));
@@ -1126,20 +1092,6 @@ export class J3DModelInstance {
      */
     public getGXLightReference(i: number): GX_Material.Light {
         return this.materialInstanceState.lights[i];
-    }
-
-    /**
-     * Returns the joint-to-world matrix for the joint with name {@param jointName}.
-     *
-     * This object is not a copy; if an animation updates the joint, the values in this object will be
-     * updated as well. You can use this as a way to parent an object to this one.
-     */
-    public getJointToWorldMatrixReference(jointName: string): mat4 {
-        const joints = this.modelData.bmd.jnt1.joints;
-        for (let i = 0; i < joints.length; i++)
-            if (joints[i].name === jointName)
-                return this.shapeInstanceState.jointToWorldMatrixArray[i];
-        throw "could not find joint";
     }
 
     public isAnyShapeVisible(): boolean {
