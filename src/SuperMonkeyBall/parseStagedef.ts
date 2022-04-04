@@ -348,18 +348,18 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         // as the tri list does not indicate its length
         const coliTriListOffs = view.getUint32(coliHeaderOffs + 0x1C);
         const coliTriIdxsOffs = view.getUint32(coliHeaderOffs + 0x20);
-        const coliGridStartX = view.getFloat32(coliHeaderOffs + 0x24);
-        const coliGridStartZ = view.getFloat32(coliHeaderOffs + 0x28);
-        const coliGridStepX = view.getFloat32(coliHeaderOffs + 0x2C);
-        const coliGridStepZ = view.getFloat32(coliHeaderOffs + 0x30);
-        const coliGridCellsX = view.getUint32(coliHeaderOffs + 0x34);
-        const coliGridCellsZ = view.getUint32(coliHeaderOffs + 0x38);
+        const gridOriginX = view.getFloat32(coliHeaderOffs + 0x24);
+        const gridOriginZ = view.getFloat32(coliHeaderOffs + 0x28);
+        const gridStepX = view.getFloat32(coliHeaderOffs + 0x2C);
+        const gridStepZ = view.getFloat32(coliHeaderOffs + 0x30);
+        const gridCellCountX = view.getUint32(coliHeaderOffs + 0x34);
+        const gridCellCountZ = view.getUint32(coliHeaderOffs + 0x38);
 
-        const coliTriIdxs: number[][] = [];
+        const gridCellTris: number[][] = [];
 
-        for (let z = 0; z < coliGridCellsZ; z++) {
-            for (let x = 0; x < coliGridCellsX; x++) {
-                const gridIdx = z * coliGridCellsX + x;
+        for (let z = 0; z < gridCellCountZ; z++) {
+            for (let x = 0; x < gridCellCountX; x++) {
+                const gridIdx = z * gridCellCountX + x;
                 // Index into the array of s16 pointers
                 // Original game had null offsets for empty grid cells,
                 // we just use empty lists
@@ -375,12 +375,12 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
                         }
                     }
                 }
-                coliTriIdxs.push(triIdxList);
+                gridCellTris.push(triIdxList);
             }
         }
 
         let maxTriIdx = -1;
-        for (let idxList of coliTriIdxs) {
+        for (let idxList of gridCellTris) {
             maxTriIdx = Math.max(maxTriIdx, Math.max(...idxList));
         }
         const numTris = maxTriIdx + 1;
@@ -431,13 +431,13 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
             // conveyorVel: conveyorVel,
 
             coliTris: coliTris,
-            gridCellTris: coliTriIdxs,
-            gridOriginX: coliGridStartX,
-            gridOriginZ: coliGridStartZ,
-            gridStepX: coliGridStepX,
-            gridStepZ: coliGridStepZ,
-            gridCellCountX: coliGridCellsX,
-            gridCellCountZ: coliGridCellsZ,
+            gridCellTris: gridCellTris,
+            gridOriginX: gridOriginX,
+            gridOriginZ: gridOriginZ,
+            gridStepX: gridStepX,
+            gridStepZ: gridStepZ,
+            gridCellCountX: gridCellCountX,
+            gridCellCountZ: gridCellCountZ,
 
             goals: subGoals,
             bumpers: subBumpers,

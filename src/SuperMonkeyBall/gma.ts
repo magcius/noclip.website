@@ -19,7 +19,7 @@ import { assert, hexzero, readString } from "../util";
 export type GcmfAttribute = {
     value16Bit: Boolean, // vertex length is 16bit (VTXFMT1)
     unk0x01: Boolean,    // maybe not exist
-    stiching: Boolean,
+    stitching: Boolean,
     skin: Boolean,
     effective: Boolean
 };
@@ -89,11 +89,11 @@ export type GcmfSampler = {
     unk0x00: number,
     mipmapAV: number,
     uvWrap: number,
-    texIdx: number, // index of tpl
+    texIdx: number, // Index of texture in TPL
     lodBias: number,
     anisotropy: number,
     unk0x0C: number, // TEV?
-    idx: number, // index of GcmfTexture
+    samplerIdx: number, // Index of this sampler in gcmf's list
     unk0x10: number // TEV
     alphaType: number,
     colorType: number
@@ -137,13 +137,13 @@ function parseSampler(buffer: ArrayBufferSlice): GcmfSampler {
     const anisotropy = view.getInt8(0x07);
     const unk0x0C = view.getInt8(0x0C);
     const isSwappable = ((view.getUint8(0x0D) & 0x01) == 1); // swapping textures in game
-    const idx = view.getInt16(0x0E);
+    const samplerIdx = view.getInt16(0x0E);
     const unk0x10 = view.getInt32(0x10);
     let type = view.getUint8(0x13);
     const alphaType = (type >> 4) & 0x07;
     const colorType = type & 0x0F;
 
-    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, idx, unk0x10, alphaType, colorType };
+    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, samplerIdx, unk0x10, alphaType, colorType };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4 {
@@ -340,11 +340,11 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
     function parseGCMFAttribute(attribute: number): GcmfAttribute {
         const value16Bit = ((attribute >> 0) & 0x01) == 1;
         const unk0x01 = ((attribute >> 1) & 0x01) == 1;
-        const stiching = ((attribute >> 2) & 0x01) == 1;
+        const stitching = ((attribute >> 2) & 0x01) == 1;
         const skin = ((attribute >> 3) & 0x01) == 1;
         const effective = ((attribute >> 4) & 0x01) == 1;
 
-        return { value16Bit, unk0x01, skin, stiching, effective };
+        return { value16Bit, unk0x01, skin, stitching, effective };
     }
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === "GCMF");
@@ -356,9 +356,10 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
     const attribute = parseGCMFAttribute(view.getUint32(0x04));
     let useVtxCon = (attribute.skin || attribute.effective);
     vec3.set(origin, view.getFloat32(0x08), view.getFloat32(0x0C), view.getFloat32(0x10));
-    const boundSpeher = view.getFloat32(0x14);
+    const boundingRadius = view.getFloat32(0x14);
 
     const texCount = view.getInt16(0x18);
+    // todo(complexplane): Are these really opaque/translucent meshes/shapes, not materials?
     const materialCount = view.getInt16(0x1A);
     const traslucidMaterialCount = view.getInt16(0x1C);
     const mtxCount = view.getInt8(0x1E);
@@ -401,12 +402,12 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
     for (let i = 0; i < allMaterialCount; i++) {
         let vtxAttr = view.getUint32(texMtxSize + shapeOffs + 0x1C);
         if ((vtxAttr & (1 << GX.Attr._NBT)) !== 0) {
-            console.log(`Not support NBT`);
+            console.log("Not support NBT");
             continue;
         }
         const shape = parseShape(shapeBuff.slice(shapeOffs), attribute, i, vtxCon2Offs);
         if (shape.material.samplerIdxs[0] < 0) {
-            console.log(`Detect Invalid samplerIdxs[0]`);
+            console.log("GCMF shape has zero samplers, ignoring shape");
             continue;
         }
         shapes.push(shape);
@@ -418,7 +419,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
         shapeOffs += offs;
     }
 
-    return { attribute, origin, boundingRadius: boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
+    return { attribute, origin, boundingRadius, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
 export function parse(buffer: ArrayBufferSlice): GMA {
@@ -452,6 +453,7 @@ export function parse(buffer: ArrayBufferSlice): GMA {
         }
         const name = readString(nameBuff, nameOffs);
 
+        // TODO parse attribute into nicer type first
         let attr = view.getUint32(gcmfBaseOffs + gcmfOffs + 0x04);
         let notSupport = (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
         if (notSupport) {
