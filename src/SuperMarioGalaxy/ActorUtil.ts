@@ -1499,8 +1499,7 @@ export function rotateQuatRollBall(dst: quat, fwd: ReadonlyVec3, up: ReadonlyVec
 }
 
 export function hideMaterial(actor: LiveActor, materialName: string): void {
-    const materialInstance = assertExists(actor.modelInstance!.materialInstances.find((m) => m.materialData.material.name === materialName));
-    materialInstance.visible = false;
+    actor.modelInstance!.setMaterialVisible(materialName, false);
 }
 
 export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {

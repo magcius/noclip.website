@@ -3989,10 +3989,6 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         }
     }
 
-    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
-        mat4.copy(dst, this.effectMtx);
-    };
-
     private nodeControl = (dst: mat4, modelData: J3DModelData, i: number): void => {
         if (i === 1)
             mDoMtx_XrotM(dst, this.aimRotY);

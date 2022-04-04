@@ -7,7 +7,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
 
-import { J3DModelData, BMDModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
@@ -523,7 +523,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdModel = lookupModel(bmdFile);
             const modelInstance = new J3DModelInstanceSimple(bmdModel);
             if (bmt !== null) {
-                const modelMaterialData = new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
+                const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
                 renderer.destroyables.push(modelMaterialData);
                 modelInstance.setModelMaterialData(modelMaterialData);
             }
@@ -555,7 +555,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdModel = lookupModel(bmdFile);
             const modelInstance = new J3DModelInstanceSimple(bmdModel);
             if (bmtFile !== null) {
-                const modelMaterialData = new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
+                const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
                 renderer.destroyables.push(modelMaterialData);
                 modelInstance.setModelMaterialData(modelMaterialData);
             }
