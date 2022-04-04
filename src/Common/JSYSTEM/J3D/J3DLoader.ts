@@ -1284,8 +1284,7 @@ export class BMD {
                     ++multiCount;
             }
 
-            if (multiCount === 0)
-                this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+            this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = (multiCount !== 0);
         }
     }
 

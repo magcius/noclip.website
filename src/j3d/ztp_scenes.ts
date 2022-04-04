@@ -6,7 +6,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
@@ -58,7 +58,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
     const bmdModel = new J3DModelData(device, cache, bmd);
     const modelInstance = new J3DModelInstanceSimple(bmdModel, materialHacks);
     if (bmt !== null)
-        modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
+        modelInstance.setModelMaterialData(new J3DModelMaterialData(device, cache, bmt));
 
     for (let i = 0; i < bmdModel.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
         // Look for any unbound textures and set them.

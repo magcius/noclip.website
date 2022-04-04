@@ -1499,6 +1499,12 @@ export class StudioPanel extends FloatingPanel {
                 border-radius: 5px;
                 font: 16px monospace;
                 color: #fefefe;
+                cursor: grab;
+                user-select: none;
+            }
+            .StudioNumericInput.manual-entry {
+                cursor: text;
+                user-select: text;
             }
             #customValuesContainer {
                 display: grid;
@@ -2204,11 +2210,23 @@ export class StudioPanel extends FloatingPanel {
             this.nextKeyframe();
         }
 
+        this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+            const kfSelectedCountBefore = this.timeline.selectedKeyframeIcons.length;
+            this.timeline.onMouseDown(e);
+            if (this.timeline.playheadGrabbed) {
+                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                if (this.livePreviewCheckbox.checked)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+            } else if (kfSelectedCountBefore < this.timeline.selectedKeyframeIcons.length) {
+                this.saveState();
+            }
+        });
+
         const numericInputs: NodeList = document.querySelectorAll('#studioPanelContents .StudioNumericInput');
         for (let i = 0; i < numericInputs.length; i++) {
             const element = numericInputs[i] as HTMLInputElement;
             element.addEventListener('mousedown', (e: MouseEvent) => {
-                if (!element.disabled)
+                if (!element.hasAttribute('disabled'))
                     this.selectedNumericInput = element;
             });
         }
@@ -2217,7 +2235,7 @@ export class StudioPanel extends FloatingPanel {
             // Only need to update if the primary mouse button is pressed while moving.
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
                 && !this.studioCameraController.isAnimationPlaying) {
-                if (this.selectedNumericInput) {
+                if (this.selectedNumericInput && !this.selectedNumericInput.classList.contains('manual-entry')) {
                     if (parseFloat(this.selectedNumericInput.step) < 1) {
                         const distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
                         this.selectedNumericInput.value = (parseFloat(this.selectedNumericInput.value) + distance).toFixed(2);
@@ -2246,25 +2264,25 @@ export class StudioPanel extends FloatingPanel {
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-            const kfSelectedCountBefore = this.timeline.selectedKeyframeIcons.length;
-            this.timeline.onMouseDown(e);
-            if (this.timeline.playheadGrabbed) {
-                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                if (this.livePreviewCheckbox.checked)
-                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
-            } else if (kfSelectedCountBefore < this.timeline.selectedKeyframeIcons.length) {
+        document.addEventListener('mouseup', (e: MouseEvent) => {
+            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectedKeyframeIcons.length) {
                 this.saveState();
             }
-        });
 
-        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeIconSelected());
-        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeIconDeselected());
-        this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
-            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                kfIcon.keyframesMap.forEach((v, trackType) => {
-                    this.getTrackByType(this.animation, trackType).reSort();
-                });
+            for (let i = 0; i < numericInputs.length; i++) {
+                const element = numericInputs[i] as HTMLInputElement;
+                element.classList.remove('manual-entry');
+            }
+
+            this.timeline.onMouseUp();
+            if (this.selectedNumericInput) {
+                if (e.target === this.selectedNumericInput) {
+                    this.selectedNumericInput.classList.add('manual-entry');
+                }
+
+                if (this.selectedNumericInput !== this.playheadTimePositionInput)
+                    this.saveState();
+                this.selectedNumericInput = undefined;
             }
         });
 
@@ -2278,18 +2296,15 @@ export class StudioPanel extends FloatingPanel {
             } else {
                 this.timeLineContainerElement.scrollBy(ev.deltaY, 0);
             }
-        })
+        });
 
-        document.addEventListener('mouseup', () => {
-            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectedKeyframeIcons.length) {
-                this.saveState();
-            }
-
-            this.timeline.onMouseUp();
-            if (this.selectedNumericInput) {
-                if (this.selectedNumericInput !== this.playheadTimePositionInput)
-                    this.saveState();
-                this.selectedNumericInput = undefined;
+        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeIconSelected());
+        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeIconDeselected());
+        this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
+            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+                kfIcon.keyframesMap.forEach((v, trackType) => {
+                    this.getTrackByType(this.animation, trackType).reSort();
+                });
             }
         });
 
@@ -3576,6 +3591,10 @@ export class StudioPanel extends FloatingPanel {
             e.setAttribute('disabled', '');
             e.classList.add('disabled');
         });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.setAttribute('disabled', '');
+            e.classList.add('disabled');
+        });
     }
 
     private enableControls(): void {
@@ -3584,6 +3603,10 @@ export class StudioPanel extends FloatingPanel {
                 e.removeAttribute('disabled');
                 e.classList.remove('disabled');
             }
+        });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.removeAttribute('disabled');
+            e.classList.remove('disabled');
         });
     }
 

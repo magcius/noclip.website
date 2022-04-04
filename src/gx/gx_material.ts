@@ -1436,7 +1436,7 @@ vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 float TevMask(float n, int mask) { return float(int((n * 255.0)) & mask) / 255.0; }
 
-void main() {
+vec4 MainColor() {
     vec4 s_kColor0   = u_KonstColor[0];
     vec4 s_kColor1   = u_KonstColor[1];
     vec4 s_kColor2   = u_KonstColor[2];
@@ -1458,10 +1458,20 @@ ${this.generateTevStagesLastMinuteFixup()}
 ${this.generateAlphaTest()}
 ${this.generateFog()}
 ${this.generateDstAlpha()}
-    gl_FragColor = t_PixelOut;
-}`;
 
-        // console.log(`vertex shader:\n${this.vert}\nfragment shader:\n${this.frag}`);
+    return t_PixelOut;
+}
+
+layout(location = 0) out vec4 o_OutColor0;
+layout(location = 1) out vec4 o_OutColor1;
+
+void main() {
+    o_OutColor0 = MainColor();
+    // This is a hack for Galaxy shadow clearing...
+    // TODO(jstpierre): Make this configurable? Allow subclassing GX_Material? Yikes...
+    o_OutColor1 = vec4(0.0);
+}
+`;
     }
 }
 // #endregion

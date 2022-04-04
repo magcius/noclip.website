@@ -265,7 +265,7 @@ export class BSPFile {
             dstIndexBase += numedges;
         }
 
-        this.vertexData = vertexData.buffer;
-        this.indexData = indexData.buffer;
+        this.vertexData = vertexData.buffer as ArrayBuffer;
+        this.indexData = indexData.buffer as ArrayBuffer;
     }
 }
