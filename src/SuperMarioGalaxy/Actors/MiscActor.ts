@@ -17,7 +17,7 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render';
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams, fillIndTexMtx } from '../../gx/gx_render';
 import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
@@ -5317,6 +5317,91 @@ class OceanRingPipeOutside extends LiveActor {
     }
 }
 
+// It seems this just renders another outside of the pipe when the camera is in the water? Seems weird...
+
+/*
+class OceanRingPipeInside extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private waterPipeInside: BTIData;
+    private tex0Trans = vec2.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private pipe: OceanRingPipe) {
+        super(zoneAndLayer, sceneObjHolder, 'OceanRingPipeInside');
+
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingPipeInside);
+
+        const arc = sceneObjHolder.modelCache.getObjectData('OceanRing');
+        this.waterPipeInside = loadBTIData(sceneObjHolder, arc, 'WaterPipeInside.bti');
+
+        const mb = new GXMaterialBuilder('OceanRingPipeInside');
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+
+        mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP0);
+        mb.setTevIndWarp(0, GX.IndTexStageID.STAGE0, true, false, GX.IndTexMtxID._0);
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_4, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.SUBHALF, GX.TevScale.SCALE_4, true, GX.Register.PREV);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.FRONT);
+
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+        this.tex0Trans[0] += -0.006 * sceneObjHolder.deltaTimeFrames;
+    }
+
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.pipe.isInside)
+            return;
+
+        if (!isValidDraw(this))
+            return;
+
+        const device = sceneObjHolder.modelCache.device;
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
+        renderInst.drawIndexes(this.pipe.indexCount);
+
+        materialParams.clear();
+        this.waterPipeInside.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.3, null);
+        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[1], 0.5, this.tex0Trans);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x001C00FF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x78A0F6FF);
+
+        const materialHelper = this.materialHelper;
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public override destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.waterPipeInside.destroy(device);
+    }
+}
+*/
+
 class OceanRingPipe extends LiveActor {
     public pointsPerSegment: number = 8;
     public segmentCount: number;
@@ -5329,6 +5414,8 @@ class OceanRingPipe extends LiveActor {
     public indexCount: number;
 
     public outside: OceanRingPipeOutside;
+    // public inside: OceanRingPipeInside;
+    public isInside = false;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private oceanRing: OceanRing) {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipe');
@@ -5352,6 +5439,7 @@ class OceanRingPipe extends LiveActor {
         }
 
         this.outside = new OceanRingPipeOutside(zoneAndLayer, sceneObjHolder, this);
+        // this.inside = new OceanRingPipeInside(zoneAndLayer, sceneObjHolder, this);
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): vec3[] {
@@ -5368,10 +5456,10 @@ class OceanRingPipe extends LiveActor {
         const theta = (MathConstants.TAU / 2) / (this.pointsPerSegment - 1);
         const segmentSize = railTotalLength / this.segmentCount;
 
-        // POS, NRM, TEX0, TEX1
-        // 3 + 3 + 2 + 2 = 10
-        // NRM is unused for Inside, TEX1 is unused for Outside.
-        const vertexBufferWordCount = pointCount * 10;
+        // POS, NRM, TEX0
+        // 3 + 3 + 2 = 8
+        // NRM is unused for Inside.
+        const vertexBufferWordCount = pointCount * 8;
 
         const vertexData = new Float32Array(vertexBufferWordCount);
         let o = 0;
@@ -5425,10 +5513,6 @@ class OceanRingPipe extends LiveActor {
                 vertexData[o++] = tx0S;
                 vertexData[o++] = tx0T;
 
-                // TODO(jstpierre): TEX1
-                vertexData[o++] = 0.0;
-                vertexData[o++] = 0.0;
-
                 tx0T += 1.0;
 
                 // Rotate around ring.
@@ -5465,7 +5549,7 @@ class OceanRingPipe extends LiveActor {
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
         this.inputLayout = cache.createInputLayout({
@@ -5484,6 +5568,10 @@ class OceanRingPipe extends LiveActor {
     public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
         this.outside.movement(sceneObjHolder);
+
+        this.isInside = (sceneObjHolder.waterAreaHolder!.cameraWaterInfo.oceanRing === this.oceanRing);
+        // if (this.isInside)
+        //     this.inside.movement(sceneObjHolder);
     }
 
     public override destroy(device: GfxDevice): void {

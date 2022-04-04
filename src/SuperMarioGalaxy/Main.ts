@@ -580,6 +580,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.execute(passRenderer, DrawType.OceanBowl);
                 this.execute(passRenderer, DrawType.EffectDrawIndirect);
                 this.execute(passRenderer, DrawType.EffectDrawAfterIndirect);
+                this.execute(passRenderer, DrawType.OceanRingPipeInside);
             });
         });
 
