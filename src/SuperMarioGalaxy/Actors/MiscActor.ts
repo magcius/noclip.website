@@ -5028,7 +5028,7 @@ class WaterPoint {
     public upVec = vec3.create();
     public alpha = 1.0;
 
-    constructor(originalPos: vec3, upVec: vec3, public coordAcrossRail: number, public coordOnRail: number, public height: number, public flowSpeedRate: number) {
+    constructor(originalPos: vec3, upVec: vec3, public coordAcrossRail: number, public coordOnRail: number, public height: number) {
         vec3.copy(this.originalPos, originalPos);
         vec3.copy(this.upVec, upVec);
     }
@@ -5421,7 +5421,6 @@ class OceanRingPipe extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipe');
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
-        this.initRailRider(sceneObjHolder, infoIter);
         const points = this.initPoints(sceneObjHolder);
 
         if (this.oceanRing.name === 'OceanRingAndFlag') {
@@ -5448,7 +5447,7 @@ class OceanRingPipe extends LiveActor {
 
         // Initializes the vertex & index buffers.
 
-        const railTotalLength = getRailTotalLength(this);
+        const railTotalLength = getRailTotalLength(this.oceanRing);
         this.segmentCount = ((railTotalLength / 300.0) | 0) + 1;
         const pointCount = (this.segmentCount + 1) * this.pointsPerSegment;
         const points: vec3[] = [];
@@ -5474,11 +5473,12 @@ class OceanRingPipe extends LiveActor {
 
         let tx0S = 0.0;
 
+        setRailCoord(this.oceanRing, 0);
         for (let i = 0; i < this.segmentCount + 1; i++) {
-            getRailPos(scratchVec3a, this);
+            getRailPos(scratchVec3a, this.oceanRing);
             calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
             vec3.negate(scratchVec3a, scratchVec3a);
-            getRailDirection(scratchVec3b, this);
+            getRailDirection(scratchVec3b, this.oceanRing);
 
             // Rotation matrix around pipe.
             mat4.fromRotation(scratchMatrix, theta, scratchVec3b);
@@ -5487,8 +5487,8 @@ class OceanRingPipe extends LiveActor {
             vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
             vec3.normalize(scratchVec3c, scratchVec3c);
 
-            const widthRate = this.width1 * this.oceanRing.calcCurrentWidthRate(getRailCoord(this), this.width2);
-            getRailPos(scratchVec3a, this);
+            const widthRate = this.width1 * this.oceanRing.calcCurrentWidthRate(getRailCoord(this.oceanRing), this.width2);
+            getRailPos(scratchVec3a, this.oceanRing);
 
             let tx0T = 0.0;
 
@@ -5537,7 +5537,7 @@ class OceanRingPipe extends LiveActor {
 
             tx0S += 0.08;
 
-            moveCoord(this, segmentSize);
+            moveCoord(this.oceanRing, segmentSize);
         }
 
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
@@ -5633,6 +5633,7 @@ export class OceanRing extends LiveActor {
         const segmentSize = railTotalLength / this.segmentCount;
         const edgePointNum = 2.0;
 
+        setRailCoord(this, 0);
         for (let i = 0; i < this.segmentCount; i++) {
             getRailPos(scratchVec3a, this);
             calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
@@ -5645,7 +5646,6 @@ export class OceanRing extends LiveActor {
 
             const railCoord = getRailCoord(this);
             const widthRate = this.calcCurrentWidthRate(railCoord);
-            const flowSpeedRate = this.calcCurrentFlowSpeedRate(railCoord);
 
             for (let j = -7; j <= 7; j++) {
                 getRailPos(scratchVec3b, this);
@@ -5654,7 +5654,7 @@ export class OceanRing extends LiveActor {
 
                 const edgePointIdx = 7 - Math.abs(j);
                 const height = edgePointIdx < edgePointNum ? getEaseOutValue(edgePointIdx / edgePointNum) : 1.0;
-                const waterPoint = new WaterPoint(scratchVec3b, scratchVec3a, width, i * segmentSize, height, flowSpeedRate);
+                const waterPoint = new WaterPoint(scratchVec3b, scratchVec3a, width, i * segmentSize, height);
                 this.points.push(waterPoint);
             }
 
