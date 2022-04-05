@@ -495,7 +495,7 @@ export class GcmfModelInstance {
 
 }
 
-// todo(complexplane): I'm thinking we associate a GfxSampler directly with the GfxTexture / GXTexture it references,
+// todo(complexplane): I'm thinking we associate a GfxSampler directly with the GfxTexture / TextureInputGX it references,
 // then stick a list of these bundles in the Material instance. Materials just own a list of "sampler instances" which
 // can be bound at render time easily (eliminates GXTextureHolder too).
 class MaterialData {

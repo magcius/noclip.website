@@ -40,7 +40,7 @@ export type GcmfMaterial = {
 };
 
 // GCMF VertexControlHeader
-type GcmfVertexControl  = {
+type GcmfVertexControl = {
     count: number;
     vtxCon1: VtxConType1,
     vtxCon2: VtxConType2,
@@ -97,6 +97,8 @@ export type GcmfSampler = {
     unk0x10: number // TEV
     alphaType: number,
     colorType: number
+    // Texture can be swapped at runtime, used for F-Zero GX lap-related textures apparently
+    swappable: boolean, 
 };
 
 type GcmfEntryOffset = {
@@ -136,14 +138,14 @@ function parseSampler(buffer: ArrayBufferSlice): GcmfSampler {
     const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
     const unk0x0C = view.getInt8(0x0C);
-    const isSwappable = ((view.getUint8(0x0D) & 0x01) == 1); // swapping textures in game
+    const swappable = !!view.getUint8(0x0D);
     const samplerIdx = view.getInt16(0x0E);
     const unk0x10 = view.getInt32(0x10);
-    let type = view.getUint8(0x13);
+    const type = view.getUint8(0x13);
     const alphaType = (type >> 4) & 0x07;
     const colorType = type & 0x0F;
 
-    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, samplerIdx, unk0x10, alphaType, colorType };
+    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, samplerIdx, unk0x10, alphaType, colorType, swappable };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4 {
@@ -248,6 +250,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         const loadedVertexData = loader.runVertices(arrays, dlist);
         if (isCW) {
             // convert cw triangle-strip to ccw triangle-strip
+            // todo(complexplane): Does game just draw back faces instead? Maybe do that instead
             const dstIndexData = new Uint16Array(loadedVertexData.indexData);
             for (let i = 1; i < loadedVertexData.totalIndexCount + 1; i++) {
                 if (i % 3 == 0 && i > 0) {
@@ -359,7 +362,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
     const boundingRadius = view.getFloat32(0x14);
 
     const texCount = view.getInt16(0x18);
-    // todo(complexplane): Are these really opaque/translucent meshes/shapes, not materials?
+    // todo(complexplane): Are these actually opaque/translucent meshes/shapes, not materials?
     const materialCount = view.getInt16(0x1A);
     const traslucidMaterialCount = view.getInt16(0x1C);
     const mtxCount = view.getInt8(0x1E);
