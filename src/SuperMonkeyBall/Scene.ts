@@ -178,10 +178,10 @@ export class SuperMonkeyBallSceneDesc {
 
     public async loadStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
         const gameFilesPath = 'SuperMonkeyBall/test';
-        const stageIdStr = leftPad(stageId.toString(), 3, '0');
-        const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
-        const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
-        const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
+        const stageIdStr = `st${leftPad(stageId.toString(), 3, '0')}`;
+        const stagedefPath = `${gameFilesPath}/${stageIdStr}/STAGE${stageIdStr}.lz`;
+        const stageGmaPath = `${gameFilesPath}/${stageIdStr}/${stageIdStr}.gma`;
+        const stageTplPath = `${gameFilesPath}/${stageIdStr}/${stageIdStr}.tpl`;
         const bgFilename = BG_TO_FILENAME_MAP[STAGE_TO_BG_MAP[stageId]];
         const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
         const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
@@ -196,9 +196,9 @@ export class SuperMonkeyBallSceneDesc {
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageGma = Gcmf.parseGma(stageGmaBuf);
-        const stageTpl = AVTpl.parseAvTpl(stageTplBuf, 0);
+        const stageTpl = AVTpl.parseAvTpl(stageTplBuf, stageIdStr);
         const bgGma = Gcmf.parseGma(bgGmaBuf);
-        const bgTpl = AVTpl.parseAvTpl(bgTplBuf, 0);
+        const bgTpl = AVTpl.parseAvTpl(bgTplBuf, bgFilename);
 
         return { stagedef, stageGma, stageTpl, bgGma, bgTpl };
     }

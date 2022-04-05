@@ -11,10 +11,10 @@ import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
 import * as GX from "../gx/gx_enum";
 import * as GX_Material from '../gx/gx_material';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, translateWrapModeGfx } from "../gx/gx_render";
+import { TextureInputGX } from '../gx/gx_texture';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { ViewerRenderInput } from '../viewer';
-import { AVTexture, AVTpl } from './AVTpl';
 import * as Gcmf from './Gcmf';
 import * as SD from './StagedefTypes';
 
@@ -22,16 +22,10 @@ import * as SD from './StagedefTypes';
 export type StageData = {
     stagedef: SD.Stage;
     stageGma: Gcmf.Gma;
-    stageTpl: AVTpl;
+    stageTpl: TextureInputGX[];
     bgGma: Gcmf.Gma;
-    bgTpl: AVTpl;
+    bgTpl: TextureInputGX[];
 };
-
-export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
-    public addAVtplTextures(device: GfxDevice, avtpl: AVTpl): void {
-        this.addTextures(device, avtpl.textures);
-    }
-}
 
 // todo(complexplane): Remove
 class InstanceStateData {
