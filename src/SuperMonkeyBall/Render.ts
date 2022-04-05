@@ -15,8 +15,8 @@ import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { ViewerRenderInput } from '../viewer';
 import { AVTexture, AVTpl } from './AVtpl';
-import * as GMA from './gma';
-import * as SD from './stagedef';
+import * as GMA from './Gcmf';
+import * as SD from './StagedefTypes';
 
 // Immutable stage/background definition
 export type StageData = {
@@ -95,7 +95,7 @@ class ShapeInstance {
     public sortKeyBias = 0;
 
     // todo(complexplane): Shape should own its own LoadedVertexData instead of referencing in GcmfShape by index
-    constructor(public shape: GMA.GcmfShape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance, public shape_idx: number) {
+    constructor(public shape: GMA.Shape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance, public shape_idx: number) {
     }
 
     public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, instanceStateData: InstanceStateData, isSkybox: boolean): void {
@@ -145,7 +145,7 @@ class MaterialInstance {
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.GcmfSampler[], public modelID: number, transparent?: boolean) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.Sampler[], public modelID: number, transparent?: boolean) {
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
             colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
@@ -501,7 +501,7 @@ export class GcmfModelInstance {
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
-    constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public sampler: GMA.GcmfSampler, public materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(device: GfxDevice, public material: GMA.Material, public sampler: GMA.Sampler, public materialHacks?: GX_Material.GXMaterialHacks) {
         function translateAVTexFilterGfx(mipmapAV: number): [GfxTexFilterMode, GfxMipFilterMode] {
             // "Debug Mode" Menu showing like this
             // 0x00: "LINER & MIPMAP NEAR, LINER"  (mipmap: 0) linear?

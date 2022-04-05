@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
-import { SuperMonkeyBallSceneDesc } from './scene';
-import { StageId } from './stageInfo';
+import { SuperMonkeyBallSceneDesc } from './Scene';
+import { StageId } from './StageInfo';
 
 const id = 'supermonkeyball'
 const name = 'Super Monkey Ball'

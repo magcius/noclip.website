@@ -9,7 +9,7 @@ import { vec2, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as LZSS from '../Common/Compression/LZSS';
 import { readString } from '../util';
-import * as SD from './stagedef';
+import * as SD from './StagedefTypes';
 
 const ITEMGROUP_SIZE = 0xC4
 const GOAL_SIZE = 0x14;

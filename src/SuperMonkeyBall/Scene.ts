@@ -11,11 +11,11 @@ import { assertExists, leftPad } from '../util';
 import * as Viewer from '../viewer';
 import { AVLZ_Type, decompressLZSS } from './AVLZ';
 import * as AVtpl from './AVtpl';
-import { debugDrawColi } from './debugDraw';
-import * as GMA from './gma';
-import { parseStagedefLz } from './parseStagedef';
-import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, StageData as StageData } from './render';
-import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from './stageInfo';
+import { debugDrawColi } from './DebugDraw';
+import * as GMA from './Gcmf';
+import { parseStagedefLz } from './ParseStagedef';
+import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, StageData as StageData } from './Render';
+import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from './StageInfo';
 
 enum Pass {
     SKYBOX = 0x01,
