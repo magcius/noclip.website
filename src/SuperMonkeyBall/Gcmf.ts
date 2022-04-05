@@ -77,10 +77,10 @@ export type Shape = {
 };
 
 // GCMF DisplaylistHeader
-type GcmfDisplaylistHeader = {
+export type GcmfDisplaylistHeader = {
     mtxIdxs: number[],
     dlistSizes: number[],
-    submesh_end_offs: number
+    submeshEndOffs: number
 };
 
 // GCMF Sampler
@@ -100,11 +100,6 @@ export type Sampler = {
     swappable: boolean,
 };
 
-type GcmfEntryOffset = {
-    gcmfOffs: number,
-    nameOffs: number
-}
-
 export type Model = {
     attrs: ModelAttrs,
     origin: vec3,
@@ -118,14 +113,7 @@ export type Model = {
     shapes: Shape[]
 }
 
-export type GcmfEntry = {
-    gcmf: Model,
-    name: string
-}
-
-export type GMA = {
-    gcmfEntries: GcmfEntry[]
-}
+export type Gma = Map<string, Model>;
 
 function parseSampler(buffer: ArrayBufferSlice): Sampler {
     const view = buffer.createDataView();
@@ -219,7 +207,7 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
     }
     const submesh_end_offs = view.byteOffset + 0x20;
 
-    return { mtxIdxs, dlistSizes, submesh_end_offs };
+    return { mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs };
 }
 
 function parseShape(buffer: ArrayBufferSlice, attribute: ModelAttrs, idx: number, vtxCon2Offs: number): Shape {
@@ -242,7 +230,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: ModelAttrs, idx: number
     }
     vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
     const submesh_end_offs = view.byteOffset + 0x60;
-    dlistHeaders.push({ mtxIdxs, dlistSizes, submesh_end_offs })
+    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs })
     // todo(complexplane): Parse individual dlist buffers
 
     // todo(complexplane): These conditionals look wrong, fix/verify them
@@ -261,7 +249,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: ModelAttrs, idx: number
     return { material, boundingSphere, dlistHeaders, rawData: buffer };
 }
 
-function parseGcmf(buffer: ArrayBufferSlice): Model {
+function parseModel(buffer: ArrayBufferSlice): Model {
     function parseModelAttrs(attrs: number): ModelAttrs {
         const value16Bit = ((attrs >> 0) & 0x01) == 1;
         const unk0x2 = ((attrs >> 1) & 0x01) == 1;
@@ -347,16 +335,20 @@ function parseGcmf(buffer: ArrayBufferSlice): Model {
     return { attrs: attribute, origin, boundingRadius, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
-export function parse(buffer: ArrayBufferSlice): GMA {
-    const view = buffer.createDataView();
+type ModelEntryOffset = {
+    gcmfOffs: number,
+    nameOffs: number,
+};
+
+export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
+    const view = gmaBuffer.createDataView();
     const count = view.getInt32(0x00);
-    const gcmfEntryOffs: GcmfEntryOffset[] = [];
-    const gcmfEntries: GcmfEntry[] = [];
+    const gcmfEntryOffs: ModelEntryOffset[] = [];
 
     const gcmfBaseOffs = view.getUint32(0x04);
 
     // Gcmf Entry Offset
-    const entry = buffer.slice(0x08);
+    const entry = gmaBuffer.slice(0x08);
     const entryView = entry.createDataView();
     let offs = 0x00
     for (let i = 0; i < count; i++) {
@@ -366,9 +358,9 @@ export function parse(buffer: ArrayBufferSlice): GMA {
         offs += 0x08;
     }
 
-    // GcmfEntry
-    const nameBuff = entry.slice(0x08 * count, gcmfBaseOffs);
-    const gcmfBuff = buffer.slice(gcmfBaseOffs);
+    const models = new Map<string, Model>();
+    const nameBuf = entry.slice(0x08 * count, gcmfBaseOffs);
+    const modelBuf = gmaBuffer.slice(gcmfBaseOffs);
     for (let i = 0; i < gcmfEntryOffs.length; i++) {
         let nameOffs = gcmfEntryOffs[i].nameOffs;
         let gcmfOffs = gcmfEntryOffs[i].gcmfOffs;
@@ -376,7 +368,7 @@ export function parse(buffer: ArrayBufferSlice): GMA {
             // ignore invaild gcmf
             continue;
         }
-        const name = readString(nameBuff, nameOffs);
+        const name = readString(nameBuf, nameOffs);
 
         // TODO parse attribute into nicer type first
         let attr = view.getUint32(gcmfBaseOffs + gcmfOffs + 0x04);
@@ -388,13 +380,14 @@ export function parse(buffer: ArrayBufferSlice): GMA {
             console.log(`Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${(attr & (1 << 4)) !== 0} Effective Model:${(attr & (1 << 5)) !== 0}`);
             continue;
         }
-        const gcmf = parseGcmf(gcmfBuff.slice(gcmfOffs));
-        if (gcmf.materialCount + gcmf.traslucidMaterialCount < 1) {
+        const model = parseModel(modelBuf.slice(gcmfOffs));
+        if (model.materialCount + model.traslucidMaterialCount < 1) {
             // ignore invaild gcmf
             continue;
         }
-        gcmfEntries.push({ gcmf, name });
+
+        models.set(name, model);
     }
 
-    return { gcmfEntries };
+    return models;
 }

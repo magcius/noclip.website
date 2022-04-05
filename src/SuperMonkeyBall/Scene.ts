@@ -10,9 +10,9 @@ import * as UI from '../ui';
 import { assertExists, leftPad } from '../util';
 import * as Viewer from '../viewer';
 import { AVLZ_Type, decompressLZSS } from './AVLZ';
-import * as AVtpl from './AVtpl';
+import * as AVTpl from './AVTpl';
 import { debugDrawColi } from './DebugDraw';
-import * as GMA from './Gcmf';
+import * as Gcmf from './Gcmf';
 import { parseStagedefLz } from './ParseStagedef';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, StageData as StageData } from './Render';
 import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from './StageInfo';
@@ -195,10 +195,10 @@ export class SuperMonkeyBallSceneDesc {
         ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
-        const stageGma = GMA.parse(stageGmaBuf);
-        const stageTpl = AVtpl.parseAvTpl(stageTplBuf, 0);
-        const bgGma = GMA.parse(bgGmaBuf);
-        const bgTpl = AVtpl.parseAvTpl(bgTplBuf, 0);
+        const stageGma = Gcmf.parseGma(stageGmaBuf);
+        const stageTpl = AVTpl.parseAvTpl(stageTplBuf, 0);
+        const bgGma = Gcmf.parseGma(bgGmaBuf);
+        const bgTpl = AVTpl.parseAvTpl(bgTplBuf, 0);
 
         return { stagedef, stageGma, stageTpl, bgGma, bgTpl };
     }
