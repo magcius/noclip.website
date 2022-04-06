@@ -363,24 +363,24 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
     const modelBuf = gmaBuffer.slice(gcmfBaseOffs);
     for (let i = 0; i < gcmfEntryOffs.length; i++) {
         let nameOffs = gcmfEntryOffs[i].nameOffs;
-        let gcmfOffs = gcmfEntryOffs[i].gcmfOffs;
-        if (gcmfOffs < 0 && nameOffs <= 0) {
-            // ignore invaild gcmf
+        let modelOffs = gcmfEntryOffs[i].gcmfOffs;
+        if (modelOffs < 0 && nameOffs <= 0) {
+            // Ignore invalid model
             continue;
         }
         const name = readString(nameBuf, nameOffs);
 
         // TODO parse attribute into nicer type first
-        let attr = view.getUint32(gcmfBaseOffs + gcmfOffs + 0x04);
+        let attr = view.getUint32(gcmfBaseOffs + modelOffs + 0x04);
         let notSupport = (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
         if (notSupport) {
             // ignore "Stiching Model", "Skin Model" and "Effective Model".
             // TODO: Support those model.
-            console.log(`not support this model ${hexzero(gcmfBaseOffs + gcmfOffs, 8)}`);
+            console.log(`not support this model ${hexzero(gcmfBaseOffs + modelOffs, 8)}`);
             console.log(`Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${(attr & (1 << 4)) !== 0} Effective Model:${(attr & (1 << 5)) !== 0}`);
             continue;
         }
-        const model = parseModel(modelBuf.slice(gcmfOffs));
+        const model = parseModel(modelBuf.slice(modelOffs));
         if (model.materialCount + model.traslucidMaterialCount < 1) {
             // ignore invaild gcmf
             continue;

@@ -19,6 +19,7 @@ import * as Gcmf from './Gcmf';
 import * as SD from './StagedefTypes';
 
 // Immutable stage/background definition
+// todo(complexplane): Move this out of here?
 export type StageData = {
     stagedef: SD.Stage;
     stageGma: Gcmf.Gma;
@@ -330,23 +331,25 @@ class MaterialInstance {
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[samplerIdxIdx];
-        // let lodBias = 0;
-        // switch (sampler.anisotropy) {
-        //     case 1:
-        //         lodBias = -2;
-        //         break;
-        //     case 2:
-        //         lodBias = -4;
-        //         break;
-        //     case 4:
-        //         lodBias = -8;
-        //         break;
-        //     case 0:
-        //     default:
-        //         lodBias = 0;
-        //         break;
-        // }
-        // dst.lodBias = lodBias;
+        // todo(complexplane): Apparently TextureMapping width/height/lodBias aren't used by renderer,
+        // don't bother setting them?
+        let lodBias = 0;
+        switch (sampler.anisotropy) {
+            case 1:
+                lodBias = -2;
+                break;
+            case 2:
+                lodBias = -4;
+                break;
+            case 4:
+                lodBias = -8;
+                break;
+            case 0:
+            default:
+                lodBias = 0;
+                break;
+        }
+        dst.lodBias = lodBias;
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
