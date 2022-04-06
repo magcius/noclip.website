@@ -1368,8 +1368,8 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
 function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
     project(dst, v, viewerInput.camera);
     // Put in viewport framebuffer space.
-    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
-    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
+    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
     dst[2] = 0.0;
 }
 

@@ -452,7 +452,7 @@ export class Explorer implements SceneGfx {
         {
             efTemplate.filterKey = Pass.INDIRECT;
             const texPrjMtx = scratchMatrix;
-            texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+            texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager, Pass.INDIRECT);
         }

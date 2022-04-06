@@ -5194,7 +5194,7 @@ class OceanRingDrawer {
         setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
         setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
         setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera);
 
         materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -6265,7 +6265,7 @@ export class ElectricRailHolder extends NameObj {
                 if (!rail.visibleScenario || !rail.visibleAlive)
                     continue;
 
-                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, drawParams);
+                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, drawParams);
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);

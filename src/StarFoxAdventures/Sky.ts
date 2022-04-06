@@ -108,7 +108,6 @@ export class Sky {
         
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
@@ -147,7 +146,6 @@ export class Sky {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skyscape');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             const skyDepthTargetID = builder.createRenderTargetID(depthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);

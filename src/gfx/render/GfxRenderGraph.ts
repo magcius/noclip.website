@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
 import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
@@ -55,8 +55,6 @@ export const enum GfxrAttachmentSlot {
     DepthStencil,
 }
 
-export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x: 0, y: 0, w: 1, h: 1 };
-
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;
 
@@ -88,11 +86,6 @@ export interface GfxrPass {
      * Attach the occlusion query pool used by this rendering pass.
      */
     attachOcclusionQueryPool(queryPool: GfxQueryPool): void;
-
-    /**
-     * Set the viewport used by this rendering pass.
-     */
-    setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void;
 
     /**
      * Attach the resolve texture ID to the given pass. All resolve textures used within the pass
@@ -132,8 +125,6 @@ class PassImpl implements GfxrPass {
     // GfxrAttachmentSlot => refcount.
     public renderTargetExtraRefs: boolean[] = [];
 
-    public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
-
     public resolveTextureInputTextures: GfxTexture[] = [];
 
     public renderTargets: (RenderTarget | null)[] = [];
@@ -151,11 +142,6 @@ class PassImpl implements GfxrPass {
         stencilClearValue: 'load',
         occlusionQueryPool: null,
     };
-
-    public viewportX: number = 0;
-    public viewportY: number = 0;
-    public viewportW: number = 0;
-    public viewportH: number = 0;
 
     // Execution callback from user.
     public execFunc: PassExecFunc | null = null;
@@ -183,10 +169,6 @@ class PassImpl implements GfxrPass {
 
     public attachOcclusionQueryPool(queryPool: GfxQueryPool): void {
         this.descriptor.occlusionQueryPool = queryPool;
-    }
-
-    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.viewport = viewport;
     }
 
     public resolveToExternalTexture(attachmentSlot: GfxrAttachmentSlot, texture: GfxTexture): void {
@@ -807,17 +789,6 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             renderTarget.needsClear = false;
         }
 
-        if (rtWidth > 0 && rtHeight > 0) {
-            const x = rtWidth  * pass.viewport.x;
-            const y = rtHeight * pass.viewport.y;
-            const w = rtWidth  * pass.viewport.w;
-            const h = rtHeight * pass.viewport.h;
-            pass.viewportX = x;
-            pass.viewportY = y;
-            pass.viewportW = w;
-            pass.viewportH = h;
-        }
-
         for (let i = 0; i < pass.resolveTextureInputIDs.length; i++) {
             const resolveTextureID = pass.resolveTextureInputIDs[i];
             pass.resolveTextureInputTextures[i] = this.acquireResolveTextureInputTextureForID(graph, resolveTextureID);
@@ -898,8 +869,6 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
         const renderPass = this.device.createRenderPass(pass.descriptor);
         renderPass.beginDebugGroup(pass.debugName);
-
-        renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
         if (pass.execFunc !== null)
             pass.execFunc(renderPass, this);
