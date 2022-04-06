@@ -319,7 +319,7 @@ export class Explorer implements SceneGfx {
         const playbackControls = document.createElement('div');
         playbackControls.style.display = 'grid';
         playbackControls.style.gridAutoFlow = 'column';
-        playbackControls.style.gridGap = '4px';
+        playbackControls.style.gap = '4px';
         panel.contents.appendChild(playbackControls);
 
         const prevButton = new SimpleButton();
