@@ -5475,8 +5475,8 @@ class OceanRingPipe extends LiveActor {
 
         setRailCoord(this.oceanRing, 0);
         for (let i = 0; i < this.segmentCount + 1; i++) {
-            getRailPos(scratchVec3a, this.oceanRing);
-            calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
+            getRailPos(scratchVec3b, this.oceanRing);
+            calcGravityVector(sceneObjHolder, this, scratchVec3b, scratchVec3a);
             vec3.negate(scratchVec3a, scratchVec3a);
             getRailDirection(scratchVec3b, this.oceanRing);
 
@@ -5635,8 +5635,8 @@ export class OceanRing extends LiveActor {
 
         setRailCoord(this, 0);
         for (let i = 0; i < this.segmentCount; i++) {
-            getRailPos(scratchVec3a, this);
-            calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
+            getRailPos(scratchVec3b, this);
+            calcGravityVector(sceneObjHolder, this, scratchVec3b, scratchVec3a);
             vec3.negate(scratchVec3a, scratchVec3a);
             getRailDirection(scratchVec3b, this);
 
