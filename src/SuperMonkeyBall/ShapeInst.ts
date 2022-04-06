@@ -48,7 +48,7 @@ export class ShapeInst {
     private loadedVertexLayout: LoadedVertexLayout;
     private loadedVertexDatas: LoadedVertexData[];
 
-    constructor(shapeData: Gcmf.Shape, modelAttrs: Gcmf.ModelAttrs) {
+    constructor(public shapeData: Gcmf.Shape, modelAttrs: Gcmf.ModelAttrs) {
         const vtxAttr = shapeData.material.vtxAttr;
         const vcd: GX_VtxDesc[] = [];
         for (let i = 0; i <= GX.Attr.MAX; i++) {

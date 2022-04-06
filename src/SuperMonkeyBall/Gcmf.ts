@@ -29,7 +29,7 @@ export type Material = {
     unk0x02: number,
     unk0x03: number,
     colors: Color[]
-    transparents: number[],
+    translucents: number[],
     matCount: number,
     vtxRenderFlag: GX.AttrType,
     samplerIdxs: number[], // GMA can store max 3 sampler index
@@ -163,7 +163,7 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4 {
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     const view = buffer.createDataView();
     const colors: Color[] = []
-    const transparents: number[] = [];
+    const translucents: number[] = [];
     const samplerIdxs: number[] = [];
 
     const unk0x02 = view.getUint8(0x02);
@@ -172,7 +172,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     colors.push(colorNewFromRGBA(view.getUint8(0x08), view.getUint8(0x09), view.getUint8(0x0A), view.getUint8(0x0B)));
     colors.push(colorNewFromRGBA(view.getUint8(0x0C), view.getUint8(0x0D), view.getUint8(0x0E), view.getUint8(0x0F)));
     for (let i = 0; i < 3; i++) {
-        transparents[i] = view.getUint8(0x10 + i);
+        translucents[i] = view.getUint8(0x10 + i);
     }
     const matCount = view.getUint8(0x12);
     const vtxRenderFlag: GX.AttrType = view.getUint8(0x13);
@@ -187,7 +187,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
 
     const vtxAttr: GX.Attr = view.getUint32(0x1C);
 
-    return { unk0x02, unk0x03, colors, transparents, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
+    return { unk0x02, unk0x03, colors, translucents, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
@@ -273,13 +273,13 @@ function parseModel(buffer: ArrayBufferSlice): Model {
 
     const texCount = view.getInt16(0x18);
     // todo(complexplane): Are these actually opaque/translucent meshes/shapes, not materials?
-    const materialCount = view.getInt16(0x1A);
-    const traslucidMaterialCount = view.getInt16(0x1C);
+    const opaqueMaterialCount = view.getInt16(0x1A);
+    const translucentMaterialCount = view.getInt16(0x1C);
     const mtxCount = view.getInt8(0x1E);
     // Texture and Matrix Size
     const texMtxSize = view.getInt32(0x20);
 
-    let allMaterialCount = materialCount + traslucidMaterialCount;
+    let allMaterialCount = opaqueMaterialCount + translucentMaterialCount;
     let offs = 0x40
     // GcmfSampler
     for (let i = 0; i < texCount; i++) {
@@ -332,7 +332,7 @@ function parseModel(buffer: ArrayBufferSlice): Model {
         shapeOffs += offs;
     }
 
-    return { attrs: attribute, origin, boundingRadius, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
+    return { attrs: attribute, origin, boundingRadius, texCount, materialCount: opaqueMaterialCount, traslucidMaterialCount: translucentMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
 type ModelEntryOffset = {

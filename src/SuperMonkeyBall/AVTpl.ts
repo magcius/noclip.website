@@ -4,21 +4,26 @@
  * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
  */
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as GX from '../gx/gx_enum';
-import { TextureInputGX } from '../gx/gx_texture';
-import { assert, leftPad } from '../util';
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import * as GX from "../gx/gx_enum";
+import { TextureInputGX } from "../gx/gx_texture";
+import { assert, leftPad } from "../util";
 
-function parseAvTplHeader(texHeaderBuffer: ArrayBufferSlice, tplName: string, idx: number, tplBuffer: ArrayBufferSlice): GXTextureInput {
+function parseAVTplHeader(
+    texHeaderBuffer: ArrayBufferSlice,
+    tplName: string,
+    idx: number,
+    tplBuffer: ArrayBufferSlice
+): TextureInputGX {
     let view = texHeaderBuffer.createDataView();
 
-    assert(view.getUint16(0x0E) == 0x1234);
-    const name = `${tplName}_${leftPad(idx.toString(), 3, '0')}`;
+    assert(view.getUint16(0x0e) == 0x1234);
+    const name = `${tplName}_${leftPad(idx.toString(), 3, "0")}`;
     const format: GX.TexFormat = view.getUint32(0x00);
     const offs = view.getUint32(0x04);
     const width = view.getUint16(0x08);
-    const height = view.getUint16(0x0A);
-    const mipCount = view.getUint16(0x0C);
+    const height = view.getUint16(0x0a);
+    const mipCount = view.getUint16(0x0c);
     const data = tplBuffer.slice(offs);
 
     const paletteFormat: GX.TexPalette | null = null;
@@ -27,14 +32,14 @@ function parseAvTplHeader(texHeaderBuffer: ArrayBufferSlice, tplName: string, id
     return { name, format, width, height, mipCount, data, paletteFormat, paletteData };
 }
 
-export function parseAvTpl(buffer: ArrayBufferSlice, tplName: string): TextureInputGX[] {
+export function parseAVTpl(buffer: ArrayBufferSlice, tplName: string): TextureInputGX[] {
     let view = buffer.createDataView();
     const textures: TextureInputGX[] = [];
 
     let entryCount = view.getUint32(0x00);
     let offs = 0x04;
     for (let i = 0; i < entryCount; i++) {
-        const texture = parseAvTplHeader(buffer.slice(offs), tplName, i, buffer);
+        const texture = parseAVTplHeader(buffer.slice(offs), tplName, i, buffer);
         offs += 0x10;
         if (texture.width === 0 && texture.height === 0 && texture.mipCount === 0) {
             continue;

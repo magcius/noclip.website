@@ -140,7 +140,7 @@ class MaterialInstance {
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: Gcmf.Sampler[], public modelID: number, transparent?: boolean) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: Gcmf.Sampler[], public modelID: number, translucent?: boolean) {
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
             colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
@@ -279,7 +279,7 @@ class MaterialInstance {
         // 0x65
         mb.setZMode(true, GX.CompareType.LEQUAL, (mat_unk0x03 & (1 << 5)) !== 0 ? false : true);
 
-        if (transparent) {
+        if (translucent) {
             // texture conatins "alpha" value
             mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x80, GX.AlphaOp.AND, GX.CompareType.LEQUAL, 0xFF);
         } else {
@@ -388,8 +388,8 @@ export class GcmfModelInstance {
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
         this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
         for (let i = 0; i < this.gcmfModel.materialData.length; i++) {
-            const transparent = i >= this.gcmfModel.gcmfEntry.gcmf.materialCount;
-            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers, modelID, transparent);
+            const translucent = i >= this.gcmfModel.gcmfEntry.gcmf.materialCount;
+            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers, modelID, translucent);
         }
 
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;

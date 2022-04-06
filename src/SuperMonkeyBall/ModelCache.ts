@@ -7,6 +7,9 @@ import { nArray } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
 
+// Cache loaded models by name and textures by index in TPL. Not much advantage over loading
+// everything at once but oh well.
+
 export class TextureCache {
     private cache: (LoadedTexture | null)[];
 
@@ -18,10 +21,7 @@ export class TextureCache {
         const tex = this.cache[idx];
         if (tex === null) {
             // Load texture
-            const mipChain = calcMipChain(
-                this.tpl[idx],
-                this.tpl[idx].mipCount
-            );
+            const mipChain = calcMipChain(this.tpl[idx], this.tpl[idx].mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
 
             this.cache[idx] = freshTex;
@@ -53,7 +53,6 @@ export class ModelCache {
     }
 
     public getModel(device: GfxDevice, modelName: string): ModelInst | null {
-        // todo(complexplane): Actually add models
         for (let i = 0; i < this.entries.length; i++) {
             const entry = this.entries[i];
             if (entry.gma.has(modelName)) {
