@@ -1152,7 +1152,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
-        return new XRWebGLLayer(webXRSession, this.gl);
+        return new XRWebGLLayer(webXRSession, this.gl, { antialias: false });
     }
 
     public destroyBuffer(o: GfxBuffer): void {
