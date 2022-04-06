@@ -4,114 +4,123 @@
  * https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=gmaFormat
  * https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
  * AmusementVision's Texture format
- * 
+ *
  * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
  */
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color, colorNewFromRGBA } from "../Color";
-import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, VtxLoader } from "../gx/gx_displaylist";
+import {
+    compileVtxLoaderMultiVat,
+    getAttributeByteSize,
+    GX_Array,
+    GX_VtxAttrFmt,
+    GX_VtxDesc,
+    LoadedVertexData,
+    LoadedVertexLayout,
+    VtxLoader,
+} from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
 import { assert, hexzero, readString } from "../util";
 
 // GCMF Attribute
 export type ModelAttrs = {
-    value16Bit: boolean, // Vertices stored using 16-bit compressed floats (VTXFMT1)
-    unk0x2: boolean, // Might not exist
-    stitching: boolean,
-    skin: boolean, // Skinned model with up to 8 bones
-    effective: boolean // Physics-driven vertices
+    value16Bit: boolean; // Vertices stored using 16-bit compressed floats (VTXFMT1)
+    unk0x2: boolean; // Might not exist
+    stitching: boolean;
+    skin: boolean; // Skinned model with up to 8 bones
+    effective: boolean; // Physics-driven vertices
 };
 
 // GCMF Material
 export type Material = {
-    unk0x02: number,
-    unk0x03: number,
-    colors: Color[]
-    translucents: number[],
-    matCount: number,
-    vtxRenderFlag: GX.AttrType,
-    samplerIdxs: number[], // GMA can store max 3 sampler index
-    vtxAttr: GX.Attr,
-    unk0x14: number, // sort index?? shader index?
-    unk0x15: number,
-    unk0x40: number // relates "TEV"
+    unk0x02: number;
+    unk0x03: number;
+    colors: Color[];
+    transparents: number[];
+    matCount: number;
+    vtxRenderFlag: GX.AttrType;
+    samplerIdxs: number[]; // GMA can store max 3 sampler index
+    vtxAttr: GX.Attr;
+    unk0x14: number; // sort index?? shader index?
+    unk0x15: number;
+    unk0x40: number; // relates "TEV"
 };
 
 // GCMF VertexControlHeader
 type VertexControl = {
     count: number;
-    vtxCon1: VtxConType1,
-    vtxCon2: VtxConType2,
-    vtxCon3: VtxConType3,
-    vtxCon4: VtxConType4
+    vtxCon1: VtxConType1;
+    vtxCon2: VtxConType2;
+    vtxCon3: VtxConType3;
+    vtxCon4: VtxConType4;
 };
 
 type VtxConType1 = {
-    position: vec3,
-    normal: vec3,
-    unk0x1C: number
+    position: vec3;
+    normal: vec3;
+    unk0x1C: number;
 };
 
 type VtxConType2 = {
-    buffer: ArrayBuffer
+    buffer: ArrayBuffer;
 };
 
 type VtxConType3 = {
-    count: number,
-    offs: number[]
+    count: number;
+    offs: number[];
 };
 
 type VtxConType4 = {
-    offs: number[]
-}
+    offs: number[];
+};
 
 // GCMF Submesh
 // todo(complexplane): GPU data probably belongs in ShapeInstance or similar
 export type Shape = {
-    material: Material,
-    boundingSphere: vec3,
-    dlistHeaders: GcmfDisplaylistHeader[],
-    rawData: ArrayBufferSlice,  // todo(complexplane): Store individual dlist bufs instead
+    material: Material;
+    boundingSphere: vec3;
+    dlistHeaders: GcmfDisplaylistHeader[];
+    rawData: ArrayBufferSlice; // todo(complexplane): Store individual dlist bufs instead
 };
 
 // GCMF DisplaylistHeader
 export type GcmfDisplaylistHeader = {
-    mtxIdxs: number[],
-    dlistSizes: number[],
-    submeshEndOffs: number
+    mtxIdxs: number[];
+    dlistSizes: number[];
+    submeshEndOffs: number;
 };
 
 // GCMF Sampler
 export type Sampler = {
-    unk0x00: number,
-    mipmapAV: number,
-    uvWrap: number,
-    texIdx: number, // Index of texture in TPL
-    lodBias: number,
-    anisotropy: number,
-    unk0x0C: number, // TEV?
-    samplerIdx: number, // Index of this sampler in gcmf's list
-    unk0x10: number // TEV
-    alphaType: number,
-    colorType: number
+    unk0x00: number;
+    mipmapAV: number;
+    uvWrap: number;
+    texIdx: number; // Index of texture in TPL
+    lodBias: number;
+    anisotropy: number;
+    unk0x0C: number; // TEV?
+    samplerIdx: number; // Index of this sampler in gcmf's list
+    unk0x10: number; // TEV
+    alphaType: number;
+    colorType: number;
     // Texture can be swapped at runtime, used for F-Zero GX lap-related textures apparently
-    swappable: boolean,
+    swappable: boolean;
 };
 
 export type Model = {
-    attrs: ModelAttrs,
-    origin: vec3,
-    boundingRadius: number,
-    texCount: number,
-    opaqueShapeCount: number,
-    translucidShapeCount: number,
-    mtxCount: number,
-    matrixs: mat4[],
-    samplers: Sampler[],
-    shapes: Shape[]
-}
+    attrs: ModelAttrs;
+    origin: vec3;
+    boundingRadius: number;
+    texCount: number;
+    opaqueShapeCount: number;
+    translucentShapeCount: number;
+    mtxCount: number;
+    matrixs: mat4[];
+    samplers: Sampler[];
+    shapes: Shape[];
+};
 
 export type Gma = Map<string, Model>;
 
@@ -124,15 +133,28 @@ function parseSampler(buffer: ArrayBufferSlice): Sampler {
     const texIdx = view.getInt16(0x04);
     const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
-    const unk0x0C = view.getInt8(0x0C);
-    const swappable = !!view.getUint8(0x0D);
-    const samplerIdx = view.getInt16(0x0E);
+    const unk0x0C = view.getInt8(0x0c);
+    const swappable = !!view.getUint8(0x0d);
+    const samplerIdx = view.getInt16(0x0e);
     const unk0x10 = view.getInt32(0x10);
     const type = view.getUint8(0x13);
     const alphaType = (type >> 4) & 0x07;
-    const colorType = type & 0x0F;
+    const colorType = type & 0x0f;
 
-    return { unk0x00, mipmapAV, uvWrap, texIdx, lodBias, anisotropy, unk0x0C, samplerIdx, unk0x10, alphaType, colorType, swappable };
+    return {
+        unk0x00,
+        mipmapAV,
+        uvWrap,
+        texIdx,
+        lodBias,
+        anisotropy,
+        unk0x0C,
+        samplerIdx,
+        unk0x10,
+        alphaType,
+        colorType,
+        swappable,
+    };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4 {
@@ -141,15 +163,16 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4 {
     const m00 = view.getFloat32(0x00);
     const m01 = view.getFloat32(0x04);
     const m02 = view.getFloat32(0x08);
-    const m03 = view.getFloat32(0x0C);
+    const m03 = view.getFloat32(0x0c);
     const m10 = view.getFloat32(0x10);
     const m11 = view.getFloat32(0x14);
     const m12 = view.getFloat32(0x18);
-    const m13 = view.getFloat32(0x1C);
+    const m13 = view.getFloat32(0x1c);
     const m20 = view.getFloat32(0x20);
     const m21 = view.getFloat32(0x24);
     const m22 = view.getFloat32(0x28);
-    const m23 = view.getFloat32(0x2C);
+    const m23 = view.getFloat32(0x2c);
+    // prettier-ignore
     const matrix = mat4.fromValues(
         m00, m10, m20, 0,
         m01, m11, m21, 0,
@@ -162,17 +185,38 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4 {
 
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     const view = buffer.createDataView();
-    const colors: Color[] = []
-    const translucents: number[] = [];
+    const colors: Color[] = [];
+    const transparents: number[] = [];
     const samplerIdxs: number[] = [];
 
     const unk0x02 = view.getUint8(0x02);
     const unk0x03 = view.getUint8(0x03);
-    colors.push(colorNewFromRGBA(view.getUint8(0x04), view.getUint8(0x05), view.getUint8(0x06), view.getUint8(0x07)));
-    colors.push(colorNewFromRGBA(view.getUint8(0x08), view.getUint8(0x09), view.getUint8(0x0A), view.getUint8(0x0B)));
-    colors.push(colorNewFromRGBA(view.getUint8(0x0C), view.getUint8(0x0D), view.getUint8(0x0E), view.getUint8(0x0F)));
+    colors.push(
+        colorNewFromRGBA(
+            view.getUint8(0x04),
+            view.getUint8(0x05),
+            view.getUint8(0x06),
+            view.getUint8(0x07)
+        )
+    );
+    colors.push(
+        colorNewFromRGBA(
+            view.getUint8(0x08),
+            view.getUint8(0x09),
+            view.getUint8(0x0a),
+            view.getUint8(0x0b)
+        )
+    );
+    colors.push(
+        colorNewFromRGBA(
+            view.getUint8(0x0c),
+            view.getUint8(0x0d),
+            view.getUint8(0x0e),
+            view.getUint8(0x0f)
+        )
+    );
     for (let i = 0; i < 3; i++) {
-        translucents[i] = view.getUint8(0x10 + i);
+        transparents[i] = view.getUint8(0x10 + i);
     }
     const matCount = view.getUint8(0x12);
     const vtxRenderFlag: GX.AttrType = view.getUint8(0x13);
@@ -182,12 +226,24 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         let offs = 0x16 + i * 0x02;
         samplerIdxs[i] = view.getInt16(offs);
     }
-    const unk0x3C = view.getInt32(0x3C);
+    const unk0x3C = view.getInt32(0x3c);
     const unk0x40 = view.getInt32(0x40);
 
-    const vtxAttr: GX.Attr = view.getUint32(0x1C);
+    const vtxAttr: GX.Attr = view.getUint32(0x1c);
 
-    return { unk0x02, unk0x03, colors, translucents, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
+    return {
+        unk0x02,
+        unk0x03,
+        colors,
+        transparents,
+        matCount,
+        unk0x14,
+        unk0x15,
+        vtxRenderFlag,
+        samplerIdxs,
+        vtxAttr,
+        unk0x40,
+    };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
@@ -210,7 +266,12 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
     return { mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs };
 }
 
-function parseShape(buffer: ArrayBufferSlice, attribute: ModelAttrs, idx: number, vtxCon2Offs: number): Shape {
+function parseShape(
+    buffer: ArrayBufferSlice,
+    attribute: ModelAttrs,
+    idx: number,
+    vtxCon2Offs: number
+): Shape {
     const view = buffer.createDataView();
 
     let mtxIdxs: number[] = [];
@@ -230,7 +291,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: ModelAttrs, idx: number
     }
     vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
     const submesh_end_offs = view.byteOffset + 0x60;
-    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs })
+    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs });
     // todo(complexplane): Parse individual dlist buffers
 
     // todo(complexplane): These conditionals look wrong, fix/verify them
@@ -267,20 +328,20 @@ function parseModel(buffer: ArrayBufferSlice): Model {
     const origin = vec3.create();
 
     const attribute = parseModelAttrs(view.getUint32(0x04));
-    let useVtxCon = (attribute.skin || attribute.effective);
-    vec3.set(origin, view.getFloat32(0x08), view.getFloat32(0x0C), view.getFloat32(0x10));
+    let useVtxCon = attribute.skin || attribute.effective;
+    vec3.set(origin, view.getFloat32(0x08), view.getFloat32(0x0c), view.getFloat32(0x10));
     const boundingRadius = view.getFloat32(0x14);
 
     const texCount = view.getInt16(0x18);
-    // todo(complexplane): Are these actually opaque/translucent meshes/shapes, not materials?
-    const opaqueMaterialCount = view.getInt16(0x1A);
-    const translucentMaterialCount = view.getInt16(0x1C);
-    const mtxCount = view.getInt8(0x1E);
+    // todo(complexplane): Are these actually opaque/transparent meshes/shapes, not materials?
+    const materialCount = view.getInt16(0x1a);
+    const traslucidMaterialCount = view.getInt16(0x1c);
+    const mtxCount = view.getInt8(0x1e);
     // Texture and Matrix Size
     const texMtxSize = view.getInt32(0x20);
 
-    let allMaterialCount = opaqueMaterialCount + translucentMaterialCount;
-    let offs = 0x40
+    let allMaterialCount = materialCount + traslucidMaterialCount;
+    let offs = 0x40;
     // GcmfSampler
     for (let i = 0; i < texCount; i++) {
         samplers.push(parseSampler(buffer.slice(offs)));
@@ -303,17 +364,17 @@ function parseModel(buffer: ArrayBufferSlice): Model {
         vtxConCount = view.getInt32(texMtxSize + 0x00);
         vtxCon1Offs = view.getInt32(texMtxSize + 0x04);
         vtxCon2Offs = view.getInt32(texMtxSize + 0x08);
-        vtxCon3Offs = view.getInt32(texMtxSize + 0x0C);
+        vtxCon3Offs = view.getInt32(texMtxSize + 0x0c);
         vtxCon4Offs = view.getInt32(texMtxSize + 0x10);
 
         // let vtxCon: GcmfVertexControl;
     }
 
-    let shapeOffs = (useVtxCon ? 0x20 : 0x00);
+    let shapeOffs = useVtxCon ? 0x20 : 0x00;
     let shapeBuff = buffer.slice(texMtxSize);
     // GcmfShape
     for (let i = 0; i < allMaterialCount; i++) {
-        let vtxAttr = view.getUint32(texMtxSize + shapeOffs + 0x1C);
+        let vtxAttr = view.getUint32(texMtxSize + shapeOffs + 0x1c);
         if ((vtxAttr & (1 << GX.Attr._NBT)) !== 0) {
             console.log("Not support NBT");
             continue;
@@ -332,12 +393,23 @@ function parseModel(buffer: ArrayBufferSlice): Model {
         shapeOffs += offs;
     }
 
-    return { attrs: attribute, origin, boundingRadius, texCount, opaqueShapeCount: opaqueMaterialCount, translucidShapeCount: translucentMaterialCount, mtxCount, matrixs, samplers, shapes };
+    return {
+        attrs: attribute,
+        origin,
+        boundingRadius,
+        texCount,
+        opaqueShapeCount: materialCount,
+        translucentShapeCount: traslucidMaterialCount,
+        mtxCount,
+        matrixs,
+        samplers,
+        shapes,
+    };
 }
 
 type ModelEntryOffset = {
-    gcmfOffs: number,
-    nameOffs: number,
+    gcmfOffs: number;
+    nameOffs: number;
 };
 
 export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
@@ -350,7 +422,7 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
     // Gcmf Entry Offset
     const entry = gmaBuffer.slice(0x08);
     const entryView = entry.createDataView();
-    let offs = 0x00
+    let offs = 0x00;
     for (let i = 0; i < count; i++) {
         const gcmfOffs = entryView.getInt32(offs);
         const nameOffs = entryView.getInt32(offs + 0x04);
@@ -372,16 +444,21 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
 
         // TODO parse attribute into nicer type first
         let attr = view.getUint32(gcmfBaseOffs + modelOffs + 0x04);
-        let notSupport = (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
+        let notSupport =
+            (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
         if (notSupport) {
             // ignore "Stiching Model", "Skin Model" and "Effective Model".
             // TODO: Support those model.
             console.log(`not support this model ${hexzero(gcmfBaseOffs + modelOffs, 8)}`);
-            console.log(`Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${(attr & (1 << 4)) !== 0} Effective Model:${(attr & (1 << 5)) !== 0}`);
+            console.log(
+                `Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${
+                    (attr & (1 << 4)) !== 0
+                } Effective Model:${(attr & (1 << 5)) !== 0}`
+            );
             continue;
         }
         const model = parseModel(modelBuf.slice(modelOffs));
-        if (model.opaqueShapeCount + model.translucidShapeCount < 1) {
+        if (model.opaqueShapeCount + model.translucentShapeCount < 1) {
             // ignore invaild gcmf
             continue;
         }

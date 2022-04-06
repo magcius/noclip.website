@@ -1,4 +1,4 @@
-import { vec2, vec3 } from 'gl-matrix';
+import { vec2, vec3 } from "gl-matrix";
 
 export const enum BananaType {
     Single,
@@ -34,7 +34,7 @@ export type Keyframe = {
     easeType: EaseType;
     time: number; // Percent of total animation duration (1-100)?
     value: number; // Translation or rotation in degrees
-}
+};
 
 export type ItemgroupAnim = {
     rotXKeyframes: Keyframe[];
@@ -43,17 +43,17 @@ export type ItemgroupAnim = {
     posXKeyframes: Keyframe[];
     posYKeyframes: Keyframe[];
     posZKeyframes: Keyframe[];
-}
+};
 
 export type BgAnim = {
-    loopPointSeconds: number,
+    loopPointSeconds: number;
     posXKeyframes: Keyframe[];
     posYKeyframes: Keyframe[];
     posZKeyframes: Keyframe[];
     rotXKeyframes: Keyframe[];
     rotYKeyframes: Keyframe[];
     rotZKeyframes: Keyframe[];
-}
+};
 
 export type BgAnim2 = {
     loopPointSeconds: number;
@@ -68,7 +68,7 @@ export type BgAnim2 = {
     unk9Keyframes: Keyframe[];
     unk10Keyframes: Keyframe[];
     unk11Keyframes: Keyframe[];
-}
+};
 
 export type BgModel = {
     modelName: string;
@@ -78,7 +78,7 @@ export type BgModel = {
     bgAnim: BgAnim;
     bgAnim2: BgAnim2;
     // effectHeader: EffectHeader;
-}
+};
 
 // export type EffectHeader = {
 //     fx1Keyframes: Effect1[];
@@ -110,21 +110,21 @@ export type BgModel = {
 
 // Visual model for the stage itself, parented to itemgroups
 export type LevelModel = {
-    flags: number,
-    modelName: string,
+    flags: number;
+    modelName: string;
 };
 
 export type Banana = {
     pos: vec3;
     type: BananaType;
-}
+};
 
 export type StageModelInstance = {
     stageModelA: StageModelPtrA;
     pos: vec3;
     rot: vec3;
     scale: vec3;
-}
+};
 
 export type FogAnim = {
     startDistanceKeyframes: Keyframe[];
@@ -133,19 +133,19 @@ export type FogAnim = {
     blueKeyframes: Keyframe[];
     greenKeyframes: Keyframe[];
     unkKeyframes: Keyframe[];
-}
+};
 
 export type ColiCone = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
-}
+};
 
 export type Bumper = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
-}
+};
 
 // export type ReflectiveModel = {
 //     modelName: string;
@@ -153,11 +153,11 @@ export type Bumper = {
 
 export type FalloutPlane = {
     y: number;
-}
+};
 
 export type StageModel = {
     modelName: string;
-}
+};
 
 export type Itemgroup = {
     initPos: vec3;
@@ -184,11 +184,11 @@ export type Itemgroup = {
     coliCones: ColiCone[];
     coliSpheres: ColiSphere[];
     coliCylinders: ColiCylinder[];
-}
+};
 
 export type StageModelPtrA = {
     stageModel: StageModel;
-}
+};
 
 // export type FgModel = {
 //     // Some other unknown fields are here...
@@ -201,12 +201,12 @@ export type StageModelPtrA = {
 
 export type StageModelPtrB = {
     stageModelA: StageModelPtrA;
-}
+};
 
 export type ColiSphere = {
     pos: vec3;
     radius: number;
-}
+};
 
 export type Stage = {
     unk0: number;
@@ -222,25 +222,25 @@ export type Stage = {
     bgModels: BgModel[];
     // fgModels: FgModel[];
     // reflectiveModels: ReflectiveModel[];
-}
+};
 
 export type Jamabar = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
-}
+};
 
 export type FalloutVolume = {
     pos: vec3;
     size: vec3;
     rot: vec3;
-}
+};
 
 export type ColiTri = {
     // Transform from triangle space to itemgroup space
-    pos: vec3;  // Position of vertex 1
-    normal: vec3;  // Normal in itemgroup space
-    rot: vec3;  // Rotation from XY plane
+    pos: vec3; // Position of vertex 1
+    normal: vec3; // Normal in itemgroup space
+    rot: vec3; // Rotation from XY plane
 
     // Triangle space (tri in XY plane, vertex 1 on origin, vertex 2 on (+)X axis)
 
@@ -250,22 +250,22 @@ export type ColiTri = {
     // Edge 1 normal in triangle space is (0, 1)
     edge2Normal: vec2; // Normal of edge from vertex 2 -> vertex 3, in triangle space
     edge3Normal: vec2; // Normal of edge from vertex 3 -> vertex 1, in triangle space
-}
+};
 
 export type Goal = {
     pos: vec3;
     rot: vec3;
     type: GoalType;
-}
+};
 
 export type ColiCylinder = {
     pos: vec3;
     radius: number;
     height: number;
     rot: vec3;
-}
+};
 
 export type InitBallPose = {
     pos: vec3;
     rot: vec3;
-}
+};

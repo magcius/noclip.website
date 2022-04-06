@@ -112,7 +112,7 @@ export class ShapeInst {
         public shapeData: Gcmf.Shape,
         modelSamplers: SamplerInst[],
         modelAttrs: Gcmf.ModelAttrs,
-        translucent: boolean,
+        translucent: boolean
     ) {
         const vtxAttr = shapeData.material.vtxAttr;
         const vcd: GX_VtxDesc[] = [];

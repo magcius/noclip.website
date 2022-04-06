@@ -1,8 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
-import { Camera } from '../Camera';
-import { Color, colorFromHSL, White } from '../Color';
+import { Camera } from "../Camera";
+import { Color, colorFromHSL, White } from "../Color";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
-import * as SD from './StagedefTypes';
+import * as SD from "./StagedefTypes";
 
 const SHORT_TO_RAD = Math.PI / 0x8000;
 
@@ -38,21 +38,21 @@ export function debugDrawColi(stagedef: SD.Stage, camera: Camera) {
                 camera.clipFromWorldMatrix,
                 vert1,
                 vert2,
-                color,
+                color
             );
             drawWorldSpaceLine(
                 getDebugOverlayCanvas2D(),
                 camera.clipFromWorldMatrix,
                 vert2,
                 vert3,
-                color,
+                color
             );
             drawWorldSpaceLine(
                 getDebugOverlayCanvas2D(),
                 camera.clipFromWorldMatrix,
                 vert3,
                 vert1,
-                color,
+                color
             );
         }
     }
