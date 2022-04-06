@@ -30,6 +30,8 @@ export class SamplerInst {
     private gfxSampler: GfxSampler;
 
     constructor(device: GfxDevice, public samplerData: Gcmf.Sampler, tplTexCache: TextureCache) {
+        this.loadedTex = tplTexCache.getTexture(device, samplerData.texIdx);
+
         const uvWrap = samplerData.uvWrap;
         const wrapS = (uvWrap >> 2) & (0x03 as GX.WrapMode);
         const wrapT = (uvWrap >> 4) & (0x03 as GX.WrapMode);

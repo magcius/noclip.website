@@ -105,8 +105,8 @@ export type Model = {
     origin: vec3,
     boundingRadius: number,
     texCount: number,
-    materialCount: number,
-    traslucidMaterialCount: number,
+    opaqueShapeCount: number,
+    translucidShapeCount: number,
     mtxCount: number,
     matrixs: mat4[],
     samplers: Sampler[],
@@ -332,7 +332,7 @@ function parseModel(buffer: ArrayBufferSlice): Model {
         shapeOffs += offs;
     }
 
-    return { attrs: attribute, origin, boundingRadius, texCount, materialCount: opaqueMaterialCount, traslucidMaterialCount: translucentMaterialCount, mtxCount, matrixs, samplers, shapes };
+    return { attrs: attribute, origin, boundingRadius, texCount, opaqueShapeCount: opaqueMaterialCount, translucidShapeCount: translucentMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
 type ModelEntryOffset = {
@@ -381,7 +381,7 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
             continue;
         }
         const model = parseModel(modelBuf.slice(modelOffs));
-        if (model.materialCount + model.traslucidMaterialCount < 1) {
+        if (model.opaqueShapeCount + model.translucidShapeCount < 1) {
             // ignore invaild gcmf
             continue;
         }

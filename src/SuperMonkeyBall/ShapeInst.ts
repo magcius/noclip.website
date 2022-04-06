@@ -1,16 +1,39 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from "../gx/gx_displaylist";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import {
+    compileVtxLoaderMultiVat,
+    getAttributeByteSize,
+    GX_Array,
+    GX_VtxAttrFmt,
+    GX_VtxDesc,
+    LoadedVertexData,
+    LoadedVertexLayout,
+} from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
 import { hexzero } from "../util";
 import * as Gcmf from "./Gcmf";
+import { MaterialInst } from "./MaterialInst";
+import { SamplerInst } from "./SamplerInst";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     const vatFormat: GX_VtxAttrFmt[] = [];
-    const compShift = vtxType == GX.CompType.S16 ? 0x0D : 0x00;
+    const compShift = vtxType == GX.CompType.S16 ? 0x0d : 0x00;
     vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: vtxType, compShift };
-    vatFormat[GX.Attr.NRM] = { compCnt: isNBT ? GX.CompCnt.NRM_NBT : GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
-    vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
-    vatFormat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+    vatFormat[GX.Attr.NRM] = {
+        compCnt: isNBT ? GX.CompCnt.NRM_NBT : GX.CompCnt.NRM_XYZ,
+        compType: vtxType,
+        compShift,
+    };
+    vatFormat[GX.Attr.CLR0] = {
+        compCnt: GX.CompCnt.CLR_RGBA,
+        compType: GX.CompType.RGBA8,
+        compShift,
+    };
+    vatFormat[GX.Attr.CLR1] = {
+        compCnt: GX.CompCnt.CLR_RGBA,
+        compType: GX.CompType.RGBA8,
+        compShift,
+    };
     vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
     vatFormat[GX.Attr.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
     vatFormat[GX.Attr.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
@@ -18,15 +41,50 @@ function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     return vatFormat;
 }
 
-function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][], fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1, isNBT: boolean, loader: VtxLoader, isCW: boolean): LoadedVertexData {
+function generateLoadedVertexData(
+    dlist: ArrayBufferSlice,
+    vat: GX_VtxAttrFmt[][],
+    fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1,
+    isNBT: boolean,
+    loader: VtxLoader,
+    isCW: boolean
+): LoadedVertexData {
     const arrays: GX_Array[] = [];
-    arrays[GX.Attr.POS] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS) };
-    arrays[GX.Attr.NRM] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) * (isNBT ? 3 : 1) };
-    arrays[GX.Attr.CLR0] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR0) };
-    arrays[GX.Attr.CLR1] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR1) };
-    arrays[GX.Attr.TEX0] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX0) };
-    arrays[GX.Attr.TEX1] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1) };
-    arrays[GX.Attr.TEX2] = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2) };
+    arrays[GX.Attr.POS] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS),
+    };
+    arrays[GX.Attr.NRM] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) * (isNBT ? 3 : 1),
+    };
+    arrays[GX.Attr.CLR0] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR0),
+    };
+    arrays[GX.Attr.CLR1] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR1),
+    };
+    arrays[GX.Attr.TEX0] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX0),
+    };
+    arrays[GX.Attr.TEX1] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1),
+    };
+    arrays[GX.Attr.TEX2] = {
+        buffer: dlist,
+        offs: 0x00,
+        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2),
+    };
     const loadedVertexData = loader.runVertices(arrays, dlist);
     if (isCW) {
         // convert cw triangle-strip to ccw triangle-strip
@@ -47,8 +105,15 @@ function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][
 export class ShapeInst {
     private loadedVertexLayout: LoadedVertexLayout;
     private loadedVertexDatas: LoadedVertexData[];
+    private material: MaterialInst;
 
-    constructor(public shapeData: Gcmf.Shape, modelAttrs: Gcmf.ModelAttrs) {
+    constructor(
+        device: GfxDevice,
+        public shapeData: Gcmf.Shape,
+        modelSamplers: SamplerInst[],
+        modelAttrs: Gcmf.ModelAttrs,
+        translucent: boolean,
+    ) {
         const vtxAttr = shapeData.material.vtxAttr;
         const vcd: GX_VtxDesc[] = [];
         for (let i = 0; i <= GX.Attr.MAX; i++) {
@@ -56,9 +121,9 @@ export class ShapeInst {
                 vcd[i] = { type: GX.AttrType.DIRECT };
             }
         }
-        const isNBT = ((vtxAttr & (1 << GX.Attr._NBT)) !== 0);
+        const isNBT = (vtxAttr & (1 << GX.Attr._NBT)) !== 0;
         if (isNBT) {
-            console.log('NBT detected');
+            console.log("NBT detected");
             // console.log(`vtxAttr: ${hexzero(vtxAttr, 8)} submesh offset: ${hexzero(view.byteOffset, 8)}`);
             vcd[GX.Attr.NRM] = { type: GX.AttrType.DIRECT };
         }
@@ -69,10 +134,10 @@ export class ShapeInst {
         this.loadedVertexLayout = loader.loadedVertexLayout;
 
         // 16-bit models use VTXFMT1
-        const fmtVat = (modelAttrs.value16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0);
+        const fmtVat = modelAttrs.value16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
         let dlistOffs = 0x60;
         this.loadedVertexDatas = [];
-        shapeData.dlistHeaders.forEach(dlistHeader => {
+        shapeData.dlistHeaders.forEach((dlistHeader) => {
             let dlistSizes = dlistHeader.dlistSizes;
             for (let i = 0; i < dlistSizes.length; i++) {
                 let size = dlistSizes[i];
@@ -83,11 +148,20 @@ export class ShapeInst {
                 let dlisEndOffs = dlistOffs + size;
                 // todo(complexplane): Parse separate dlist slices beforehand, and clean this up?
                 let dlist = shapeData.rawData.slice(dlistOffs + 0x01, dlisEndOffs);
-                const loadedVertexData = generateLoadedVertexData(dlist, vat, fmtVat, isNBT, loader, isCW);
+                const loadedVertexData = generateLoadedVertexData(
+                    dlist,
+                    vat,
+                    fmtVat,
+                    isNBT,
+                    loader,
+                    isCW
+                );
                 this.loadedVertexDatas.push(loadedVertexData);
 
                 dlistOffs = dlisEndOffs;
             }
         });
+
+        this.material = new MaterialInst(shapeData.material, modelSamplers, translucent);
     }
 }
