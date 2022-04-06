@@ -3,7 +3,7 @@
 
 import { mat4, quat, ReadonlyMat3, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
 import { Camera } from '../../Camera';
-import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
+import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, Magenta, OpaqueBlack, Red, White, Yellow } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
@@ -20,9 +20,10 @@ import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams, fillIndTexMtx } from '../../gx/gx_render';
 import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
+import { HIGHLIGHT_COLOR, Slider, TextField } from '../../ui';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointArg0, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
@@ -5069,10 +5070,6 @@ class OceanRingDrawer {
     private pointCount: number;
 
     constructor(sceneObjHolder: SceneObjHolder, private oceanRing: OceanRing) {
-        this.pointCount = this.oceanRing.points.length;
-        if (!isLoopRail(this.oceanRing))
-            this.pointCount -= this.oceanRing.pointsPerSegment;
-
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -5146,6 +5143,10 @@ class OceanRingDrawer {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.pointCount = this.oceanRing.points.length;
+        if (!isLoopRail(this.oceanRing))
+            this.pointCount -= this.oceanRing.pointsPerSegment;
+
         this.ddraw.beginDraw();
 
         const p = this.oceanRing.points, pointsPerSegment = this.oceanRing.pointsPerSegment;
@@ -5417,28 +5418,44 @@ class OceanRingPipe extends LiveActor {
     // public inside: OceanRingPipeInside;
     public isInside = false;
 
+    private flags: Flag[] = [];
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private oceanRing: OceanRing) {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipe');
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.build(sceneObjHolder);
+
+        this.outside = new OceanRingPipeOutside(zoneAndLayer, sceneObjHolder, this);
+        // this.inside = new OceanRingPipeInside(zoneAndLayer, sceneObjHolder, this);
+    }
+
+    public build(sceneObjHolder: SceneObjHolder): void {
         const points = this.initPoints(sceneObjHolder);
 
         if (this.oceanRing.name === 'OceanRingAndFlag') {
+            const flagPool = this.flags.slice();
+            this.flags.length = 0;
+
             for (let i = 0; i < this.segmentCount; i += 7) {
                 calcGravityVector(sceneObjHolder, this, points[i * this.pointsPerSegment], scratchVec3a);
                 if (scratchVec3a[1] <= -0.9) {
                     const position = !!(i & 1) ? points[i * this.pointsPerSegment] : points[i * this.pointsPerSegment + this.pointsPerSegment - 1];
 
-                    const flag = new Flag(zoneAndLayer, sceneObjHolder, null, 'FlagSurfing');
-                    vec3.set(scratchVec3, 1, 0, 0);
-                    flag.setInfoPos('FlagSurfing', position, scratchVec3, 500, 300, 200, 2, 3);
+                    const flag = flagPool.length !== 0 ? flagPool.pop()! : new Flag(this.zoneAndLayer, sceneObjHolder, null, 'FlagSurfing');
+                    flag.makeActorAppeared(sceneObjHolder);
+
+                    flag.setInfoPos('FlagSurfing', position, Vec3UnitX, 500, 300, 200, 2, 3);
                     flag.init(sceneObjHolder);
+                    this.flags.push(flag);
                 }
             }
-        }
 
-        this.outside = new OceanRingPipeOutside(zoneAndLayer, sceneObjHolder, this);
-        // this.inside = new OceanRingPipeInside(zoneAndLayer, sceneObjHolder, this);
+            for (let i = 0; i < flagPool.length; i++) {
+                flagPool[i].makeActorDead(sceneObjHolder);
+                this.flags.push(flagPool[i]);
+            }
+        }
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): vec3[] {
@@ -5540,6 +5557,12 @@ class OceanRingPipe extends LiveActor {
             moveCoord(this.oceanRing, segmentSize);
         }
 
+        if (this.vertexBuffer !== undefined) {
+            device.destroyBuffer(this.vertexBuffer);
+            device.destroyBuffer(this.indexBuffer);
+            device.destroyInputState(this.inputState);
+        }
+
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
@@ -5582,6 +5605,243 @@ class OceanRingPipe extends LiveActor {
     }
 }
 
+class SimpleTextEntry {
+    public textfield: TextField;
+    private toplevel: HTMLElement;
+    private label: HTMLElement;
+    public elem: HTMLElement;
+    public onsubmit: ((text: string) => void) | null = null;
+
+    constructor(private number: boolean = false) {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.display = 'grid';
+        this.toplevel.style.gridAutoFlow = 'column';
+        this.toplevel.style.lineHeight = '20px';
+
+        this.label = document.createElement('div');
+        this.label.style.font = '16px monospace';
+        this.label.style.color = 'white';
+        this.label.style.userSelect = 'none';
+        this.toplevel.appendChild(this.label);
+
+        this.textfield = new TextField();
+        const textarea = this.textfield.textarea;
+        textarea.onchange = () => {
+            this.valueChanged();
+        };
+        if (number) {
+            textarea.type = 'number';
+            let dragStart = 0, valueStart = 0;
+            textarea.onmousedown = (e) => {
+                dragStart = e.clientX;
+                valueStart = parseFloat(textarea.value);
+                document.onmousemove = (e) => {
+                    const delta = (e.clientX - dragStart);
+                    textarea.value = '' + (valueStart + delta * 10);
+                    this.valueChanged();
+                };
+                document.onmouseup = () => {
+                    document.onmousemove = null;
+                }
+            };
+        }
+        this.toplevel.appendChild(this.textfield.elem);
+
+        this.elem = this.toplevel;
+    }
+
+    private valueChanged(): void {
+        if (this.onsubmit !== null)
+            this.onsubmit(this.textfield.getValue());
+    }
+
+    public setLabel(text: string): void {
+        this.label.textContent = text;
+    }
+}
+
+export class SimpleButton {
+    public onclick: (() => void) | null = null;
+    public elem: HTMLElement;
+
+    constructor() {
+        this.elem = document.createElement('div');
+        this.elem.style.font = '16px monospace';
+        this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.5)';
+        this.elem.style.color = 'white';
+        this.elem.style.lineHeight = '32px';
+        this.elem.style.textAlign = 'center';
+        this.elem.style.userSelect = 'none';
+        this.elem.onclick = () => {
+            if (this.onclick !== null)
+                this.onclick();
+        };
+    }
+
+    public setActive(v: boolean): void {
+        this.elem.style.backgroundColor = v ? HIGHLIGHT_COLOR : '#666';
+        this.elem.style.cursor = v ? 'pointer' : '';
+    }
+
+    public setLabel(text: string): void {
+        this.elem.textContent = text;
+    }
+}
+
+class OceanRingEditor {
+    private label: SimpleTextEntry;
+    private x: SimpleTextEntry;
+    private y: SimpleTextEntry;
+    private z: SimpleTextEntry;
+    private widthSlider: Slider;
+    private currentPoint: number = 0;
+    private doRebuild = false;
+
+    constructor(private sceneObjHolder: SceneObjHolder, private ring: OceanRing) {
+        const panel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Editor');
+
+        this.label = new SimpleTextEntry();
+        panel.contents.appendChild(this.label.elem);
+
+        const prevButton = new SimpleButton();
+        prevButton.setActive(true);
+        prevButton.setLabel('Previous');
+        prevButton.onclick = () => {
+            this.setCurrentPoint(this.currentPoint - 1);
+        };
+        panel.contents.appendChild(prevButton.elem);
+
+        const nextButton = new SimpleButton();
+        nextButton.setActive(true);
+        nextButton.setLabel('Next');
+        nextButton.onclick = () => {
+            this.setCurrentPoint(this.currentPoint + 1);
+        };
+        panel.contents.appendChild(nextButton.elem);
+
+        this.x = new SimpleTextEntry(true);
+        this.x.setLabel('X');
+        this.x.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.x.elem);
+
+        this.y = new SimpleTextEntry(true);
+        this.y.setLabel('Y');
+        this.y.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.y.elem);
+
+        this.z = new SimpleTextEntry(true);
+        this.z.setLabel('Z');
+        this.z.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.z.elem);
+
+        this.widthSlider = new Slider();
+        this.widthSlider.setLabel('Width');
+        this.widthSlider.setRange(0.5, 20.0);
+        this.widthSlider.onvalue = () => {
+            this.setArg('point_arg1', this.widthSlider.getValue());
+            this.rebuild();
+        };
+        panel.contents.appendChild(this.widthSlider.elem);
+
+        this.setCurrentPoint(15);
+    }
+
+    private setPos(): void {
+        scratchVec3[0] = Number(this.x.textfield.getValue());
+        scratchVec3[1] = Number(this.y.textfield.getValue());
+        scratchVec3[2] = Number(this.z.textfield.getValue());
+
+        const stageDataHolder = assertExists(this.sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(this.ring.infoIter));
+        mat4.invert(scratchMatrix, stageDataHolder.placementMtx);
+        transformVec3Mat4w1(scratchVec3, scratchMatrix, scratchVec3);
+
+        const rail = this.ring.railRider!;
+        if (this.currentPoint % 3 === 0) {
+            const infoIter = rail.bezierRail.calcRailCtrlPointIter((this.currentPoint / 3) | 0);
+            infoIter.setValue(`pnt0_x`, scratchVec3[0]);
+            infoIter.setValue(`pnt0_y`, scratchVec3[1]);
+            infoIter.setValue(`pnt0_z`, scratchVec3[2]);
+        } else if (this.currentPoint % 3 === 1) {
+            const infoIter = rail.bezierRail.calcRailCtrlPointIter((this.currentPoint / 3) | 0);
+            infoIter.setValue(`pnt2_x`, scratchVec3[0]);
+            infoIter.setValue(`pnt2_y`, scratchVec3[1]);
+            infoIter.setValue(`pnt2_z`, scratchVec3[2]);
+        } else if (this.currentPoint % 3 === 2) {
+            const infoIter = rail.bezierRail.calcRailCtrlPointIter(((this.currentPoint + 1) / 3) | 0);
+            infoIter.setValue(`pnt1_x`, scratchVec3[0]);
+            infoIter.setValue(`pnt1_y`, scratchVec3[1]);
+            infoIter.setValue(`pnt1_z`, scratchVec3[2]);
+        }
+
+        rail.build(this.sceneObjHolder);
+        this.rebuild();
+    }
+
+    private setArg(name: string, value: any): void {
+        const rail = this.ring.railRider!;
+        rail.bezierRail.calcRailCtrlPointIter((this.currentPoint / 3) | 0).setValue(name, value);
+    }
+
+    private rebuild(): void {
+        this.doRebuild = true;
+    }
+
+    public setCurrentPoint(i: number): void {
+        const rail = this.ring.railRider!;
+        this.currentPoint = mod(i, rail.getPointNum() * 3);
+
+        this.label.setLabel(`Point ${this.currentPoint}/${rail.getPointNum() * 3}`);
+
+        const ptIdx = (this.currentPoint / 3) | 0;
+        const part = rail.bezierRail.railParts[ptIdx];
+        if (this.currentPoint % 3 === 0) {
+            vec3.copy(scratchVec3, part.p0);
+        } else if (this.currentPoint % 3 === 1) {
+            part.calcTanOutPos(scratchVec3);
+        } else {
+            part.calcTanInPos(scratchVec3);
+        }
+
+        this.x.textfield.setValue('' + scratchVec3[0]);
+        this.y.textfield.setValue('' + scratchVec3[1]);
+        this.z.textfield.setValue('' + scratchVec3[2]);
+
+        const infoIter = rail.bezierRail.calcRailCtrlPointIter(ptIdx);
+        this.widthSlider.setValue(fallback(infoIter.getValueNumberNoInit('point_arg1'), 12.0), false);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder): void {
+        if (this.doRebuild) {
+            this.ring.rebuild(this.sceneObjHolder);
+            this.doRebuild = false;
+        }
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder): void {
+        const rail = this.ring.railRider!;
+
+        const clipFromWorldMatrix = sceneObjHolder.viewerInput.camera.clipFromWorldMatrix;
+        rail.debugDrawRailLine(sceneObjHolder.viewerInput.camera, 500);
+        for (let i = 0; i < rail.getPointNum(); i++) {
+            const part = rail.bezierRail.railParts[i];
+
+            const isSelected0 = this.currentPoint === (i * 3 + 0);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, part.p0, isSelected0 ? Green : Yellow, isSelected0 ? 25 : 10);
+
+            part.calcTanOutPos(scratchVec3);
+            const isSelected1 = this.currentPoint === (i * 3 + 1);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, part.p0, scratchVec3, Magenta, 1);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, scratchVec3, isSelected1 ? Green : Yellow, isSelected1 ? 25 : 10);
+
+            part.calcTanInPos(scratchVec3);
+            part.calcPos(scratchVec3a, 1.0);
+            const isSelected2 = this.currentPoint === (i * 3 + 2);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, scratchVec3a, scratchVec3, Magenta, 1);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), clipFromWorldMatrix, scratchVec3, isSelected2 ? Green : Yellow, isSelected2 ? 25 : 10);
+        }
+    }
+}
+
 export class OceanRing extends LiveActor {
     public points: WaterPoint[] = [];
     public pointsPerSegment: number = 15;
@@ -5593,8 +5853,9 @@ export class OceanRing extends LiveActor {
     private arg1: number;
     private oceanRingDrawer: OceanRingDrawer;
     private oceanRingPipe: OceanRingPipe;
+    private editor: OceanRingEditor | null = null;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.OceanRing);
@@ -5625,6 +5886,16 @@ export class OceanRing extends LiveActor {
         sceneObjHolder.waterAreaHolder!.entryOceanRing(this);
     }
 
+    public rebuild(sceneObjHolder: SceneObjHolder): void {
+        this.initPoints(sceneObjHolder);
+        if (this.oceanRingPipe !== null)
+            this.oceanRingPipe.build(sceneObjHolder);
+    }
+
+    public edit(): void {
+        this.editor = new OceanRingEditor((window.main.scene as any).sceneObjHolder, this);
+    }
+
     private initPoints(sceneObjHolder: SceneObjHolder): void {
         const railTotalLength = getRailTotalLength(this);
 
@@ -5633,7 +5904,9 @@ export class OceanRing extends LiveActor {
         const segmentSize = railTotalLength / this.segmentCount;
         const edgePointNum = 2.0;
 
+        this.points.length = 0;
         setRailCoord(this, 0);
+
         for (let i = 0; i < this.segmentCount; i++) {
             getRailPos(scratchVec3b, this);
             calcGravityVector(sceneObjHolder, this, scratchVec3b, scratchVec3a);
@@ -5743,6 +6016,9 @@ export class OceanRing extends LiveActor {
     public override movement(sceneObjHolder: SceneObjHolder): void {
         super.movement(sceneObjHolder);
 
+        if (this.editor !== null)
+            this.editor.movement(sceneObjHolder);
+
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.waveTheta2 += -0.06 * deltaTimeFrames;
         this.waveTheta1 += -0.04 * deltaTimeFrames;
@@ -5760,6 +6036,9 @@ export class OceanRing extends LiveActor {
 
         if (this.oceanRingDrawer !== null)
             this.oceanRingDrawer.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (this.editor !== null)
+            this.editor.draw(sceneObjHolder);
     }
 
     private calcCurrentFlowSpeedRate(coord: number): number {
@@ -5935,9 +6214,12 @@ export class Flag extends LiveActor {
         mb.setUsePnMtxIdx(false);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        const arc = sceneObjHolder.modelCache.getObjectData(this.name);
+        this.texture = loadBTIData(sceneObjHolder, arc, `${this.name}.bti`);
     }
 
-    public setInfoPos(name: string, position: vec3, windDirection: vec3, poleHeight: number, width: number, height: number, swingPointCount: number, fixPointCount: number): void {
+    public setInfoPos(name: string, position: vec3, windDirection: ReadonlyVec3, poleHeight: number, width: number, height: number, swingPointCount: number, fixPointCount: number): void {
         this.name = name;
 
         vec3.copy(this.translation, position);
@@ -5957,6 +6239,7 @@ export class Flag extends LiveActor {
         if (this.name === 'FlagSurfing')
             this.noColorTint = true;
 
+        this.fixPoints.length = 0;
         assert(this.fixPoints.length === 0);
 
         for (let i = 0; i < this.fixPointCount; i++) {
@@ -5983,9 +6266,6 @@ export class Flag extends LiveActor {
         this.colors = new Uint32Array(this.fixPointCount * (this.swingPointCount + 1));
         for (let i = 0; i < this.colors.length; i++)
             this.colors[i] = 0xFFFFFFFF;
-
-        const arc = sceneObjHolder.modelCache.getObjectData(this.name);
-        this.texture = loadBTIData(sceneObjHolder, arc, `${this.name}.bti`);
     }
 
     private drawPolePoint(offsX: number, offsZ: number, top: number, g: number): void {

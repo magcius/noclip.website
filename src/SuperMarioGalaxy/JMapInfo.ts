@@ -4,7 +4,7 @@ import { vec3 } from 'gl-matrix';
 import type { SceneObjHolder } from './Main';
 import type { ZoneAndLayer } from './LiveActor';
 import { MathConstants } from '../MathHelpers';
-import { assertExists, fallback, hexzero0x } from '../util';
+import { assert, assertExists, fallback, hexzero0x } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import type { UI } from '../ui';
 
@@ -138,6 +138,14 @@ export class JMapInfoIter {
         if (v === -1)
             return null;
         return v;
+    }
+
+    // not for the faint of heart
+    public setValue(name: string, v: any): void {
+        const hash = bcsvHashSMG(name);
+        const index = BCSV.getFieldIndexFromHash(this.bcsv, hash);
+        assert(index !== -1)
+        this.record[index] = v;
     }
 
     public popDebug(): void {

@@ -86,6 +86,16 @@ class BezierRailPart {
         this.length = this.getLength(0.0, 1.0);
     }
 
+    public calcTanOutPos(dst: vec3): void {
+        vec3.add(dst, this.p0, this.p1);
+    }
+
+    public calcTanInPos(dst: vec3): void {
+        vec3.add(dst, this.p2, this.p0);
+        vec3.add(dst, dst, this.p1);
+        vec3.add(dst, dst, this.p1);
+    }
+
     public calcPos(dst: vec3, param: number): void {
         vec3.copy(dst, this.p0);
         vec3.scaleAndAdd(dst, dst, this.p1, 3 * param);
@@ -167,7 +177,7 @@ class BezierRailPart {
     }
 }
 
-type RailPart = LinearRailPart | BezierRailPart;
+type RailPart = BezierRailPart;
 
 function equalEpsilon(a: number, b: number, ep: number): boolean {
     if ((a - b) < -ep)
@@ -182,9 +192,9 @@ function equalEpsilonVec3(a: ReadonlyVec3, b: ReadonlyVec3, ep: number): boolean
 }
 
 function makeRailPart(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3): RailPart {
-    if (equalEpsilonVec3(p0, p1, 0.01) && equalEpsilonVec3(p2, p3, 0.01))
+    /*if (equalEpsilonVec3(p0, p1, 0.01) && equalEpsilonVec3(p2, p3, 0.01))
         return new LinearRailPart(p0, p3);
-    else
+    else*/
         return new BezierRailPart(p0, p1, p2, p3);
 }
 
@@ -199,8 +209,14 @@ export class BezierRail {
         this.isClosed = railIter.getValueString('closed') === 'CLOSE';
 
         this.railIter = new JMapInfoIter(railIter.filename, railIter.bcsv, railIter.record);
+        this.build(sceneObjHolder);
+    }
 
-        this.pointRecordCount = pointsInfo.getNumRecords();
+    public build(sceneObjHolder: SceneObjHolder): void {
+        this.railParts.length = 0;
+        this.railPartCoords.length = 0;
+
+        this.pointRecordCount = this.pointsInfo.getNumRecords();
         const railPartCount = this.isClosed ? this.pointRecordCount : this.pointRecordCount - 1;
 
         const p0 = vec3.create();
@@ -213,13 +229,13 @@ export class BezierRail {
             const i0 = i;
             const i1 = (i + 1) % this.pointRecordCount;
 
-            pointsInfo.setRecord(i0);
-            assert(pointsInfo.getValueNumber('id') === i0);
-            getRailPointPos(p0, sceneObjHolder, pointsInfo, `pnt0`);
-            getRailPointPos(p1, sceneObjHolder, pointsInfo, `pnt2`);
-            pointsInfo.setRecord(i1);
-            getRailPointPos(p2, sceneObjHolder, pointsInfo, `pnt1`);
-            getRailPointPos(p3, sceneObjHolder, pointsInfo, `pnt0`);
+            this.pointsInfo.setRecord(i0);
+            assert(this.pointsInfo.getValueNumber('id') === i0);
+            getRailPointPos(p0, sceneObjHolder, this.pointsInfo, `pnt0`);
+            getRailPointPos(p1, sceneObjHolder, this.pointsInfo, `pnt2`);
+            this.pointsInfo.setRecord(i1);
+            getRailPointPos(p2, sceneObjHolder, this.pointsInfo, `pnt1`);
+            getRailPointPos(p3, sceneObjHolder, this.pointsInfo, `pnt0`);
 
             const railPart = makeRailPart(p0, p1, p2, p3);
             this.railParts.push(railPart);
@@ -405,6 +421,10 @@ export class RailRider {
     constructor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter) {
         assert(isConnectedWithRail(actorIter));
         this.bezierRail = getBezierRailForActor(sceneObjHolder, actorIter);
+    }
+
+    public build(sceneObjHolder: SceneObjHolder): void {
+        this.bezierRail.build(sceneObjHolder);
 
         this.setCoord(this.bezierRail.getTotalLength());
         vec3.copy(this.endPos, this.currentPos);
@@ -596,7 +616,7 @@ export class RailRider {
             const coord1 = this.bezierRail.normalizePos(i * speed, 1);
             this.bezierRail.calcPos(scratchVec3b, coord0);
             this.bezierRail.calcPos(scratchVec3c, coord1);
-            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c, Magenta, 1);
+            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c, Magenta, 4);
         }
     }
 }
