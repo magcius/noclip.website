@@ -2,16 +2,25 @@
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, JMapLinkInfo } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
-import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead } from "./LiveActor";
+import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead, makeMtxTRSFromActor } from "./LiveActor";
 import { fallback, nArray, spliceBisectRight, assert } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0 } from "../MathHelpers";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
-import { NameObj } from "./NameObj";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0, invlerp, saturate, computeModelMatrixS } from "../MathHelpers";
+import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement, connectToScene } from "./ActorUtil";
+import { DrawType, MovementType, NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { Red, Green } from "../Color";
+import { Red, Green, colorNewFromRGBA, colorFromRGBA, colorCopy } from "../Color";
 import { RailRider } from "./RailRider";
 import { addBaseMatrixFollower, BaseMatrixFollower } from "./Follow";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
+import { TSDraw } from "./DDraw";
+import * as GX from "../gx/gx_enum";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { dfShow } from "../DebugFloaters";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { GfxRendererLayer, GfxRenderInstManager, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -118,6 +127,10 @@ abstract class PlanetGravity {
     public alive = false;
     public switchActive = true;
     public hostActive = true;
+
+    public isActive(): boolean {
+        return this.alive && this.switchActive && this.hostActive;
+    }
 
     public calcGravity(dst: vec3, pos: ReadonlyVec3): boolean {
         let distance = this.calcOwnGravityVector(dst, pos);
@@ -777,9 +790,9 @@ class CubeGravity extends PlanetGravity {
     }
 }
 
-class PointGravity extends PlanetGravity {
+export class PointGravity extends PlanetGravity {
     public localPos = vec3.create();
-    private globalPos = vec3.create();
+    public globalPos = vec3.create();
 
     protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         vec3.sub(dst, this.globalPos, coord);
@@ -1337,9 +1350,8 @@ function addBaseMatrixFollowerGravity(sceneObjHolder: SceneObjHolder, gravity: G
 }
 
 export class GlobalGravityObj extends LiveActor {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
-        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        // 
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, public gravity: PlanetGravity) {
+        super(zoneAndLayer, sceneObjHolder, 'GlobalGravityObj');
 
         useStageSwitchWriteA(sceneObjHolder, this, infoIter);
         useStageSwitchWriteB(sceneObjHolder, this, infoIter);
@@ -1348,7 +1360,8 @@ export class GlobalGravityObj extends LiveActor {
             connectToSceneMapObjMovement(sceneObjHolder, this);
         }
 
-        addBaseMatrixFollowerGravity(sceneObjHolder, this, infoIter);
+        if (infoIter !== null)
+            addBaseMatrixFollowerGravity(sceneObjHolder, this, infoIter);
 
         this.makeActorAppeared(sceneObjHolder);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
@@ -1691,4 +1704,174 @@ export function createGlobalWireGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
     registerGravity(sceneObjHolder, gravity);
 
     return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+function sphereModel(ddraw: TSDraw, numY: number, numX: number = numY): void {
+    function spherePoint(dst: vec3, y: number, x: number): void {
+        const theta = MathConstants.TAU * (x / numX);
+        const phi = MathConstants.TAU * (((1.0 - y / numY)) - 0.5) / 2;
+        const cos = Math.cos(phi);
+        vec3.set(dst, cos * Math.cos(theta), Math.sin(phi), cos * Math.sin(theta));
+    }
+
+    function drawPoint(y: number, x: number): void {
+        spherePoint(scratchVec3a, y, x);
+        ddraw.position3vec3(scratchVec3a);
+        ddraw.normal3vec3(scratchVec3a);
+    }
+
+    for (let y1 = 1; y1 < numY + 1; y1++) {
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let x = 0; x < numX + 1; x++) {
+            const y0 = y1 - 1;
+            drawPoint(y0, x);
+            drawPoint(y1, x);
+        }
+        ddraw.end();
+    }
+}
+
+class SphereModel {
+    public sdraw = new TSDraw();
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, numY: number = 50, numX: number = numY) {
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        this.sdraw.setVtxDesc(GX.Attr.NRM, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
+
+        this.sdraw.beginDraw();
+        sphereModel(this.sdraw, numY, numX);
+        this.sdraw.endDraw(renderCache);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
+    }
+}
+
+function getPulseAlpha(t: number): number {
+    if (t <= 0.1)
+        return invlerp(0.0, 0.1, t);
+    else if (t <= 0.6)
+        return 1.0;
+    else
+        return saturate(invlerp(0.8, 0.6, t));
+}
+
+const materialParams = new MaterialParams();
+const drawParams = new DrawParams();
+
+export class GravityExplainer2_PointGravity extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private sphereModel: SphereModel;
+
+    @dfShow()
+    private c0 = colorNewFromRGBA(0.0, 0.0, 0.0, 1.0);
+    @dfShow()
+    private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
+    @dfShow()
+    private amb0Alpha = -20.0;
+    @dfShow()
+    private light2Alpha = 120.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: PointGravity) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_PointGravity');
+
+        const mb = new GXMaterialBuilder('GravityExplainer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 4, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        this.sphereModel = new SphereModel(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+
+        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 0.4);
+        colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.0);
+        this.amb0Alpha = 0.2;
+        this.light2Alpha = 0.9;
+    }
+
+    private drawSphere(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, t: number): void {
+        const renderInst = renderInstManager.newRenderInst();
+        this.sphereModel.sdraw.setOnRenderInst(renderInst);
+
+        const device = sceneObjHolder.modelCache.device;
+
+        if (this.gravity.inverse)
+            t = 1.0 - t;
+
+        const scale = 1.0 - t;
+        const alpha = getPulseAlpha(t);
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        const light2 = materialParams.u_Lights[2];
+        vec3.set(light2.Position, 0, 0, 0);
+        vec3.set(light2.Direction, 0, -1, 0);
+        vec3.set(light2.CosAtten, 1, 0, 0);
+        vec3.set(light2.DistAtten, 1, 0, 0);
+        colorFromRGBA(light2.Color, 0, 0, 0, this.light2Alpha);
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
+
+        materialParams.u_Color[ColorKind.C0].a *= alpha;
+        materialParams.u_Color[ColorKind.C1].a *= alpha;
+
+        colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 0, 0, 0, this.amb0Alpha);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+
+        makeMtxTRSFromActor(scratchMatrix, this);
+        mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        computeModelMatrixS(scratchMatrix, scale);
+        mat4.mul(drawParams.u_PosMtx[0], drawParams.u_PosMtx[0], scratchMatrix);
+        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
+
+        vec3.copy(this.translation, this.gravity.globalPos);
+        const scale = this.gravity.range;
+        vec3.set(this.scale, scale, scale, scale);
+    }
+
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.gravity.isActive())
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera.viewMatrix, this.translation);
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
+
+        const duration = 5000.0, numRings = 4;
+        for (let i = 0; i < numRings; i++) {
+            const t = ((viewerInput.time + (i * duration / numRings)) / duration) % 1.0;
+            this.drawSphere(sceneObjHolder, renderInstManager, viewerInput, t);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public override destroy(device: GfxDevice): void {
+        this.sphereModel.destroy(device);
+    }
 }

@@ -30,6 +30,7 @@ import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '..
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
+import { GlobalGravityObj, GravityExplainer2_PointGravity, PointGravity } from '../Gravity';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
@@ -5637,7 +5638,7 @@ class SimpleTextEntry {
                 valueStart = parseFloat(textarea.value);
                 document.onmousemove = (e) => {
                     const delta = (e.clientX - dragStart);
-                    textarea.value = '' + (valueStart + delta * 10);
+                    textarea.value = '' + (valueStart + delta * 1);
                     this.valueChanged();
                 };
                 document.onmouseup = () => {
@@ -5685,6 +5686,75 @@ export class SimpleButton {
 
     public setLabel(text: string): void {
         this.elem.textContent = text;
+    }
+}
+
+function createGravity(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): PointGravity {
+    const gravity = new PointGravity();
+    gravity.priority = 0;
+    sceneObjHolder.planetGravityManager!.registerGravity(gravity);
+    const explainer = new GravityExplainer2_PointGravity(zoneAndLayer, sceneObjHolder, gravity);
+    const obj = new GlobalGravityObj(zoneAndLayer, sceneObjHolder, null, gravity);
+    return gravity;
+}
+
+class GravityEditor {
+    private gravity: PointGravity;
+
+    private x: SimpleTextEntry;
+    private y: SimpleTextEntry;
+    private z: SimpleTextEntry;
+    private range: SimpleTextEntry;
+    private doRebuild = false;
+
+    constructor(private sceneObjHolder: SceneObjHolder, private ring: OceanRing) {
+        this.gravity = createGravity(dynamicSpawnZoneAndLayer, sceneObjHolder);
+
+        const panel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Sphere Gravity');
+
+        this.x = new SimpleTextEntry(true);
+        this.x.setLabel('X');
+        this.x.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.x.elem);
+
+        this.y = new SimpleTextEntry(true);
+        this.y.setLabel('Y');
+        this.y.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.y.elem);
+
+        this.z = new SimpleTextEntry(true);
+        this.z.setLabel('Z');
+        this.z.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.z.elem);
+
+        this.range = new SimpleTextEntry(true);
+        this.range.setLabel('Range');
+        this.range.onsubmit = () => { this.setPos(); }
+        panel.contents.appendChild(this.range.elem);
+
+        this.x.textfield.setValue('-4200');
+        this.y.textfield.setValue('14400');
+        this.z.textfield.setValue('1950');
+        this.range.textfield.setValue('2000');
+        this.setPos();
+    }
+
+    private setPos(): void {
+        this.gravity.localPos[0] = Number(this.x.textfield.getValue());
+        this.gravity.localPos[1] = Number(this.y.textfield.getValue());
+        this.gravity.localPos[2] = Number(this.z.textfield.getValue());
+        this.gravity.updateIdentityMtx();
+
+        this.gravity.range = Number(this.range.textfield.getValue());
+
+        this.doRebuild = true;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder): void {
+        if (this.doRebuild) {
+            this.ring.rebuild(this.sceneObjHolder);
+            this.doRebuild = false;
+        }
     }
 }
 
@@ -5854,6 +5924,7 @@ export class OceanRing extends LiveActor {
     private oceanRingDrawer: OceanRingDrawer;
     private oceanRingPipe: OceanRingPipe;
     private editor: OceanRingEditor | null = null;
+    private gravityEditor: GravityEditor | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -5894,6 +5965,10 @@ export class OceanRing extends LiveActor {
 
     public edit(): void {
         this.editor = new OceanRingEditor((window.main.scene as any).sceneObjHolder, this);
+    }
+
+    public editg(): void {
+        this.gravityEditor = new GravityEditor((window.main.scene as any).sceneObjHolder, this);
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
@@ -6018,6 +6093,8 @@ export class OceanRing extends LiveActor {
 
         if (this.editor !== null)
             this.editor.movement(sceneObjHolder);
+        if (this.gravityEditor !== null)
+            this.gravityEditor.movement(sceneObjHolder);
 
         const deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         this.waveTheta2 += -0.06 * deltaTimeFrames;
