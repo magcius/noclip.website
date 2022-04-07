@@ -2,7 +2,7 @@ import { ModelInst } from "./ModelInst";
 import * as Gcmf from "./Gcmf";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { nArray } from "../util";
+import { assert, nArray } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -19,6 +19,7 @@ export class TextureCache {
     }
 
     public getTexture(device: GfxDevice, idx: number): LoadedTexture {
+        assert(idx >= 0 && idx < this.cache.length);
         const tex = this.cache[idx];
         if (tex === null) {
             // Load texture
@@ -53,7 +54,11 @@ export class ModelCache {
         ];
     }
 
-    public getModel(device: GfxDevice, renderCache: GfxRenderCache, modelName: string): ModelInst | null {
+    public getModel(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        modelName: string
+    ): ModelInst | null {
         for (let i = 0; i < this.entries.length; i++) {
             const entry = this.entries[i];
             const modelData = entry.gma.get(modelName);
@@ -62,7 +67,12 @@ export class ModelCache {
                 if (modelInst !== undefined) {
                     return modelInst;
                 }
-                const freshModelInst = new ModelInst(device, renderCache, modelData, entry.texCache);
+                const freshModelInst = new ModelInst(
+                    device,
+                    renderCache,
+                    modelData,
+                    entry.texCache
+                );
                 entry.modelCache.set(modelName, freshModelInst);
                 return freshModelInst;
             }

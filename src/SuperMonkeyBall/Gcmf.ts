@@ -106,8 +106,7 @@ export type Model = {
     boundingRadius: number;
     opaqueShapeCount: number;
     translucentShapeCount: number;
-    mtxCount: number;
-    matrixs: mat4[];
+    matrices: mat4[];
     samplers: Sampler[];
     shapes: Shape[];
 };
@@ -312,7 +311,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): Model {
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === "GCMF");
     const samplers: Sampler[] = [];
-    const matrixs: mat4[] = [];
+    const matrices: mat4[] = [];
     const shapes: Shape[] = [];
     const origin = vec3.create();
 
@@ -338,7 +337,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): Model {
 
     // GcnfMatrix
     for (let i = 0; i < mtxCount; i++) {
-        matrixs.push(parseMatrix(buffer.slice(offs)));
+        matrices.push(parseMatrix(buffer.slice(offs)));
         offs += 0x30;
     }
 
@@ -389,8 +388,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): Model {
         boundingRadius,
         opaqueShapeCount,
         translucentShapeCount,
-        mtxCount,
-        matrixs,
+        matrices,
         samplers,
         shapes,
     };
