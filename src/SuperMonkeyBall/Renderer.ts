@@ -32,9 +32,9 @@ export class Renderer extends BasicGXRendererHelper {
     private drawColi: boolean = false;
     private materialHacks: GXMaterialHacks;
 
-    constructor(private device: GfxDevice, stageData: StageData) {
+    constructor(device: GfxDevice, stageData: StageData) {
         super(device);
-        this.world = new World(device, stageData);
+        this.world = new World(device, this.getCache(), stageData);
     }
 
     public createPanels(): UI.Panel[] {

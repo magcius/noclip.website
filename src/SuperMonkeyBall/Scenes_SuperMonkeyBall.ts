@@ -2,7 +2,13 @@ import { DataFetcher } from "../DataFetcher";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
-import { StageId } from "./StageInfo";
+import { parseStagedefLz } from "./ParseStagedef";
+import { Renderer } from "./Renderer";
+import { BG_TO_FILENAME_MAP, StageId, STAGE_TO_BG_MAP } from "./StageInfo";
+import * as Gcmf from "./Gcmf";
+import { parseAVTpl } from "./AVTpl";
+import { leftPad } from "../util";
+import { StageData } from "./World";
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -16,17 +22,11 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-
-        //load stage
-        let prefix = 0;
-        const stageData = await this.loadStage(dataFetcher, this.stageId);
-        const renderer = new Renderer(device, stageData);
-
-        return sceneRender;
+        const stageData = await this.fetchStage(context.dataFetcher, this.stageId);
+        return new Renderer(device, stageData);
     }
 
-    private async loadStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
+    private async fetchStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
         const gameFilesPath = "SuperMonkeyBall/test";
         const stageIdStr = `st${leftPad(stageId.toString(), 3, "0")}`;
         const stagedefPath = `${gameFilesPath}/${stageIdStr}/STAGE${stageIdStr}.lz`;
@@ -46,9 +46,9 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageGma = Gcmf.parseGma(stageGmaBuf);
-        const stageTpl = AVTpl.parseAvTpl(stageTplBuf, stageIdStr);
+        const stageTpl = parseAVTpl(stageTplBuf, stageIdStr);
         const bgGma = Gcmf.parseGma(bgGmaBuf);
-        const bgTpl = AVTpl.parseAvTpl(bgTplBuf, bgFilename);
+        const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
 
         return { stagedef, stageGma, stageTpl, bgGma, bgTpl };
     }

@@ -1,11 +1,12 @@
 import { ModelInst } from "./ModelInst";
-import { StageData } from "./Render";
 import * as Gcmf from "./Gcmf";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { nArray } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { StageData } from "./World";
 
 // Cache loaded models by name and textures by index in TPL. Not much advantage over loading
 // everything at once but oh well.
@@ -52,7 +53,7 @@ export class ModelCache {
         ];
     }
 
-    public getModel(device: GfxDevice, modelName: string): ModelInst | null {
+    public getModel(device: GfxDevice, renderCache: GfxRenderCache, modelName: string): ModelInst | null {
         for (let i = 0; i < this.entries.length; i++) {
             const entry = this.entries[i];
             const modelData = entry.gma.get(modelName);
@@ -61,7 +62,7 @@ export class ModelCache {
                 if (modelInst !== undefined) {
                     return modelInst;
                 }
-                const freshModelInst = new ModelInst(device, modelData, entry.texCache);
+                const freshModelInst = new ModelInst(device, renderCache, modelData, entry.texCache);
                 entry.modelCache.set(modelName, freshModelInst);
                 return freshModelInst;
             }

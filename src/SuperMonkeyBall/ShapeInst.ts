@@ -204,7 +204,7 @@ export class ShapeInst {
         const template = renderInstManager.pushTemplateRenderInst();
         const drawParams = scratchDrawParams;
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialInst.setOnRenderInst(device, renderInstManager.gfxRenderCache, template, drawParams);
+        this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template, drawParams);
 
         for (let i = 0; i < this.shapeHelpers.length; i++) {
             const inst = renderInstManager.newRenderInst();

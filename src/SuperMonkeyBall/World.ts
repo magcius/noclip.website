@@ -8,6 +8,7 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import * as Viewer from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 // Immutable stage/background definition
 export type StageData = {
@@ -22,13 +23,13 @@ export class World {
     private modelCache: ModelCache;
     private levelModels: ModelInst[];
 
-    constructor(device: GfxDevice, stageData: StageData) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, stageData: StageData) {
         this.modelCache = new ModelCache(stageData);
 
         // For now, just render all level models referenced by stagedef
         this.levelModels = [];
         for (const levelModelData of stageData.stagedef.levelModels) {
-            const modelInst = this.modelCache.getModel(device, levelModelData.modelName);
+            const modelInst = this.modelCache.getModel(device, renderCache, levelModelData.modelName);
             if (modelInst !== null) {
                 this.levelModels.push(modelInst);
             }
