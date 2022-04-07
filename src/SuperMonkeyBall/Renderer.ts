@@ -1,40 +1,29 @@
-import AnimationController from "../AnimationController";
 import { CameraController } from "../Camera";
-import { DataFetcher } from "../DataFetcher";
 import {
     makeBackbufferDescSimple,
     opaqueBlackFullClearRenderPassDescriptor,
-    pushAntialiasingPostProcessPass,
+    pushAntialiasingPostProcessPass
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GXMaterialHacks } from "../gx/gx_material";
 import {
-    BasicGXRendererHelper,
     fillSceneParamsDataOnTemplate,
-    GXTextureHolder,
+    GXRenderHelperGfx
 } from "../gx/gx_render";
-import { SceneContext } from "../SceneBase";
 import * as UI from "../ui";
-import { assertExists, leftPad } from "../util";
 import * as Viewer from "../viewer";
-import { AVLZ_Type, decompressLZSS } from "./AVLZ";
-import * as AVTpl from "./AVTpl";
-import { debugDrawColi } from "./DebugDraw";
-import * as Gcmf from "./Gcmf";
-import { parseStagedefLz } from "./ParseStagedef";
-import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from "./StageInfo";
 import { StageData, World } from "./World";
 
-// TODO(complexplane): Do we really need a separate World class?
-export class Renderer extends BasicGXRendererHelper {
+export class Renderer implements Viewer.SceneGfx {
+    private renderHelper: GXRenderHelperGfx;
     private world: World;
-    private drawColi: boolean = false;
+    private renderCollision: boolean = false;
     private materialHacks: GXMaterialHacks;
 
     constructor(device: GfxDevice, stageData: StageData) {
-        super(device);
-        this.world = new World(device, this.getCache(), stageData);
+        this.renderHelper = new GXRenderHelperGfx(device);
+        this.world = new World(device, this.renderHelper.getCache(), stageData);
     }
 
     public createPanels(): UI.Panel[] {
@@ -60,14 +49,14 @@ export class Renderer extends BasicGXRendererHelper {
         // Debug draw collision (eventually do it with polys)
         const drawColi = new UI.Checkbox("Draw Collision", false);
         drawColi.onchanged = () => {
-            this.drawColi = drawColi.checked;
+            this.renderCollision = drawColi.checked;
         };
         renderHacksPanel.contents.appendChild(drawColi.elem);
 
         return [renderHacksPanel];
     }
 
-    public override prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(0.1);
         // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for
         // us. Use it once, then use the underlying GfxRenderInstManager's pushTemplateRenderInst().
@@ -78,8 +67,7 @@ export class Renderer extends BasicGXRendererHelper {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
-    // TODO(complexplane): Don't duplicate work in BasicGXRendererHelper?
-    public override render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(
@@ -117,7 +105,7 @@ export class Renderer extends BasicGXRendererHelper {
         renderInstManager.resetRenderInsts();
     }
 
-    public override destroy(device: GfxDevice): void {
+    public destroy(device: GfxDevice): void {
         // TODO(complexplane)
     }
 
