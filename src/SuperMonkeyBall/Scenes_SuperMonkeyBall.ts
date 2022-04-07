@@ -28,10 +28,10 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
     private async fetchStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
         const gameFilesPath = "SuperMonkeyBall/test";
-        const stageIdStr = `st${leftPad(stageId.toString(), 3, "0")}`;
-        const stagedefPath = `${gameFilesPath}/${stageIdStr}/STAGE${stageIdStr}.lz`;
-        const stageGmaPath = `${gameFilesPath}/${stageIdStr}/${stageIdStr}.gma`;
-        const stageTplPath = `${gameFilesPath}/${stageIdStr}/${stageIdStr}.tpl`;
+        const stageIdStr = `${leftPad(stageId.toString(), 3, "0")}`;
+        const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
+        const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
+        const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
         const bgFilename = BG_TO_FILENAME_MAP[STAGE_TO_BG_MAP[stageId]];
         const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
         const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
@@ -46,7 +46,7 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageGma = Gcmf.parseGma(stageGmaBuf);
-        const stageTpl = parseAVTpl(stageTplBuf, stageIdStr);
+        const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const bgGma = Gcmf.parseGma(bgGmaBuf);
         const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
 

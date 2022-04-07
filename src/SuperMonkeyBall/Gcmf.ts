@@ -370,6 +370,7 @@ function parseModel(buffer: ArrayBufferSlice): Model {
         }
         const shape = parseShape(shapeBuff.slice(shapeOffs), attribute, i, vtxCon2Offs);
         if (shape.material.samplerIdxs[0] < 0) {
+            // TODO(complexplane): Support 0 sampler shapes
             console.log("GCMF shape has zero samplers, ignoring shape");
             continue;
         }
