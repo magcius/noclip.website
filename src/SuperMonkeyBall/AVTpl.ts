@@ -7,7 +7,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
 import { TextureInputGX } from "../gx/gx_texture";
-import { parseAvTpl } from "../SuperMonkeyBallOld/AVtpl";
 import { assert, leftPad } from "../util";
 
 function parseAVTplHeader(
