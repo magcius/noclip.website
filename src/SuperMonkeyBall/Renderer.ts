@@ -8,6 +8,7 @@ import {
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { GXMaterialHacks } from "../gx/gx_material";
 import {
     BasicGXRendererHelper,
     fillSceneParamsDataOnTemplate,
@@ -22,14 +23,18 @@ import * as AVTpl from "./AVTpl";
 import { debugDrawColi } from "./DebugDraw";
 import * as Gcmf from "./Gcmf";
 import { parseStagedefLz } from "./ParseStagedef";
-import { GcmfModel, GcmfModelInstance, StageData as StageData } from "./Render";
 import { StageId, BgType, STAGE_TO_BG_MAP, BG_TO_FILENAME_MAP } from "./StageInfo";
+import { StageData, World } from "./World";
 
+// TODO(complexplane): Do we really need a separate World class?
 export class Renderer extends BasicGXRendererHelper {
+    private world: World;
     private drawColi: boolean = false;
+    private materialHacks: GXMaterialHacks;
 
-    constructor(private device: GfxDevice, private stageData: StageData) {
+    constructor(private device: GfxDevice, stageData: StageData) {
         super(device);
+        this.world = new World(device, stageData);
     }
 
     public createPanels(): UI.Panel[] {
@@ -39,18 +44,16 @@ export class Renderer extends BasicGXRendererHelper {
         // Enable Vertex Color
         const enableVertexColorsCheckbox = new UI.Checkbox("Enable Vertex Colors", true);
         enableVertexColorsCheckbox.onchanged = () => {
-            const v = enableVertexColorsCheckbox.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setVertexColorsEnabled(v);
+            this.materialHacks.disableVertexColors = !enableVertexColorsCheckbox.checked;
+            this.world.setMaterialHacks(this.materialHacks);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
 
         // Enable Texture
         const enableTextures = new UI.Checkbox("Enable Textures", true);
         enableTextures.onchanged = () => {
-            const v = enableTextures.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setTexturesEnabled(v);
+            this.materialHacks.disableTextures = !enableTextures.checked;
+            this.world.setMaterialHacks(this.materialHacks);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -64,27 +67,18 @@ export class Renderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+    public override prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(0.1);
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
+        // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for
+        // us. Use it once, then use the underlying GfxRenderInstManager's pushTemplateRenderInst().
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = this.modelInstances.length - 1; i >= 0; i--)
-            this.modelInstances[i].prepareToRender(
-                device,
-                this.renderHelper.renderInstManager,
-                viewerInput
-            );
+        this.world.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-
-        if (this.stageData.stagedef !== undefined && this.drawColi) {
-            debugDrawColi(this.stageData.stagedef, viewerInput.camera);
-        }
     }
 
+    // TODO(complexplane): Don't duplicate work in BasicGXRendererHelper?
     public override render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
@@ -118,21 +112,17 @@ export class Renderer extends BasicGXRendererHelper {
         );
 
         this.prepareToRender(device, viewerInput);
+
         this.renderHelper.renderGraph.execute(builder);
         renderInstManager.resetRenderInsts();
     }
 
     public override destroy(device: GfxDevice): void {
-        this.textureHolder.destroy(device);
-        this.renderHelper.destroy();
-
-        for (let i = 0; i < this.modelInstances.length; i++) this.modelInstances[i].destroy(device);
-
-        for (let i = 0; i < this.modelData.length; i++) this.modelData[i].destroy(device);
+        // TODO(complexplane)
     }
 
     public adjustCameraController(c: CameraController) {
-        // todo(complexplane): Add ability to adjust camera speed range
+        // TODO(complexplane): Add ability to adjust camera speed range
         c.setKeyMoveSpeed(1);
     }
 }

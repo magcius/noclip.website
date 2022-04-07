@@ -55,11 +55,15 @@ export class ModelCache {
     public getModel(device: GfxDevice, modelName: string): ModelInst | null {
         for (let i = 0; i < this.entries.length; i++) {
             const entry = this.entries[i];
-            if (entry.gma.has(modelName)) {
-                if (entry.modelCache.has(modelName)) {
-                    return entry.modelCache.get(modelName);
+            const modelData = entry.gma.get(modelName);
+            if (modelData !== undefined) {
+                const modelInst = entry.modelCache.get(modelName);
+                if (modelInst !== undefined) {
+                    return modelInst;
                 }
-                // todo(complexplane): Create model and return it
+                const freshModelInst = new ModelInst(device, modelData, entry.texCache);
+                entry.modelCache.set(modelName, freshModelInst);
+                return freshModelInst;
             }
         }
 

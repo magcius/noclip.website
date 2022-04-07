@@ -39,7 +39,7 @@ export type Material = {
     unk0x03: number;
     colors: Color[];
     transparents: number[];
-    matCount: number;
+    tevStageCount: number;
     vtxRenderFlag: GX.AttrType;
     samplerIdxs: number[]; // GMA can store max 3 sampler index
     vtxAttr: GX.Attr;
@@ -77,12 +77,12 @@ type VtxConType4 = {
 };
 
 // GCMF Submesh
-// todo(complexplane): GPU data probably belongs in ShapeInstance or similar
+// TODO(complexplane): GPU data probably belongs in ShapeInstance or similar
 export type Shape = {
     material: Material;
     boundingSphere: vec3;
     dlistHeaders: GcmfDisplaylistHeader[];
-    rawData: ArrayBufferSlice; // todo(complexplane): Store individual dlist bufs instead
+    rawData: ArrayBufferSlice; // TODO(complexplane): Store individual dlist bufs instead
 };
 
 // GCMF DisplaylistHeader
@@ -236,7 +236,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         unk0x03,
         colors,
         transparents,
-        matCount,
+        tevStageCount: matCount,
         unk0x14,
         unk0x15,
         vtxRenderFlag,
@@ -292,9 +292,9 @@ function parseShape(
     vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
     const submesh_end_offs = view.byteOffset + 0x60;
     dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs });
-    // todo(complexplane): Parse individual dlist buffers
+    // TODO(complexplane): Parse individual dlist buffers
 
-    // todo(complexplane): These conditionals look wrong, fix/verify them
+    // TODO(complexplane): These conditionals look wrong, fix/verify them
     // let vtxRenderFlag = material.vtxRenderFlag;
     // if (vtxRenderFlag & 1 >> 2 || vtxRenderFlag & 1 >> 3) {
     //     //Exsit Extra DisplayList
@@ -333,7 +333,7 @@ function parseModel(buffer: ArrayBufferSlice): Model {
     const boundingRadius = view.getFloat32(0x14);
 
     const texCount = view.getInt16(0x18);
-    // todo(complexplane): Are these actually opaque/transparent meshes/shapes, not materials?
+    // TODO(complexplane): Are these actually opaque/transparent meshes/shapes, not materials?
     const materialCount = view.getInt16(0x1a);
     const traslucidMaterialCount = view.getInt16(0x1c);
     const mtxCount = view.getInt8(0x1e);

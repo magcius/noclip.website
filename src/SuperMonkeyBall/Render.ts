@@ -18,17 +18,8 @@ import { ViewerRenderInput } from '../viewer';
 import * as Gcmf from './Gcmf';
 import * as SD from './StagedefTypes';
 
-// Immutable stage/background definition
-// todo(complexplane): Move this out of here?
-export type StageData = {
-    stagedef: SD.Stage;
-    stageGma: Gcmf.Gma;
-    stageTpl: TextureInputGX[];
-    bgGma: Gcmf.Gma;
-    bgTpl: TextureInputGX[];
-};
 
-// todo(complexplane): Remove
+// TODO(complexplane): Remove
 class InstanceStateData {
     public jointToWorldMatrixVisibility: IntersectionState[] = [];
     public jointToWorldMatrixArray: mat4[] = [];
@@ -89,7 +80,7 @@ const drawParams = new DrawParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
-    // todo(complexplane): Shape should own its own LoadedVertexData instead of referencing in GcmfShape by index
+    // TODO(complexplane): Shape should own its own LoadedVertexData instead of referencing in GcmfShape by index
     constructor(public shape: Gcmf.Shape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance, public shape_idx: number) {
     }
 
@@ -152,7 +143,7 @@ class MaterialInstance {
         let mat_unk0x03 = material.unk0x03;
 
         const mb = new GXMaterialBuilder();
-        const matCount = material.matCount;
+        const matCount = material.tevStageCount;
         let i = 0;
         for (i = 0; i < matCount; i++) {
             mb.setTevDirect(i);
@@ -331,7 +322,7 @@ class MaterialInstance {
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[samplerIdxIdx];
-        // todo(complexplane): Apparently TextureMapping width/height/lodBias aren't used by renderer,
+        // TODO(complexplane): Apparently TextureMapping width/height/lodBias aren't used by renderer,
         // don't bother setting them?
         let lodBias = 0;
         switch (sampler.anisotropy) {
@@ -374,7 +365,7 @@ export class GcmfModelInstance {
 
     public colorOverrides: Color[] = [];
 
-    // todo(complexplane): Remove most of this stuff
+    // TODO(complexplane): Remove most of this stuff
     public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
     public name: string;
@@ -406,13 +397,13 @@ export class GcmfModelInstance {
         }
     }
 
-    // todo(complexplane): Shouldn't this be done on shapes or models (need z depth) instead of materials?
+    // TODO(complexplane): Shouldn't this be done on shapes or models (need z depth) instead of materials?
     public setSortKeyLayer(layer: GfxRendererLayer): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setSortKeyLayer(layer);
     }
 
-    // todo(complexplane): Should we just have one method that sets from a MaterialHacks object?
+    // TODO(complexplane): Should we just have one method that sets from a MaterialHacks object?
 
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -424,22 +415,22 @@ export class GcmfModelInstance {
             this.materialInstances[i].setMaterialHacks({ disableTextures: !v });
     }
 
-    // todo(complexplane): Remove
+    // TODO(complexplane): Remove
     public setColorOverride(i: ColorKind, color: Color): void {
         this.colorOverrides[i] = color;
     }
 
-    // todo(complexplane): Remove
+    // TODO(complexplane): Remove
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
-    // todo(complexplane): Remove
+    // TODO(complexplane): Remove
     private calcView(camera: Camera): void {
         const viewMatrix = matrixScratch;
 
         if (this.isSkybox) {
-            // todo(complexplane): Just copies view matrix out of camera with 0 translation,
+            // TODO(complexplane): Just copies view matrix out of camera with 0 translation,
             // but skyboxes in SMB1 don't seem parented to the camera position?
             computeViewMatrixSkybox(viewMatrix, camera);
         } else {
@@ -456,7 +447,7 @@ export class GcmfModelInstance {
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
         const camera = viewerInput.camera;
 
-        // todo(complexplane): modelVisibility currently unused (and probably should be boolean or early return or something?)
+        // TODO(complexplane): modelVisibility currently unused (and probably should be boolean or early return or something?)
         let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
 
         if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
@@ -475,7 +466,7 @@ export class GcmfModelInstance {
         this.calcView(camera);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        // todo(complexplane): filterKey and using a single list of render insts in general should be considered deprecated,
+        // TODO(complexplane): filterKey and using a single list of render insts in general should be considered deprecated,
         // instead use multiple lists
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
@@ -492,7 +483,7 @@ export class GcmfModelInstance {
 
 }
 
-// todo(complexplane): I'm thinking we associate a GfxSampler directly with the GfxTexture / TextureInputGX it references,
+// TODO(complexplane): I'm thinking we associate a GfxSampler directly with the GfxTexture / TextureInputGX it references,
 // then stick a list of these bundles in the Material instance. Materials just own a list of "sampler instances" which
 // can be bound at render time easily (eliminates GXTextureHolder too).
 class MaterialData {
@@ -511,7 +502,7 @@ class MaterialData {
             let MipFilter = GfxMipFilterMode.NoMip;
 
             if ((mipmapAV & (1 << 1)) !== 0) {
-                texFilter = GfxTexFilterMode.Bilinear;  // todo(complexplane): Redundant?
+                texFilter = GfxTexFilterMode.Bilinear;  // TODO(complexplane): Redundant?
                 MipFilter = GfxMipFilterMode.Linear;
             }
 

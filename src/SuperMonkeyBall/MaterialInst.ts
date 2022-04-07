@@ -51,9 +51,9 @@ export class MaterialInst {
         let mat_unk0x03 = this.materialData.unk0x03;
 
         const mb = new GXMaterialBuilder();
-        const matCount = this.materialData.matCount;
+        const tevStageCount = this.materialData.tevStageCount;
         let i = 0;
-        for (i = 0; i < matCount; i++) {
+        for (i = 0; i < tevStageCount; i++) {
             mb.setTevDirect(i);
             let ambSrc = GX.ColorSrc.VTX;
             let matSrc = GX.ColorSrc.VTX;

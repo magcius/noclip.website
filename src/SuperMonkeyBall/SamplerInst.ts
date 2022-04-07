@@ -18,7 +18,7 @@ function translateAVTexFilterGfx(mipmapAV: number): [GfxTexFilterMode, GfxMipFil
     let MipFilter = GfxMipFilterMode.NoMip;
 
     if ((mipmapAV & (1 << 1)) !== 0) {
-        texFilter = GfxTexFilterMode.Bilinear; // todo(complexplane): Redundant?
+        texFilter = GfxTexFilterMode.Bilinear; // TODO(complexplane): Redundant?
         MipFilter = GfxMipFilterMode.Linear;
     }
 

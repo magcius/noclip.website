@@ -1,4 +1,6 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GXMaterialHacks } from "../gx/gx_material";
 import * as Gcmf from "./Gcmf";
 import { TextureCache } from "./ModelCache";
 import { SamplerInst } from "./SamplerInst";
@@ -8,7 +10,12 @@ export class ModelInst {
     private shapes: ShapeInst[];
     private samplers: SamplerInst[]; // Each shape material uses a subset of these samplers
 
-    constructor(device: GfxDevice, modelData: Gcmf.Model, texCache: TextureCache) {
+    constructor(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        modelData: Gcmf.Model,
+        texCache: TextureCache
+    ) {
         this.samplers = modelData.samplers.map(
             (samplerData) => new SamplerInst(device, samplerData, texCache)
         );
@@ -16,11 +23,18 @@ export class ModelInst {
             (shapeData, i) =>
                 new ShapeInst(
                     device,
+                    renderCache,
                     shapeData,
                     this.samplers,
                     modelData.attrs,
                     i >= modelData.opaqueShapeCount
                 )
         );
+    }
+
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        for (let i = 0; i < this.shapes.length; i++) {
+            this.shapes[i].setMaterialHacks(hacks);
+        }
     }
 }

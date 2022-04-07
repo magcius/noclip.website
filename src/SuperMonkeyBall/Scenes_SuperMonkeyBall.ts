@@ -1,3 +1,4 @@
+import { DataFetcher } from "../DataFetcher";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
@@ -19,8 +20,8 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
         //load stage
         let prefix = 0;
-        const stageDefn = await this.loadStage(dataFetcher, this.stageId);
-        const renderer = new Renderer(device, stageDefn);
+        const stageData = await this.loadStage(dataFetcher, this.stageId);
+        const renderer = new Renderer(device, stageData);
 
         return sceneRender;
     }

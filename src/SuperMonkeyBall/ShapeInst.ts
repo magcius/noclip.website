@@ -1,5 +1,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import {
     compileVtxLoaderMultiVat,
     getAttributeByteSize,
@@ -8,8 +9,11 @@ import {
     GX_VtxDesc,
     LoadedVertexData,
     LoadedVertexLayout,
+    VtxLoader,
 } from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
+import { GXMaterialHacks } from "../gx/gx_material";
+import { GXShapeHelperGfx } from "../gx/gx_render";
 import { hexzero } from "../util";
 import * as Gcmf from "./Gcmf";
 import { MaterialInst } from "./MaterialInst";
@@ -88,7 +92,7 @@ function generateLoadedVertexData(
     const loadedVertexData = loader.runVertices(arrays, dlist);
     if (isCW) {
         // convert cw triangle-strip to ccw triangle-strip
-        // todo(complexplane): Does game just draw back faces instead? Maybe do that instead
+        // TODO(complexplane): Does game just draw back faces instead? Maybe do that instead
         const dstIndexData = new Uint16Array(loadedVertexData.indexData);
         for (let i = 1; i < loadedVertexData.totalIndexCount + 1; i++) {
             if (i % 3 == 0 && i > 0) {
@@ -103,12 +107,14 @@ function generateLoadedVertexData(
 }
 
 export class ShapeInst {
-    private loadedVertexLayout: LoadedVertexLayout;
-    private loadedVertexDatas: LoadedVertexData[];
+    // private loadedVertexLayout: LoadedVertexLayout;
+    // private loadedVertexDatas: LoadedVertexData[];
+    private shapeHelper: GXShapeHelperGfx;
     private material: MaterialInst;
 
     constructor(
         device: GfxDevice,
+        renderCache: GfxRenderCache,
         public shapeData: Gcmf.Shape,
         modelSamplers: SamplerInst[],
         modelAttrs: Gcmf.ModelAttrs,
@@ -131,12 +137,12 @@ export class ShapeInst {
         vat[GX.VtxFmt.VTXFMT0] = fillVatFormat(GX.CompType.F32, isNBT);
         vat[GX.VtxFmt.VTXFMT1] = fillVatFormat(GX.CompType.S16, isNBT);
         const loader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexLayout = loader.loadedVertexLayout;
+        const loadedVertexLayout = loader.loadedVertexLayout;
 
         // 16-bit models use VTXFMT1
         const fmtVat = modelAttrs.value16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
         let dlistOffs = 0x60;
-        this.loadedVertexDatas = [];
+        const loadedVertexDatas: LoadedVertexData[] = [];
         shapeData.dlistHeaders.forEach((dlistHeader) => {
             let dlistSizes = dlistHeader.dlistSizes;
             for (let i = 0; i < dlistSizes.length; i++) {
@@ -146,7 +152,7 @@ export class ShapeInst {
                 }
                 let isCW = i % 2 == 1;
                 let dlisEndOffs = dlistOffs + size;
-                // todo(complexplane): Parse separate dlist slices beforehand, and clean this up?
+                // TODO(complexplane): Parse separate dlist slices beforehand, and clean this up?
                 let dlist = shapeData.rawData.slice(dlistOffs + 0x01, dlisEndOffs);
                 const loadedVertexData = generateLoadedVertexData(
                     dlist,
@@ -156,12 +162,18 @@ export class ShapeInst {
                     loader,
                     isCW
                 );
-                this.loadedVertexDatas.push(loadedVertexData);
+                loadedVertexDatas.push(loadedVertexData);
 
                 dlistOffs = dlisEndOffs;
             }
         });
 
+        // TODO(complexplane): Build GXShapeHelperGfx
+
         this.material = new MaterialInst(shapeData.material, modelSamplers, translucent);
+    }
+
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        this.material.setMaterialHacks(hacks);
     }
 }
