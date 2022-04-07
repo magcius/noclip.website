@@ -54,4 +54,9 @@ export class SamplerInst {
         mapping.gfxTexture = this.loadedTex.gfxTexture;
         mapping.gfxSampler = this.gfxSampler;
     }
+
+    public destroy(device: GfxDevice): void {
+        // GfxTexture is destroyed in TextureCache
+        device.destroySampler(this.gfxSampler);
+    }
 }

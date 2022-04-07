@@ -106,7 +106,8 @@ export class Renderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO(complexplane)
+        this.renderHelper.destroy();
+        this.world.destroy(device);
     }
 
     public adjustCameraController(c: CameraController) {

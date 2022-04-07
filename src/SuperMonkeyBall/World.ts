@@ -54,4 +54,8 @@ export class World {
             this.levelModels[i].prepareToRender(device, renderInstManager, viewerInput);
         }
     }
+
+    public destroy(device: GfxDevice): void {
+        this.modelCache.destroy(device); // Destroys GPU resources that transitively exist in cache
+    }
 }

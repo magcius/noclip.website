@@ -30,6 +30,10 @@ export class TextureCache {
         }
         return loadedTex;
     }
+
+    public destroy(device: GfxDevice): void {
+        this.cache.forEach((tex) => device.destroyTexture(tex.gfxTexture));
+    }
 }
 
 class CacheEntry {
@@ -78,5 +82,12 @@ export class ModelCache {
         }
 
         return null;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.entries.length; i++) {
+            this.entries[i].modelCache.forEach((model) => model.destroy(device));
+            this.entries[i].texCache.destroy(device);
+        }
     }
 }

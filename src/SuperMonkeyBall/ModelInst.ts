@@ -49,4 +49,13 @@ export class ModelInst {
             this.shapes[i].prepareToRender(device, renderInstManager, viewerInput);
         }
     }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.shapes.length; i++) {
+            this.shapes[i].destroy(device);
+        }
+        for (let i = 0; i < this.samplers.length; i++) {
+            this.samplers[i].destroy(device);
+        }
+    }
 }

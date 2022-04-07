@@ -11,14 +11,11 @@ import {
     GX_VtxAttrFmt,
     GX_VtxDesc,
     LoadedVertexData,
-    LoadedVertexLayout,
     VtxLoader,
 } from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { TheWitnessGlobals } from "../TheWitness/Globals";
-import { hexzero } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import * as Gcmf from "./Gcmf";
 import { MaterialInst } from "./MaterialInst";
@@ -113,9 +110,8 @@ function generateLoadedVertexData(
 
 const scratchDrawParams = new DrawParams();
 export class ShapeInst {
-    // private loadedVertexLayout: LoadedVertexLayout;
-    // private loadedVertexDatas: LoadedVertexData[];
     private material: MaterialInst;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
     private shapeHelpers: GXShapeHelperGfx[];
 
     constructor(
@@ -176,8 +172,8 @@ export class ShapeInst {
 
         // TODO(complexplane): Either get rid of GfxBufferCoalescer or go ham and coalesce all shape
         // buffers in model (is cross-model buffer coalescing possible?)
-        const bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
-        this.shapeHelpers = bufferCoalescer.coalescedBuffers.map(
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
+        this.shapeHelpers = this.bufferCoalescer.coalescedBuffers.map(
             (buf, i) =>
                 new GXShapeHelperGfx(
                     device,
@@ -204,7 +200,12 @@ export class ShapeInst {
         const template = renderInstManager.pushTemplateRenderInst();
         const drawParams = scratchDrawParams;
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template, drawParams);
+        this.material.setOnRenderInst(
+            device,
+            renderInstManager.gfxRenderCache,
+            template,
+            drawParams
+        );
 
         for (let i = 0; i < this.shapeHelpers.length; i++) {
             const inst = renderInstManager.newRenderInst();
@@ -213,5 +214,12 @@ export class ShapeInst {
         }
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.shapeHelpers.length; i++) {
+            this.shapeHelpers[i].destroy(device);
+        }
+        this.bufferCoalescer.destroy(device);
     }
 }
