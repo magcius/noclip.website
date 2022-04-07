@@ -100,10 +100,10 @@ export type Sampler = {
 };
 
 export type Model = {
+    name: string;
     attrs: ModelAttrs;
     origin: vec3;
     boundingRadius: number;
-    texCount: number;
     opaqueShapeCount: number;
     translucentShapeCount: number;
     mtxCount: number;
@@ -299,7 +299,7 @@ function parseShape(
     return { material, boundingSphere, dlistHeaders, rawData: buffer };
 }
 
-function parseModel(buffer: ArrayBufferSlice): Model {
+function parseModel(buffer: ArrayBufferSlice, name: string): Model {
     function parseModelAttrs(attrs: number): ModelAttrs {
         const value16Bit = ((attrs >> 0) & 0x01) == 1;
         const unk0x2 = ((attrs >> 1) & 0x01) == 1;
@@ -316,23 +316,22 @@ function parseModel(buffer: ArrayBufferSlice): Model {
     const shapes: Shape[] = [];
     const origin = vec3.create();
 
-    const attribute = parseModelAttrs(view.getUint32(0x04));
-    let useVtxCon = attribute.skin || attribute.effective;
+    const attrs = parseModelAttrs(view.getUint32(0x04));
+    let useVtxCon = attrs.skin || attrs.effective;
     vec3.set(origin, view.getFloat32(0x08), view.getFloat32(0x0c), view.getFloat32(0x10));
     const boundingRadius = view.getFloat32(0x14);
 
-    const texCount = view.getInt16(0x18);
-    // TODO(complexplane): Are these actually opaque/transparent meshes/shapes, not materials?
-    const materialCount = view.getInt16(0x1a);
-    const traslucidMaterialCount = view.getInt16(0x1c);
+    const samplerCount = view.getInt16(0x18);
+    const opaqueShapeCount = view.getInt16(0x1a);
+    const translucentShapeCount = view.getInt16(0x1c);
     const mtxCount = view.getInt8(0x1e);
     // Texture and Matrix Size
     const texMtxSize = view.getInt32(0x20);
 
-    let allMaterialCount = materialCount + traslucidMaterialCount;
+    let allMaterialCount = opaqueShapeCount + translucentShapeCount;
     let offs = 0x40;
     // GcmfSampler
-    for (let i = 0; i < texCount; i++) {
+    for (let i = 0; i < samplerCount; i++) {
         samplers.push(parseSampler(buffer.slice(offs)));
         offs += 0x20;
     }
@@ -368,7 +367,7 @@ function parseModel(buffer: ArrayBufferSlice): Model {
             console.log("Not support NBT");
             continue;
         }
-        const shape = parseShape(shapeBuff.slice(shapeOffs), attribute, i, vtxCon2Offs);
+        const shape = parseShape(shapeBuff.slice(shapeOffs), attrs, i, vtxCon2Offs);
         if (shape.material.samplerIdxs[0] < 0) {
             // TODO(complexplane): Support 0 sampler shapes
             console.log("GCMF shape has zero samplers, ignoring shape");
@@ -384,12 +383,12 @@ function parseModel(buffer: ArrayBufferSlice): Model {
     }
 
     return {
-        attrs: attribute,
+        name,
+        attrs,
         origin,
         boundingRadius,
-        texCount,
-        opaqueShapeCount: materialCount,
-        translucentShapeCount: traslucidMaterialCount,
+        opaqueShapeCount,
+        translucentShapeCount,
         mtxCount,
         matrixs,
         samplers,
@@ -447,7 +446,7 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
             );
             continue;
         }
-        const model = parseModel(modelBuf.slice(modelOffs));
+        const model = parseModel(modelBuf.slice(modelOffs), name);
         if (model.opaqueShapeCount + model.translucentShapeCount < 1) {
             // ignore invaild gcmf
             continue;
