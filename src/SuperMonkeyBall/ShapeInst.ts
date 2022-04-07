@@ -1,3 +1,5 @@
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
+
 import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";

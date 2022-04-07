@@ -1,3 +1,5 @@
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
+
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { LoadedTexture, TextureMapping } from "../TextureHolder";

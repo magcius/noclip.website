@@ -1,8 +1,5 @@
-/*
- * AmusementVision's Texture format
- *
- * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
- */
+// AmusementVision's texture format
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";

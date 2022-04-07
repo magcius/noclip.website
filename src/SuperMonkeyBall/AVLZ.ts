@@ -1,6 +1,4 @@
-/*
- * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
- */
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZSS from "../Common/Compression/LZSS";

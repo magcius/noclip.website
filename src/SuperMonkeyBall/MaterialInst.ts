@@ -1,3 +1,5 @@
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
+
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
 import * as Gcmf from "./Gcmf";

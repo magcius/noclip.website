@@ -1,12 +1,12 @@
-﻿/*
- * Parses Amusement Vision GMA Format (GeoMetry Archive) files.
- * (or is it "Gamecube Model Archive"?)
- * https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=gmaFormat
- * https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
- * AmusementVision's Texture format
- *
- * Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
- */
+﻿// Parses Amusement Vision GMA Format (GeoMetry Archive) files
+// (or is it "Gamecube Model Archive"?)
+//
+// References (some may be largely incomplete/outdated):
+// https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
+// https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=gmaFormat
+// https://github.com/camthesaxman/smb-decomp/
+//
+// Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
