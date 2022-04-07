@@ -359,7 +359,6 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         sceneObjHolder.create(SceneObj.ClipAreaDropHolder);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         const mb = new GXMaterialBuilder('ClipAreaDropLaser Laser');
         mb.setCullMode(GX.CullMode.NONE);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);

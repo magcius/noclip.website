@@ -89,9 +89,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
             skyscape: new GfxRenderInstList(),

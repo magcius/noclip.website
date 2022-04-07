@@ -29,8 +29,6 @@ export class Sky {
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
         this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);

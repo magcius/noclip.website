@@ -139,7 +139,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     const dataTables = [
         GX.Attr.POS,
         GX.Attr.NRM,
-        GX.Attr.NRM, // NBT
+        GX.Attr._NBT,
         GX.Attr.CLR0,
         GX.Attr.CLR1,
         GX.Attr.TEX0,
@@ -424,7 +424,6 @@ export interface Shape {
 }
 
 export interface SHP1 {
-    vat: GX_VtxAttrFmt[];
     shapes: Shape[];
 }
 
@@ -483,18 +482,33 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
         const vcd: GX_VtxDesc[] = [];
 
+        let usesNBT = false;
         let attribIdx = attribTableOffs + attribOffs;
         while (true) {
-            const vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
+            let vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
             if (vtxAttrib === GX.Attr.NULL)
                 break;
+
+            if (vtxAttrib === GX.Attr._NBT) {
+                usesNBT = true;
+                vtxAttrib = GX.Attr.NRM;
+            }
+
             const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
             vcd[vtxAttrib] = { type: indexDataType };
             attribIdx += 0x08;
         }
 
+        const vatNRM = vat[GX.Attr.NRM];
+        const vtxArrayNRM = vtxArrays[GX.Attr.NRM];
+        if (usesNBT) {
+            // Swap out the NRM array for the NBT one.
+            vat[GX.Attr.NRM] = vat[GX.Attr._NBT];
+            vtxArrays[GX.Attr.NRM] = vtxArrays[GX.Attr._NBT];
+        }
+
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
-        const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
+        const loadedVertexLayout = compileLoadedVertexLayout(vcd, usesNBT);
         const vtxLoader = compileVtxLoader(vat, vcd);
 
         let mtxGroupIdx = matrixGroupTableOffs + (firstMtxGroup * 0x08);
@@ -548,9 +562,14 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex });
 
         shapeIdx += 0x28;
+
+        if (usesNBT) {
+            vat[GX.Attr.NRM] = vatNRM;
+            vtxArrays[GX.Attr.NRM] = vtxArrayNRM;
+        }
     }
 
-    return { vat, shapes };
+    return { shapes };
 }
 //#endregion
 //#region MAT3

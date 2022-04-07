@@ -208,7 +208,6 @@ class dDlst_alphaModel_c {
         projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
