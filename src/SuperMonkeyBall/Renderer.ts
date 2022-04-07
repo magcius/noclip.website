@@ -2,15 +2,12 @@ import { CameraController } from "../Camera";
 import {
     makeBackbufferDescSimple,
     opaqueBlackFullClearRenderPassDescriptor,
-    pushAntialiasingPostProcessPass
+    pushAntialiasingPostProcessPass,
 } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GXMaterialHacks } from "../gx/gx_material";
-import {
-    fillSceneParamsDataOnTemplate,
-    GXRenderHelperGfx
-} from "../gx/gx_render";
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
 import * as UI from "../ui";
 import * as Viewer from "../viewer";
 import { StageData, World } from "./World";
@@ -19,8 +16,6 @@ export class Renderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private world: World;
     private renderCollision: boolean = false;
-    private materialHacks: GXMaterialHacks;
-
     constructor(device: GfxDevice, stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.world = new World(device, this.renderHelper.getCache(), stageData);
@@ -33,16 +28,18 @@ export class Renderer implements Viewer.SceneGfx {
         // Enable Vertex Color
         const enableVertexColorsCheckbox = new UI.Checkbox("Enable Vertex Colors", true);
         enableVertexColorsCheckbox.onchanged = () => {
-            this.materialHacks.disableVertexColors = !enableVertexColorsCheckbox.checked;
-            this.world.setMaterialHacks(this.materialHacks);
+            this.world.setMaterialHacks({
+                disableVertexColors: !enableVertexColorsCheckbox.checked,
+            });
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
 
         // Enable Texture
         const enableTextures = new UI.Checkbox("Enable Textures", true);
         enableTextures.onchanged = () => {
-            this.materialHacks.disableTextures = !enableTextures.checked;
-            this.world.setMaterialHacks(this.materialHacks);
+            this.world.setMaterialHacks({
+                disableTextures: !enableTextures.checked,
+            });
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
