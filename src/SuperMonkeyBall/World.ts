@@ -9,14 +9,15 @@ import * as Viewer from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { AVTpl } from "./AVTpl";
 
 // Immutable stage/background definition
 export type StageData = {
     stagedef: SD.Stage;
     stageGma: Gcmf.Gma;
-    stageTpl: TextureInputGX[];
+    stageTpl: AVTpl;
     bgGma: Gcmf.Gma;
-    bgTpl: TextureInputGX[];
+    bgTpl: AVTpl;
 };
 
 export class World {

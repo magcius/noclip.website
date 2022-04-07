@@ -7,6 +7,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
 import { TextureInputGX } from "../gx/gx_texture";
+import { parseAvTpl } from "../SuperMonkeyBallOld/AVtpl";
 import { assert, leftPad } from "../util";
 
 function parseAVTplHeader(
@@ -32,9 +33,12 @@ function parseAVTplHeader(
     return { name, format, width, height, mipCount, data, paletteFormat, paletteData };
 }
 
-export function parseAVTpl(buffer: ArrayBufferSlice, tplName: string): TextureInputGX[] {
+// Not every texture index is filled as some textures may be invalid
+export type AVTpl = Map<number, TextureInputGX>;
+
+export function parseAVTpl(buffer: ArrayBufferSlice, tplName: string): AVTpl {
     let view = buffer.createDataView();
-    const textures: TextureInputGX[] = [];
+    const textures: AVTpl = new Map();
 
     let entryCount = view.getUint32(0x00);
     let offs = 0x04;
@@ -44,7 +48,7 @@ export function parseAVTpl(buffer: ArrayBufferSlice, tplName: string): TextureIn
         if (texture.width === 0 && texture.height === 0 && texture.mipCount === 0) {
             continue;
         }
-        textures.push(texture);
+        textures.set(i, texture);
     }
 
     return textures;

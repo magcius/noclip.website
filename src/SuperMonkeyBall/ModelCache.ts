@@ -2,34 +2,33 @@ import { ModelInst } from "./ModelInst";
 import * as Gcmf from "./Gcmf";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { assert, nArray } from "../util";
+import { assert, assertExists, nArray } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { StageData } from "./World";
+import { AVTpl } from "./AVTpl";
 
 // Cache loaded models by name and textures by index in TPL. Not much advantage over loading
 // everything at once but oh well.
 
 export class TextureCache {
-    private cache: (LoadedTexture | null)[];
+    private cache: Map<number, LoadedTexture>;
 
-    constructor(private tpl: TextureInputGX[]) {
-        this.cache = nArray(tpl.length, () => null);
+    constructor(private tpl: AVTpl) {
+        this.cache = new Map();
     }
 
     public getTexture(device: GfxDevice, idx: number): LoadedTexture {
-        assert(idx >= 0 && idx < this.cache.length);
-        const tex = this.cache[idx];
-        if (tex === null) {
-            // Load texture
-            const mipChain = calcMipChain(this.tpl[idx], this.tpl[idx].mipCount);
+        const loadedTex = this.cache.get(idx);
+        if (loadedTex === undefined) {
+            const gxTex = assertExists(this.tpl.get(idx));
+            const mipChain = calcMipChain(gxTex, gxTex.mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
-
-            this.cache[idx] = freshTex;
+            this.cache.set(idx, freshTex);
             return freshTex;
         }
-        return tex;
+        return loadedTex;
     }
 }
 
@@ -37,7 +36,7 @@ class CacheEntry {
     public modelCache: Map<string, ModelInst>;
     public texCache: TextureCache;
 
-    constructor(public gma: Gcmf.Gma, tpl: TextureInputGX[]) {
+    constructor(public gma: Gcmf.Gma, tpl: AVTpl) {
         this.modelCache = new Map<string, ModelInst>();
         this.texCache = new TextureCache(tpl);
     }
