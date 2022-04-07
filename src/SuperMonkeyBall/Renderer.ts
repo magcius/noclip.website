@@ -8,17 +8,23 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
-import * as UI from "../ui";
 import * as Viewer from "../viewer";
+import { ModelCache } from "./ModelCache";
 import { StageData, World } from "./World";
+import * as UI from "../ui";
 
 export class Renderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private world: World;
+    private modelCache: ModelCache;
+    public textureHolder: UI.TextureListHolder;
     private renderCollision: boolean = false;
+
     constructor(device: GfxDevice, stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.world = new World(device, this.renderHelper.getCache(), stageData);
+        this.modelCache = new ModelCache(stageData);
+        this.textureHolder = this.modelCache; // It's also the viewer texture holder
+        this.world = new World(device, this.renderHelper.getCache(), this.modelCache, stageData);
     }
 
     public createPanels(): UI.Panel[] {

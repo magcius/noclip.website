@@ -8,6 +8,8 @@ import { loadTextureFromMipChain } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { StageData } from "./World";
 import { AVTpl } from "./AVTpl";
+import * as UI from "../ui";
+import * as Viewer from '../viewer';
 
 // Cache loaded models by name and textures by index in TPL. Not much advantage over loading
 // everything at once but oh well.
@@ -15,7 +17,7 @@ import { AVTpl } from "./AVTpl";
 export class TextureCache {
     private cache: Map<number, LoadedTexture>;
 
-    constructor(private tpl: AVTpl) {
+    constructor(private tpl: AVTpl, private onNewViewerTex: (t: Viewer.Texture) => void) {
         this.cache = new Map();
     }
 
@@ -26,6 +28,7 @@ export class TextureCache {
             const mipChain = calcMipChain(gxTex, gxTex.mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
             this.cache.set(idx, freshTex);
+            this.onNewViewerTex(freshTex.viewerTexture);
             return freshTex;
         }
         return loadedTex;
@@ -40,21 +43,24 @@ class CacheEntry {
     public modelCache: Map<string, ModelInst>;
     public texCache: TextureCache;
 
-    constructor(public gma: Gcmf.Gma, tpl: AVTpl) {
+    constructor(public gma: Gcmf.Gma, tpl: AVTpl, onNewViewerTex: (t: Viewer.Texture) => void) {
         this.modelCache = new Map<string, ModelInst>();
-        this.texCache = new TextureCache(tpl);
+        this.texCache = new TextureCache(tpl, onNewViewerTex);
     }
 }
 
-export class ModelCache {
+// TODO(complexplane): Consider doing something closer to TextureHolder for textures instead.
+export class ModelCache implements UI.TextureListHolder {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];
 
     constructor(stageData: StageData) {
         this.entries = [
-            new CacheEntry(stageData.stageGma, stageData.stageTpl),
-            new CacheEntry(stageData.bgGma, stageData.bgTpl),
+            new CacheEntry(stageData.stageGma, stageData.stageTpl, (t) => this.addViewerTex(t)),
+            new CacheEntry(stageData.bgGma, stageData.bgTpl, (t) => this.addViewerTex(t)),
         ];
+        this.viewerTextures = [];
+        this.onnewtextures = null;
     }
 
     public getModel(
@@ -82,6 +88,16 @@ export class ModelCache {
         }
 
         return null;
+    }
+
+    public viewerTextures: Viewer.Texture[];
+    public onnewtextures: (() => void) | null;
+
+    private addViewerTex(tex: Viewer.Texture) {
+        this.viewerTextures.push(tex);
+        if (this.onnewtextures !== null) {
+            this.onnewtextures();
+        }
     }
 
     public destroy(device: GfxDevice): void {

@@ -21,16 +21,13 @@ export type StageData = {
 };
 
 export class World {
-    private modelCache: ModelCache;
     private levelModels: ModelInst[];
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, stageData: StageData) {
-        this.modelCache = new ModelCache(stageData);
-
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         // For now, just render all level models referenced by stagedef
         this.levelModels = [];
         for (const levelModelData of stageData.stagedef.levelModels) {
-            const modelInst = this.modelCache.getModel(
+            const modelInst = modelCache.getModel(
                 device,
                 renderCache,
                 levelModelData.modelName
