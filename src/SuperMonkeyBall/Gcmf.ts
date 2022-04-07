@@ -71,12 +71,12 @@ type VtxConType4 = {
 export type Shape = {
     material: Material;
     boundingSphere: vec3;
-    dlistHeaders: GcmfDisplaylistHeader[];
+    dlistHeaders: DisplaylistHeader[];
     rawData: ArrayBufferSlice; // TODO(complexplane): Store individual dlist bufs instead
 };
 
 // GCMF DisplaylistHeader
-export type GcmfDisplaylistHeader = {
+export type DisplaylistHeader = {
     mtxIdxs: number[];
     dlistSizes: number[];
     submeshEndOffs: number;
@@ -235,7 +235,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     };
 }
 
-function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
+function parseExShape(buffer: ArrayBufferSlice): DisplaylistHeader {
     const view = buffer.createDataView();
     const mtxIdxs = [];
     const dlistSizes = [];
@@ -255,18 +255,13 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader {
     return { mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs };
 }
 
-function parseShape(
-    buffer: ArrayBufferSlice,
-    attribute: ModelAttrs,
-    idx: number,
-    vtxCon2Offs: number
-): Shape {
+function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     const view = buffer.createDataView();
 
     let mtxIdxs: number[] = [];
     const boundingSphere = vec3.create();
     let dlistSizes: number[] = [];
-    const dlistHeaders: GcmfDisplaylistHeader[] = [];
+    const dlistHeaders: DisplaylistHeader[] = [];
 
     const material = parseMaterial(buffer.slice(0x00, 0x60), idx);
     for (let i = 0; i < 8; i++) {
@@ -278,8 +273,8 @@ function parseShape(
         dlistSizes.push(dlistSize);
     }
     vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
-    const submesh_end_offs = view.byteOffset + 0x60;
-    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs });
+    const submeshEndOffs = view.byteOffset + 0x60;
+    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs });
     // TODO(complexplane): Parse individual dlist buffers
 
     // TODO(complexplane): These conditionals look wrong, fix/verify them
@@ -366,7 +361,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): Model {
             console.log("Not support NBT");
             continue;
         }
-        const shape = parseShape(shapeBuff.slice(shapeOffs), attrs, i, vtxCon2Offs);
+        const shape = parseShape(shapeBuff.slice(shapeOffs), i);
         if (shape.material.samplerIdxs[0] < 0) {
             // TODO(complexplane): Support 0 sampler shapes
             console.log("GCMF shape has zero samplers, ignoring shape");
