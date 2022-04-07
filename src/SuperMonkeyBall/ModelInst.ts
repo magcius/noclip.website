@@ -1,6 +1,8 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialHacks } from "../gx/gx_material";
+import { ViewerRenderInput } from "../viewer";
 import * as Gcmf from "./Gcmf";
 import { TextureCache } from "./ModelCache";
 import { SamplerInst } from "./SamplerInst";
@@ -35,6 +37,16 @@ export class ModelInst {
     public setMaterialHacks(hacks: GXMaterialHacks): void {
         for (let i = 0; i < this.shapes.length; i++) {
             this.shapes[i].setMaterialHacks(hacks);
+        }
+    }
+
+    public prepareToRender(
+        device: GfxDevice,
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: ViewerRenderInput
+    ) {
+        for (let i = 0; i < this.shapes.length; i++) {
+            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput);
         }
     }
 }

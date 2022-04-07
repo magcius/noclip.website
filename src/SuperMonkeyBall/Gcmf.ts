@@ -11,16 +11,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color, colorNewFromRGBA } from "../Color";
-import {
-    compileVtxLoaderMultiVat,
-    getAttributeByteSize,
-    GX_Array,
-    GX_VtxAttrFmt,
-    GX_VtxDesc,
-    LoadedVertexData,
-    LoadedVertexLayout,
-    VtxLoader,
-} from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
 import { assert, hexzero, readString } from "../util";
 
@@ -277,7 +267,6 @@ function parseShape(
     let mtxIdxs: number[] = [];
     const boundingSphere = vec3.create();
     let dlistSizes: number[] = [];
-    const loadedVertexDatas: LoadedVertexData[] = [];
     const dlistHeaders: GcmfDisplaylistHeader[] = [];
 
     const material = parseMaterial(buffer.slice(0x00, 0x60), idx);

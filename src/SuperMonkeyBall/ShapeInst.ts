@@ -1,6 +1,9 @@
+import { mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import {
     compileVtxLoaderMultiVat,
     getAttributeByteSize,
@@ -13,8 +16,10 @@ import {
 } from "../gx/gx_displaylist";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
-import { GXShapeHelperGfx } from "../gx/gx_render";
+import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { TheWitnessGlobals } from "../TheWitness/Globals";
 import { hexzero } from "../util";
+import { ViewerRenderInput } from "../viewer";
 import * as Gcmf from "./Gcmf";
 import { MaterialInst } from "./MaterialInst";
 import { SamplerInst } from "./SamplerInst";
@@ -106,11 +111,12 @@ function generateLoadedVertexData(
     return loadedVertexData;
 }
 
+const scratchDrawParams = new DrawParams();
 export class ShapeInst {
     // private loadedVertexLayout: LoadedVertexLayout;
     // private loadedVertexDatas: LoadedVertexData[];
-    private shapeHelper: GXShapeHelperGfx;
     private material: MaterialInst;
+    private shapeHelpers: GXShapeHelperGfx[];
 
     constructor(
         device: GfxDevice,
@@ -168,12 +174,44 @@ export class ShapeInst {
             }
         });
 
-        // TODO(complexplane): Build GXShapeHelperGfx
+        // TODO(complexplane): Either get rid of GfxBufferCoalescer or go ham and coalesce all shape
+        // buffers in model (is cross-model buffer coalescing possible?)
+        const bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
+        this.shapeHelpers = bufferCoalescer.coalescedBuffers.map(
+            (buf, i) =>
+                new GXShapeHelperGfx(
+                    device,
+                    renderCache,
+                    buf.vertexBuffers,
+                    buf.indexBuffer,
+                    loadedVertexLayout,
+                    loadedVertexDatas[i]
+                )
+        );
 
         this.material = new MaterialInst(shapeData.material, modelSamplers, translucent);
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {
         this.material.setMaterialHacks(hacks);
+    }
+
+    public prepareToRender(
+        device: GfxDevice,
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: ViewerRenderInput
+    ) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        const drawParams = scratchDrawParams;
+        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialInst.setOnRenderInst(device, renderInstManager.gfxRenderCache, template, drawParams);
+
+        for (let i = 0; i < this.shapeHelpers.length; i++) {
+            const inst = renderInstManager.newRenderInst();
+            this.shapeHelpers[i].setOnRenderInst(inst);
+            renderInstManager.submitRenderInst(inst);
+        }
+
+        renderInstManager.popTemplateRenderInst();
     }
 }

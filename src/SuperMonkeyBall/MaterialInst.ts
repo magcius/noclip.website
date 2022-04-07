@@ -1,10 +1,14 @@
 import { GXMaterialHacks } from "../gx/gx_material";
-import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
 import * as Gcmf from "./Gcmf";
 import { SamplerInst } from "./SamplerInst";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
+const scratchMaterialParams = new MaterialParams();
 export class MaterialInst {
     private samplers: SamplerInst[];
     private materialHelper: GXMaterialHelperGfx;
@@ -225,5 +229,26 @@ export class MaterialInst {
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {
         this.materialHelper.setMaterialHacks(hacks);
+    }
+
+    public setOnRenderInst(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        inst: GfxRenderInst,
+        drawParams: DrawParams
+    ): void {
+        // Shader program
+        this.materialHelper.setOnRenderInst(device, renderCache, inst);
+
+        // Sampler bindings
+        const materialParams = scratchMaterialParams;
+        for (let i = 0; i < this.samplers.length; i++) {
+            this.samplers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
+        }
+        this.materialHelper.allocateMaterialParamsDataOnInst(inst, materialParams);
+        inst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        // Draw params
+        this.materialHelper.allocateDrawParamsDataOnInst(inst, drawParams);
     }
 }
