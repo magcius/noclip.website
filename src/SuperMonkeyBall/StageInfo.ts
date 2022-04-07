@@ -8,7 +8,7 @@ export const enum StageId {
     St007_Blocks = 7,
     St008_JumpSingle = 8,
     St009_ExamA = 9,
-};
+}
 
 export const enum BgType {
     Jungle = 13,
@@ -21,7 +21,7 @@ export const enum BgType {
     Storm = 20,
     Bonus = 21,
     Master = 26,
-};
+}
 
 // Maybe these should be some object type instead of a bunch of maps?
 
@@ -38,14 +38,14 @@ export const STAGE_TO_BG_MAP = {
 };
 
 export const BG_TO_FILENAME_MAP = {
-    [BgType.Jungle]: 'bg_jun',
-    [BgType.Water]: 'bg_wat',
-    [BgType.Night]: 'bg_nig',
-    [BgType.Sunset]: 'bg_sun',
-    [BgType.Space]: 'bg_spa',
-    [BgType.Sand]: 'bg_snd',
-    [BgType.Ice]: 'bg_ice',
-    [BgType.Storm]: 'bg_stm',
-    [BgType.Bonus]: 'bg_bns',
-    [BgType.Master]: 'bg_mst',
+    [BgType.Jungle]: "bg_jun",
+    [BgType.Water]: "bg_wat",
+    [BgType.Night]: "bg_nig",
+    [BgType.Sunset]: "bg_sun",
+    [BgType.Space]: "bg_spa",
+    [BgType.Sand]: "bg_snd",
+    [BgType.Ice]: "bg_ice",
+    [BgType.Storm]: "bg_stm",
+    [BgType.Bonus]: "bg_bns",
+    [BgType.Master]: "bg_mst",
 };

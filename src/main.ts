@@ -84,7 +84,7 @@ import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
 import * as Scenes_Subnautica from './Subnautica/scenes';
 import * as Scenes_Glover from './Glover/scenes';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife';
-import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/scenes_SuperMonkeyBall';
+import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
