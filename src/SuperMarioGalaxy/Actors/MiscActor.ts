@@ -5061,14 +5061,12 @@ class OceanRingDrawer {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX1, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX2, true);
 
         const mb = new GXMaterialBuilder('OceanRing');
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.TEXMTX1);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX2, GX.TexGenMatrix.TEXMTX2);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX2);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX3);
 
         const isCameraInWater = false;
@@ -5130,40 +5128,27 @@ class OceanRingDrawer {
 
         const p = this.oceanRing.points, pointsPerSegment = this.oceanRing.pointsPerSegment;
 
-        let tx0S = 0.0, tx1S = 0.0, tx2S = 0.0;
+        let tx0S = 0.0;
         for (let i = 0; i < this.pointCount; i += pointsPerSegment) {
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
 
-            let tx0T = 0.0, tx1T = 0.0, tx2T = 0.0;
-
+            let tx0T = 0.0;
             const tx0Sb = tx0S + 0.05;
-            const tx1Sb = tx1S + 0.05;
-            const tx2Sb = tx2S + 0.1;
-
             for (let j = i; j < i + pointsPerSegment; j++) {
                 const p0 = p[j], p1 = p[(j + pointsPerSegment) % p.length];
 
                 this.ddraw.position3vec3(p0.pos);
                 this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, p0.alpha * 0xFF);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, tx0S, tx0T);
-                this.ddraw.texCoord2f32(GX.Attr.TEX1, tx1S, tx1T);
-                this.ddraw.texCoord2f32(GX.Attr.TEX2, tx2S, tx2T);
 
                 this.ddraw.position3vec3(p1.pos);
                 this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, p1.alpha * 0xFF);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, tx0Sb, tx0T);
-                this.ddraw.texCoord2f32(GX.Attr.TEX1, tx1Sb, tx1T);
-                this.ddraw.texCoord2f32(GX.Attr.TEX2, tx2Sb, tx2T);
 
                 tx0T += 0.05;
-                tx1T += 0.05;
-                tx2T += 0.1;
             }
 
             tx0S = tx0Sb;
-            tx1S = tx1Sb;
-            tx2S = tx2Sb;
-
             this.ddraw.end();
         }
 
