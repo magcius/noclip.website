@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import { TextureInputGX } from '../gx/gx_texture';
 import { assert } from '../util';
 
-// todo(complexplane): Just use TextureInputGX?
+// TODO(complexplane): Just use TextureInputGX?
 export interface AVTexture extends TextureInputGX {
     name: string;
     format: GX.TexFormat;

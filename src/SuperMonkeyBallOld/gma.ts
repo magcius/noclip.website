@@ -68,7 +68,7 @@ type VtxConType4 = {
 }
 
 // GCMF Submesh
-// todo(complexplane): GPU data probably belongs in ShapeInstance or similar
+// TODO(complexplane): GPU data probably belongs in ShapeInstance or similar
 export type GcmfShape = {
     material: GcmfMaterial,
     boundingSphere: vec3,
@@ -250,7 +250,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         const loadedVertexData = loader.runVertices(arrays, dlist);
         if (isCW) {
             // convert cw triangle-strip to ccw triangle-strip
-            // todo(complexplane): Does game just draw back faces instead? Maybe do that instead
+            // TODO(complexplane): Does game just draw back faces instead? Maybe do that instead
             const dstIndexData = new Uint16Array(loadedVertexData.indexData);
             for (let i = 1; i < loadedVertexData.totalIndexCount + 1; i++) {
                 if (i % 3 == 0 && i > 0) {
@@ -362,7 +362,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf {
     const boundingRadius = view.getFloat32(0x14);
 
     const texCount = view.getInt16(0x18);
-    // todo(complexplane): Are these actually opaque/translucent meshes/shapes, not materials?
+    // TODO(complexplane): Are these actually opaque/translucent meshes/shapes, not materials?
     const materialCount = view.getInt16(0x1A);
     const traslucidMaterialCount = view.getInt16(0x1C);
     const mtxCount = view.getInt8(0x1E);
