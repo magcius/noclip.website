@@ -30,7 +30,11 @@ export class World {
         // For now, just render all level models referenced by stagedef
         this.levelModels = [];
         for (const levelModelData of stageData.stagedef.levelModels) {
-            const modelInst = this.modelCache.getModel(device, renderCache, levelModelData.modelName);
+            const modelInst = this.modelCache.getModel(
+                device,
+                renderCache,
+                levelModelData.modelName
+            );
             if (modelInst !== null) {
                 this.levelModels.push(modelInst);
             }
