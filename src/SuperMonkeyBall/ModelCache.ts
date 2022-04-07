@@ -17,7 +17,7 @@ import * as Viewer from '../viewer';
 export class TextureCache {
     private cache: Map<number, LoadedTexture>;
 
-    constructor(private tpl: AVTpl, private onNewViewerTex: (t: Viewer.Texture) => void) {
+    constructor(private tpl: AVTpl) {
         this.cache = new Map();
     }
 
@@ -28,10 +28,14 @@ export class TextureCache {
             const mipChain = calcMipChain(gxTex, gxTex.mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
             this.cache.set(idx, freshTex);
-            this.onNewViewerTex(freshTex.viewerTexture);
             return freshTex;
         }
         return loadedTex;
+    }
+
+    public getViewerTextures(): Viewer.Texture[] {
+        const idxs = Array.from(this.cache.keys()).sort();
+        return idxs.map((i) => assertExists(this.cache.get(i)).viewerTexture);
     }
 
     public destroy(device: GfxDevice): void {
@@ -43,24 +47,22 @@ class CacheEntry {
     public modelCache: Map<string, ModelInst>;
     public texCache: TextureCache;
 
-    constructor(public gma: Gcmf.Gma, tpl: AVTpl, onNewViewerTex: (t: Viewer.Texture) => void) {
+    constructor(public gma: Gcmf.Gma, tpl: AVTpl) {
         this.modelCache = new Map<string, ModelInst>();
-        this.texCache = new TextureCache(tpl, onNewViewerTex);
+        this.texCache = new TextureCache(tpl);
     }
 }
 
 // TODO(complexplane): Consider doing something closer to TextureHolder for textures instead.
-export class ModelCache implements UI.TextureListHolder {
+export class ModelCache {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];
 
     constructor(stageData: StageData) {
         this.entries = [
-            new CacheEntry(stageData.stageGma, stageData.stageTpl, (t) => this.addViewerTex(t)),
-            new CacheEntry(stageData.bgGma, stageData.bgTpl, (t) => this.addViewerTex(t)),
+            new CacheEntry(stageData.stageGma, stageData.stageTpl),
+            new CacheEntry(stageData.bgGma, stageData.bgTpl),
         ];
-        this.viewerTextures = [];
-        this.onnewtextures = null;
     }
 
     public getModel(
@@ -90,14 +92,8 @@ export class ModelCache implements UI.TextureListHolder {
         return null;
     }
 
-    public viewerTextures: Viewer.Texture[];
-    public onnewtextures: (() => void) | null;
-
-    private addViewerTex(tex: Viewer.Texture) {
-        this.viewerTextures.push(tex);
-        if (this.onnewtextures !== null) {
-            this.onnewtextures();
-        }
+    public getViewerTextures(): Viewer.Texture[] {
+        return this.entries.flatMap((entry) => entry.texCache.getViewerTextures());
     }
 
     public destroy(device: GfxDevice): void {
