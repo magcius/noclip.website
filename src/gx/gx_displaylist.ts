@@ -484,7 +484,7 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
         } else if (vtxAttrib === GX.Attr.POS) {
             // POS and PNMTX are packed together.
             input = allocateVertexInput(VertexAttributeInput.POS, GfxFormat.F32_RGBA);
-            fieldFormat = input.format;
+            fieldFormat = GfxFormat.F32_RGB;
         } else if (vtxAttrib === GX.Attr.PNMTXIDX) {
             // PNMTXIDX is packed in w of POS.
             input = allocateVertexInput(VertexAttributeInput.POS, GfxFormat.F32_RGBA);
@@ -626,9 +626,8 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
         }
 
         function compileOneAttribColor(viewName: string, attrOffs: string): string {
-            const dstComponentCount = getFormatComponentCount(dstFormat);
             const dstOffs = dstBaseOffs;
-            assert(dstComponentCount === 4);
+            assert(getFormatComponentCount(dstFormat) === 4);
 
             const temp = `_T${vtxAttrib}`;
             const componentType = getComponentType(vtxAttrib, vtxAttrFmt);
@@ -702,11 +701,18 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
 
             for (let i = 0; i < srcAttrCompCount; i++) {
                 const dstOffs = dstBaseOffs + (i * dstComponentSize);
+
                 const srcOffs: string = `${attrOffs} + ${i * srcAttrCompSize}`;
                 const value = compileReadOneComponent(viewName, srcOffs);
-
                 S += `
     ${compileWriteOneComponent(dstOffs, value)};`;
+            }
+
+            const dstComponentCount = getFormatComponentCount(dstFormat);
+            for (let i = srcAttrCompCount; i < dstComponentCount; i++) {
+                const dstOffs = dstBaseOffs + (i * dstComponentSize);
+                S += `
+    ${compileWriteOneComponent(dstOffs, '0.0')};`
             }
 
             return S;
