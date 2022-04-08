@@ -4,7 +4,7 @@ import { readString, assert } from "../util";
 import { mat4, vec3, quat } from "gl-matrix";
 
 import * as GX from "../gx/gx_enum";
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist';
 import * as GX_Material from '../gx/gx_material';
 import { AABB } from "../Geometry";
 
@@ -129,7 +129,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             if ((attributes & (1 << i)) !== 0) {
                 // Only care about TEX0 and POS for now...
                 const enableOutput = (i === GX.Attr.POS || i === GX.Attr.TEX0);
-                vcd[i] = { type: GX.AttrType.INDEX16, enableOutput };
+                const outputMode = enableOutput ? GX_VtxDescOutputMode.VertexData : GX_VtxDescOutputMode.None;
+                vcd[i] = { type: GX.AttrType.INDEX16, outputMode };
             }
         }
 
@@ -138,7 +139,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const displayListBuffer = buffer.subarray(displayListOffset, displayListSize);
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer, offs: positionBufferOffs,stride: getAttributeByteSize(vat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.POS] = { buffer, offs: positionBufferOffs, stride: getAttributeByteSize(vat, GX.Attr.POS) };
         vtxArrays[GX.Attr.TEX0] = { buffer, offs: tex0BufferOffs, stride: getAttributeByteSize(vat, GX.Attr.TEX0) };
 
         let loadedVertexData;
