@@ -1353,6 +1353,7 @@ export class BSPFile {
 
                 // Tangent
                 vec3.cross(scratchTangentS, v.normal, scratchTangentT);
+                vec3.normalize(scratchTangentS, scratchTangentS);
                 vertexData[dstOffsVertex++] = scratchTangentS[0];
                 vertexData[dstOffsVertex++] = scratchTangentS[1];
                 vertexData[dstOffsVertex++] = scratchTangentS[2];
