@@ -2173,7 +2173,7 @@ class material_modify_control extends BaseEntity {
         this.lerp.valueStart = Number(startValue);
         this.lerp.valueEnd = Number(endValue);
         this.lerp.setDuration(entitySystem.currentTime, Number(duration));
-        this.lerp.loop = Boolean(loop);
+        this.lerp.loop = !!Number(loop);
     }
 
     private input_startanimsequence(entitySystem: EntitySystem, value: string): void {
@@ -2192,7 +2192,7 @@ class material_modify_control extends BaseEntity {
         const duration = numFrames / Math.max(Number(frameRate), 1);
         this.textureAnim.setDuration(entitySystem.currentTime, duration);
 
-        this.textureAnim.loop = Boolean(loop);
+        this.textureAnim.loop = !!Number(loop);
     }
 
     private getMaterialInstance(): BaseMaterial | null {
