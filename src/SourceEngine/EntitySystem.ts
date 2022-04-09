@@ -11,7 +11,7 @@ import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlat
 import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
-import { getRandomFloat } from '../SuperMarioGalaxy/ActorUtil';
+import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
@@ -3023,6 +3023,80 @@ export class env_projectedtexture extends BaseEntity {
     }
 }
 
+export class env_shake extends BaseEntity {
+    public static classname = `env_shake`;
+
+    public amplitude: number;
+    public interval: number;
+    public duration: number;
+    public squaredRadius: number;
+
+    public shakeOffset = vec3.create();
+    public shakeRoll = 0;
+    public shakeStartTime = -1;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.amplitude = Number(this.entity.amplitude);
+        this.interval = 1.0 / Number(this.entity.frequency);
+        this.duration = Number(this.entity.duration);
+        this.squaredRadius = Number(this.entity.radius) ** 2.0;
+
+        // TODO(jstpierre): Portal testchmb_a_04 seems to set this to an absurdly low 2.5?
+        // Double check this with the original game.
+        this.interval = 1.0 / 40;
+
+        this.registerInput('startshake', this.input_startshake.bind(this));
+        this.registerInput('stopshake', this.input_stopshake.bind(this));
+    }
+
+    private input_startshake(entitySystem: EntitySystem): void {
+        entitySystem.getLocalPlayer().getAbsOrigin(scratchVec3a);
+        this.getAbsOrigin(scratchVec3b);
+        if (vec3.squaredDistance(scratchVec3a, scratchVec3b) > this.squaredRadius)
+            return;
+
+        this.shakeStartTime = entitySystem.currentTime;
+    }
+
+    private input_stopshake(entitySystem: EntitySystem): void {
+        this.shakeStartTime = -1;
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.shakeStartTime < 0)
+            return;
+
+        const time = (entitySystem.currentTime - this.shakeStartTime);
+        if (time >= this.duration) {
+            // Done.
+            this.shakeStartTime = -1;
+            vec3.zero(this.shakeOffset);
+            this.shakeRoll = 0;
+            renderContext.currentShake = null;
+            return;
+        }
+
+        renderContext.currentShake = this;
+
+        if (renderContext.crossedRepeatTime(this.shakeStartTime, this.interval)) {
+            // Compute new shake vector.
+            const amplitude = this.amplitude * ((1.0 - (time / this.duration)) ** 2);
+            getRandomVector(this.shakeOffset, amplitude);
+            this.shakeRoll = MathConstants.DEG_TO_RAD * randomRange(amplitude) * 0.25;
+        }
+    }
+
+    public adjustView(view: SourceEngineView): void {
+        mat4.fromTranslation(scratchMat4a, this.shakeOffset);
+        mat4.rotateZ(scratchMat4a, scratchMat4a, this.shakeRoll);
+        mat4.mul(view.viewFromWorldMatrix, scratchMat4a, view.viewFromWorldMatrix);
+    }
+}
+
 export class point_camera extends BaseEntity {
     public static classname = `point_camera`;
 
@@ -3168,6 +3242,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_sprite_clientside);
         this.registerFactory(env_tonemap_controller);
         this.registerFactory(env_projectedtexture);
+        this.registerFactory(env_shake);
         this.registerFactory(point_camera);
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);

@@ -21,7 +21,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, point_camera, sky_camera, worldspawn } from "./EntitySystem";
+import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -590,7 +590,6 @@ export class SourceEngineView {
         this.aspect = camera.aspect;
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
-        this.finishSetup();
     }
 
     public reset(): void {
@@ -1055,6 +1054,7 @@ export class SourceRenderContext {
     public renderCache: GfxRenderCache;
     public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public currentPointCamera: point_camera | null = null;
+    public currentShake: env_shake | null = null;
     public flashlight: Flashlight;
 
     // Public settings
@@ -1087,6 +1087,19 @@ export class SourceRenderContext {
             // occlusion queries on WebGPU, once that's more widely deployed.
             this.enableAutoExposure = false;
         }
+    }
+
+    public crossedTime(time: number): boolean {
+        const oldTime = this.globalTime - this.globalDeltaTime;
+        return (time >= oldTime) && (time < this.globalTime);
+    }
+
+    public crossedRepeatTime(start: number, interval: number): boolean {
+        if (this.globalTime <= start)
+            return false;
+
+        const base = start + (((this.globalTime - start) / interval) | 0) * interval;
+        return this.crossedTime(base);
     }
 
     public isUsingHDR(): boolean {
@@ -1682,7 +1695,6 @@ export class SourceRenderer implements SceneGfx {
         this.renderContext.currentProjectedLightRenderer = bestProjectedLight;
     }
 
-    private overrideView: SourceEngineView | null = null;
     public prepareToRender(viewerInput: ViewerRenderInput): void {
         const renderContext = this.renderContext, device = renderContext.device;
 
@@ -1692,12 +1704,10 @@ export class SourceRenderer implements SceneGfx {
         renderContext.debugStatistics.reset();
 
         // Update the main view early, since that's what movement/entities will use
-        if (this.overrideView !== null) {
-            this.mainViewRenderer.mainView.copy(this.overrideView);
-            this.mainViewRenderer.mainView.finishSetup();
-        } else {
-            this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
-        }
+        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+        if (renderContext.currentShake !== null)
+            renderContext.currentShake.adjustView(this.mainViewRenderer.mainView);
+        this.mainViewRenderer.mainView.finishSetup();
 
         renderContext.currentPointCamera = null;
 
