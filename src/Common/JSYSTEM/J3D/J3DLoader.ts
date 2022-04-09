@@ -443,9 +443,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     if (nameTableOffs !== 0)
         console.log('Found a SHP1 that has a name table!');
 
-    // J3D only uses VTXFMT0.
-    const vat = bmd.vtx1.vat;
-
     const shapes: Shape[] = [];
     let shapeIdx = shapeTableOffs;
     for (let i = 0; i < shapeCount; i++) {
@@ -457,6 +454,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const firstMtxGroup = view.getUint16(shapeIdx + 0x08);
 
         const vcd: GX_VtxDesc[] = [];
+        const vat: GX_VtxAttrFmt[] = [];
         const vtxArrays: GX_Array[] = [];
 
         let usesNBT = false;
@@ -466,19 +464,21 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             if (vtxAttrib === GX.Attr.NULL)
                 break;
 
-            let dstAttrib = vtxAttrib;
-            let arrayData: ArrayBufferSlice | undefined = bmd.vtx1.arrayData[vtxAttrib];
+            const arrayData: ArrayBufferSlice | undefined = bmd.vtx1.arrayData[vtxAttrib];
 
             if (vtxAttrib === GX.Attr._NBT) {
                 usesNBT = true;
-                dstAttrib = GX.Attr.NRM;
+                vtxAttrib = GX.Attr.NRM;
+                vat[vtxAttrib] = { ... bmd.vtx1.vat[vtxAttrib], compCnt: GX.CompCnt.NRM_NBT };
+            } else {
+                vat[vtxAttrib] = bmd.vtx1.vat[vtxAttrib];
             }
 
             if (arrayData !== undefined)
-                vtxArrays[dstAttrib] = { buffer: arrayData!, offs: 0, stride: getAttributeByteSize(vat, vtxAttrib) };
+                vtxArrays[vtxAttrib] = { buffer: arrayData!, offs: 0, stride: getAttributeByteSize(vat, vtxAttrib) };
 
             const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
-            vcd[dstAttrib] = { type: indexDataType };
+            vcd[vtxAttrib] = { type: indexDataType };
             attribIdx += 0x08;
         }
 
