@@ -8,7 +8,7 @@ import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
@@ -1392,6 +1392,11 @@ void main() {
     gl_FragColor = t_Color;
 }
 `;
+
+    constructor(useBloom: boolean) {
+        super();
+        this.setDefineBool('USE_BLOOM', useBloom);
+    }
 }
 
 class BloomDownsampleProgram extends DeviceProgram {
@@ -1514,6 +1519,12 @@ export class SourceRenderer implements SceneGfx {
     public mainViewRenderer = new SourceWorldViewRenderer(`Main View`, SourceEngineViewType.MainView);
     public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`, SourceEngineViewType.WaterReflectView);
 
+    private bloomDownsampleProgram: GfxProgram;
+    private bloomBlurXProgram: GfxProgram;
+    private bloomBlurYProgram: GfxProgram;
+    private fullscreenPostProgram: GfxProgram;
+    private fullscreenPostProgramBloom: GfxProgram;
+
     constructor(private sceneContext: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
         this.reflectViewRenderer.pvsFallback = false;
@@ -1523,6 +1534,13 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
+
+        const cache = renderContext.renderCache;
+        this.bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
+        this.bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
+        this.bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
+        this.fullscreenPostProgram = cache.createProgram(new FullscreenPostProgram(false));
+        this.fullscreenPostProgramBloom = cache.createProgram(new FullscreenPostProgram(true));
     }
 
     private resetTextureMappings(): void {
@@ -1794,10 +1812,6 @@ export class SourceRenderer implements SceneGfx {
         const cache = this.renderContext.renderCache;
         const staticResources = this.renderContext.materialCache.staticResources;
 
-        const bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
-        const bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
-        const bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayoutsPost);
         renderInst.setInputLayoutAndState(null, null);
@@ -1826,7 +1840,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 this.resetTextureMappings();
         
-                renderInst.setGfxProgram(bloomDownsampleProgram);
+                renderInst.setGfxProgram(this.bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1843,7 +1857,7 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(downsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(bloomBlurXProgram);
+                renderInst.setGfxProgram(this.bloomBlurXProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1860,7 +1874,7 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(downsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(bloomBlurYProgram);
+                renderInst.setGfxProgram(this.bloomBlurYProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1922,19 +1936,18 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
-            const postProgram = new FullscreenPostProgram();
-
+            let postProgram = this.fullscreenPostProgram;
             let bloomResolveTextureID: GfxrResolveTextureID | null = null;
             if (bloomColorTargetID !== null) {
                 bloomResolveTextureID = builder.resolveRenderTarget(bloomColorTargetID);
                 pass.attachResolveTexture(bloomResolveTextureID);
-                postProgram.setDefineBool('USE_BLOOM', true);
+                postProgram = this.fullscreenPostProgramBloom;
             }
 
             const postRenderInst = renderInstManager.newRenderInst();
             postRenderInst.setBindingLayouts(bindingLayoutsPost);
             postRenderInst.setInputLayoutAndState(null, null);
-            postRenderInst.setGfxProgram(cache.createProgram(postProgram));
+            postRenderInst.setGfxProgram(postProgram);
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
             postRenderInst.drawPrimitives(3);
 
