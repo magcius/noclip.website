@@ -1363,9 +1363,9 @@ ${this.generateFogFunc(`t_Fog`)}
             (which === 1) ? `vec4(a_Binormal.xyz, 0.0)` : `vec4(a_Tangent.xyz, 0.0)`;
 
         if (materialUsePnMtxIdx(this.material))
-            return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
+            return `normalize(${this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`)})`;
         else
-            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);
+            return `normalize(${this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`)})`;
     }
 
     private generateShaders(): void {
@@ -1413,7 +1413,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = ${this.usesNormal() ? `normalize(${this.generateMulNrm(0)})` : `vec3(0.0)`};
+    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(0) : `vec3(0.0)`};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
