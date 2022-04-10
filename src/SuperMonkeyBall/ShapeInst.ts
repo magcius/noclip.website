@@ -19,7 +19,7 @@ import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { MaterialInst } from "./MaterialInst";
 import { SamplerInst } from "./SamplerInst";
 
@@ -119,9 +119,9 @@ export class ShapeInst {
     constructor(
         device: GfxDevice,
         renderCache: GfxRenderCache,
-        public shapeData: Gcmf.Shape,
+        public shapeData: Gma.Shape,
         modelSamplers: SamplerInst[],
-        modelAttrs: Gcmf.ModelAttrs,
+        modelAttrs: Gma.ModelAttrs,
         translucent: boolean
     ) {
         const vtxAttr = shapeData.material.vtxAttr;

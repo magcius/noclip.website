@@ -2,7 +2,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { ModelCache } from "./ModelCache";
 import { ModelInst } from "./ModelInst";
 import * as SD from "./StagedefTypes";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { TextureInputGX } from "../gx/gx_texture";
 import { GXMaterialHacks } from "../gx/gx_material";
 import * as Viewer from "../viewer";
@@ -14,8 +14,8 @@ import { AVTpl } from "./AVTpl";
 // Immutable stage/background definition
 export type StageData = {
     stagedef: SD.Stage;
-    stageGma: Gcmf.Gma;
-    bgGma: Gcmf.Gma;
+    stageGma: Gma.Gma;
+    bgGma: Gma.Gma;
 };
 
 export class World {

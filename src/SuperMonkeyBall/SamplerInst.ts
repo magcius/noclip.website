@@ -3,7 +3,7 @@
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { LoadedTexture, TextureMapping } from "../TextureHolder";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import * as GX from "../gx/gx_enum";
 import { TextureHolder } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
@@ -31,7 +31,7 @@ export class SamplerInst {
     private loadedTex: LoadedTexture;
     private gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public samplerData: Gcmf.Sampler, textureHolder: TextureHolder) {
+    constructor(device: GfxDevice, public samplerData: Gma.Sampler, textureHolder: TextureHolder) {
         this.loadedTex = textureHolder.getTexture(device, samplerData.gxTexture);
 
         const uvWrap = samplerData.uvWrap;

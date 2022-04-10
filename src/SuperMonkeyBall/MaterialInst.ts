@@ -2,7 +2,7 @@
 
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { SamplerInst } from "./SamplerInst";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
@@ -16,7 +16,7 @@ export class MaterialInst {
     private materialHelper: GXMaterialHelperGfx;
 
     constructor(
-        private materialData: Gcmf.Material,
+        private materialData: Gma.Material,
         modelSamplers: SamplerInst[],
         private translucentShape: boolean
     ) {

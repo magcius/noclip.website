@@ -5,7 +5,7 @@ import * as Viewer from "../viewer";
 import { parseStagedefLz } from "./ParseStagedef";
 import { Renderer } from "./Renderer";
 import { BG_TO_FILENAME_MAP, StageId, STAGE_TO_BG_MAP } from "./StageInfo";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
 import { leftPad } from "../util";
 import { StageData } from "./World";
@@ -46,9 +46,9 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
-        const stageGma = Gcmf.parseGma(stageGmaBuf, stageTpl);
+        const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
         const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
-        const bgGma = Gcmf.parseGma(bgGmaBuf, bgTpl);
+        const bgGma = Gma.parseGma(bgGmaBuf, bgTpl);
 
         return { stagedef, stageGma, bgGma };
     }

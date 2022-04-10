@@ -3,7 +3,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { ViewerRenderInput } from "../viewer";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { TextureHolder } from "./ModelCache";
 import { SamplerInst } from "./SamplerInst";
 import { ShapeInst } from "./ShapeInst";
@@ -15,7 +15,7 @@ export class ModelInst {
     constructor(
         device: GfxDevice,
         renderCache: GfxRenderCache,
-        modelData: Gcmf.Model,
+        modelData: Gma.Model,
         texCache: TextureHolder
     ) {
         this.samplers = modelData.samplers.map(

@@ -1,5 +1,5 @@
 import { ModelInst } from "./ModelInst";
-import * as Gcmf from "./Gcmf";
+import * as Gma from "./Gma";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
 import { GfxCullMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { assert, assertExists, nArray } from "../util";
@@ -50,7 +50,7 @@ export class TextureHolder implements UI.TextureListHolder {
 class CacheEntry {
     public modelCache: Map<string, ModelInst>;
 
-    constructor(public gma: Gcmf.Gma) {
+    constructor(public gma: Gma.Gma) {
         this.modelCache = new Map();
     }
 }
