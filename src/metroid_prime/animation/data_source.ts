@@ -7,6 +7,11 @@ import { compareEpsilon, saturate } from '../../MathHelpers';
 import { PerSegmentData } from './base_reader';
 import { nArray } from '../../util';
 
+export abstract class AnimSourceBase {
+    evntData: EVNT | null = null;
+    public GetPOIData(): EVNT | null { return this.evntData; }
+}
+
 class KeyStorage {
     private scaleKeys: ReadonlyVec3[] | null = null;
     private rotationKeys: ReadonlyQuat[];
@@ -32,7 +37,7 @@ class KeyStorage {
     }
 }
 
-export class AnimSource {
+export class AnimSource extends AnimSourceBase {
     duration: CharAnimTime;
     interval: CharAnimTime;
     frameCount: number;
@@ -42,9 +47,9 @@ export class AnimSource {
     translationChannels: Uint8Array;
     scaleChannels?: Uint8Array;
     keyStorage: KeyStorage;
-    evntData?: EVNT | null;
 
     constructor(stream: InputStream, resourceSystem: ResourceSystem, mp2: boolean) {
+        super();
         this.duration = CharAnimTime.FromStream(stream);
         this.interval = CharAnimTime.FromStream(stream);
         this.frameCount = stream.readUint32();
@@ -228,8 +233,7 @@ class BoneChannelDescriptor {
     }
 }
 
-export class AnimSourceCompressed {
-    evntData?: EVNT | null;
+export class AnimSourceCompressed extends AnimSourceBase {
     duration: number;
     interval: number;
     rootBone: number;
@@ -247,6 +251,7 @@ export class AnimSourceCompressed {
     bitstreamWords: Uint32Array;
 
     constructor(stream: InputStream, resourceSystem: ResourceSystem, mp2: boolean) {
+        super();
         stream.skip(4);
         if (!mp2) {
             const evntID = stream.readAssetID();

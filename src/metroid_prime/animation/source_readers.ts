@@ -1,31 +1,140 @@
-import { AdvancementDeltas, AdvancementResults, IAnimReader, PerSegmentData, SteadyStateAnimInfo } from './base_reader';
+import { AdvancementDeltas, AdvancementResults, BoolPOINode, IAnimReader, Int32POINode, ParentedMode, ParticlePOINode, PerSegmentData, POIKey, POINode, SoundPOINode, SteadyStateAnimInfo } from './base_reader';
 import { CharAnimTime } from './char_anim_time';
 import { AnimSource, AnimSourceCompressed } from './data_source';
 import { quat, vec3 } from 'gl-matrix';
+import { EVNT } from '../evnt';
+
+interface BoolState {
+    name: string;
+    value: boolean;
+}
+
+interface Int32State {
+    name: string;
+    value: number;
+}
+
+interface ParticleState {
+    name: string;
+    value: ParentedMode;
+}
 
 export abstract class AnimSourceReaderBase extends IAnimReader {
     passedBoolIdx: number = 0;
     passedIntIdx: number = 0;
     passedParticleIdx: number = 0;
     passedSoundIdx: number = 0;
+    boolStates: BoolState[];
+    int32States: Int32State[];
+    particleStates: ParticleState[];
 
     protected constructor(public steadyStateInfo: SteadyStateAnimInfo,
+                          public poiData: EVNT | null,
                           public curTime: CharAnimTime = new CharAnimTime()) {
         super();
     }
-
-    // TODO(Cirrus): EVNT data reference
 
     public GetSteadyStateAnimInfo(): SteadyStateAnimInfo {
         return this.steadyStateInfo;
     }
 
-    public PostConstruct(time: CharAnimTime) {
+    private static GetUniquePOIs(arr: POINode[]): Set<POIKey> {
+        const ret = new Set<POIKey>();
+        for (const poi of arr) {
+            if (poi.GetUnique())
+                ret.add(poi.GetKey());
+        }
+        return ret;
+    }
+    private GetUniqueBoolPOIs(): Set<POIKey> {
+        return AnimSourceReaderBase.GetUniquePOIs(this.poiData!.GetBoolPOIStream());
+    }
+    private GetUniqueInt32POIs(): Set<POIKey> {
+        return AnimSourceReaderBase.GetUniquePOIs(this.poiData!.GetInt32POIStream());
+    }
+    private GetUniqueParticlePOIs(): Set<POIKey> {
+        return AnimSourceReaderBase.GetUniquePOIs(this.poiData!.GetParticlePOIStream());
+    }
 
+    public PostConstruct(time: CharAnimTime) {
+        this.passedBoolIdx = 0;
+        this.passedIntIdx = 0;
+        this.passedParticleIdx = 0;
+        this.passedSoundIdx = 0;
+
+        if (this.poiData) {
+            const boolPOIs = this.GetUniqueBoolPOIs();
+            const int32POIs = this.GetUniqueInt32POIs();
+            const particlePOIs = this.GetUniqueParticlePOIs();
+
+            this.boolStates = new Array(boolPOIs.size);
+            this.int32States = new Array(int32POIs.size);
+            this.particleStates = new Array(particlePOIs.size);
+
+            for (const poi of boolPOIs) {
+                this.boolStates[poi.index] = { name: poi.name, value: false };
+            }
+            for (const poi of int32POIs) {
+                this.int32States[poi.index] = { name: poi.name, value: 0 };
+            }
+            for (const poi of particlePOIs) {
+                this.particleStates[poi.index] = { name: poi.name, value: ParentedMode.Initial };
+            }
+        }
+
+        let tmpTime = time;
+        if (tmpTime.GreaterThanZero()) {
+            while (tmpTime.GreaterThanZero()) {
+                const res = this.AdvanceView(tmpTime);
+                tmpTime = res.remTime;
+            }
+        } else if (this.poiData) {
+            this.UpdatePOIStates();
+            if (!time.GreaterThanZero()) {
+                this.passedBoolIdx = 0;
+                this.passedIntIdx = 0;
+                this.passedParticleIdx = 0;
+                this.passedSoundIdx = 0;
+            }
+        }
     }
 
     public UpdatePOIStates() {
+        if (!this.poiData)
+            return;
 
+        const boolNodes = this.poiData.GetBoolPOIStream();
+        const int32Nodes = this.poiData.GetInt32POIStream();
+        const particleNodes = this.poiData.GetParticlePOIStream();
+        const soundNodes = this.poiData.GetSoundPOIStream();
+
+        while (this.passedBoolIdx < boolNodes.length && boolNodes[this.passedBoolIdx].GetTime() <= this.curTime) {
+            const node = boolNodes[this.passedBoolIdx];
+            if (node.GetIndex() >= 0) {
+                this.boolStates[node.GetIndex()].value = node.GetValue();
+            }
+            ++this.passedBoolIdx;
+        }
+
+        while (this.passedIntIdx < int32Nodes.length && int32Nodes[this.passedIntIdx].GetTime() <= this.curTime) {
+            const node = int32Nodes[this.passedIntIdx];
+            if (node.GetIndex() >= 0) {
+                this.int32States[node.GetIndex()].value = node.GetValue();
+            }
+            ++this.passedIntIdx;
+        }
+
+        while (this.passedParticleIdx < particleNodes.length && particleNodes[this.passedParticleIdx].GetTime() <= this.curTime) {
+            const node = particleNodes[this.passedParticleIdx];
+            if (node.GetIndex() >= 0) {
+                this.particleStates[node.GetIndex()].value = node.GetParticleData().GetParentedMode();
+            }
+            ++this.passedParticleIdx;
+        }
+
+        while (this.passedSoundIdx < soundNodes.length && soundNodes[this.passedSoundIdx].GetTime() <= this.curTime) {
+            ++this.passedSoundIdx;
+        }
     }
 
     public SetPhase(phase: number) {
@@ -38,12 +147,74 @@ export abstract class AnimSourceReaderBase extends IAnimReader {
             this.passedSoundIdx = 0;
         }
     }
+
+    static GetPOIList<T extends POINode>(time: CharAnimTime, listOut: T[], capacity: number, iterator: number, stream: T[],
+                                         curTime: CharAnimTime, duration: CharAnimTime, passedIdx: number): number {
+        let ret = 0;
+        if (stream.length) {
+            let targetTime = curTime.Add(time);
+            if (targetTime.GreaterEqual(duration))
+                targetTime = duration;
+
+            if (passedIdx >= stream.length)
+                return ret;
+
+            let nodeTime = stream[passedIdx].GetTime();
+            while (passedIdx < stream.length && nodeTime.LessEqual(targetTime)) {
+                const idx = iterator + ret;
+                if (idx < capacity) {
+                    listOut[idx] = stream[passedIdx].CopyNodeMinusStartTime(curTime) as T;
+                    ++ret;
+                }
+                ++passedIdx;
+                if (passedIdx < stream.length)
+                    nodeTime = stream[passedIdx].GetTime();
+            }
+        }
+        return ret;
+    }
+
+    public VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        if (this.poiData) {
+            const nodes = this.poiData.GetBoolPOIStream();
+            return AnimSourceReaderBase.GetPOIList(time, listOut, capacity, iterator, nodes, this.curTime,
+                this.steadyStateInfo.duration, this.passedBoolIdx);
+        }
+        return 0;
+    }
+
+    public VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        if (this.poiData) {
+            const nodes = this.poiData.GetInt32POIStream();
+            return AnimSourceReaderBase.GetPOIList(time, listOut, capacity, iterator, nodes, this.curTime,
+                this.steadyStateInfo.duration, this.passedIntIdx);
+        }
+        return 0;
+    }
+
+    public VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        if (this.poiData) {
+            const nodes = this.poiData.GetParticlePOIStream();
+            return AnimSourceReaderBase.GetPOIList(time, listOut, capacity, iterator, nodes, this.curTime,
+                this.steadyStateInfo.duration, this.passedParticleIdx);
+        }
+        return 0;
+    }
+
+    public VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        if (this.poiData) {
+            const nodes = this.poiData.GetSoundPOIStream();
+            return AnimSourceReaderBase.GetPOIList(time, listOut, capacity, iterator, nodes, this.curTime,
+                this.steadyStateInfo.duration, this.passedSoundIdx);
+        }
+        return 0;
+    }
 }
 
 export class AnimSourceReader extends AnimSourceReaderBase {
     constructor(private source: AnimSource, time: CharAnimTime) {
         super(new SteadyStateAnimInfo(
-            source.duration, source.GetTranslation(source.rootBone, time), false), time);
+            source.duration, source.GetTranslation(source.rootBone, time), false), source.GetPOIData(), time);
         this.PostConstruct(time);
     }
 
@@ -413,7 +584,7 @@ export class AnimSourceReaderCompressed extends AnimSourceReaderBase {
 
     constructor(private source: AnimSourceCompressed, time: CharAnimTime) {
         super(new SteadyStateAnimInfo(
-            new CharAnimTime(source.duration), vec3.create(), source.looping), time);
+            new CharAnimTime(source.duration), vec3.create(), source.looping), source.GetPOIData(), time);
         this.totals = new StreamedPairOfTotals(source);
         this.bitLoader = new BitLevelLoader(source.bitstreamWords);
         this.segIdToIndex = new SegIdToIndexConverter(source);

@@ -2,7 +2,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceGame, ResourceSystem } from './resource';
-import { MREARenderer, RetroTextureHolder } from './render';
+import { MREARenderer } from './render';
 
 import * as Viewer from '../viewer';
 import { assert, assertExists } from '../util';
@@ -37,11 +37,9 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 assert(mlvl.areaTable.length === 1);
                 const area: MLVL.Area = mlvl.areaTable[0];
                 const mrea: MREA.MREA = assertExists(resourceSystem.loadAssetByID<MREA.MREA>(area.areaMREAID, 'MREA'));
-                const textureHolder = new RetroTextureHolder();
-                const renderer = new DKCRSceneRenderer(device, mlvl, ResourceGame.DKCR, textureHolder);
+                const renderer = new DKCRSceneRenderer(device, mlvl, ResourceGame.DKCR);
                 colorFromRGBA(renderer.worldAmbientColor, 0.5, 0.5, 0.5, 1.0);
-                const cache = renderer.renderHelper.getCache();
-                const mreaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, this.name, mrea, resourceSystem);
+                const mreaRenderer = new MREARenderer(renderer, this.name, mrea, resourceSystem, null);
                 renderer.areaRenderers.push(mreaRenderer);
                 return renderer;
             }

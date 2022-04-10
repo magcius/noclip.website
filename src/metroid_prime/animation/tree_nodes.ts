@@ -1,11 +1,27 @@
 import { CharAnimTime } from './char_anim_time';
 import {
-    AdvancementDeltas, AdvancementResults, DoubleChildAdvancementResults,
-    IAnimReader, PerSegmentData, SteadyStateAnimInfo
+    AdvancementDeltas, AdvancementResults, BoolPOINode, DoubleChildAdvancementResults,
+    IAnimReader, Int32POINode, ParticlePOINode, PerSegmentData, POINode, SoundPOINode, SteadyStateAnimInfo
 } from './base_reader';
 import { quat, vec3 } from 'gl-matrix';
 import { AnimSysContext, IMetaAnim } from './meta_nodes';
 import { compareEpsilon } from '../../MathHelpers';
+
+function GetPOIList<T extends POINode>(time: CharAnimTime, listOut: T[], capacity: number, iterator: number, stream: T[], curTime: CharAnimTime): number {
+    let ret = 0;
+    let targetTime = curTime.Add(time);
+    for (let it = iterator; it < stream.length; ++it) {
+        let nodeTime = stream[it].GetTime();
+        if (nodeTime.Greater(targetTime))
+            return ret;
+        const idx = iterator + ret;
+        if (nodeTime.GreaterEqual(curTime) && idx < capacity) {
+            listOut[idx] = stream[it].CopyNodeMinusStartTime(curTime) as T;
+            ++ret;
+        }
+    }
+    return ret;
+}
 
 class AnimTreeEffectiveContribution {
     constructor(public contributionWeight: number,
@@ -24,9 +40,9 @@ export abstract class AnimTreeNode extends IAnimReader {
         super();
     }
 
-    public abstract GetContributionOfHighestInfluence(): AnimTreeEffectiveContribution
+    public abstract GetContributionOfHighestInfluence(): AnimTreeEffectiveContribution;
 
-    public abstract GetBestUnblendedChild(): IAnimReader | null
+    public abstract GetBestUnblendedChild(): IAnimReader | null;
 }
 
 function GetTransitionTree(a: AnimTreeNode, b: AnimTreeNode, context: AnimSysContext) {
@@ -35,22 +51,45 @@ function GetTransitionTree(a: AnimTreeNode, b: AnimTreeNode, context: AnimSysCon
     return context.transDB.GetMetaTrans(contribA.dbIndex, contribB.dbIndex).GetTransitionTree(a, b, context);
 }
 
+type GetPOINodeFunc<T> = (time: CharAnimTime, listOut: T[], capacity: number, iterator: number) => number;
+
 /**
  * Composite information of two or more animation resources
  */
 class SequenceFundamentals {
-    // TODO(Cirrus): EVNT nodes
-    constructor(public steadyStateInfo: SteadyStateAnimInfo) {
+    constructor(public steadyStateInfo: SteadyStateAnimInfo,
+                public boolPOIs: BoolPOINode[],
+                public int32POIs: Int32POINode[],
+                public particlePOIs: ParticlePOINode[],
+                public soundPOIs: SoundPOINode[]) {
     }
 
     public static Compute(nodes: AnimTreeNode[], context: AnimSysContext): SequenceFundamentals {
         let duration: CharAnimTime = new CharAnimTime();
         const offset: vec3 = vec3.create();
 
+        const boolNodes: BoolPOINode[] = [];
+        const int32Nodes: Int32POINode[] = [];
+        const particleNodes: ParticlePOINode[] = [];
+        const soundNodes: SoundPOINode[] = [];
+
+        function fillNodes<T extends POINode>(outArr: T[], treeNode: AnimTreeNode, getFunc: GetPOINodeFunc<T>) {
+            const tempArr = new Array<T>(64);
+            const numPOIs = getFunc.call(treeNode, CharAnimTime.Infinity(), tempArr, tempArr.length, 0);
+            for (let j = 0; j < numPOIs; ++j) {
+                const n = tempArr[j];
+                n.SetTime(n.GetTime().Add(duration));
+                outArr.push(n);
+            }
+        }
+
         if (nodes.length > 0) {
             let node: AnimTreeNode = nodes[0].Clone() as AnimTreeNode;
             for (let i = 0; i < nodes.length; ++i) {
-                // TODO(Cirrus): EVNT nodes
+                fillNodes(boolNodes, node, node.GetBoolPOIList);
+                fillNodes(int32Nodes, node, node.GetInt32POIList);
+                fillNodes(particleNodes, node, node.GetParticlePOIList);
+                fillNodes(soundNodes, node, node.GetSoundPOIList);
 
                 duration = duration.Add(node.GetTimeRemaining());
 
@@ -71,7 +110,7 @@ class SequenceFundamentals {
             }
         }
 
-        return new SequenceFundamentals(new SteadyStateAnimInfo(duration, offset, false));
+        return new SequenceFundamentals(new SteadyStateAnimInfo(duration, offset, false), boolNodes, int32Nodes, particleNodes, soundNodes);
     }
 
     public static ComputeMeta(nodes: IMetaAnim[], context: AnimSysContext) {
@@ -102,6 +141,22 @@ export abstract class AnimTreeSingleChild extends AnimTreeNode {
 
     public SetPhase(phase: number) {
         this.child.SetPhase(phase);
+    }
+
+    public VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return this.child.VGetBoolPOIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return this.child.VGetInt32POIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return this.child.VGetParticlePOIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return this.child.VGetSoundPOIList(time, listOut, capacity, iterator);
     }
 }
 
@@ -189,6 +244,30 @@ export abstract class AnimTreeDoubleChild extends AnimTreeNode {
         this.left.SetPhase(phase);
         this.right.SetPhase(phase);
     }
+
+    private GetPOIList<T extends POINode>(time: CharAnimTime, listOut: T[], capacity: number, iterator: number, getFunc: GetPOINodeFunc<T>): number {
+        let newCapacity = getFunc.call(this.left, time, listOut, capacity, iterator);
+        newCapacity += getFunc.call(this.right, time, listOut, capacity, newCapacity + iterator);
+        newCapacity = Math.min(newCapacity, capacity);
+        listOut.sort((a, b) => a.GetTime().Less(b.GetTime()) ? -1 : 1);
+        return newCapacity;
+    }
+
+    public VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.left.GetBoolPOIList);
+    }
+
+    public VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.left.GetInt32POIList);
+    }
+
+    public VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.left.GetParticlePOIList);
+    }
+
+    public VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.left.GetSoundPOIList);
+    }
 }
 
 /**
@@ -268,6 +347,22 @@ export class AnimTreeLoopIn extends AnimTreeSingleChild {
             this.name, this.curTime);
         ret.fundamentals = this.fundamentals;
         return ret;
+    }
+
+    public override VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.boolPOIs, this.curTime);
+    }
+
+    public override VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.int32POIs, this.curTime);
+    }
+
+    public override VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.particlePOIs, this.curTime);
+    }
+
+    public override VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.soundPOIs, this.curTime);
     }
 }
 
@@ -363,6 +458,22 @@ export class AnimTreeSequence extends AnimTreeSingleChild {
             this.curTime);
         ret.fundamentals = this.fundamentals;
         return ret;
+    }
+
+    public override VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.boolPOIs, this.curTime);
+    }
+
+    public override VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.int32POIs, this.curTime);
+    }
+
+    public override VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.particlePOIs, this.curTime);
+    }
+
+    public override VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return GetPOIList(time, listOut, capacity, iterator, this.fundamentals.soundPOIs, this.curTime);
     }
 }
 
@@ -573,6 +684,33 @@ export class AnimTreeTimeScale extends AnimTreeSingleChild {
     public Clone(): IAnimReader {
         return new AnimTreeTimeScale(this.child.Clone() as AnimTreeNode, this.timeScale.Clone(),
             this.targetIntegratedTime, this.name, this.curIntegratedTime, this.initialTime);
+    }
+
+    private GetPOIList<T extends POINode>(time: CharAnimTime, listOut: T[], capacity: number, iterator: number, getFunc: GetPOINodeFunc<T>): number {
+        const useTime = time.Equals(CharAnimTime.Infinity()) ? this.child.GetTimeRemaining() : this.GetRealLifeTime(time);
+        const ret = getFunc(useTime, listOut, capacity, iterator);
+        if (this.targetIntegratedTime > new CharAnimTime()) {
+            for (let i = 0; i < ret; ++i) {
+                listOut[iterator + i].SetTime(this.GetRealLifeTime(listOut[i].GetTime()));
+            }
+        }
+        return ret;
+    }
+
+    public override VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.child.GetBoolPOIList);
+    }
+
+    public override VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.child.GetInt32POIList);
+    }
+
+    public override VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.child.GetParticlePOIList);
+    }
+
+    public override VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return this.GetPOIList(time, listOut, capacity, iterator, this.child.GetSoundPOIList);
     }
 }
 
@@ -842,5 +980,21 @@ export class AnimTreeAnimReaderContainer extends AnimTreeNode {
 
     public Clone(): IAnimReader {
         return new AnimTreeAnimReaderContainer(this.name, this.reader.Clone(), this.animDbIdx);
+    }
+
+    public VGetBoolPOIList(time: CharAnimTime, listOut: BoolPOINode[], capacity: number, iterator: number): number {
+        return this.reader.GetBoolPOIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetInt32POIList(time: CharAnimTime, listOut: Int32POINode[], capacity: number, iterator: number): number {
+        return this.reader.GetInt32POIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetParticlePOIList(time: CharAnimTime, listOut: ParticlePOINode[], capacity: number, iterator: number): number {
+        return this.reader.GetParticlePOIList(time, listOut, capacity, iterator);
+    }
+
+    public VGetSoundPOIList(time: CharAnimTime, listOut: SoundPOINode[], capacity: number, iterator: number): number {
+        return this.reader.GetSoundPOIList(time, listOut, capacity, iterator);
     }
 }

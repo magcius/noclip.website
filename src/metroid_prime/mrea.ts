@@ -20,7 +20,6 @@ import { AABB } from '../Geometry';
 import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';
 import { CSKR } from './cskr';
-import { TexGenMatrix } from '../gx/gx_enum';
 
 export interface MREA {
     materialSet: MaterialSet;
