@@ -20,7 +20,7 @@ import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
-import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
@@ -51,6 +51,7 @@ export const enum LateBindingTexture {
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
     WaterReflection     = `water-reflection`,
+    ProjectedLightDepth = `projected-light-depth`,
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
@@ -2388,8 +2389,7 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
 
         if (this.wantsProjectedTexture && renderContext.currentView.viewType !== SourceEngineViewType.ShadowMap) {
-            dst[12].gfxTexture = this.projectedLight!.depthTexture.getTextureForSampling();
-            dst[12].gfxSampler = renderContext.materialCache.staticResources.shadowSampler;
+            dst[12].lateBinding = LateBindingTexture.ProjectedLightDepth;
             this.projectedLight!.texture!.fillTextureMapping(dst[13], this.projectedLight!.textureFrame);
         }
     }
@@ -4495,14 +4495,10 @@ export class ProjectedLight {
     public textureFrame: number = 0;
     public lightColor = colorNewCopy(White);
     public brightnessScale: number = 1.0;
-    public depthTexture = new GfxrTemporalTexture();
+    public resolveTextureID: GfxrResolveTextureID;
 
     constructor() {
         this.frustumView.viewType = SourceEngineViewType.ShadowMap;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.depthTexture.destroy(device);
     }
 }
 

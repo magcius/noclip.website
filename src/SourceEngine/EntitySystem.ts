@@ -830,14 +830,15 @@ class func_movelinear extends BaseToggle {
         this.output_onFullyClosed.parse(this.entity.onfullyclosed);
         this.registerInput('open', this.input_open.bind(this));
         this.registerInput('close', this.input_close.bind(this));
+        this.registerInput('setposition', this.input_setposition.bind(this));
     }
 
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
 
         angleVec(scratchVec3a, null, null, this.moveDir);
-        vec3.scaleAndAdd(this.positionOpened, this.localOrigin, scratchVec3a, -this.moveDistance * this.startPosition);
-        vec3.scaleAndAdd(this.positionClosed, this.localOrigin, scratchVec3a,  this.moveDistance);
+        vec3.scaleAndAdd(this.positionClosed, this.localOrigin, scratchVec3a, -this.moveDistance * this.startPosition);
+        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, this.moveDistance);
     }
 
     protected moveDone(entitySystem: EntitySystem): void {
@@ -853,6 +854,15 @@ class func_movelinear extends BaseToggle {
 
     private input_close(entitySystem: EntitySystem): void {
         this.linearMove(entitySystem, this.positionClosed, this.speed);
+    }
+
+    private input_setposition(entitySystem: EntitySystem, value: string): void {
+        this.calcPos(scratchVec3a, Number(value));
+        this.linearMove(entitySystem, scratchVec3a, this.speed);
+    }
+
+    private calcPos(dst: vec3, t: number): void {
+        vec3.lerp(dst, this.positionClosed, this.positionOpened, t);
     }
 }
 
@@ -1387,8 +1397,8 @@ class logic_branch extends BaseEntity {
         this.registerInput('toggle', this.input_toggle.bind(this));
         this.registerInput('toggletest', this.input_toggletest.bind(this));
         this.registerInput('test', this.input_test.bind(this));
-        this.output_onTrue.parse(this.entity.ontrigger);
-        this.output_onFalse.parse(this.entity.ontrigger);
+        this.output_onTrue.parse(this.entity.ontrue);
+        this.output_onFalse.parse(this.entity.onfalse);
     }
 
     private parseValue(value: string): boolean {
@@ -1451,6 +1461,7 @@ class logic_case extends BaseEntity {
     public static classname = `logic_case`;
 
     private output_oncaseNN = nArray(16, () => new EntityOutput());
+    private caseNN: number[] = [];
     private connectedOutputs: number[] = [];
     private shuffled: number[] = [];
 
@@ -1458,11 +1469,17 @@ class logic_case extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         for (let i = 0; i < 16; i++) {
-            const oncase = this.entity[`oncase${leftPad('' + (i + 1), 2)}`];
+            const idxStr = leftPad('' + (i + 1), 2);
+            const oncase = this.entity[`oncase${idxStr}`];
             if (oncase === undefined)
                 continue;
 
             this.output_oncaseNN[i].parse(oncase);
+
+            const case_ = this.entity[`case${idxStr}`];
+            const caseNum = case_ !== undefined ? Number(case_) : i;
+            this.caseNN.push(caseNum);
+
             this.connectedOutputs.push(i);
         }
 
@@ -1472,9 +1489,12 @@ class logic_case extends BaseEntity {
     }
 
     private input_invalue(entitySystem: EntitySystem, value: string): void {
-        const c = Number(value);
-        if (c >= 0 && c < this.output_oncaseNN.length)
-            this.output_oncaseNN[c].fire(entitySystem, this);
+        const idx = this.caseNN.indexOf(Number(value));
+        if (idx < 0)
+            return;
+
+        const c = this.connectedOutputs[idx];
+        this.output_oncaseNN[c].fire(entitySystem, this);
     }
 
     private input_pickrandom(entitySystem: EntitySystem): void {
@@ -3016,10 +3036,6 @@ export class env_projectedtexture extends BaseEntity {
         this.projectedLightRenderer.light.brightnessScale = this.brightnessScale * styleIntensity;
     
         this.updateFrustumView(renderContext);
-    }
-
-    public override destroy(device: GfxDevice): void {
-        this.projectedLightRenderer.destroy(device);
     }
 }
 
