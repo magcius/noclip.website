@@ -25,6 +25,7 @@ export class Renderer implements Viewer.SceneGfx {
         this.modelCache = new ModelCache(stageData);
         this.world = new World(device, this.renderHelper.getCache(), this.modelCache, stageData);
         this.textureHolder = this.modelCache.getTextureHolder();
+        this.modelCache.getTextureHolder().updateViewerTextures();
     }
 
     public createPanels(): UI.Panel[] {

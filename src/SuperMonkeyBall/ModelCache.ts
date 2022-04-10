@@ -15,8 +15,8 @@ import * as Viewer from "../viewer";
 // everything at once but oh well.
 
 export class TextureHolder implements UI.TextureListHolder {
-    public viewerTextures: Viewer.Texture[];
-    public onnewtextures: (() => void) | null;
+    public viewerTextures: Viewer.Texture[] = [];
+    public onnewtextures: (() => void) | null = null;
     private cache: Map<string, LoadedTexture> = new Map();
 
     getTexture(device: GfxDevice, gxTexture: TextureInputGX): LoadedTexture {
@@ -35,6 +35,9 @@ export class TextureHolder implements UI.TextureListHolder {
         this.viewerTextures = nameList.map(
             (name) => assertExists(this.cache.get(name)).viewerTexture
         );
+        if (this.onnewtextures !== null) {
+            this.onnewtextures();
+        }
     }
 
     public destroy(device: GfxDevice): void {
