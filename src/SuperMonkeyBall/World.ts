@@ -46,6 +46,12 @@ function searchKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number 
 
 function interpolateKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number {
     if (keyframes.length === 0) return 0;
+    if (timeSeconds <= keyframes[0].timeSeconds) {
+        return keyframes[0].value;
+    }
+    if (timeSeconds >= keyframes[keyframes.length - 1].timeSeconds) {
+        return keyframes[keyframes.length - 1].value;
+    }
 
     const nextIdx = searchKeyframes(timeSeconds, keyframes);
     if (nextIdx === 0) {
@@ -68,7 +74,6 @@ const scratchVec3b = vec3.create();
 function interpolateAnimPose(
     outPose: mat4,
     timeSeconds: number,
-    loopDuration: number,
     posXKeyframes: SD.Keyframe[],
     posYKeyframes: SD.Keyframe[],
     posZKeyframes: SD.Keyframe[],
@@ -96,17 +101,19 @@ class Itemgroup {
     private models: ModelInst[];
     private worldFromIg: mat4;
     private originFromIg: mat4;
+    private igData: SD.Itemgroup;
 
     constructor(
         device: GfxDevice,
         renderCache: GfxRenderCache,
         modelCache: ModelCache,
-        private igData: SD.Itemgroup,
-        private inWorldSpace: boolean
+        private stagedef: SD.Stage,
+        private itemgroupIdx: number
     ) {
+        this.igData = stagedef.itemgroups[itemgroupIdx];
         this.models = [];
-        for (let i = 0; i < igData.levelModels.length; i++) {
-            const name = igData.levelModels[i].modelName;
+        for (let i = 0; i < this.igData.levelModels.length; i++) {
+            const name = this.igData.levelModels[i].modelName;
             const modelInst = modelCache.getModel(device, renderCache, name);
             if (modelInst !== null) {
                 this.models.push(modelInst);
@@ -116,35 +123,44 @@ class Itemgroup {
         this.worldFromIg = mat4.create();
         this.originFromIg = mat4.create();
 
-        if (!inWorldSpace) {
-            mat4.fromXRotation(this.originFromIg, -igData.originRot[0] * S16_TO_RADIANS);
+        if (itemgroupIdx > 0) {
+            // Not in world space, animate
+            mat4.fromXRotation(this.originFromIg, -this.igData.originRot[0] * S16_TO_RADIANS);
             mat4.rotateY(
                 this.originFromIg,
                 this.originFromIg,
-                -igData.originRot[1] * S16_TO_RADIANS
+                -this.igData.originRot[1] * S16_TO_RADIANS
             );
             mat4.rotateZ(
                 this.originFromIg,
                 this.originFromIg,
-                -igData.originRot[2] * S16_TO_RADIANS
+                -this.igData.originRot[2] * S16_TO_RADIANS
             );
             const negOrigin = scratchVec3a;
-            vec3.negate(negOrigin, igData.originPos);
+            vec3.negate(negOrigin, this.igData.originPos);
             mat4.translate(this.originFromIg, this.originFromIg, negOrigin);
         } else {
+            // In world space
             mat4.identity(this.originFromIg);
             mat4.identity(this.worldFromIg);
         }
     }
 
     public update(animController: AnimationController): void {
-        if (this.inWorldSpace) return;
+        // Check if this is the world space itemgroup
+        if (this.itemgroupIdx === 0) return;
+
+        const rawTimeSeconds = animController.getTimeInSeconds();
+        const loopDuration = this.stagedef.loopEndSeconds - this.stagedef.loopStartSeconds;
+        // Game does this but adding loop start time before mod just seems wrong...
+        const loopedTimeSeconds =
+            ((rawTimeSeconds + this.stagedef.loopStartSeconds) % loopDuration) +
+            this.stagedef.loopStartSeconds;
 
         const worldFromOrigin = scratchMat4a;
         interpolateAnimPose(
             worldFromOrigin,
-            animController.getTimeInSeconds(),
-            0, // TODO(complexplane)
+            loopedTimeSeconds,
             this.igData.anim.posXKeyframes,
             this.igData.anim.posYKeyframes,
             this.igData.anim.posZKeyframes,
@@ -181,7 +197,7 @@ export class World {
     ) {
         this.animController = new AnimationController();
         this.itemgroups = stageData.stagedef.itemgroups.map(
-            (ig, i) => new Itemgroup(device, renderCache, modelCache, ig, i === 0)
+            (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
         this.animTime = 0;
     }

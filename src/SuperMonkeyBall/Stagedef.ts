@@ -220,8 +220,8 @@ export type ColiSphere = {
 };
 
 export type Stage = {
-    unk0: number;
-    unk4: number;
+    loopStartSeconds: number;
+    loopEndSeconds: number;
     itemgroups: Itemgroup[];
     initBallPose: InitBallPose;
     falloutPlane: FalloutPlane;
@@ -370,8 +370,8 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stage {
 function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     const view = buffer.createDataView();
 
-    const unk0 = view.getUint32(0x0);
-    const unk4 = view.getUint32(0x4);
+    const loopStartSeconds = view.getInt32(0x0);
+    const loopEndSeconds = view.getInt32(0x4);
 
     // Start aka ball spawn
     const startOffs = view.getUint32(0x10);
@@ -780,8 +780,8 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     }
 
     return {
-        unk0,
-        unk4,
+        loopStartSeconds,
+        loopEndSeconds,
         itemgroups,
         initBallPose,
         falloutPlane,
