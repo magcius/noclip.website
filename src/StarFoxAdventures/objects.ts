@@ -3,23 +3,18 @@ import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import * as GX_Material from '../gx/gx_material';
-import * as GX from '../gx/gx_enum';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine, drawWorldSpaceText } from "../DebugJunk";
 import { colorNewFromRGBA } from '../Color';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { computeViewMatrix } from '../Camera';
 import { ViewerRenderInput } from '../viewer';
-import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { SFA_CLASSES } from './Objects/Classes';
 import { SFAClass } from './Objects/SFAClass';
 
-import { StandardMaterial } from './materials';
-import { ModelInstance, ModelRenderContext } from './models';
-import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16, getCamPos } from './util';
+import { ModelInstance } from './models';
+import { dataSubarray, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
-import { computeMatrixWithoutScale, getMatrixTranslation } from '../MathHelpers';
+import { getMatrixTranslation } from '../MathHelpers';
 import { LightType } from './WorldLights';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
@@ -104,7 +99,7 @@ export class ObjectType {
 export interface ObjectRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
+    setupLights: (lights: GX_Material.Light[], typeMask: LightType) => void;
 }
 
 export interface Light {

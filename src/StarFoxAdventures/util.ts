@@ -1,6 +1,6 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
-import { Camera, computeViewMatrix } from '../Camera';
+import { mat4, vec3, quat, ReadonlyVec3 } from 'gl-matrix';
+import { Camera } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {

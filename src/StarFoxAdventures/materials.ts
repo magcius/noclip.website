@@ -157,8 +157,6 @@ export interface MapLight {
 
 export interface MaterialRenderContext {
     sceneCtx: SceneRenderContext;
-    worldToViewMtx: mat4;
-    viewToWorldMtx: mat4;
     modelToViewMtx: mat4;
     viewToModelMtx: mat4;
     ambienceIdx: number;
@@ -264,7 +262,7 @@ export abstract class StandardMaterial extends MaterialBase {
             const f = -1.0 / (mistParams[4] - mistParams[3]);
             mat4SetRowMajor(dst,
                 0.0, 0.0, -1.0 / mistParams[2], mistParams[1],
-                f * ctx.viewToWorldMtx[4*0+1], f * ctx.viewToWorldMtx[4*1+1], f * ctx.viewToWorldMtx[4*2+1], f * ctx.viewToWorldMtx[4*3+1] - mistParams[4] * f,
+                f * ctx.sceneCtx.viewToWorldMtx[4*0+1], f * ctx.sceneCtx.viewToWorldMtx[4*1+1], f * ctx.sceneCtx.viewToWorldMtx[4*2+1], f * ctx.sceneCtx.viewToWorldMtx[4*3+1] - mistParams[4] * f,
                 0.0, 0.0, 0.0, 1.0,
                 0.0, 0.0, 0.0, 1.0
             );
@@ -560,7 +558,7 @@ export class StandardMapMaterial extends StandardMaterial {
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
         const postTexMtx0 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
-            mat4.mul(dst, pttexmtx0, ctx.viewToWorldMtx);
+            mat4.mul(dst, pttexmtx0, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate0, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -571,8 +569,8 @@ export class StandardMapMaterial extends StandardMaterial {
         mat4SetTranslation(pttexmtx1, 0.5 * 0.01 * mapOriginX, 0.0, 0.5 * 0.01 * mapOriginZ);
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
-        const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4.mul(dst, pttexmtx1, matCtx.viewToWorldMtx);
+        const postTexMtx1 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
+            mat4.mul(dst, pttexmtx1, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate1, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -590,7 +588,7 @@ export class StandardMapMaterial extends StandardMaterial {
             mat4.fromScaling(pttexmtx2, [0.01, 0.01, 0.01]);
             mat4SetTranslation(pttexmtx2, 0.01 * mapOriginX + ctx.sceneCtx.animController.envAnimValue0, 0.0, 0.01 * mapOriginZ);
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
-            mat4.mul(dst, pttexmtx2, ctx.viewToWorldMtx);
+            mat4.mul(dst, pttexmtx2, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate2, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
@@ -611,7 +609,7 @@ export class StandardMapMaterial extends StandardMaterial {
         const postTexMtx3 = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(pttexmtx3, [0.01, 0.01, 0.01]);
             mat4SetTranslation(pttexmtx3, 0.01 * mapOriginX, 0.0, 0.01 * mapOriginZ + ctx.sceneCtx.animController.envAnimValue1);
-            mat4.mul(dst, pttexmtx3, ctx.viewToWorldMtx);
+            mat4.mul(dst, pttexmtx3, ctx.sceneCtx.viewToWorldMtx);
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
