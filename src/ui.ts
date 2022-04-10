@@ -1517,15 +1517,16 @@ export class RadioButtons implements Widget {
 
         this.elem.style.display = 'grid';
 
-        const fr = `${optionNames.length}fr ${optionNames.map(() => '1fr').join(' ')}`;
+        const fr = (title.length ? `${optionNames.length}fr ` : ``) + `${optionNames.map(() => '1fr').join(' ')}`;
         this.elem.style.gridTemplateColumns = fr;
         this.elem.style.alignItems = 'center';
 
-        const header = document.createElement('div');
-        header.style.fontWeight = 'bold';
-        header.textContent = title;
-
-        this.elem.appendChild(header);
+        if (title.length) {
+            const header = document.createElement('div');
+            header.style.fontWeight = 'bold';
+            header.textContent = title;
+            this.elem.appendChild(header);
+        }
 
         optionNames.forEach((optionName, i) => {
             const option = document.createElement('div');
@@ -1541,6 +1542,10 @@ export class RadioButtons implements Widget {
             this.elem.appendChild(option);
             this.options.push(option);
         });
+    }
+
+    public setVisible(v: boolean) {
+        this.elem.style.display = v ? 'grid' : 'none';
     }
 
     private sync(): void {
@@ -2224,7 +2229,7 @@ export interface Layer {
 }
 
 export class LayerPanel extends Panel {
-    private multiSelect: MultiSelect;
+    public multiSelect: MultiSelect;
     private layers: Layer[] = [];
     public onlayertoggled: (() => void) | null = null;
 

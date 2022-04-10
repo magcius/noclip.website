@@ -6,6 +6,7 @@ import { CMDLRenderer, ModelCache, MREARenderer, RetroPass, RetroTextureHolder }
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
+import { GroupLayerPanel } from './ui';
 import { assert, assertExists } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
@@ -39,7 +40,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public showAllActors: boolean = false;
     public suitModel: number = 0;
     private suitModelButtons: UI.RadioButtons;
-    private layersPanel: UI.LayerPanel;
+    private groupLayerPanel: GroupLayerPanel;
 
     public onstatechanged!: () => void;
 
@@ -162,11 +163,11 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        this.layersPanel = new UI.LayerPanel(this.areaRenderers);
-        this.layersPanel.onlayertoggled = () => {
+        this.groupLayerPanel = new GroupLayerPanel(this.areaRenderers);
+        this.groupLayerPanel.layerPanel.onlayertoggled = () => {
             this.onstatechanged();
         };
-        return [this.layersPanel, this.createRenderHacksPanel()];
+        return [this.groupLayerPanel, this.createRenderHacksPanel()];
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -188,7 +189,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             const b = new BitMap(this.areaRenderers.length);
             offs = bitMapDeserialize(view, offs, b);
             layerVisibilitySyncFromBitMap(this.areaRenderers, b);
-            this.layersPanel.syncLayerVisibility();
+            this.groupLayerPanel.layerPanel.syncLayerVisibility();
         }
         if (offs + 1 <= byteLength) {
             this.showAllActors = view.getUint8(offs) !== 0;
