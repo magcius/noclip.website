@@ -1,15 +1,285 @@
 /*
- * Decompresses and parses SMB1 stagedef files (.lz in stage directories).
+ * SMB1 stagedef types and parsing (.lz in stage directories).
  *
  * SMB1 stagedef format: https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=stagedefFormat2#spec-stagedefFormat2-section-collisionHeader
  * SMB1 decompilation (potentially more up to date): https://github.com/camthesaxman/smb-decomp
  */
 
+export const enum BananaType {
+    Single,
+    Bunch,
+}
+
+export const enum AnimType {
+    Loop,
+    Once,
+}
+
+export const enum PlaybackState {
+    Forward,
+    Pause,
+    Backward,
+    FastForward,
+    FastBackward,
+}
+
+export const enum GoalType {
+    Blue,
+    Green,
+    Red,
+}
+
+export const enum EaseType {
+    Constant,
+    Linear,
+    Smooth,
+}
+
+export type Keyframe = {
+    easeType: EaseType;
+    time: number; // Percent of total animation duration (1-100)?
+    value: number; // Translation or rotation in degrees
+};
+
+export type ItemgroupAnim = {
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+};
+
+export type BgAnim = {
+    loopPointSeconds: number;
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+};
+
+export type BgAnim2 = {
+    loopPointSeconds: number;
+    unk1Keyframes: Keyframe[];
+    unk2Keyframes: Keyframe[];
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+    rotXKeyframes: Keyframe[];
+    rotYKeyframes: Keyframe[];
+    rotZKeyframes: Keyframe[];
+    unk9Keyframes: Keyframe[];
+    unk10Keyframes: Keyframe[];
+    unk11Keyframes: Keyframe[];
+};
+
+export type BgModel = {
+    modelName: string;
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+    bgAnim: BgAnim;
+    bgAnim2: BgAnim2;
+    // effectHeader: EffectHeader;
+};
+
+// export type EffectHeader = {
+//     fx1Keyframes: Effect1[];
+//     fx2Keyframes: Effect2[];
+//     textureScroll: TextureScroll;
+// }
+
+// export type Effect1 = {
+//     // ??
+// }
+
+// export type Effect2 = {
+//     // ??
+// }
+
+// export type TextureScroll = {
+//     speed: vec3;
+// }
+
+// export type BgModel = {
+//     modelName: string;
+//     pos: vec3;
+//     rot: vec3;
+//     scale: vec3;
+//     backgroundAnimHeader: BackgroundAnimHeader;
+//     backgroundAnim2Header: BackgroundAnim2Header;
+//     // effectHeader: EffectHeader;
+// }
+
+// Visual model for the stage itself, parented to itemgroups
+export type LevelModel = {
+    flags: number;
+    modelName: string;
+};
+
+export type Banana = {
+    pos: vec3;
+    type: BananaType;
+};
+
+export type StageModelInstance = {
+    stageModelA: StageModelPtrA;
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+};
+
+export type FogAnim = {
+    startDistanceKeyframes: Keyframe[];
+    endDistanceKeyframes: Keyframe[];
+    redKeyframes: Keyframe[];
+    blueKeyframes: Keyframe[];
+    greenKeyframes: Keyframe[];
+    unkKeyframes: Keyframe[];
+};
+
+export type ColiCone = {
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+};
+
+export type Bumper = {
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+};
+
+// export type ReflectiveModel = {
+//     modelName: string;
+// }
+
+export type FalloutPlane = {
+    y: number;
+};
+
+export type StageModel = {
+    modelName: string;
+};
+
+export type Itemgroup = {
+    originPos: vec3;
+    originRot: vec3;
+    animType: AnimType;
+    anim: ItemgroupAnim;
+    // conveyorVel: vec3;
+
+    coliTris: ColiTri[];
+    // Given cell coord (x, z), coliTriIdxs[z * coliGridCellsX + x] gives you
+    // a list of tri indices in that cell
+    gridCellTris: number[][];
+    gridOriginX: number;
+    gridOriginZ: number;
+    gridStepX: number;
+    gridStepZ: number;
+    gridCellCountX: number;
+    gridCellCountZ: number;
+
+    goals: Goal[];
+    bumpers: Bumper[];
+    jamabars: Jamabar[];
+    bananas: Banana[];
+    coliCones: ColiCone[];
+    coliSpheres: ColiSphere[];
+    coliCylinders: ColiCylinder[];
+    levelModels: LevelModel[];
+};
+
+export type StageModelPtrA = {
+    stageModel: StageModel;
+};
+
+// export type FgModel = {
+//     // Some other unknown fields are here...
+//     modelName: string;
+//     pos: vec3;
+//     rot: vec3;
+//     scale: vec3;
+//     backgroundAnim2Header: BackgroundAnim2Header;
+// }
+
+export type StageModelPtrB = {
+    stageModelA: StageModelPtrA;
+};
+
+export type ColiSphere = {
+    pos: vec3;
+    radius: number;
+};
+
+export type Stage = {
+    unk0: number;
+    unk4: number;
+    itemgroups: Itemgroup[];
+    initBallPose: InitBallPose;
+    falloutPlane: FalloutPlane;
+    goals: Goal[];
+    bumpers: Bumper[];
+    jamabars: Jamabar[];
+    bananas: Banana[];
+    levelModels: LevelModel[];
+    bgModels: BgModel[];
+    // fgModels: FgModel[];
+    // reflectiveModels: ReflectiveModel[];
+};
+
+export type Jamabar = {
+    pos: vec3;
+    rot: vec3;
+    scale: vec3;
+};
+
+export type FalloutVolume = {
+    pos: vec3;
+    size: vec3;
+    rot: vec3;
+};
+
+export type ColiTri = {
+    // Transform from triangle space to itemgroup space
+    pos: vec3; // Position of vertex 1
+    normal: vec3; // Normal in itemgroup space
+    rot: vec3; // Rotation from XY plane
+
+    // Triangle space (tri in XY plane, vertex 1 on origin, vertex 2 on (+)X axis)
+
+    // Vertex 1 in triangle space is (0, 0)
+    vert2: vec2;
+    vert3: vec2;
+    // Edge 1 normal in triangle space is (0, 1)
+    edge2Normal: vec2; // Normal of edge from vertex 2 -> vertex 3, in triangle space
+    edge3Normal: vec2; // Normal of edge from vertex 3 -> vertex 1, in triangle space
+};
+
+export type Goal = {
+    pos: vec3;
+    rot: vec3;
+    type: GoalType;
+};
+
+export type ColiCylinder = {
+    pos: vec3;
+    radius: number;
+    height: number;
+    rot: vec3;
+};
+
+export type InitBallPose = {
+    pos: vec3;
+    rot: vec3;
+};
+
 import { vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZSS from "../Common/Compression/LZSS";
 import { readString } from "../util";
-import * as SD from "./StagedefTypes";
 
 const ITEMGROUP_SIZE = 0xc4;
 const GOAL_SIZE = 0x14;
@@ -45,13 +315,13 @@ function parseVec3s(view: DataView, offset: number): vec3 {
     return vec3.fromValues(x, y, z);
 }
 
-function parseKeyframeList(view: DataView, offset: number): SD.Keyframe[] {
-    const keyframes: SD.Keyframe[] = [];
+function parseKeyframeList(view: DataView, offset: number): Keyframe[] {
+    const keyframes: Keyframe[] = [];
     const keyframeCount = view.getUint32(offset);
     const keyframeListOffs = view.getUint32(offset + 0x4);
     for (let i = 0; i < keyframeCount; i++) {
         const keyframeOffs = keyframeListOffs + i * ANIM_KEYFRAME_SIZE;
-        const easeType = view.getUint32(keyframeOffs + 0x0) as SD.EaseType;
+        const easeType = view.getUint32(keyframeOffs + 0x0) as EaseType;
         const time = view.getFloat32(keyframeOffs + 0x4);
         const value = view.getFloat32(keyframeOffs + 0x8);
         keyframes.push({ easeType: easeType, time, value });
@@ -59,7 +329,7 @@ function parseKeyframeList(view: DataView, offset: number): SD.Keyframe[] {
     return keyframes;
 }
 
-function parseAnimHeader(view: DataView, offset: number): SD.ItemgroupAnim {
+function parseAnimHeader(view: DataView, offset: number): ItemgroupAnim {
     const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
     const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
     const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
@@ -89,7 +359,7 @@ function parseSlicedList<T>(
     return origList.slice(idx, idx + count);
 }
 
-export function parseStagedefLz(buffer: ArrayBufferSlice): SD.Stage {
+export function parseStagedefLz(buffer: ArrayBufferSlice): Stage {
     const view = buffer.createDataView();
     const compressedView = buffer.subarray(0x8).createDataView();
     const uncompressedSize = view.getUint32(0x4, true);
@@ -97,7 +367,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): SD.Stage {
     return parseStagedefUncompressed(uncompressedBuffer);
 }
 
-function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
+function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     const view = buffer.createDataView();
 
     const unk0 = view.getUint32(0x0);
@@ -107,25 +377,25 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     const startOffs = view.getUint32(0x10);
     const startPos = parseVec3f(view, startOffs + 0x0);
     const startRot = parseVec3s(view, startOffs + 0xc);
-    const initBallPose: SD.InitBallPose = { pos: startPos, rot: startRot };
+    const initBallPose: InitBallPose = { pos: startPos, rot: startRot };
 
     // Fallout plane
     const falloutPlaneOffs = view.getUint32(0x14);
-    const falloutPlane: SD.FalloutPlane = { y: view.getFloat32(falloutPlaneOffs) };
+    const falloutPlane: FalloutPlane = { y: view.getFloat32(falloutPlaneOffs) };
 
     // Goals
     const goalCount = view.getUint32(0x18);
     const goalListOffs = view.getUint32(0x1c);
-    const goals: SD.Goal[] = [];
+    const goals: Goal[] = [];
     for (let i = 0; i < goalCount; i++) {
         const goalOffs = goalListOffs + i * GOAL_SIZE;
         const pos = parseVec3f(view, goalOffs + 0x0);
         const rot = parseVec3s(view, goalOffs + 0xc);
         const typeStr = readString(buffer, goalOffs + 0x12, 1, false);
-        let type: SD.GoalType;
-        if (typeStr == "B") type = SD.GoalType.Blue;
-        else if (typeStr == "G") type = SD.GoalType.Green;
-        else if (typeStr == "R") type = SD.GoalType.Red;
+        let type: GoalType;
+        if (typeStr == "B") type = GoalType.Blue;
+        else if (typeStr == "G") type = GoalType.Green;
+        else if (typeStr == "R") type = GoalType.Red;
         else throw new Error(`Unknown goal type '${typeStr}'`);
         goals.push({ pos, rot, type });
     }
@@ -133,7 +403,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Bumpers
     const bumperCount = view.getUint32(0x28);
     const bumperListOffs = view.getUint32(0x2c);
-    const bumpers: SD.Bumper[] = [];
+    const bumpers: Bumper[] = [];
     for (let i = 0; i < bumperCount; i++) {
         const bumperOffs = bumperListOffs + i * BUMPER_SIZE;
         const pos = parseVec3f(view, bumperOffs + 0x0);
@@ -145,7 +415,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Jamabars
     const jamabarCount = view.getUint32(0x30);
     const jamabarListOffs = view.getUint32(0x34);
-    const jamabars: SD.Jamabar[] = [];
+    const jamabars: Jamabar[] = [];
     for (let i = 0; i < jamabarCount; i++) {
         const jamabarOffs = jamabarListOffs + i * JAMABAR_SIZE;
         const pos = parseVec3f(view, jamabarOffs + 0x0);
@@ -157,18 +427,18 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Bananas
     const bananaCount = view.getUint32(0x38);
     const bananaListOffs = view.getUint32(0x3c);
-    const bananas: SD.Banana[] = [];
+    const bananas: Banana[] = [];
     for (let i = 0; i < bananaCount; i++) {
         const bananaOffs = bananaListOffs + i * BANANA_SIZE;
         const pos = parseVec3f(view, bananaOffs + 0x0);
-        const type = view.getUint32(bananaOffs + 0xc) as SD.BananaType;
+        const type = view.getUint32(bananaOffs + 0xc) as BananaType;
         bananas.push({ pos, type });
     }
 
     // Collision cones
     const coliConeCount = view.getUint32(0x30);
     const coliConeListOffs = view.getUint32(0x34);
-    const coliCones: SD.ColiCone[] = [];
+    const coliCones: ColiCone[] = [];
     for (let i = 0; i < coliConeCount; i++) {
         const coliConeOffs = coliConeListOffs + i * COLI_CONE_SIZE;
         const pos = parseVec3f(view, coliConeOffs + 0x0);
@@ -180,7 +450,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Collision spheres
     const coliSphereCount = view.getUint32(0x38);
     const coliSphereListOffs = view.getUint32(0x3c);
-    const coliSpheres: SD.ColiSphere[] = [];
+    const coliSpheres: ColiSphere[] = [];
     for (let i = 0; i < coliSphereCount; i++) {
         const coliSphereOffs = coliSphereListOffs + i * COLI_SPHERE_SIZE;
         const pos = parseVec3f(view, coliSphereOffs + 0x0);
@@ -191,7 +461,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Collision cylinders
     const coliCylinderCount = view.getUint32(0x40);
     const coliCylinderListOffs = view.getUint32(0x44);
-    const coliCylinders: SD.ColiCylinder[] = [];
+    const coliCylinders: ColiCylinder[] = [];
     for (let i = 0; i < coliCylinderCount; i++) {
         const coliCylinderOffs = coliCylinderListOffs + i * COLI_CYLINDER_SIZE;
         const pos = parseVec3f(view, coliCylinderOffs + 0x0);
@@ -204,7 +474,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // // Fallout volumes
     // const falloutVolumeCount = view.getUint32(0x50);
     // const falloutVolumeListOffs = view.getUint32(0x54);
-    // const falloutVolumes: SD.FalloutVolume[] = [];
+    // const falloutVolumes: FalloutVolume[] = [];
     // for (let i = 0; i < falloutVolumeCount; i++) {
     //     const falloutVolumeOffs = falloutVolumeListOffs + i * FALLOUT_VOLUME_SIZE;
     //     const pos = parseVec3f(view, falloutVolumeOffs + 0x0);
@@ -216,7 +486,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Level models
     const levelModelCount = view.getUint32(0x58);
     const levelModelListOffs = view.getUint32(0x5c);
-    const levelModels: SD.LevelModel[] = [];
+    const levelModels: LevelModel[] = [];
     for (let i = 0; i < levelModelCount; i++) {
         const levelModelOffs = levelModelListOffs + i * LEVEL_MODEL_SIZE;
         const flags = view.getUint32(levelModelOffs + 0x0);
@@ -227,7 +497,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // Background models
     const bgModelCount = view.getUint32(0x68);
     const bgModelListOffs = view.getUint32(0x6c);
-    const bgModels: SD.BgModel[] = [];
+    const bgModels: BgModel[] = [];
     for (let i = 0; i < bgModelCount; i++) {
         const bgModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
         const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
@@ -244,7 +514,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         const bgPosXKeyframes = parseKeyframeList(view, bgAnimOffs + 0x28);
         const bgPosYKeyframes = parseKeyframeList(view, bgAnimOffs + 0x30);
         const bgPosZKeyframes = parseKeyframeList(view, bgAnimOffs + 0x38);
-        const bgAnim: SD.BgAnim = {
+        const bgAnim: BgAnim = {
             loopPointSeconds: bgLoopPointSeconds,
             rotXKeyframes: bgRotXKeyframes,
             rotYKeyframes: bgRotYKeyframes,
@@ -268,7 +538,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         const bg2Unk9Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x48);
         const bg2Unk10Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x50);
         const bg2Unk11Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x58);
-        const bgAnim2: SD.BgAnim2 = {
+        const bgAnim2: BgAnim2 = {
             loopPointSeconds: bg2LoopPointSeconds,
             unk1Keyframes: bg2Unk1Keyframes,
             unk2Keyframes: bg2Unk2Keyframes,
@@ -288,7 +558,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         // TODO fx1 and fx2 keyfranmes
         // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
 
-        const bgModel: SD.BgModel = {
+        const bgModel: BgModel = {
             modelName,
             pos,
             rot,
@@ -302,23 +572,23 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // // Foreground models
     // const foregroundModelCount = view.getUint32(0x60);
     // const foregroundModelListOffs = view.getUint32(0x64);
-    // const fgModels: SD.FgModel[] = [];
+    // const fgModels: FgModel[] = [];
     // // TODO actually parse 'em
 
     // // Reflective stage models
     // const reflectiveModelCount = view.getUint32(0x70);
     // const reflectiveModelListOffs = view.getUint32(0x74);
-    // const reflectiveModels: SD.ReflectiveModel[] = [];
+    // const reflectiveModels: ReflectiveModel[] = [];
     // // TODO actually parse 'em
 
     // // TODO Stage model instances
-    // const stageModelInstances: SD.StageModelInstance[] = [];
+    // const stageModelInstances: StageModelInstance[] = [];
 
     // // TODO Stage model ptr As
-    // const stageModelPtrAs: SD.StageModelPtrA[] = [];
+    // const stageModelPtrAs: StageModelPtrA[] = [];
 
     // // TODO Stage model ptr Bs
-    // const stageModelPtrBs: SD.StageModelPtrB[] = [];
+    // const stageModelPtrBs: StageModelPtrB[] = [];
 
     // // Fog animation headers
     // const fogAnimHeaderOffs = view.getUint32(0xB0);
@@ -328,7 +598,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
     // const fogGreenKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x18);
     // const fogBlueKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x20);
     // const fogUnkKeyframes = parseKeyframeList(view, fogAnimHeaderOffs + 0x28);
-    // const fogAnimHeader: SD.FogAnimHeader = {
+    // const fogAnimHeader: FogAnimHeader = {
     //     startDistanceKeyframes: fogStartDistanceKeyframes,
     //     endDistanceKeyframes: fogEndDistanceKeyframes,
     //     redKeyframes: fogRedKeyframes,
@@ -339,12 +609,12 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
 
     const itemgroupCount = view.getUint32(0x8);
     const itemgroupListOffs = view.getUint32(0xc);
-    const itemgroups: SD.Itemgroup[] = [];
+    const itemgroups: Itemgroup[] = [];
     for (let i = 0; i < itemgroupCount; i++) {
         const coliHeaderOffs = itemgroupListOffs + i * ITEMGROUP_SIZE;
         const initPos = parseVec3f(view, coliHeaderOffs + 0x0);
         const initRot = parseVec3s(view, coliHeaderOffs + 0xc);
-        const animType = view.getUint16(coliHeaderOffs + 0x12) as SD.AnimType;
+        const animType = view.getUint16(coliHeaderOffs + 0x12) as AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
         const animHeader = parseAnimHeader(view, animHeaderOffs);
         // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
@@ -390,7 +660,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         }
         const numTris = maxTriIdx + 1;
 
-        const coliTris: SD.ColiTri[] = [];
+        const coliTris: ColiTri[] = [];
 
         // Parse collision tris
         for (let i = 0; i < numTris; i++) {
@@ -475,7 +745,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
 
         // const loopPointSeconds = view.getFloat32(coliHeaderOffs + 0xD4);
         // const textureScrollOffs = view.getUint32(coliHeaderOffs + 0xD8);
-        // const textureScroll: SD.TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
+        // const textureScroll: TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
 
         itemgroups.push({
             originPos: initPos,

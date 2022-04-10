@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
 import { Color, colorFromHSL, White } from "../Color";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
-import * as SD from "./StagedefTypes";
+import * as SD from "./Stagedef";
 
 const SHORT_TO_RAD = Math.PI / 0x8000;
 

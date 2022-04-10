@@ -1,7 +1,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { ModelCache } from "./ModelCache";
 import { ModelInst } from "./ModelInst";
-import * as SD from "./StagedefTypes";
+import * as SD from "./Stagedef";
 import * as Gma from "./Gma";
 import { TextureInputGX } from "../gx/gx_texture";
 import { GXMaterialHacks } from "../gx/gx_material";
