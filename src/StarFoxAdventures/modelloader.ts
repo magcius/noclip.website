@@ -401,7 +401,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     const fields = FIELDS[version];
 
     const normalFlags = fields.hasNormals ? data.getUint8(0x24) : 0;
-    const lightFlags = fields.isFinal ? data.getUint16(0xe2) : 0;
 
     model.isMapBlock = !!fields.isMapBlock;
     
@@ -562,6 +561,11 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         }
     }
 
+    if (!fields.isMapBlock && fields.isFinal) {
+        model.cullRadius = data.getUint16(0xe0);
+        model.lightFlags = data.getUint16(0xe2);
+    }
+
     let texMtxCount = 0;
     if (fields.hasBones)
         texMtxCount = data.getUint8(fields.texMtxCount);
@@ -575,7 +579,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     let offs = shaderOffset;
     for (let i = 0; i < shaderCount; i++) {
         const shaderBin = dataSubarray(data, offs, fields.shaderFields.size);
-        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds, normalFlags, lightFlags, texMtxCount));
+        shaders.push(parseShader(shaderBin, fields.shaderFields, texIds, normalFlags, model.lightFlags, texMtxCount));
         offs += fields.shaderFields.size;
     }
 
@@ -610,9 +614,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     if (fields.hasYTranslate)
         model.modelTranslate[1] = data.getInt16(0x8e);
-
-    if (!fields.isMapBlock)
-        model.cullRadius = data.getUint16(0xe0);
 
     const pnMatrixMap: number[] = nArray(10, () => 0);
 
@@ -772,7 +773,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                 try {
                     if (curShader.flags & ShaderFlags.Water) {
                         const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, materialFactory.buildWaterMaterial.bind(materialFactory), posBuffer, nrmBuffer);
-                        modelShapes.waters.push({ shape: newShape });
+                        modelShapes.waters.push(newShape);
                     } else {
                         const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 

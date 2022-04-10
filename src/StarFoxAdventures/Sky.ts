@@ -14,8 +14,6 @@ import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from '.
 import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
-import { createDirectionalLight, Light, LightType } from './WorldLights';
-import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -124,7 +122,7 @@ export class Sky {
             const objectCtx: ObjectRenderContext = {
                 sceneCtx,
                 showDevGeometry: false,
-                setupPointLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+                setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
             }
 
             const eyePos = scratchVec0;

@@ -247,7 +247,7 @@ class ModelExhibitRenderer extends SFARenderer {
             showDevGeometry: true,
             ambienceIdx: 0,
             outdoorAmbientColor: White,
-            setupPointLights: () => {},
+            setupLights: () => {},
         };
 
         modelInst.addRenderInsts(device, renderInstManager, modelCtx, null, matrix);
