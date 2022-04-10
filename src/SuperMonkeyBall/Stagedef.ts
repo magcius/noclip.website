@@ -5,6 +5,11 @@
  * SMB1 decompilation (potentially more up to date): https://github.com/camthesaxman/smb-decomp
  */
 
+import { vec2, vec3 } from "gl-matrix";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import * as LZSS from "../Common/Compression/LZSS";
+import { readString } from "../util";
+
 export const enum BananaType {
     Single,
     Bunch,
@@ -37,8 +42,8 @@ export const enum EaseType {
 
 export type Keyframe = {
     easeType: EaseType;
-    time: number; // Percent of total animation duration (1-100)?
-    value: number; // Translation or rotation in degrees
+    timeSeconds: number;
+    value: number; // Translation, or rotation in degrees, or color r/g/b, etc
 };
 
 export type ItemgroupAnim = {
@@ -276,11 +281,6 @@ export type InitBallPose = {
     rot: vec3;
 };
 
-import { vec2, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as LZSS from "../Common/Compression/LZSS";
-import { readString } from "../util";
-
 const ITEMGROUP_SIZE = 0xc4;
 const GOAL_SIZE = 0x14;
 const BUMPER_SIZE = 0x20;
@@ -321,15 +321,15 @@ function parseKeyframeList(view: DataView, offset: number): Keyframe[] {
     const keyframeListOffs = view.getUint32(offset + 0x4);
     for (let i = 0; i < keyframeCount; i++) {
         const keyframeOffs = keyframeListOffs + i * ANIM_KEYFRAME_SIZE;
-        const easeType = view.getUint32(keyframeOffs + 0x0) as EaseType;
-        const time = view.getFloat32(keyframeOffs + 0x4);
+        const easeType = view.getInt32(keyframeOffs + 0x0) as EaseType;
+        const timeSeconds = view.getFloat32(keyframeOffs + 0x4);
         const value = view.getFloat32(keyframeOffs + 0x8);
-        keyframes.push({ easeType: easeType, time, value });
+        keyframes.push({ easeType, timeSeconds, value });
     }
     return keyframes;
 }
 
-function parseAnimHeader(view: DataView, offset: number): ItemgroupAnim {
+function parseItemgroupAnim(view: DataView, offset: number): ItemgroupAnim {
     const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
     const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
     const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
@@ -616,7 +616,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const initRot = parseVec3s(view, coliHeaderOffs + 0xc);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
-        const animHeader = parseAnimHeader(view, animHeaderOffs);
+        const animHeader = parseItemgroupAnim(view, animHeaderOffs);
         // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,

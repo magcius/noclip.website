@@ -10,6 +10,7 @@ import { StageData } from "./World";
 import { AVTpl } from "./AVTpl";
 import * as UI from "../ui";
 import * as Viewer from "../viewer";
+import { GXMaterialHacks } from "../gx/gx_material";
 
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
@@ -79,7 +80,12 @@ export class ModelCache {
                 if (modelInst !== undefined) {
                     return modelInst;
                 }
-                const freshModelInst = new ModelInst(device, renderCache, modelData, this.textureHolder);
+                const freshModelInst = new ModelInst(
+                    device,
+                    renderCache,
+                    modelData,
+                    this.textureHolder
+                );
                 entry.modelCache.set(modelName, freshModelInst);
                 return freshModelInst;
             }
@@ -90,6 +96,14 @@ export class ModelCache {
 
     public getTextureHolder(): TextureHolder {
         return this.textureHolder;
+    }
+
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        for (let i = 0; i < this.entries.length; i++) {
+            for (const model of this.entries[i].modelCache.values()) {
+                model.setMaterialHacks(hacks);
+            }
+        }
     }
 
     public destroy(device: GfxDevice): void {

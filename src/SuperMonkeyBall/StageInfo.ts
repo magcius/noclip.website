@@ -8,6 +8,7 @@ export const enum StageId {
     St007_Blocks = 7,
     St008_JumpSingle = 8,
     St009_ExamA = 9,
+    St023_Jumpies = 23,
 }
 
 export const enum BgType {
@@ -35,6 +36,7 @@ export const STAGE_TO_BG_MAP = {
     [StageId.St007_Blocks]: BgType.Sunset,
     [StageId.St008_JumpSingle]: BgType.Sunset,
     [StageId.St009_ExamA]: BgType.Sunset,
+    [StageId.St023_Jumpies]: BgType.Night,
 };
 
 export const BG_TO_FILENAME_MAP = {

@@ -197,11 +197,12 @@ export class ShapeInst {
     public prepareToRender(
         device: GfxDevice,
         renderInstManager: GfxRenderInstManager,
-        viewerInput: ViewerRenderInput
+        viewerInput: ViewerRenderInput,
+        viewFromModel: mat4
     ) {
         const template = renderInstManager.pushTemplateRenderInst();
         const drawParams = scratchDrawParams;
-        mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        mat4.copy(drawParams.u_PosMtx[0], viewFromModel);
         this.material.setOnRenderInst(
             device,
             renderInstManager.gfxRenderCache,

@@ -1,3 +1,4 @@
+import { mat4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -43,10 +44,11 @@ export class ModelInst {
     public prepareToRender(
         device: GfxDevice,
         renderInstManager: GfxRenderInstManager,
-        viewerInput: ViewerRenderInput
+        viewerInput: ViewerRenderInput,
+        viewFromModel: mat4
     ) {
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput);
+            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, viewFromModel);
         }
     }
 

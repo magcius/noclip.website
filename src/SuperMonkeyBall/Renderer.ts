@@ -35,7 +35,7 @@ export class Renderer implements Viewer.SceneGfx {
         // Enable Vertex Color
         const enableVertexColorsCheckbox = new UI.Checkbox("Enable Vertex Colors", true);
         enableVertexColorsCheckbox.onchanged = () => {
-            this.world.setMaterialHacks({
+            this.modelCache.setMaterialHacks({
                 disableVertexColors: !enableVertexColorsCheckbox.checked,
             });
         };
@@ -44,7 +44,7 @@ export class Renderer implements Viewer.SceneGfx {
         // Enable Texture
         const enableTextures = new UI.Checkbox("Enable Textures", true);
         enableTextures.onchanged = () => {
-            this.world.setMaterialHacks({
+            this.modelCache.setMaterialHacks({
                 disableTextures: !enableTextures.checked,
             });
         };
@@ -61,6 +61,9 @@ export class Renderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.world.update(viewerInput);
+        viewerInput.deltaTime;
+
         viewerInput.camera.setClipPlanes(0.1);
         // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for
         // us. Use it once, then use the underlying GfxRenderInstManager's pushTemplateRenderInst().
