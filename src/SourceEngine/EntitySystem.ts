@@ -3028,6 +3028,7 @@ export class env_projectedtexture extends BaseEntity {
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
+        this.projectedLightRenderer.reset();
 
         if (!this.shouldDraw())
             return;
@@ -3142,6 +3143,7 @@ export class point_camera extends BaseEntity {
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
+        this.viewRenderer.reset();
 
         if (!this.shouldDraw())
             return;
@@ -3150,7 +3152,6 @@ export class point_camera extends BaseEntity {
     }
 
     public preparePasses(renderer: SourceRenderer): void {
-        this.viewRenderer.reset();
         this.viewRenderer.prepareToRender(renderer, null);
     }
 

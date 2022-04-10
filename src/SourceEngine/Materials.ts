@@ -2398,13 +2398,16 @@ class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
-        let renderer = renderContext.currentProjectedLightRenderer;
-        if (renderer !== null) {
-            if (!renderer.light.frustumView.frustum.contains(bbox))
-                renderer = null;
+        let projectedLightRenderer = null;
+        if (renderContext.currentViewRenderer !== null)
+            projectedLightRenderer = renderContext.currentViewRenderer.currentProjectedLightRenderer;
+
+        if (projectedLightRenderer !== null) {
+            if (!projectedLightRenderer.light.frustumView.frustum.contains(bbox))
+                projectedLightRenderer = null;
         }
 
-        this.projectedLight = renderer !== null ? renderer.light : null;
+        this.projectedLight = projectedLightRenderer !== null ? projectedLightRenderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
         if (this.shaderInstance.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))

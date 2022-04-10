@@ -923,18 +923,17 @@ export class ProjectedLightRenderer {
     public debugName: string = 'ProjectedLight';
     public outputDepthTargetID: GfxrRenderTargetID | null = null;
     public outputDepthTextureID: GfxrResolveTextureID | null = null;
-
-    public prepareRenderTarget(renderContext: SourceRenderContext): void {
-        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
-    }
+    public enabled = false;
 
     public preparePasses(renderer: SourceRenderer): void {
+        if (this.enabled)
+            return;
+
+        this.enabled = true;
+
         const renderContext = renderer.renderContext;
         renderContext.currentView = this.light.frustumView;
         const renderInstManager = renderer.renderHelper.renderInstManager;
-
-        this.prepareRenderTarget(renderContext);
 
         for (let i = 0; i < renderer.bspRenderers.length; i++) {
             const bspRenderer = renderer.bspRenderers[i];
@@ -949,6 +948,10 @@ export class ProjectedLightRenderer {
     }
 
     public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
+        if (this.outputDepthTargetID !== null)
+            return;
+
+        assert(this.enabled);
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
         depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
@@ -966,6 +969,13 @@ export class ProjectedLightRenderer {
 
         this.outputDepthTargetID = depthTargetID;
         this.outputDepthTextureID = builder.resolveRenderTarget(depthTargetID);
+    }
+
+    public reset(): void {
+        this.enabled = false;
+        this.light.frustumView.reset();
+        this.outputDepthTargetID = null;
+        this.outputDepthTextureID = null;
     }
 }
 
@@ -1012,6 +1022,7 @@ class Flashlight {
 
     public movement(renderContext: SourceRenderContext): void {
         this.updateFrustumView(renderContext);
+        this.projectedLightRenderer.reset();
     }
 }
 
@@ -1034,11 +1045,11 @@ export class SourceRenderContext {
     public materialProxySystem = new MaterialProxySystem();
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
+    public currentViewRenderer: SourceWorldViewRenderer | null = null;
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
     public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
-    public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public currentPointCamera: point_camera | null = null;
     public currentShake: env_shake | null = null;
     public flashlight: Flashlight;
@@ -1127,6 +1138,7 @@ export class SourceWorldViewRenderer {
     public drawSkybox3D = true;
     public drawIndirect = true;
     public drawWorld = true;
+    public drawProjectedShadows = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities;
     public pvsEnabled = true;
     public pvsFallback = true;
@@ -1135,15 +1147,56 @@ export class SourceWorldViewRenderer {
     public skyboxView = new SourceEngineView();
     public enabled = false;
 
+    public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public outputColorTargetID: GfxrRenderTargetID | null = null;
     public outputColorTextureID: GfxrResolveTextureID | null = null;
 
-    constructor(public name: string, private viewType: SourceEngineViewType) {
+    constructor(public name: string, viewType: SourceEngineViewType) {
         this.mainView.viewType = viewType;
         this.skyboxView.viewType = viewType;
     }
 
+    private calcProjectedLight(renderer: SourceRenderer): void {
+        this.currentProjectedLightRenderer = null;
+
+        if (!this.drawProjectedShadows)
+            return;
+
+        let bestDistance = Infinity;
+        let bestProjectedLight: ProjectedLightRenderer | null = null;
+
+        for (let i = 0; i < renderer.bspRenderers.length; i++) {
+            const bspRenderer = renderer.bspRenderers[i];
+            let projectedLight: env_projectedtexture | null = null;
+            while (projectedLight = bspRenderer.entitySystem.findEntityByType<env_projectedtexture>(env_projectedtexture, projectedLight)) {
+                if (!projectedLight.shouldDraw())
+                    continue;
+
+                projectedLight.getAbsOrigin(scratchVec3);
+                const dist = vec3.squaredDistance(this.mainView.cameraPos, scratchVec3);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestProjectedLight = projectedLight.projectedLightRenderer;
+                }
+            }
+        }
+
+        const renderContext = renderer.renderContext, flashlight = renderContext.flashlight;
+        if (bestProjectedLight === null && flashlight.enabled) {
+            renderContext.currentView = this.mainView;
+            flashlight.movement(renderContext);
+            renderContext.currentView = null!;
+            if (flashlight.isReady())
+                bestProjectedLight = flashlight.projectedLightRenderer;
+        }
+
+        this.currentProjectedLightRenderer = bestProjectedLight;
+    }
+
     public prepareToRender(renderer: SourceRenderer, parentViewRenderer: SourceWorldViewRenderer | null): void {
+        if (this.enabled)
+            return;
+
         this.enabled = true;
         const renderContext = renderer.renderContext, renderInstManager = renderer.renderHelper.renderInstManager;
 
@@ -1154,6 +1207,12 @@ export class SourceWorldViewRenderer {
         mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, scratchMatrix);
         this.skyboxView.finishSetup();
 
+        this.calcProjectedLight(renderer);
+
+        if (this.currentProjectedLightRenderer !== null)
+            this.currentProjectedLightRenderer.preparePasses(renderer);
+
+        renderContext.currentViewRenderer = this;
         renderContext.currentView = this.skyboxView;
 
         if (this.drawSkybox2D && renderer.skyboxRenderer !== null)
@@ -1206,24 +1265,29 @@ export class SourceWorldViewRenderer {
     }
 
     private lateBindTextureAttachPass(renderContext: SourceRenderContext, builder: GfxrGraphBuilder, pass: GfxrPass): void {
-        if (renderContext.currentPointCamera !== null)
+        if (renderContext.currentPointCamera !== null && renderContext.currentPointCamera.viewRenderer !== this)
             pass.attachResolveTexture(renderContext.currentPointCamera.viewRenderer.resolveColorTarget(builder));
-        if (renderContext.currentProjectedLightRenderer !== null)
-            pass.attachResolveTexture(renderContext.currentProjectedLightRenderer.outputDepthTextureID!);
+        if (this.currentProjectedLightRenderer !== null)
+            pass.attachResolveTexture(this.currentProjectedLightRenderer.outputDepthTextureID!);
     }
 
     private lateBindTextureSetOnPassRenderer(renderer: SourceRenderer, scope: GfxrPassScope): void {
         const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
-        if (renderContext.currentPointCamera !== null)
+        if (renderContext.currentPointCamera !== null && renderContext.currentPointCamera.viewRenderer !== this)
             renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(renderContext.currentPointCamera.viewRenderer.outputColorTextureID!), staticResources.linearRepeatSampler);
-        if (renderContext.currentProjectedLightRenderer !== null)
-            renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(renderContext.currentProjectedLightRenderer.outputDepthTextureID!), staticResources.shadowSampler);
+        if (this.currentProjectedLightRenderer !== null)
+            renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(this.currentProjectedLightRenderer.outputDepthTextureID!), staticResources.shadowSampler);
     }
 
     public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
+        assert(this.enabled);
+        if (this.outputColorTextureID !== null)
+            return;
+
         const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
 
-        assert(this.enabled);
+        if (this.currentProjectedLightRenderer !== null)
+            this.currentProjectedLightRenderer.pushPasses(renderContext, renderer.renderHelper.renderInstManager, builder);
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.copyDimensions(renderTargetDesc);
@@ -1530,6 +1594,7 @@ export class SourceRenderer implements SceneGfx {
 
     constructor(private sceneContext: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
+        this.reflectViewRenderer.drawProjectedShadows = false;
         this.reflectViewRenderer.pvsFallback = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
 
@@ -1684,38 +1749,6 @@ export class SourceRenderer implements SceneGfx {
         return [renderHacksPanel];
     }
 
-    private calcProjectedLight(): void {
-        let bestDistance = Infinity;
-        let bestProjectedLight: ProjectedLightRenderer | null = null;
-
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
-            let projectedLight: env_projectedtexture | null = null;
-            while (projectedLight = bspRenderer.entitySystem.findEntityByType<env_projectedtexture>(env_projectedtexture, projectedLight)) {
-                if (!projectedLight.enabled || !projectedLight.alive)
-                    continue;
-
-                projectedLight.getAbsOrigin(scratchVec3);
-                const dist = vec3.squaredDistance(this.mainViewRenderer.mainView.cameraPos, scratchVec3);
-                if (dist < bestDistance) {
-                    bestDistance = dist;
-                    bestProjectedLight = projectedLight.projectedLightRenderer;
-                }
-            }
-        }
-
-        const renderContext = this.renderContext, flashlight = renderContext.flashlight;
-        if (bestProjectedLight === null && flashlight.enabled) {
-            renderContext.currentView = this.mainViewRenderer.mainView;
-            flashlight.movement(renderContext);
-            renderContext.currentView = null!;
-            if (flashlight.isReady())
-                bestProjectedLight = flashlight.projectedLightRenderer;
-        }
-
-        this.renderContext.currentProjectedLightRenderer = bestProjectedLight;
-    }
-
     public prepareToRender(viewerInput: ViewerRenderInput): void {
         const renderContext = this.renderContext, device = renderContext.device;
 
@@ -1732,7 +1765,6 @@ export class SourceRenderer implements SceneGfx {
 
         renderContext.currentPointCamera = null;
 
-        this.calcProjectedLight();
         this.movement();
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -1740,9 +1772,6 @@ export class SourceRenderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
-
-        if (renderContext.currentProjectedLightRenderer !== null)
-            renderContext.currentProjectedLightRenderer.preparePasses(this);
 
         if (renderContext.currentPointCamera !== null)
             (renderContext.currentPointCamera as point_camera).preparePasses(this);
@@ -1904,10 +1933,6 @@ export class SourceRenderer implements SceneGfx {
         // Render the camera
         if (renderContext.currentPointCamera !== null)
             renderContext.currentPointCamera.pushPasses(this, builder, mainColorDesc);
-
-        // Render the depth map first if necessary
-        if (renderContext.currentProjectedLightRenderer !== null)
-            renderContext.currentProjectedLightRenderer.pushPasses(renderContext, renderInstManager, builder);
 
         // Render reflection view first.
         if (this.reflectViewRenderer.enabled)
