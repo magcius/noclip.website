@@ -5,7 +5,7 @@ import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { LoadedTexture, TextureMapping } from "../TextureHolder";
 import * as Gcmf from "./Gcmf";
 import * as GX from "../gx/gx_enum";
-import { TextureCache } from "./ModelCache";
+import { TextureHolder } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
 
 function translateAVTexFilterGfx(mipmapAV: number): [GfxTexFilterMode, GfxMipFilterMode] {
@@ -31,8 +31,8 @@ export class SamplerInst {
     private loadedTex: LoadedTexture;
     private gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public samplerData: Gcmf.Sampler, tplTexCache: TextureCache) {
-        this.loadedTex = tplTexCache.getTexture(device, samplerData.texIdx);
+    constructor(device: GfxDevice, public samplerData: Gcmf.Sampler, textureHolder: TextureHolder) {
+        this.loadedTex = textureHolder.getTexture(device, samplerData.gxTexture);
 
         const uvWrap = samplerData.uvWrap;
         const wrapS = (uvWrap >> 2) & (0x03 as GX.WrapMode);
@@ -41,6 +41,19 @@ export class SamplerInst {
         const [minFilter, mipFilter] = translateAVTexFilterGfx(samplerData.mipmapAV);
         const [magFilter] = translateAVTexFilterGfx(samplerData.mipmapAV);
 
+        const width = samplerData.gxTexture.width;
+        const height = samplerData.gxTexture.height;
+        let maxLod;
+        if (width !== height) {
+            maxLod = 0;
+        } else if (samplerData.maxMipLod === 15) {
+            // Use 16x16 as the max LOD
+            const minDim = Math.min(width, height);
+            maxLod = Math.max(0, Math.log2(minDim) - 4);
+        } else {
+            maxLod = samplerData.maxMipLod;
+        }
+
         this.gfxSampler = device.createSampler({
             wrapS: translateWrapModeGfx(wrapS),
             wrapT: translateWrapModeGfx(wrapT),
@@ -48,7 +61,7 @@ export class SamplerInst {
             mipFilter,
             magFilter,
             minLOD: 0,
-            maxLOD: 100,
+            maxLOD: maxLod,
         });
     }
 

@@ -15,9 +15,7 @@ import { AVTpl } from "./AVTpl";
 export type StageData = {
     stagedef: SD.Stage;
     stageGma: Gcmf.Gma;
-    stageTpl: AVTpl;
     bgGma: Gcmf.Gma;
-    bgTpl: AVTpl;
 };
 
 export class World {

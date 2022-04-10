@@ -1,7 +1,7 @@
 import { ModelInst } from "./ModelInst";
 import * as Gcmf from "./Gcmf";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxCullMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { assert, assertExists, nArray } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
@@ -9,47 +9,46 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { StageData } from "./World";
 import { AVTpl } from "./AVTpl";
 import * as UI from "../ui";
-import * as Viewer from '../viewer';
+import * as Viewer from "../viewer";
 
-// Cache loaded models by name and textures by index in TPL. Not much advantage over loading
+// Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
 
-export class TextureCache {
-    private cache: Map<number, LoadedTexture>;
+export class TextureHolder implements UI.TextureListHolder {
+    public viewerTextures: Viewer.Texture[];
+    public onnewtextures: (() => void) | null;
+    private cache: Map<string, LoadedTexture> = new Map();
 
-    constructor(private tpl: AVTpl) {
-        this.cache = new Map();
-    }
-
-    public getTexture(device: GfxDevice, idx: number): LoadedTexture {
-        const loadedTex = this.cache.get(idx);
+    getTexture(device: GfxDevice, gxTexture: TextureInputGX): LoadedTexture {
+        const loadedTex = this.cache.get(gxTexture.name);
         if (loadedTex === undefined) {
-            const gxTex = assertExists(this.tpl.get(idx));
-            const mipChain = calcMipChain(gxTex, gxTex.mipCount);
+            const mipChain = calcMipChain(gxTexture, gxTexture.mipCount);
             const freshTex = loadTextureFromMipChain(device, mipChain);
-            this.cache.set(idx, freshTex);
+            this.cache.set(gxTexture.name, freshTex);
             return freshTex;
         }
         return loadedTex;
     }
 
-    public getViewerTextures(): Viewer.Texture[] {
-        const idxs = Array.from(this.cache.keys()).sort();
-        return idxs.map((i) => assertExists(this.cache.get(i)).viewerTexture);
+    public updateViewerTextures(): void {
+        const nameList = Array.from(this.cache.keys()).sort();
+        this.viewerTextures = nameList.map(
+            (name) => assertExists(this.cache.get(name)).viewerTexture
+        );
     }
 
     public destroy(device: GfxDevice): void {
-        this.cache.forEach((tex) => device.destroyTexture(tex.gfxTexture));
+        for (const loadedTex of this.cache.values()) {
+            device.destroyTexture(loadedTex.gfxTexture);
+        }
     }
 }
 
 class CacheEntry {
     public modelCache: Map<string, ModelInst>;
-    public texCache: TextureCache;
 
-    constructor(public gma: Gcmf.Gma, tpl: AVTpl) {
-        this.modelCache = new Map<string, ModelInst>();
-        this.texCache = new TextureCache(tpl);
+    constructor(public gma: Gcmf.Gma) {
+        this.modelCache = new Map();
     }
 }
 
@@ -57,12 +56,11 @@ class CacheEntry {
 export class ModelCache {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];
+    private textureHolder: TextureHolder;
 
     constructor(stageData: StageData) {
-        this.entries = [
-            new CacheEntry(stageData.stageGma, stageData.stageTpl),
-            new CacheEntry(stageData.bgGma, stageData.bgTpl),
-        ];
+        this.entries = [new CacheEntry(stageData.stageGma), new CacheEntry(stageData.bgGma)];
+        this.textureHolder = new TextureHolder();
     }
 
     public getModel(
@@ -78,12 +76,7 @@ export class ModelCache {
                 if (modelInst !== undefined) {
                     return modelInst;
                 }
-                const freshModelInst = new ModelInst(
-                    device,
-                    renderCache,
-                    modelData,
-                    entry.texCache
-                );
+                const freshModelInst = new ModelInst(device, renderCache, modelData, this.textureHolder);
                 entry.modelCache.set(modelName, freshModelInst);
                 return freshModelInst;
             }
@@ -92,14 +85,14 @@ export class ModelCache {
         return null;
     }
 
-    public getViewerTextures(): Viewer.Texture[] {
-        return this.entries.flatMap((entry) => entry.texCache.getViewerTextures());
+    public getTextureHolder(): TextureHolder {
+        return this.textureHolder;
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.entries.length; i++) {
             this.entries[i].modelCache.forEach((model) => model.destroy(device));
-            this.entries[i].texCache.destroy(device);
         }
+        this.textureHolder.destroy(device);
     }
 }

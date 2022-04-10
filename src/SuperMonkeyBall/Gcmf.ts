@@ -12,7 +12,9 @@ import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color, colorNewFromRGBA } from "../Color";
 import * as GX from "../gx/gx_enum";
-import { assert, hexzero, readString } from "../util";
+import { TextureInputGX } from "../gx/gx_texture";
+import { assert, assertExists, hexzero, readString } from "../util";
+import { AVTpl } from "./AVTpl";
 
 // GCMF Attribute
 export type ModelAttrs = {
@@ -84,10 +86,12 @@ export type DisplaylistHeader = {
 
 // GCMF Sampler
 export type Sampler = {
+    // TODO(complexplane): These are all a 4 byte flag field. Parse them out properly.
     unk0x00: number;
     mipmapAV: number;
     uvWrap: number;
-    texIdx: number; // Index of texture in TPL
+    maxMipLod: number;
+    gxTexture: TextureInputGX;
     lodBias: number;
     anisotropy: number;
     unk0x0C: number; // TEV?
@@ -113,12 +117,13 @@ export type Model = {
 
 export type Gma = Map<string, Model>;
 
-function parseSampler(buffer: ArrayBufferSlice): Sampler {
+function parseSampler(buffer: ArrayBufferSlice, tpl: AVTpl): Sampler {
     const view = buffer.createDataView();
 
     const unk0x00 = view.getInt16(0x00);
     const mipmapAV = view.getInt8(0x02);
     const uvWrap = view.getInt8(0x03);
+    const maxMipLod = (view.getUint32(0x00) >> 7) & 0xF;
     const texIdx = view.getInt16(0x04);
     const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
@@ -134,7 +139,8 @@ function parseSampler(buffer: ArrayBufferSlice): Sampler {
         unk0x00,
         mipmapAV,
         uvWrap,
-        texIdx,
+        maxMipLod,
+        gxTexture: assertExists(tpl.get(texIdx)),
         lodBias,
         anisotropy,
         unk0x0C,
@@ -293,7 +299,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     return { material, boundingSphere, dlistHeaders, rawData: buffer };
 }
 
-function parseModel(buffer: ArrayBufferSlice, name: string): Model {
+function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     function parseModelAttrs(attrs: number): ModelAttrs {
         const value16Bit = ((attrs >> 0) & 0x01) == 1;
         const unk0x2 = ((attrs >> 1) & 0x01) == 1;
@@ -326,7 +332,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): Model {
     let offs = 0x40;
     // GcmfSampler
     for (let i = 0; i < samplerCount; i++) {
-        samplers.push(parseSampler(buffer.slice(offs)));
+        samplers.push(parseSampler(buffer.slice(offs), tpl));
         offs += 0x20;
     }
 
@@ -394,7 +400,7 @@ type ModelEntryOffset = {
     nameOffs: number;
 };
 
-export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
+export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
     const view = gmaBuffer.createDataView();
     const count = view.getInt32(0x00);
     const gcmfEntryOffs: ModelEntryOffset[] = [];
@@ -439,7 +445,7 @@ export function parseGma(gmaBuffer: ArrayBufferSlice): Gma {
             );
             continue;
         }
-        const model = parseModel(modelBuf.slice(modelOffs), name);
+        const model = parseModel(modelBuf.slice(modelOffs), name, tpl);
         if (model.opaqueShapeCount + model.translucentShapeCount < 1) {
             // ignore invaild gcmf
             continue;

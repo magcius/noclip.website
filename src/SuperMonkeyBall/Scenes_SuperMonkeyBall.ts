@@ -45,12 +45,12 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
-        const stageGma = Gcmf.parseGma(stageGmaBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
-        const bgGma = Gcmf.parseGma(bgGmaBuf);
+        const stageGma = Gcmf.parseGma(stageGmaBuf, stageTpl);
         const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
+        const bgGma = Gcmf.parseGma(bgGmaBuf, bgTpl);
 
-        return { stagedef, stageGma, stageTpl, bgGma, bgTpl };
+        return { stagedef, stageGma, bgGma };
     }
 }
 
