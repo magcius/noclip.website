@@ -37,13 +37,15 @@ export const enum GoalType {
 export const enum EaseType {
     Constant,
     Linear,
-    Smooth,
+    Smoothstep, // The game actually treats any value other than constant or linear as smoothstep, I've seen lots of different values
 }
 
 export type Keyframe = {
     easeType: EaseType;
     timeSeconds: number;
     value: number; // Translation, or rotation in degrees, or color r/g/b, etc
+    tangentIn: number; // Left handle
+    tangentOut: number; // Right handle
 };
 
 export type ItemgroupAnim = {
@@ -324,7 +326,9 @@ function parseKeyframeList(view: DataView, offset: number): Keyframe[] {
         const easeType = view.getInt32(keyframeOffs + 0x0) as EaseType;
         const timeSeconds = view.getFloat32(keyframeOffs + 0x4);
         const value = view.getFloat32(keyframeOffs + 0x8);
-        keyframes.push({ easeType, timeSeconds, value });
+        const tangentIn = view.getFloat32(keyframeOffs + 0xc);
+        const tangentOut = view.getFloat32(keyframeOffs + 0x10);
+        keyframes.push({ easeType, timeSeconds, value, tangentIn, tangentOut });
     }
     return keyframes;
 }

@@ -4,7 +4,7 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { invlerp, lerp, MathConstants } from "../MathHelpers";
+import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers";
 import { assert, bisectRight } from "../util";
 import * as Viewer from "../viewer";
 import * as Gma from "./Gma";
@@ -66,8 +66,14 @@ function interpolateKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): nu
     if (prev.easeType === SD.EaseType.Linear) {
         return lerp(prev.value, next.value, t);
     }
-    // TODO(complexplane): Smooth ease
-    return lerp(prev.value, next.value, t);
+    // Any other ease value means smoothstep
+    const deltaSeconds = next.timeSeconds - prev.timeSeconds;
+    const baseValue = lerp(prev.value, next.value, smoothstep(t));
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const inAdjust = next.tangentIn * (t3 - t2);
+    const outAdjust = prev.tangentOut * (t + (t3 - 2 * t2));
+    return baseValue + deltaSeconds * (inAdjust + outAdjust);
 }
 
 const scratchVec3b = vec3.create();
@@ -195,7 +201,7 @@ export class World {
         private modelCache: ModelCache,
         private stageData: StageData
     ) {
-        this.animController = new AnimationController();
+        this.animController = new AnimationController(60);
         this.itemgroups = stageData.stagedef.itemgroups.map(
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
