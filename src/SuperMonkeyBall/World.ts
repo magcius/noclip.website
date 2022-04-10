@@ -54,7 +54,7 @@ export class World {
         device: GfxDevice,
         renderCache: GfxRenderCache,
         private modelCache: ModelCache,
-        stageData: StageData
+        private stageData: StageData
     ) {
         // For now, just render all level models referenced by stagedef
         this.levelModels = [];

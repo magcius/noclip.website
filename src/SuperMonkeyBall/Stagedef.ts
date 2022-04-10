@@ -686,56 +686,56 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         // "sub" means a subset of the stage's list
         const subGoals = parseSlicedList(
             view,
-            coliHeaderOffs + 0x4c,
+            coliHeaderOffs + 0x3c,
             goals,
             goalListOffs,
             GOAL_SIZE
         );
         const subBumpers = parseSlicedList(
             view,
-            coliHeaderOffs + 0x54,
+            coliHeaderOffs + 0x4c,
             bumpers,
             bumperListOffs,
             BUMPER_SIZE
         );
         const subJamabars = parseSlicedList(
             view,
-            coliHeaderOffs + 0x5c,
+            coliHeaderOffs + 0x54,
             jamabars,
             jamabarListOffs,
             JAMABAR_SIZE
         );
         const subBananas = parseSlicedList(
             view,
-            coliHeaderOffs + 0x64,
+            coliHeaderOffs + 0x5c,
             bananas,
             bananaListOffs,
             BANANA_SIZE
         );
         const subColiCones = parseSlicedList(
             view,
-            coliHeaderOffs + 0x6c,
+            coliHeaderOffs + 0x64,
             coliCones,
             coliConeListOffs,
             COLI_CONE_SIZE
         );
         const subColiSpheres = parseSlicedList(
             view,
-            coliHeaderOffs + 0x74,
+            coliHeaderOffs + 0x6c,
             coliSpheres,
             coliSphereListOffs,
             COLI_SPHERE_SIZE
         );
         const subColiCylinders = parseSlicedList(
             view,
-            coliHeaderOffs + 0x7c,
+            coliHeaderOffs + 0x74,
             coliCylinders,
             coliCylinderListOffs,
             COLI_CYLINDER_SIZE
         );
         const subLevelModels = parseSlicedList(
             view,
-            coliHeaderOffs + 0x84,
+            coliHeaderOffs + 0x7c,
             levelModels,
             levelModelListOffs,
             LEVEL_MODEL_SIZE
