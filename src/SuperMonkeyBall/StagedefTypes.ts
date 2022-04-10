@@ -160,10 +160,10 @@ export type StageModel = {
 };
 
 export type Itemgroup = {
-    initPos: vec3;
-    initRot: vec3;
+    originPos: vec3;
+    originRot: vec3;
     animType: AnimType;
-    animHeader: ItemgroupAnim;
+    anim: ItemgroupAnim;
     // conveyorVel: vec3;
 
     coliTris: ColiTri[];
@@ -184,6 +184,7 @@ export type Itemgroup = {
     coliCones: ColiCone[];
     coliSpheres: ColiSphere[];
     coliCylinders: ColiCylinder[];
+    levelModels: LevelModel[];
 };
 
 export type StageModelPtrA = {

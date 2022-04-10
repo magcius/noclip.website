@@ -413,7 +413,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
             });
         }
 
-        // "sub" means a subset of the entire stage's lists
+        // "sub" means a subset of the stage's list
         const subGoals = parseSlicedList(
             view,
             coliHeaderOffs + 0x4c,
@@ -463,6 +463,13 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
             coliCylinderListOffs,
             COLI_CYLINDER_SIZE
         );
+        const subLevelModels = parseSlicedList(
+            view,
+            coliHeaderOffs + 0x84,
+            levelModels,
+            levelModelListOffs,
+            LEVEL_MODEL_SIZE
+        );
         // const subFalloutVolumes = parseSlicedList(view, coliHeaderOffs + 0x7C, falloutVolumes, falloutVolumeListOffs, FALLOUT_VOLUME_SIZE);
         // TODO reflective stage models, stage model instances, model A/B ptr
 
@@ -471,10 +478,10 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
         // const textureScroll: SD.TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
 
         itemgroups.push({
-            initPos: initPos,
-            initRot: initRot,
+            originPos: initPos,
+            originRot: initRot,
             animType: animType,
-            animHeader: animHeader,
+            anim: animHeader,
             // conveyorVel: conveyorVel,
 
             coliTris: coliTris,
@@ -493,6 +500,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.Stage {
             coliCones: subColiCones,
             coliSpheres: subColiSpheres,
             coliCylinders: subColiCylinders,
+            levelModels: subLevelModels,
             // reflectiveStageModels: [],
             // stageModelInstances: [],
             // stageModelPtrB: [],
