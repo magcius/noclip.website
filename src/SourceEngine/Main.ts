@@ -11,7 +11,7 @@ import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullC
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
@@ -922,6 +922,7 @@ export class ProjectedLightRenderer {
     public light = new ProjectedLight();
     public debugName: string = 'ProjectedLight';
     public outputDepthTargetID: GfxrRenderTargetID | null = null;
+    public outputDepthTextureID: GfxrResolveTextureID | null = null;
 
     public prepareRenderTarget(renderContext: SourceRenderContext): void {
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -964,6 +965,7 @@ export class ProjectedLightRenderer {
         });
 
         this.outputDepthTargetID = depthTargetID;
+        this.outputDepthTextureID = builder.resolveRenderTarget(depthTargetID);
     }
 }
 
@@ -1134,6 +1136,7 @@ export class SourceWorldViewRenderer {
     public enabled = false;
 
     public outputColorTargetID: GfxrRenderTargetID | null = null;
+    public outputColorTextureID: GfxrResolveTextureID | null = null;
 
     constructor(public name: string, private viewType: SourceEngineViewType) {
         this.mainView.viewType = viewType;
@@ -1202,8 +1205,23 @@ export class SourceWorldViewRenderer {
         renderContext.currentView = null!;
     }
 
+    private lateBindTextureAttachPass(renderContext: SourceRenderContext, builder: GfxrGraphBuilder, pass: GfxrPass): void {
+        if (renderContext.currentPointCamera !== null)
+            pass.attachResolveTexture(renderContext.currentPointCamera.viewRenderer.resolveColorTarget(builder));
+        if (renderContext.currentProjectedLightRenderer !== null)
+            pass.attachResolveTexture(renderContext.currentProjectedLightRenderer.outputDepthTextureID!);
+    }
+
+    private lateBindTextureSetOnPassRenderer(renderer: SourceRenderer, scope: GfxrPassScope): void {
+        const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
+        if (renderContext.currentPointCamera !== null)
+            renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(renderContext.currentPointCamera.viewRenderer.outputColorTextureID!), staticResources.linearRepeatSampler);
+        if (renderContext.currentProjectedLightRenderer !== null)
+            renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(renderContext.currentProjectedLightRenderer.outputDepthTextureID!), staticResources.shadowSampler);
+    }
+
     public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
-        const staticResources = renderer.renderContext.materialCache.staticResources;
+        const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
 
         assert(this.enabled);
 
@@ -1231,32 +1249,15 @@ export class SourceWorldViewRenderer {
 
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Main Depth`);
 
-        let cameraResolveTextureID: GfxrResolveTextureID | null = null;
-        const pointCamera = renderer.renderContext.currentPointCamera;
-        if (pointCamera !== null && pointCamera.viewRenderer.outputColorTargetID !== null)
-            cameraResolveTextureID = builder.resolveRenderTarget(pointCamera.viewRenderer.outputColorTargetID);
-
-        let projectedLightResolveTextureID: GfxrResolveTextureID | null = null;
-        const projectedLightRenderer = renderer.renderContext.currentProjectedLightRenderer;
-        if (projectedLightRenderer && projectedLightRenderer.outputDepthTargetID !== null)
-            projectedLightResolveTextureID = builder.resolveRenderTarget(projectedLightRenderer.outputDepthTargetID);
-
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            if (cameraResolveTextureID !== null)
-                pass.attachResolveTexture(cameraResolveTextureID);
-            if (projectedLightResolveTextureID !== null)
-                pass.attachResolveTexture(projectedLightResolveTextureID);
+            this.lateBindTextureAttachPass(renderContext, builder, pass);
 
             pass.exec((passRenderer, scope) => {
-                if (cameraResolveTextureID !== null)
-                    renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
-                if (projectedLightResolveTextureID !== null)
-                    renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(projectedLightResolveTextureID), staticResources.shadowSampler);
-
+                this.lateBindTextureSetOnPassRenderer(renderer, scope);
                 renderer.executeOnPass(passRenderer, this.mainView.mainList);
             });
         });
@@ -1279,18 +1280,16 @@ export class SourceWorldViewRenderer {
                     pass.attachResolveTexture(reflectColorResolveTextureID);
                 }
 
-                if (projectedLightResolveTextureID !== null)
-                    pass.attachResolveTexture(projectedLightResolveTextureID);
+                this.lateBindTextureAttachPass(renderContext, builder, pass);
 
                 pass.exec((passRenderer, scope) => {
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), staticResources.linearClampSampler);
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), staticResources.pointClampSampler);
 
-                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.staticResources.opaqueBlackTexture2D;
+                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : staticResources.opaqueBlackTexture2D;
                     renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, staticResources.linearClampSampler);
 
-                    if (projectedLightResolveTextureID !== null)
-                        renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(projectedLightResolveTextureID), staticResources.shadowSampler);
+                    this.lateBindTextureSetOnPassRenderer(renderer, scope);
 
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
                 });
@@ -1302,24 +1301,25 @@ export class SourceWorldViewRenderer {
                 pass.setDebugName('Translucent');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-    
-                if (cameraResolveTextureID !== null)
-                    pass.attachResolveTexture(cameraResolveTextureID);
-                if (projectedLightResolveTextureID !== null)
-                    pass.attachResolveTexture(projectedLightResolveTextureID);
-    
+                
+                this.lateBindTextureAttachPass(renderContext, builder, pass);
+
                 pass.exec((passRenderer, scope) => {
-                    if (cameraResolveTextureID !== null)
-                        renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
-                    if (projectedLightResolveTextureID !== null)
-                        renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(projectedLightResolveTextureID), staticResources.shadowSampler);
-    
+                    this.lateBindTextureSetOnPassRenderer(renderer, scope);
                     renderer.executeOnPass(passRenderer, this.mainView.translucentList);
                 });
             });
         }
 
         this.outputColorTargetID = mainColorTargetID;
+        this.outputColorTextureID = null;
+    }
+
+    public resolveColorTarget(builder: GfxrGraphBuilder): GfxrResolveTextureID {
+        if (this.outputColorTextureID === null)
+            this.outputColorTextureID = builder.resolveRenderTarget(assertExists(this.outputColorTargetID));
+
+        return this.outputColorTextureID;
     }
 
     public reset(): void {
@@ -1327,6 +1327,7 @@ export class SourceWorldViewRenderer {
         this.skyboxView.reset();
         this.enabled = false;
         this.outputColorTargetID = null;
+        this.outputColorTextureID = null;
     }
 }
 
