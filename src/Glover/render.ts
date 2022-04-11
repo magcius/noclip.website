@@ -689,8 +689,8 @@ export class DrawCallInstance {
 export function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, faceVertIdx: number, alpha: number = 1.0) : F3DEX.Vertex {
     const f3dexVertex = new F3DEX.Vertex();
 
-    const vertIdx = (faceVertIdx == 0) ? geo.faces[faceIdx].v0 :
-                            (faceVertIdx == 1) ? geo.faces[faceIdx].v1 :
+    const vertIdx = (faceVertIdx === 0) ? geo.faces[faceIdx].v0 :
+                            (faceVertIdx === 1) ? geo.faces[faceIdx].v1 :
                                 geo.faces[faceIdx].v2;
 
     const geoVert = geo.vertices[vertIdx];
@@ -701,10 +701,10 @@ export function f3dexFromGeometry(geo: GloverObjbank.Geometry, faceIdx: number, 
 
     f3dexVertex.tx = (faceVertIdx == 0) ? geo.uvs[faceIdx].u1.raw :
                             (faceVertIdx == 1) ? geo.uvs[faceIdx].u2.raw :
-                                geo.uvs[faceIdx].u3.raw
+                                geo.uvs[faceIdx].u3.raw;
     f3dexVertex.ty = (faceVertIdx == 0) ? geo.uvs[faceIdx].v1.raw :
                             (faceVertIdx == 1) ? geo.uvs[faceIdx].v2.raw :
-                                geo.uvs[faceIdx].v3.raw
+                                geo.uvs[faceIdx].v3.raw;
 
     const colorsNorms = geo.colorsNorms[vertIdx];
     f3dexVertex.c0 = ((colorsNorms >>> 24) & 0xFF) / 0xFF;
@@ -724,15 +724,12 @@ export function loadRspTexture(rspState: GloverRSPState, textureHolder: Textures
     const texFile = textureHolder.idToTexture.get(textureId);
     const dataAddr = textureHolder.getSegmentDataAddr(textureId);
     const palAddr = textureHolder.getSegmentPaletteAddr(textureId);
-    if (texFile === undefined || dataAddr === undefined ||
-        palAddr === undefined)
-    {
-        throw `Texture 0x${textureId.toString(16)} not loaded`;
-        return 0;
-    }
 
-    const indexedImage = texFile.compressionFormat == 0 ||
-                            texFile.compressionFormat == 1; 
+    if (texFile === undefined || dataAddr === undefined || palAddr === undefined)
+        throw `Texture 0x${textureId.toString(16)} not loaded`;
+
+    const indexedImage = texFile.compressionFormat === 0 ||
+                            texFile.compressionFormat === 1; 
 
     // Set up texture state
 

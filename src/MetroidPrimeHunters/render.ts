@@ -201,8 +201,8 @@ class ShapeInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_drawParams, 12*32);
-        const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_drawParams);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
+        const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
 
         this.computeModelView(scratchMat4, viewerInput);
         offs += fillMatrix4x3(drawParamsMapped, offs, scratchMat4);

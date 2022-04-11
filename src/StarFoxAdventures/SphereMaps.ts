@@ -21,7 +21,7 @@ import { World } from './world';
 import { LightType } from './WorldLights';
 
 const scratchMaterialParams = new MaterialParams();
-const scratchdrawParams = new DrawParams();
+const scratchDrawParams = new DrawParams();
 const scratchSceneParams = new SceneParams();
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
@@ -163,8 +163,6 @@ export class SphereMapManager {
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
 
         this.hemisphericMaterial = createHemisphericProbeMaterial(this.materialFactory);
         this.reflectiveMaterial = createReflectiveProbeMaterial(this.materialFactory, this.world.resColl.texFetcher);
@@ -294,7 +292,7 @@ export class SphereMapManager {
 
         const renderInst = this.ddraw.makeRenderInst(renderInstManager);
 
-        scratchdrawParams.clear();
+        scratchDrawParams.clear();
         scratchMaterialParams.clear();
 
         const ambParams = this.params[mapIdx]; // TODO: selectable per object
@@ -304,7 +302,7 @@ export class SphereMapManager {
         else // SphereMapType.ReflectiveProbe
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchdrawParams);
+        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 

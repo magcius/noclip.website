@@ -166,7 +166,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
     mat4.copy(drawParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams_);
+    materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -241,8 +241,6 @@ export class dKankyo_sun_Packet {
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -609,9 +607,6 @@ export class dKankyo_vrkumo_Packet {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         // noclip modification: Use VTX instead of separate draw calls for the color.
@@ -815,8 +810,6 @@ export class dKankyo_rain_Packet {
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -1055,9 +1048,6 @@ export class dKankyo_wave_Packet {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
 
         const mb = new GXMaterialBuilder();
         // noclip modification: Use VTX instead of separate draw calls for the alpha.
@@ -1206,8 +1196,6 @@ export class dKankyo_star_Packet {
     constructor(globals: dGlobals) {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
 
         const mb = new GXMaterialBuilder();
         // noclip modification: Use VTX instead of separate draw calls for the color.
@@ -1368,8 +1356,8 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
 function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
     project(dst, v, viewerInput.camera);
     // Put in viewport framebuffer space.
-    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
-    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
+    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
     dst[2] = 0.0;
 }
 

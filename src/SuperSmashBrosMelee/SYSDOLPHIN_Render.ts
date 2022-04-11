@@ -1188,7 +1188,7 @@ class HSD_DObj_Instance {
                 megaStateFlags.cullMode = GfxCullMode.FrontAndBack;
 
             shapeHelper.setOnRenderInst(renderInst);
-            this.mobj.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            this.mobj.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 

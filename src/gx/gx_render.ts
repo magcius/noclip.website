@@ -496,7 +496,7 @@ export class GXMaterialHelperGfx {
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
-    public allocatedrawParamsDataOnInst(renderInst: GfxRenderInst, drawParams: DrawParams): void {
+    public allocateDrawParamsDataOnInst(renderInst: GfxRenderInst, drawParams: DrawParams): void {
         const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
         fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);

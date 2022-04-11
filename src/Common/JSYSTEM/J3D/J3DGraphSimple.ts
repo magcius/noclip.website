@@ -1,5 +1,5 @@
 
-import { J3DModelInstance, BMDModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance, ShapeInstanceState } from "./J3DGraphBase";
+import { J3DModelInstance, J3DModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance, ShapeInstanceState } from "./J3DGraphBase";
 import AnimationController from "../../../AnimationController";
 import { assert } from "../../../util";
 import { Camera } from "../../../Camera";
@@ -197,10 +197,10 @@ export function bindTPT1MaterialInstance(materialInstance: MaterialInstance, ani
 export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
     public passMask: number = 0x01;
-    public ownedModelMaterialData: BMDModelMaterialData | null = null;
+    public ownedModelMaterialData: J3DModelMaterialData | null = null;
     public isSkybox: boolean = false;
 
-    public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
+    public setModelMaterialDataOwned(modelMaterialData: J3DModelMaterialData): void {
         this.setModelMaterialData(modelMaterialData);
         assert(this.ownedModelMaterialData === null);
         this.ownedModelMaterialData = modelMaterialData;
@@ -257,6 +257,20 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         this.jointMatrixCalc = anf1 !== null ? new JointMatrixCalcANF1(animationController, anf1) : new JointMatrixCalcNoAnm();
     }
 
+    /**
+     * Returns the joint-to-world matrix for the joint with name {@param jointName}.
+     *
+     * This object is not a copy; if an animation updates the joint, the values in this object will be
+     * updated as well. You can use this as a way to parent an object to this one.
+     */
+     public getJointToWorldMatrixReference(jointName: string): mat4 {
+        const joints = this.modelData.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++)
+            if (joints[i].name === jointName)
+                return this.shapeInstanceState.jointToWorldMatrixArray[i];
+        throw "could not find joint";
+    }
+
     private calcSkybox(camera: Camera): void {
         if (this.isSkybox) {
             this.modelMatrix[12] = camera.worldMatrix[12];
@@ -283,7 +297,7 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         renderInstManager.popTemplateRenderInst();
     }
 

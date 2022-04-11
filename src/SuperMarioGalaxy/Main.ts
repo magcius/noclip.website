@@ -10,53 +10,53 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
+import { TransparentBlack } from '../Color';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+
+import { SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
+import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import { JSystemFileReaderHelper } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
+import { DrawCameraType } from './DrawBuffer';
 import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
-import { EffectSystem, ParticleResourceHolder } from './EffectSystem';
-
-import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
-import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
+import { EffectSystem, ParticleResourceHolder } from './EffectSystem';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube, DeathArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
-import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
-import { MapPartsRailGuideHolder } from './MapParts';
-import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, DepthOfFieldBlur, ImageEffectAreaMgr } from './ImageEffect';
-import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
-import { DrawCameraType } from './DrawBuffer';
-import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
-import { FurDrawManager } from './Fur';
-import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
-import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
-import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
-import { TransparentBlack } from '../Color';
-import { GameSystemFontHolder, LayoutHolder } from './Layout';
-import { GalaxyMapController } from './Actors/GalaxyMap';
-import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
-import { TakoHeiInkHolder } from './Actors/Enemy';
 import { BaseMatrixFollowTargetHolder } from './Follow';
 import { MessageArea, TalkDirector } from './Talk';
+import { DemoDirector } from './Demo';
+import { FurDrawManager } from './Fur';
+import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { getLayoutMessageDirect, MessageHolder } from './MessageData';
+import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, DepthOfFieldBlur, ImageEffectAreaMgr } from './ImageEffect';
+import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
+import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
+import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
+import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
+import { MapPartsRailGuideHolder } from './MapParts';
+import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
+import { NPCDirector } from './Actors/NPC';
+import { GalaxyMapController } from './Actors/GalaxyMap';
+import { TakoHeiInkHolder } from './Actors/Enemy';
+import { dfLabel, dfShow } from '../DebugFloaters';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -248,7 +248,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             let texPrjMtx: mat4 | null = null;
             if (drawType === DrawType.EffectDrawIndirect) {
                 texPrjMtx = scratchMatrix;
-                texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+                texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
             }
 
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
@@ -349,9 +349,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
-        executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_3D);
+        executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, DrawCameraType.DrawCameraType_3D);
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
-        executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
+        executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
@@ -368,13 +368,15 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         this.maskDesc.copyDimensions(this.mainColorDesc);
+        // TODO(jstpierre): Re-enable this. This would require bouncing the Opaque after Shadow
+        // pass to a temp MSAA RT if the sample counts differ, and then resolving...
+        // this.maskDesc.sampleCount = 1;
         this.maskDesc.colorClearColor = TransparentBlack;
 
         if (sceneObjHolder.fallOutFieldDraw !== null && sceneObjHolder.clipAreaHolder !== null && sceneObjHolder.clipAreaHolder.isActive && this.hasAnyDrawBuffer(DrawBufferType.ClippedMapParts)) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts');
-                pass.setViewport(viewerInput.viewport);
-
+    
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
@@ -389,7 +391,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
             builder.pushPass((pass) => {
                 pass.setDebugName('Clipped Map Parts Mask');
-                pass.setViewport(viewerInput.viewport);
 
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, clipAreaMaskTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -404,7 +405,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skybox');
-            pass.setViewport(viewerInput.viewport);
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -456,14 +456,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.ShadowVolume);
             });
-
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
 
         builder.pushPass((pass) => {
             pass.setDebugName('Opaque after Shadow');
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color1, shadowColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 // executeDrawBufferListNormalOpaBeforeSilhouette()
@@ -578,6 +577,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.execute(passRenderer, DrawType.OceanBowl);
                 this.execute(passRenderer, DrawType.EffectDrawIndirect);
                 this.execute(passRenderer, DrawType.EffectDrawAfterIndirect);
+                this.execute(passRenderer, DrawType.OceanRingPipeInside);
             });
         });
 

@@ -13,6 +13,7 @@ function getParentMetadata(target: any, key: string) {
     return {
         range: Reflect.getMetadata('df:range', target, key),
         usepercent: Reflect.getMetadata('df:usepercent', target, key),
+        sigfigs: Reflect.getMetadata('df:sigfigs', target, key),
     };
 }
 
@@ -224,7 +225,11 @@ export class FloatingPanel implements Widget {
         if (labelNameMetadata !== undefined)
             labelName = labelNameMetadata;
 
-        const fracDig = Math.max(0, -Math.log10(step));
+        let sigfigs = Reflect.getMetadata('df:sigfigs', obj, paramName);
+        if (sigfigs === undefined && parentMetadata !== null)
+            sigfigs = parentMetadata.sigfigs;
+        if (sigfigs === undefined)
+            sigfigs = -Math.log10(step);
         const slider = new Slider();
 
         let midiBindButton: HTMLElement | null = null;
@@ -300,7 +305,7 @@ export class FloatingPanel implements Widget {
             if (usePercent) {
                 valueStr = `${(invlerp(min, max, value) * 100).toFixed(0)}%`;
             } else {
-                valueStr = value.toFixed(fracDig);
+                valueStr = value.toFixed(sigfigs);
             }
 
             slider.setLabel(`${labelName} = ${valueStr}`);
@@ -410,19 +415,7 @@ export class DebugFloaterHolder {
 }
 
 function dfShouldShowOwn(obj: any, keyName: string): boolean {
-    const visibility = Reflect.getMetadata('df:visibility', obj, keyName);
-    if (visibility === false)
-        return false;
-
-    // Look for a sign that the user wants to show it.
-    if (visibility === true)
-        return true;
-    if (Reflect.hasMetadata('df:range', obj, keyName))
-        return true;
-    if (Reflect.hasMetadata('df:sigfigs', obj, keyName))
-        return true;
-
-    return false;
+    return Reflect.getMetadata('df:visibility', obj, keyName);
 }
 
 interface MIDIControlListener {

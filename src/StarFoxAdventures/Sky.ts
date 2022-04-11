@@ -27,8 +27,6 @@ export class Sky {
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
         this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -106,7 +104,6 @@ export class Sky {
         
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
@@ -145,7 +142,6 @@ export class Sky {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skyscape');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             const skyDepthTargetID = builder.createRenderTargetID(depthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);

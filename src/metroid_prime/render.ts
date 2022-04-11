@@ -186,7 +186,7 @@ class SurfaceInstance {
             this.materialGroupInstance.prepareToRender(renderHelper.renderInstManager, viewerInput, uvAnimationModelMatrix, isSkybox, actorLights, OpaqueBlack);
             this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
             this.surfaceData.shapeHelper.setOnRenderInst(renderInst, packet);
-            this.materialGroupInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, this.drawParams);
+            this.materialGroupInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, this.drawParams);
 
             renderHelper.renderInstManager.submitRenderInst(renderInst);
         }
@@ -464,6 +464,7 @@ export class MREARenderer {
     public overrideSky: CMDLRenderer | null = null;
     public modelMatrix = mat4.create();
     public needSky: boolean = false;
+    public layerGroup: string = 'Light';
     public visible: boolean = true;
 
     constructor(private device: GfxDevice, private modelCache: ModelCache, private cache: GfxRenderCache, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA, private resourceSystem: ResourceSystem) {
@@ -591,6 +592,9 @@ export class MREARenderer {
                             this.overrideSky.isSkybox = true;
                         }
                     }
+
+                    if (areaAttributes.darkWorld)
+                        this.layerGroup = 'Dark';
                 }
             }
         }

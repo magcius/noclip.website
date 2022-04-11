@@ -237,7 +237,7 @@ class BatchInstance {
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
-        materialInstance.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

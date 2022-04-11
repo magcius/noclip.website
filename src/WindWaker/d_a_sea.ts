@@ -229,8 +229,6 @@ export class d_a_sea extends fopAc_ac_c {
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder(`d_a_sea`);
         mb.setCullMode(GX.CullMode.BACK);
@@ -570,7 +568,7 @@ export class d_a_sea extends fopAc_ac_c {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

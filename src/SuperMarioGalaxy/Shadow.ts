@@ -352,7 +352,6 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
     }
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -370,7 +369,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
 
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.material.allocatedrawParamsDataOnInst(template, drawParams);
+        this.material.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.ddraw.beginDraw();
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
@@ -442,7 +441,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.loadDrawModelMtx(drawParams, viewerInput);
-        this.materialFront.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialFront.allocateDrawParamsDataOnInst(template, drawParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
         renderInstManager.popTemplateRenderInst();
@@ -660,7 +659,6 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowVolumeBox', controller);
 
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
     }
 
@@ -852,7 +850,6 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowVolumeLine', controller);
 
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
     }
 
@@ -1056,8 +1053,6 @@ class AlphaShadow extends NameObj {
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
@@ -1097,7 +1092,7 @@ class AlphaShadow extends NameObj {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(drawParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelperDrawAlpha.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -1228,72 +1223,54 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
 
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeSphere(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeOval(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     vec3.set(drawer.size, 100.0, 100.0, 100.0);
     getJMapInfoV3f(drawer.size, infoIter, `Size`);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeOvalPoleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeOvalPole(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     vec3.set(drawer.size, 100.0, 100.0, 100.0);
     getJMapInfoV3f(drawer.size, infoIter, `Size`);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeCylinder(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeBoxFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeBox(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     getJMapInfoV3f(drawer.size, infoIter, 'Size');
-
     controller.shadowDrawer = drawer;
 }
 
 function createShadowVolumeLineFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
-    controller.setDropTypeNormal();
-
     const drawer = new ShadowVolumeLine(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.fromController = actor.shadowControllerList!.getController(infoIter.getValueString('LineStart'));
     drawer.toController = actor.shadowControllerList!.getController(infoIter.getValueString('LineEnd'));
     drawer.fromWidth = fallback(infoIter.getValueNumber('LineStartRadius'), 100.0);
     drawer.toWidth = fallback(infoIter.getValueNumber('LineEndRadius'), 100.0);
-
     controller.shadowDrawer = drawer;
 }
 

@@ -795,7 +795,7 @@ export class StandardMapMaterial extends StandardMaterial {
 
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, matCtx.sceneCtx.viewerInput.viewport, 1);
+            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, 1);
             mat4.mul(dst, dst, matCtx.modelToViewMtx);
             return dst;
         });
@@ -1336,13 +1336,13 @@ class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.mb.setTexMtx(0, (dst: mat4, ctx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.viewerInput.viewport, 1);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, 1);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
         this.mb.setTexMtx(1, (dst: mat4, ctx: MaterialRenderContext) => {
             // Unflipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.viewerInput.viewport, -1);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, -1);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 

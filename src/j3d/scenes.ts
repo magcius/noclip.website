@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { readBTI_Texture } from '../Common/JSYSTEM/JUTTexture';
-import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render';
@@ -110,7 +110,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     const bmdModel = new J3DModelData(device, cache, bmd);
     const scene = new J3DModelInstanceSimple(bmdModel, materialHacks);
     if (bmt !== null)
-        scene.setModelMaterialDataOwned(new BMDModelMaterialData(device, cache, bmt));
+        scene.setModelMaterialDataOwned(new J3DModelMaterialData(device, cache, bmt));
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);

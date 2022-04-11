@@ -115,18 +115,9 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
 }
 //#endregion
 //#region VTX1
-export interface VertexArray {
-    vtxAttrib: GX.Attr;
-    compType: GX.CompType;
-    compCnt: GX.CompCnt;
-    compShift: number;
-    buffer: ArrayBufferSlice;
-    dataOffs: number;
-    dataSize: number;
-}
-
 export interface VTX1 {
-    vertexArrays: Map<GX.Attr, VertexArray>;
+    vat: GX_VtxAttrFmt[];
+    arrayData: (ArrayBufferSlice | undefined)[];
 }
 
 function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
@@ -134,12 +125,10 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     const formatOffs = view.getUint32(0x08);
     const dataOffsLookupTable = 0x0C;
 
-    // Data tables are stored in this order. Assumed to be hardcoded in a
-    // struct somewhere inside JSystem.
-    const dataTables = [
+    const arrayAttribs = [
         GX.Attr.POS,
         GX.Attr.NRM,
-        GX.Attr.NRM, // NBT
+        GX.Attr._NBT,
         GX.Attr.CLR0,
         GX.Attr.CLR1,
         GX.Attr.TEX0,
@@ -153,7 +142,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     ];
 
     let offs = formatOffs;
-    const vertexArrays = new Map<GX.Attr, VertexArray>();
+    const vat: GX_VtxAttrFmt[] = [];
     while (true) {
         const vtxAttrib: GX.Attr = view.getUint32(offs + 0x00);
         if (vtxAttrib === GX.Attr.NULL)
@@ -164,28 +153,26 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         const compShift: number = view.getUint8(offs + 0x0C);
         offs += 0x10;
 
-        const formatIdx = dataTables.indexOf(vtxAttrib);
-        if (formatIdx < 0)
-            continue;
+        vat[vtxAttrib] = { compType, compCnt, compShift };
+    }
 
-        // Each attrib in the VTX1 chunk also has a corresponding data chunk containing
-        // the data for that attribute, in the format stored above.
-
-        // BMD doesn't tell us how big each data chunk is, but we need to know to figure
-        // out how much data to upload. We assume the data offset lookup table is sorted
-        // in order, and can figure it out by finding the next offset above us.
+    function getArrayData(formatIdx: number): ArrayBufferSlice | null {
         const dataOffsLookupTableEntry: number = dataOffsLookupTable + formatIdx*0x04;
-        const dataOffsLookupTableEnd: number = dataOffsLookupTable + dataTables.length*0x04;
         const dataStart: number = view.getUint32(dataOffsLookupTableEntry);
-        const dataEnd: number = getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd);
+        if (dataStart === 0)
+            return null;
+        const dataEnd: number = getDataEnd(dataOffsLookupTableEntry);
         const dataOffs: number = dataStart;
         const dataSize: number = dataEnd - dataStart;
         const vtxDataBuffer = buffer.subarray(dataOffs, dataSize);
-        const vertexArray: VertexArray = { vtxAttrib, compType, compCnt, compShift, dataOffs, dataSize, buffer: vtxDataBuffer };
-        vertexArrays.set(vtxAttrib, vertexArray);
+        return vtxDataBuffer;
     }
 
-    function getDataEnd(dataOffsLookupTableEntry: number, dataOffsLookupTableEnd: number): number {
+    const dataOffsLookupTableEnd: number = dataOffsLookupTable + arrayAttribs.length*0x04;
+    function getDataEnd(dataOffsLookupTableEntry: number): number {
+        // BMD doesn't tell us how big each data chunk is, but we need to know to figure
+        // out how much data to upload. We assume the data offset lookup table is sorted
+        // in order, and can figure it out by finding the next offset above us.
         let offs = dataOffsLookupTableEntry + 0x04;
         while (offs < dataOffsLookupTableEnd) {
             const dataOffs = view.getUint32(offs);
@@ -196,7 +183,15 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         return buffer.byteLength;
     }
 
-    return { vertexArrays };
+    const arrayData: (ArrayBufferSlice | undefined)[] = [];
+    for (let i = 0; i < arrayAttribs.length; i++) {
+        const vtxAttrib = arrayAttribs[i];
+        const array = getArrayData(i);
+        if (array !== null)
+            arrayData[vtxAttrib] = array;
+    }
+
+    return { vat, arrayData };
 }
 //#endregion
 //#region EVP1
@@ -424,7 +419,6 @@ export interface Shape {
 }
 
 export interface SHP1 {
-    vat: GX_VtxAttrFmt[];
     shapes: Shape[];
 }
 
@@ -449,28 +443,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     if (nameTableOffs !== 0)
         console.log('Found a SHP1 that has a name table!');
 
-    // We have a number of "shapes". Each shape has a number of vertex attributes
-    // (e.g. pos, nrm, txc) and a list of matrix groups. Each matrix group has a
-    // list of draw calls, and each draw call has a list of indices into *each*
-    // of the vertex arrays, one per vertex.
-    //
-    // Instead of one global index per draw call like OGL and some amount of packed
-    // vertex data, the GX instead allows specifying separate indices per attribute.
-    // So you can have POS's indexes be 0 1 2 3 and NRM's indexes be 0 0 0 0.
-    //
-    // What we end up doing is similar to what Dolphin does with its vertex loader
-    // JIT. We construct buffers for each of the components that are shape-specific.
-
-    // Build vattrs for VTX1.
-    const vat: GX_VtxAttrFmt[] = [];
-    const vtxArrays: GX_Array[] = [];
-
-    // J3D only uses VTXFMT0.
-    for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
-        vat[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType, compShift: vertexArray.compShift };
-        vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0, stride: getAttributeByteSize(vat, attr) };
-    }
-
     const shapes: Shape[] = [];
     let shapeIdx = shapeTableOffs;
     for (let i = 0; i < shapeCount; i++) {
@@ -482,19 +454,36 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const firstMtxGroup = view.getUint16(shapeIdx + 0x08);
 
         const vcd: GX_VtxDesc[] = [];
+        const vat: GX_VtxAttrFmt[] = [];
+        const vtxArrays: GX_Array[] = [];
 
+        let usesNBT = false;
         let attribIdx = attribTableOffs + attribOffs;
         while (true) {
-            const vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
+            let vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
             if (vtxAttrib === GX.Attr.NULL)
                 break;
+
+            const arrayData: ArrayBufferSlice | undefined = bmd.vtx1.arrayData[vtxAttrib];
+
+            if (vtxAttrib === GX.Attr._NBT) {
+                usesNBT = true;
+                vtxAttrib = GX.Attr.NRM;
+                vat[vtxAttrib] = { ... bmd.vtx1.vat[vtxAttrib], compCnt: GX.CompCnt.NRM_NBT };
+            } else {
+                vat[vtxAttrib] = bmd.vtx1.vat[vtxAttrib];
+            }
+
+            if (arrayData !== undefined)
+                vtxArrays[vtxAttrib] = { buffer: arrayData!, offs: 0, stride: getAttributeByteSize(vat, vtxAttrib) };
+
             const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
             vcd[vtxAttrib] = { type: indexDataType };
             attribIdx += 0x08;
         }
 
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
-        const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
+        const loadedVertexLayout = compileLoadedVertexLayout(vcd, usesNBT);
         const vtxLoader = compileVtxLoader(vat, vcd);
 
         let mtxGroupIdx = matrixGroupTableOffs + (firstMtxGroup * 0x08);
@@ -550,7 +539,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         shapeIdx += 0x28;
     }
 
-    return { vat, shapes };
+    return { shapes };
 }
 //#endregion
 //#region MAT3
@@ -1284,8 +1273,7 @@ export class BMD {
                     ++multiCount;
             }
 
-            if (multiCount === 0)
-                this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+            this.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = (multiCount !== 0);
         }
     }
 

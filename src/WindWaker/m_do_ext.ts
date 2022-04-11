@@ -105,9 +105,9 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
     renderInstManager.setCurrentRenderInstList(drawListSet[0]);
-    modelInstance.drawOpa(device, renderInstManager, viewerInput.camera, viewerInput.viewport);
+    modelInstance.drawOpa(device, renderInstManager, viewerInput.camera);
     renderInstManager.setCurrentRenderInstList(drawListSet[1]);
-    modelInstance.drawXlu(device, renderInstManager, viewerInput.camera, viewerInput.viewport);
+    modelInstance.drawXlu(device, renderInstManager, viewerInput.camera);
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {

@@ -159,6 +159,7 @@ export class Entity {
 export class AreaAttributes extends Entity {
     public needSky: boolean = false;
     public overrideSky: CMDL | null = null;
+    public darkWorld: boolean = false;
 
     public override readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
         switch (propertyID) {
@@ -168,6 +169,10 @@ export class AreaAttributes extends Entity {
 
         case 0xD208C9FA:
             this.overrideSky = resourceSystem.loadAssetByID<CMDL>(stream.readAssetID(), 'CMDL');
+            break;
+
+        case 0xB24FDE1A:
+            this.darkWorld = stream.readBool();
             break;
         }
     }

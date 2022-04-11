@@ -12,6 +12,10 @@
 import { assert } from "./util";
 import { getSystemEndianness, Endianness } from "./endian";
 
+declare global {
+    interface ArrayBuffer { [Symbol.species]?: "ArrayBuffer"; }
+}
+
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
 ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {

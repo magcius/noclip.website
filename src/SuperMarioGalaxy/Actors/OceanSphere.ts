@@ -249,9 +249,6 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.ddrawXlu.setVtxDesc(GX.Attr.POS, true);
         this.ddrawXlu.setVtxDesc(GX.Attr.TEX0, true);
         this.ddrawXlu.setVtxDesc(GX.Attr.TEX1, true);
-        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX1, GX.CompCnt.TEX_ST);
 
         // Env / loadMaterialBack
         mb.reset();
@@ -277,8 +274,6 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         this.ddrawEnv.setVtxDesc(GX.Attr.POS, true);
         this.ddrawEnv.setVtxDesc(GX.Attr.NRM, true);
-        this.ddrawEnv.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddrawEnv.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
 
         this.initNerve(OceanSphereNrv.Wait);
 
@@ -466,7 +461,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         const template = renderInstManager.pushTemplateRenderInst();
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelperEnvBack.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialHelperEnvBack.allocateDrawParamsDataOnInst(template, drawParams);
 
         if (this.isStartPosCamera && !this.isCameraInside) {
             // TODO(jstpierre)

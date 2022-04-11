@@ -196,9 +196,9 @@ class SunshineWaterModel {
 
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
         mat4.mul(drawParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
-        this.seaMaterialInstance.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
+        this.seaMaterialInstance.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, viewerInput.viewport, drawParams);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, drawParams);
 
         this.plane.prepareToRender(renderHelper);
 

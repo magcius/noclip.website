@@ -4,7 +4,7 @@ import { FloatingPanel } from './DebugFloaters';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
 import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
 import { StudioCameraController } from './Camera';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants, angleDist } from './MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
 import { getPointHermite } from './Spline';
@@ -507,6 +507,15 @@ class Timeline {
         }
     }
 
+    public moveLoopEndframeIcons(t: number): void {
+        let x = (t / MILLISECONDS_IN_SECOND) * this.pixelsPerSecond / this.timelineScaleFactor
+        for (const kfIcon of this.keyframeIcons) {
+            if (kfIcon.type === KeyframeIconType.Loop_End) {
+                kfIcon.updatePosition(x, t);
+            }
+        }
+    }
+
     public onMouseDown(e: MouseEvent) {
         e.stopPropagation();
         // Check if click landed on playhead, or the part of the timeline where markers are displayed
@@ -576,12 +585,13 @@ class Timeline {
         targetX = clamp(targetX, Playhead.HALF_WIDTH, this.width - Playhead.HALF_WIDTH);
         targetX -= Playhead.HALF_WIDTH;
 
-        const snappingEnabled = this.snappingEnabled || e.shiftKey;
+        const prevSnapping = this.snappingEnabled;
+        this.snappingEnabled = this.snappingEnabled || e.shiftKey;
 
         if (this.playheadGrabbed) {
             const snapKfIndex = this.getClosestSnappingIconIndex(targetX);
             if (snapKfIndex > -1) {
-                if (snappingEnabled)
+                if (this.snappingEnabled)
                     targetX = this.keyframeIcons[snapKfIndex].getX();
 
                 // If the playhead is directly on a keyframe, highlight it and any others at the same position.
@@ -596,23 +606,36 @@ class Timeline {
         } else if (this.grabbedIcon && this.selectedKeyframeIcons.length) {
             if (this.selectedKeyframeIcons.length === 1) {
                 // Don't allow a loop keyframe icon to be moved before any other keyframes.
-                if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End)
-                    targetX = clamp(targetX, this.keyframeIcons[this.keyframeIcons.length - 2].getX() + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
-                else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.Loop_End)
+                if (this.selectedKeyframeIcons[0].type === KeyframeIconType.Loop_End) {
+                    let minAllowedX = 0;
+                    for (const kfIcon of this.keyframeIcons) {
+                        if (kfIcon.type !== KeyframeIconType.Loop_End && kfIcon.getX() > minAllowedX)
+                            minAllowedX = kfIcon.getX();
+                    }
+
+                    targetX = clamp(targetX, minAllowedX + Timeline.SNAP_DISTANCE_PX, this.width - Playhead.HALF_WIDTH);
+                } else if (this.keyframeIcons[this.keyframeIcons.length - 1].type === KeyframeIconType.Loop_End) {
                     targetX = clamp(targetX, this.keyframeIcons[0].getX() + Timeline.SNAP_DISTANCE_PX, this.keyframeIcons[this.keyframeIcons.length - 1].getX() - Timeline.SNAP_DISTANCE_PX);
-                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                }
+
+                if (this.snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], this.playhead.getX());
                 else
                     this.updateKeyframeIconPosition(this.selectedKeyframeIcons[0], targetX);
             } else {
-                if (snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
+                if (this.snappingEnabled && Math.abs(targetX - this.playhead.getX()) < Timeline.SNAP_DISTANCE_PX)
                     targetX = this.playhead.getX();
                 // Moving multiple icons. Check if moving all of them will cause
                 // any of them to be in an illegal position.
                 if (this.canMoveGroupTo(targetX)) {
                     const grabbedX = this.grabbedIcon.getX();
+                    let movedLoopEndIcons = false;
                     for (const kfIcon of this.selectedKeyframeIcons) {
+                        if (kfIcon.type === KeyframeIconType.Loop_End && movedLoopEndIcons)
+                            continue;
                         this.updateKeyframeIconPosition(kfIcon, targetX + (kfIcon.getX() - grabbedX));
+                        if (kfIcon.type === KeyframeIconType.Loop_End)
+                            movedLoopEndIcons = true;
                     }
                 }
             }
@@ -666,6 +689,7 @@ class Timeline {
                 
             }
         }
+        this.snappingEnabled = prevSnapping;
 
         this.draw();
     }
@@ -687,16 +711,18 @@ class Timeline {
             // range, or results in any keyframe moving past a loop keyframe icon,
             // prevent the update.
             for (const kfIcon of this.keyframeIcons) {
-                if (kfIcon.selected || kfIcon.getY() !== selectedIcon.getY())
+                if (selectedIcon.type === KeyframeIconType.Loop_End && !kfIcon.selected
+                    && kfIcon.type !== KeyframeIconType.Loop_End
+                    && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX)
+                    return false;
+                else if (kfIcon.selected || kfIcon.getY() !== selectedIcon.getY())
                     continue;
                 if (newX < Timeline.SNAP_DISTANCE_PX
                     || (newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX
                         && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX)
                     || (kfIcon.type === KeyframeIconType.Loop_End
                         && newX > kfIcon.getX() - Timeline.SNAP_DISTANCE_PX)
-                    || (newX > this.width - Playhead.HALF_WIDTH)
-                    || (selectedIcon.type === KeyframeIconType.Loop_End 
-                        && newX < kfIcon.getX() + Timeline.SNAP_DISTANCE_PX))
+                    || (newX > this.width - Playhead.HALF_WIDTH))
                     return false;
             }
         }
@@ -714,14 +740,6 @@ class Timeline {
             return;
         kfIcon.selected = true;
         this.selectedKeyframeIcons.push(kfIcon);
-        if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
-            for (const icon of this.keyframeIcons) {
-                if (icon.type === kfIcon.type && !this.selectedKeyframeIcons.includes(icon)) {
-                    icon.selected = true;
-                    this.selectedKeyframeIcons.push(icon);
-                }
-            }
-        }
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeSelected', { bubbles: false }));
     }
 
@@ -804,7 +822,15 @@ class Timeline {
                 t = this.keyframeIcons[snapKfIndex].getT();
             }
         }
-        icon.updatePosition(x, t);
+        if (icon.type === KeyframeIconType.Loop_End) {
+            for (const kfIcon of this.keyframeIcons) {
+                if (kfIcon.type === KeyframeIconType.Loop_End) {
+                    kfIcon.updatePosition(x, t);
+                }
+            }
+        } else {
+            icon.updatePosition(x, t);
+        }
         this.elementsCtx.canvas.dispatchEvent(new Event('keyframeIconMovedEvent', { bubbles: false }));
     }
 
@@ -949,13 +975,9 @@ class Timeline {
         return Math.max(...this.keyframeIcons.map((k) => { return k.keyframesMap.values().next().value.time }));
     }
 
-    public getLastKeyframeTimeSeconds(): string {
-        return (this.getLastKeyframeTimeMs() * MILLISECONDS_IN_SECOND).toFixed(2);
-    }
-
     public playheadIsOnIcon(): boolean {
         for (const kfIcon of this.keyframeIcons) {
-            if (this.playhead.getX() === kfIcon.getX())
+            if (this.playhead.getT() === kfIcon.getT())
                 return true;
         }
         return false;
@@ -977,8 +999,7 @@ class Timeline {
                     return kf;
             }
         }
-        // Should never happen... obviously.
-        throw 'No start keyframe icon exists for track.';
+        throw 'No end loop keyframe icon exists for track.';
     }
 
     public getStartKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
@@ -989,7 +1010,8 @@ class Timeline {
                     return kf;
             }
         }
-        throw 'No end loop keyframe icon exists for track.';
+        // Should never happen... obviously.
+        throw 'No start keyframe icon exists for track.';
     }
 }
 
@@ -1000,7 +1022,6 @@ export class CameraAnimationManager {
 
     // The animation's duration.
     public durationMs: number;
-
 
     private findKeyframe(frames: Readonly<Keyframe[]>, time: number): number {
         for (let i = 0; i < frames.length; i++)
@@ -1029,7 +1050,7 @@ export class CameraAnimationManager {
         return duration;
     }
 
-    private getCurrentTrackValue(track: KeyframeTrack, time: number, normalizeAngleValue: boolean = false): number {
+    private getCurrentTrackValue(track: KeyframeTrack, time: number, normalizeBankForLoop?: boolean): number {
         const idx1 = this.findKeyframe(track.keyframes, time);
         if (idx1 === 0)
             return track.keyframes[0].value;
@@ -1043,14 +1064,8 @@ export class CameraAnimationManager {
         
         let p0 = k0.value;
         let p1 = k1.value;
-        if (normalizeAngleValue && track.keyframes.length > 1) {
-            p0 = track.keyframes[0].value;
-            p1 = p0 + angleDist(p0, track.keyframes[1].value);
-            for (let i = 2; i <= idx1; i++) {
-                p0 = p1;
-                p1 = p1 + angleDist(p1, track.keyframes[i].value);
-            }
-        }
+        if (normalizeBankForLoop && idx1 === track.keyframes.length - 1)
+            p0 %= MathConstants.TAU;
         let tOut = k0.tangentOut;
         let tIn = k1.tangentIn;
         let interpType = k0.interpOutType;
@@ -1091,7 +1106,7 @@ export class CameraAnimationManager {
         const lookAtZ = this.getCurrentTrackValue(animation.lookAtZTrack, time);
         vec3.set(dst.pos, posX, posY, posZ);
         vec3.set(dst.lookAtPos, lookAtX, lookAtY, lookAtZ);
-        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time, true);
+        dst.bank = this.getCurrentTrackValue(animation.bankTrack, time, animation.loop);
     }
 
     public initAnimationPlayback(animation: Readonly<CameraAnimation>, startTimeMs: number) {
@@ -1139,7 +1154,7 @@ interface studioSettings {
 
 export class StudioPanel extends FloatingPanel {
     static readonly FULL_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px, #494949 40px, #494949 59px, #a5a5a5 59px, #a5a5a5 61px, #2f2f2f 61px, #2f2f2f 80px, #494949 80px, #494949 100px, #2f2f2f 100px, #2f2f2f 119px, #a5a5a5 119px, #a5a5a5 121px)';
-    static DEFAULT_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px)';
+    static readonly DEFAULT_TIMELINE_BG: string = 'repeating-linear-gradient(#494949, #494949 20px, #2f2f2f 20px, #2f2f2f 40px)';
     static readonly PREVIEW_STEP_TIME_MS: number = 16;
 
     private animationManager: CameraAnimationManager;
@@ -1175,7 +1190,6 @@ export class StudioPanel extends FloatingPanel {
     private recordPlaybackBtn: HTMLButtonElement;
 
     private timeLineContainerElement: HTMLElement;
-    private timelineControlsContainer: HTMLElement;
     private snapBtn: HTMLButtonElement;
     private playheadTimePositionInput: HTMLInputElement;
     private timelineLengthInput: HTMLInputElement;
@@ -1210,7 +1224,6 @@ export class StudioPanel extends FloatingPanel {
     private easeInSlider: Slider;
     private easeOutSlider: Slider;
 
-    private customValuesContainer: HTMLElement;
     private posXValueInputContainer: HTMLElement;
     private posYValueInputContainer: HTMLElement;
     private posZValueInputContainer: HTMLElement;
@@ -1249,7 +1262,6 @@ export class StudioPanel extends FloatingPanel {
     private previewLineKfDotSelectedColor: Color = Red;
 
     private selectedNumericInput: HTMLInputElement | undefined;
-    private bankRotationLinGrad: CanvasGradient;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
@@ -1487,6 +1499,12 @@ export class StudioPanel extends FloatingPanel {
                 border-radius: 5px;
                 font: 16px monospace;
                 color: #fefefe;
+                cursor: grab;
+                user-select: none;
+            }
+            .StudioNumericInput.manual-entry {
+                cursor: text;
+                user-select: text;
             }
             #customValuesContainer {
                 display: grid;
@@ -1857,7 +1875,6 @@ export class StudioPanel extends FloatingPanel {
         this.recordPlaybackBtn.onclick = () => this.playAnimation(true);
 
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
-        this.timelineControlsContainer = this.contents.querySelector('#timelineControlsContainer') as HTMLElement;
 
         this.positionLookAtBankLabels = this.contents.querySelector('#positionLookAtBankLabels') as HTMLElement;
         this.fullLabels = this.contents.querySelector('#fullLabels') as HTMLElement;
@@ -1945,14 +1962,7 @@ export class StudioPanel extends FloatingPanel {
             if (this.animation.loop) {
                 this.addLoopEndFrames();
             } else {
-                this.animation.posXTrack.keyframes.pop();
-                this.animation.posYTrack.keyframes.pop();
-                this.animation.posZTrack.keyframes.pop();
-                this.animation.lookAtXTrack.keyframes.pop();
-                this.animation.lookAtYTrack.keyframes.pop();
-                this.animation.lookAtZTrack.keyframes.pop();
-                this.animation.bankTrack.keyframes.pop();
-                this.timeline.deleteEndframeIcons();
+                this.deleteLoopEndFrames();
             }
             this.updatePreviewSteps();
             this.timeline.draw();
@@ -1972,7 +1982,6 @@ export class StudioPanel extends FloatingPanel {
         this.selectKeyframeMsg = this.contents.querySelector('#selectKeyframeMsg') as HTMLElement;
         this.interpolationTab = this.contents.querySelector('#interpolationTab') as HTMLElement;
 
-        this.customValuesContainer = this.contents.querySelector('#customValuesContainer') as HTMLElement;
         this.posXValueInputContainer = this.contents.querySelector('#posXValueInputContainer') as HTMLElement;
         this.posYValueInputContainer = this.contents.querySelector('#posYValueInputContainer') as HTMLElement;
         this.posZValueInputContainer = this.contents.querySelector('#posZValueInputContainer') as HTMLElement;
@@ -1989,9 +1998,10 @@ export class StudioPanel extends FloatingPanel {
         this.bankValueInput = this.contents.querySelector('#bankValueInput') as HTMLInputElement;
         this.bankRotationValCanvas = this.contents.querySelector('#bankRotationValCanvas') as HTMLCanvasElement;
         this.bankRotationValCanvasCtx = this.bankRotationValCanvas.getContext('2d') as CanvasRenderingContext2D;
-        this.bankRotationLinGrad = this.bankRotationValCanvasCtx.createLinearGradient(20,20,20,60);
-        this.bankRotationLinGrad.addColorStop(0, '#494949');
-        this.bankRotationLinGrad.addColorStop(1, '#2f2f2f');
+        const bankRotationLinGrad = this.bankRotationValCanvasCtx.createLinearGradient(20,20,20,60);
+        bankRotationLinGrad.addColorStop(0, '#494949');
+        bankRotationLinGrad.addColorStop(1, '#2f2f2f');
+        this.bankRotationValCanvasCtx.fillStyle = bankRotationLinGrad
         this.bankRotationValCanvasCtx.save();
 
         this.lockPerspectiveDiv = this.contents.querySelector('#lockPerspective') as HTMLElement;
@@ -2200,11 +2210,23 @@ export class StudioPanel extends FloatingPanel {
             this.nextKeyframe();
         }
 
+        this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+            const kfSelectedCountBefore = this.timeline.selectedKeyframeIcons.length;
+            this.timeline.onMouseDown(e);
+            if (this.timeline.playheadGrabbed) {
+                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
+                if (this.livePreviewCheckbox.checked)
+                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
+            } else if (kfSelectedCountBefore < this.timeline.selectedKeyframeIcons.length) {
+                this.saveState();
+            }
+        });
+
         const numericInputs: NodeList = document.querySelectorAll('#studioPanelContents .StudioNumericInput');
         for (let i = 0; i < numericInputs.length; i++) {
             const element = numericInputs[i] as HTMLInputElement;
             element.addEventListener('mousedown', (e: MouseEvent) => {
-                if (!element.disabled)
+                if (!element.hasAttribute('disabled'))
                     this.selectedNumericInput = element;
             });
         }
@@ -2213,7 +2235,7 @@ export class StudioPanel extends FloatingPanel {
             // Only need to update if the primary mouse button is pressed while moving.
             if (e.buttons === 1 && this.timeline && this.playheadTimePositionInput
                 && !this.studioCameraController.isAnimationPlaying) {
-                if (this.selectedNumericInput) {
+                if (this.selectedNumericInput && !this.selectedNumericInput.classList.contains('manual-entry')) {
                     if (parseFloat(this.selectedNumericInput.step) < 1) {
                         const distance = (e.movementX - e.movementY) * parseFloat(this.selectedNumericInput.step);
                         this.selectedNumericInput.value = (parseFloat(this.selectedNumericInput.value) + distance).toFixed(2);
@@ -2242,25 +2264,25 @@ export class StudioPanel extends FloatingPanel {
             }
         });
 
-        this.timelineElementsCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-            const kfSelectedCountBefore = this.timeline.selectedKeyframeIcons.length;
-            this.timeline.onMouseDown(e);
-            if (this.timeline.playheadGrabbed) {
-                this.playheadTimePositionInput.value = this.timeline.getPlayheadTimeSeconds();
-                if (this.livePreviewCheckbox.checked)
-                    this.goToPreviewStepAtTime(this.timeline.getPlayheadTimeMs());
-            } else if (kfSelectedCountBefore < this.timeline.selectedKeyframeIcons.length) {
+        document.addEventListener('mouseup', (e: MouseEvent) => {
+            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectedKeyframeIcons.length) {
                 this.saveState();
             }
-        });
 
-        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeIconSelected());
-        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeIconDeselected());
-        this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
-            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
-                kfIcon.keyframesMap.forEach((v, trackType) => {
-                    this.getTrackByType(this.animation, trackType).reSort();
-                });
+            for (let i = 0; i < numericInputs.length; i++) {
+                const element = numericInputs[i] as HTMLInputElement;
+                element.classList.remove('manual-entry');
+            }
+
+            this.timeline.onMouseUp();
+            if (this.selectedNumericInput) {
+                if (e.target === this.selectedNumericInput) {
+                    this.selectedNumericInput.classList.add('manual-entry');
+                }
+
+                if (this.selectedNumericInput !== this.playheadTimePositionInput)
+                    this.saveState();
+                this.selectedNumericInput = undefined;
             }
         });
 
@@ -2274,18 +2296,15 @@ export class StudioPanel extends FloatingPanel {
             } else {
                 this.timeLineContainerElement.scrollBy(ev.deltaY, 0);
             }
-        })
+        });
 
-        document.addEventListener('mouseup', () => {
-            if (this.timeline.hasGrabbedIconMoved() || this.timeline.selectedKeyframeIcons.length) {
-                this.saveState();
-            }
-
-            this.timeline.onMouseUp();
-            if (this.selectedNumericInput) {
-                if (this.selectedNumericInput !== this.playheadTimePositionInput)
-                    this.saveState();
-                this.selectedNumericInput = undefined;
+        this.timelineElementsCanvas.addEventListener('keyframeSelected', (e: Event) => this.onKeyframeIconSelected());
+        this.timelineElementsCanvas.addEventListener('keyframeDeselected', (e: Event) => this.onKeyframeIconDeselected());
+        this.timelineElementsCanvas.addEventListener('keyframeIconMovedEvent', (e: Event) => {
+            for (const kfIcon of this.timeline.selectedKeyframeIcons) {
+                kfIcon.keyframesMap.forEach((v, trackType) => {
+                    this.getTrackByType(this.animation, trackType).reSort();
+                });
             }
         });
 
@@ -2339,10 +2358,10 @@ export class StudioPanel extends FloatingPanel {
 
                     countdownCtx.beginPath();
                     countdownCtx.save();
-                    countdownCtx.translate(x,y);
+                    countdownCtx.translate(x + 3, y + 3);
                     countdownCtx.rotate(-Math.PI / 2);
-                    countdownCtx.translate(-x,-y);
-                    countdownCtx.arc(x - 3, y + 4, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
+                    countdownCtx.translate(-(x + 3),-(y + 3));
+                    countdownCtx.arc(x + 3, y + 3, 100, 0, ((countdownMs % 1000) / 1000) * (2*Math.PI));
                     countdownCtx.stroke();
                     countdownCtx.restore();
                     countdownCtx.fillText(Math.ceil(seconds).toFixed(0), x + 3, y + 3);
@@ -2755,8 +2774,13 @@ export class StudioPanel extends FloatingPanel {
                 if (linkedKf)
                     this.getTrackByType(this.animation, trackType).setValue(linkedKf, val);
                 
-                if (trackType === KeyframeTrackType.bankTrack)
-                    this.drawBankRotationWheel(-val);
+                if (trackType === KeyframeTrackType.bankTrack) {
+                    const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
+                    let prevBank: number | undefined = undefined;
+                    if (prevIndex > -1)
+                        prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
+                    this.drawBankRotationWheel(-val, prevBank);
+                }
                 
                 this.updatePreviewSteps();
                 if (this.livePreviewCheckbox.checked)
@@ -2787,19 +2811,18 @@ export class StudioPanel extends FloatingPanel {
 
     private drawBankRotationWheel(angleRads: number, prevAngleRads?: number) {
         this.bankRotationValCanvasCtx.clearRect(0, 0, this.bankRotationValCanvas.width, this.bankRotationValCanvas.height);
-        this.bankRotationValCanvasCtx.fillStyle = this.bankRotationLinGrad;
         const width = this.bankRotationValCanvas.width;
         const height = this.bankRotationValCanvas.height;
         const outerRadius = 30;
         const innerRadius = 23;
 
         this.bankRotationValCanvasCtx.beginPath();
-        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, outerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, outerRadius, 0, MathConstants.TAU);
         this.bankRotationValCanvasCtx.fill();
 
         this.bankRotationValCanvasCtx.strokeStyle = '#a9a9a9';
         this.bankRotationValCanvasCtx.beginPath();
-        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, innerRadius, 0, 2 * Math.PI);
+        this.bankRotationValCanvasCtx.arc(width / 2, height / 2, innerRadius, 0, MathConstants.TAU);
         this.bankRotationValCanvasCtx.stroke();
         this.bankRotationValCanvasCtx.save();
 
@@ -2814,6 +2837,21 @@ export class StudioPanel extends FloatingPanel {
         this.bankRotationValCanvasCtx.lineTo(width / 2, (height / 2) - innerRadius + 15);
         this.bankRotationValCanvasCtx.stroke();
         this.bankRotationValCanvasCtx.restore();
+
+        if (prevAngleRads !== undefined && angleRads !== prevAngleRads) {
+            prevAngleRads *= -1;
+            this.bankRotationValCanvasCtx.save();
+            this.bankRotationValCanvasCtx.strokeStyle = '#ebb23c';
+            this.bankRotationValCanvasCtx.lineWidth = 2;
+            this.bankRotationValCanvasCtx.beginPath();
+            this.bankRotationValCanvasCtx.translate(width / 2, height / 2);
+            this.bankRotationValCanvasCtx.rotate(-Math.PI / 2);
+            this.bankRotationValCanvasCtx.rotate(prevAngleRads);
+            this.bankRotationValCanvasCtx.translate(-width / 2, -height / 2);
+            this.bankRotationValCanvasCtx.arc(width / 2, height / 2, (innerRadius + outerRadius) / 2, 0, (angleRads - prevAngleRads) % MathConstants.TAU, angleRads < prevAngleRads);
+            this.bankRotationValCanvasCtx.stroke();
+            this.bankRotationValCanvasCtx.restore();
+        }
     }
 
     private onKeyframeIconSelected() {
@@ -2823,12 +2861,16 @@ export class StudioPanel extends FloatingPanel {
         let commonEaseOutVal = 1;
         let commonInterpInType = 0;
         let commonInterpOutType = 0;
+        let prevBank: number | undefined = undefined;
 
         const updateValueInputs = (kf: Keyframe, trackType: KeyframeTrackType) => {
             keyframeTracks |= trackType;
             const input = this.getValueInput(trackType);
             if (trackType === KeyframeTrackType.bankTrack) {
                 input.value = (kf.value * MathConstants.RAD_TO_DEG).toFixed(0).toString();
+                const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
+                if (prevIndex > -1)
+                    prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
             } else {
                 input.value = kf.value.toFixed(0).toString();
             }
@@ -2899,7 +2941,7 @@ export class StudioPanel extends FloatingPanel {
                 this.lookAtZValueInputContainer.style.visibility = '';
                 
             if ((keyframeTracks & KeyframeTrackType.bankTrack)) {
-                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD);
+                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD, prevBank);
                 this.bankValueInputContainer.style.visibility = '';
             }
         }
@@ -2957,9 +2999,17 @@ export class StudioPanel extends FloatingPanel {
         this.timeline.draw();
     }
 
-    private getPreviewSteps(): InterpolationStep[] {
-        const steps: InterpolationStep[] = [];
+    private updatePreviewSteps() {
+        this.animationManager.initAnimationPlayback(this.animation, 0);
+        this.animation.posXTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.posYTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.posZTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtXTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtYTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.lookAtZTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animation.bankTrack.setAllCatmullRomTangents(this.animation.loop);
 
+        const steps: InterpolationStep[] = [];
         if (this.timeline.keyframeIcons.length > 1) {
             // TODO(jstpierre): Don't rely on animationManager for this.
             for (let time = 0; time <= this.animationManager.durationMs; time += StudioPanel.PREVIEW_STEP_TIME_MS) {
@@ -2968,25 +3018,7 @@ export class StudioPanel extends FloatingPanel {
                 steps.push(step);
             }
         }
-
-        return steps;
-    }
-
-    private updatePreviewSteps() {
-        this.animationManager.initAnimationPlayback(this.animation, 0);
-        this.updateAutoTangents();
-
-        this.animationPreviewSteps = this.getPreviewSteps();
-    }
-
-    private updateAutoTangents() {
-        this.animation.posXTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.posYTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.posZTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtXTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtYTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.lookAtZTrack.setAllCatmullRomTangents(this.animation.loop);
-        this.animation.bankTrack.setAllCatmullRomTangents(this.animation.loop);
+        this.animationPreviewSteps = steps;
     }
 
     private goToPreviewStepAtTime(t: number) {
@@ -3092,10 +3124,32 @@ export class StudioPanel extends FloatingPanel {
         vec3.rotateX(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[0]);
         this.scratchVecLook[2] = 0;
         vec3.normalize(this.scratchVecLook, this.scratchVecLook);
-        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY)
+        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY);
         if (this.scratchVecLook[0] < 0) {
             bank *= -1;
         }
+
+        let prevBankVal = 0;
+        let relativePrevBankVal = 0;
+        let halfRotations = 0;
+        if (this.animation.bankTrack.keyframes.length > 0) {
+            let prevIndex = this.animation.bankTrack.getNextKeyframeIndexAtTime(time);
+            if (prevIndex === -1)
+                prevIndex = this.animation.bankTrack.keyframes.length - 1;
+            else
+                prevIndex -= 1;
+
+            prevBankVal = this.animation.bankTrack.keyframes[prevIndex].value;
+            halfRotations = (prevBankVal / Math.PI) | 0;
+            relativePrevBankVal = prevBankVal % MathConstants.TAU;
+            if (prevBankVal > 0 && bank < relativePrevBankVal - Math.PI )
+                bank += MathConstants.TAU;
+            else if (prevBankVal <= 0 && bank > relativePrevBankVal + Math.PI )
+                bank -= MathConstants.TAU;
+
+            bank += ((halfRotations / 2) | 0) * MathConstants.TAU;
+        }
+
         const bankKf: Keyframe = { time, value: bank, tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
 
         if (editingKf) {
@@ -3125,6 +3179,8 @@ export class StudioPanel extends FloatingPanel {
                 }
                 
                 kfIcon.keyframesMap.forEach((kf, track) => {
+                    if ((tracks & track) === 0)
+                        return;
                     tracks ^= track;
                     if (track === KeyframeTrackType.posXTrack)
                         kf.value = posXKf.value;
@@ -3147,6 +3203,11 @@ export class StudioPanel extends FloatingPanel {
                 this.updatePreviewSteps();
                 return;
             }
+        }
+
+        if (this.animation.loop && time > this.timeline.getLastKeyframeTimeMs()) {
+            this.ensureTimelineLength(time + 5000);
+            this.timeline.moveLoopEndframeIcons(time + 5000);
         }
 
         if (tracks & KeyframeTrackType.posXTrack)
@@ -3236,7 +3297,7 @@ export class StudioPanel extends FloatingPanel {
         this.saveState();
     }
 
-    private addLoopEndFrames() {
+    private addLoopEndFrames(): void {
         const time = this.timeline.getLastKeyframeTimeMs() + 5000;
 
         function makeLoopKeyframe(track: KeyframeTrack): Keyframe {
@@ -3277,10 +3338,25 @@ export class StudioPanel extends FloatingPanel {
             throw "Bad timelineMode";
         }
 
-        if (time > this.timeline.getTimelineLengthMs()) {
-            this.timelineLengthInput.value = (time / MILLISECONDS_IN_SECOND).toFixed(2);
+        this.ensureTimelineLength(time);
+    }
+
+    private ensureTimelineLength(timeMs: number): void {
+        if (timeMs > this.timeline.getTimelineLengthMs()) {
+            this.timelineLengthInput.value = (timeMs / MILLISECONDS_IN_SECOND).toFixed(2);
             this.timelineLengthInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
+    }
+
+    private deleteLoopEndFrames(): void {
+        this.animation.posXTrack.keyframes.pop();
+        this.animation.posYTrack.keyframes.pop();
+        this.animation.posZTrack.keyframes.pop();
+        this.animation.lookAtXTrack.keyframes.pop();
+        this.animation.lookAtYTrack.keyframes.pop();
+        this.animation.lookAtZTrack.keyframes.pop();
+        this.animation.bankTrack.keyframes.pop();
+        this.timeline.deleteEndframeIcons();
     }
 
     private newAnimation(): void {
@@ -3515,6 +3591,10 @@ export class StudioPanel extends FloatingPanel {
             e.setAttribute('disabled', '');
             e.classList.add('disabled');
         });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.setAttribute('disabled', '');
+            e.classList.add('disabled');
+        });
     }
 
     private enableControls(): void {
@@ -3523,6 +3603,10 @@ export class StudioPanel extends FloatingPanel {
                 e.removeAttribute('disabled');
                 e.classList.remove('disabled');
             }
+        });
+        this.keyframeControlsDock.querySelectorAll('button, input').forEach((e) => {
+            e.removeAttribute('disabled');
+            e.classList.remove('disabled');
         });
     }
 

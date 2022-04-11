@@ -1477,8 +1477,6 @@ export class dDlst_2DStatic_c {
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const size = 1;
         this.ddraw.beginDraw();
@@ -1545,7 +1543,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1597,7 +1595,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
-            this.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+            this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
             renderInstManager.submitRenderInst(renderInst);
 
             // No more digits.
@@ -2080,9 +2078,6 @@ class dCloth_packet_c {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setUsePnMtxIdx(false);
@@ -2327,7 +2322,7 @@ class dCloth_packet_c {
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2688,9 +2683,6 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setUsePnMtxIdx(false);
@@ -2819,7 +2811,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        this.materialHelper.allocatedrawParamsDataOnInst(template, drawParams);
+        this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -3988,10 +3980,6 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
             this.changeModeByRange(globals);
         }
     }
-
-    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
-        mat4.copy(dst, this.effectMtx);
-    };
 
     private nodeControl = (dst: mat4, modelData: J3DModelData, i: number): void => {
         if (i === 1)

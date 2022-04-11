@@ -208,7 +208,6 @@ class dDlst_alphaModel_c {
         projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
@@ -242,7 +241,7 @@ class dDlst_alphaModel_c {
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
                 mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
-                this.materialHelperBackRevZ.allocatedrawParamsDataOnInst(template, drawParams);
+                this.materialHelperBackRevZ.allocateDrawParamsDataOnInst(template, drawParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
@@ -270,7 +269,7 @@ class dDlst_alphaModel_c {
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(drawParams.u_PosMtx[0]);
-        this.materialHelperDrawAlpha.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialHelperDrawAlpha.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
 
         this.reset();
@@ -697,7 +696,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);

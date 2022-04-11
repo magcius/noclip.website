@@ -52,8 +52,8 @@ function project(dst: vec4, v: ReadonlyVec3, viewerInput: ViewerRenderInput): vo
 }
 
 function calcScreenPosition(dst: vec2, v: ReadonlyVec4, viewerInput: ViewerRenderInput): void {
-    dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
-    dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
+    dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
 }
 
 export class BrightObjCheckArg {

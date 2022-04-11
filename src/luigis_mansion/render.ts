@@ -63,7 +63,7 @@ class Command_Batch {
         this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialCommand.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.computeModelView(drawParams.u_PosMtx[0], viewerInput.camera);
-        this.materialCommand.materialHelper.allocatedrawParamsDataOnInst(renderInst, drawParams);
+        this.materialCommand.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

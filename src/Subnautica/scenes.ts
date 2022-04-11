@@ -184,7 +184,7 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
         const chunks: MeshMetadata[] = await context.dataFetcher.fetchData('subnautica/chunks.json')
             .then(data => {
                 let decoder = new TextDecoder();
-                return JSON.parse(decoder.decode(data.arrayBuffer)).chunks;
+                return JSON.parse(decoder.decode(data.arrayBuffer as ArrayBuffer)).chunks;
             });
         let assets = new UnityAssetManager('subnautica/resources.assets', context, device);
         await assets.loadAssetInfo();

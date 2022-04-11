@@ -5084,6 +5084,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
         this.registerProxyFactory(MaterialProxy_EntityRandom);
+        this.registerProxyFactory(MaterialProxy_FizzlerVortex);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -5573,6 +5574,17 @@ class MaterialProxy_EntityRandom {
 
         const scale = paramGetNum(map, this.scale);
         paramSetNum(map, this.resultvar, entityParams.randomNumber * scale);
+    }
+}
+
+class MaterialProxy_FizzlerVortex {
+    public static type = `fizzlervortex`;
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        const param = map['$flow_color_intensity'] as ParameterNumber;
+        if (param === undefined)
+            return;
+        param.value = 1.0;
     }
 }
 //#endregion
