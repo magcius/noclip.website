@@ -3576,7 +3576,7 @@ layout(std140) uniform ub_ObjectParams {
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
-varying vec3 v_PositionWorld;
+varying vec4 v_PositionWorld;
 
 layout(binding = 0) uniform sampler2D u_TextureBase;
 layout(binding = 1) uniform sampler2D u_TextureDetail1;
@@ -3591,6 +3591,10 @@ void mainVS() {
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_PositionWorld.w = -gl_Position.z;
+#ifndef GFX_CLIPSPACE_NEAR_ZERO
+    v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
+#endif
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3623,6 +3627,10 @@ void mainVS() {
 #endif
 
 ${SampleFlowMap}
+
+float CalcCameraFade(in float t_PosProjZ) {
+    return smoothstep(0.0, 1.0, saturate(t_PosProjZ * 0.025));
+}
 
 #ifdef FRAG
 void mainPS() {
@@ -3694,6 +3702,8 @@ void mainPS() {
     t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
     t_FinalColor.a = 1.0;
 #endif
+
+    t_FinalColor.a *= CalcCameraFade(v_PositionWorld.w);
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -3818,8 +3828,8 @@ class Material_SolidEnergy extends BaseMaterial {
 
         if (this.wantsFlowmap) {
             offs += fillVec4(d, offs,
-                1.0 / this.paramGetNumber('$flow_worlduvscale'),
-                1.0 / this.paramGetNumber('$flow_normaluvscale'),
+                this.paramGetNumber('$flow_worlduvscale'),
+                this.paramGetNumber('$flow_normaluvscale'),
                 this.paramGetNumber('$flow_noise_scale'),
                 this.paramGetNumber('$outputintensity'));
 
