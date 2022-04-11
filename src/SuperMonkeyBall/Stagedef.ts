@@ -92,6 +92,7 @@ export type BgModel = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
+    translucency: number;
     // bgAnim: BgAnim;
     anim: BgAnim;
     // effectHeader: EffectHeader;
@@ -513,6 +514,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const pos = parseVec3f(view, bgModelOffs + 0xc);
         const rot = parseVec3s(view, bgModelOffs + 0x18);
         const scale = parseVec3f(view, bgModelOffs + 0x20);
+        const translucency = view.getFloat32(bgModelOffs + 0x2c);
 
         // Background anim
         const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
@@ -543,6 +545,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
             rot,
             scale,
             anim,
+            translucency,
         };
         bgModels.push(bgModel);
     }

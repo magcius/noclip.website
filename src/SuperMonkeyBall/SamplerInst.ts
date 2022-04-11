@@ -71,7 +71,7 @@ export class SamplerInst {
     }
 
     public destroy(device: GfxDevice): void {
-        // GfxTexture is destroyed in TextureCache
+        // GfxTexture is destroyed in TextureHolder
         device.destroySampler(this.gfxSampler);
     }
 }

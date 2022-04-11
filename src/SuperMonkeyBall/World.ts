@@ -101,6 +101,12 @@ function interpolateAnimPose(
     mat4.rotateX(outPose, outPose, rotX * MathConstants.DEG_TO_RAD);
 }
 
+function loopWrap(timeSeconds: number, loopStartSeconds: number, loopEndSeconds: number): number {
+    const loopDuration = loopEndSeconds - loopStartSeconds;
+    // Game does this but adding loop start time just seems weird...
+    return ((timeSeconds + loopStartSeconds) % loopDuration) + loopStartSeconds;
+}
+
 const scratchVec3a = vec3.create();
 const scratchMat4a = mat4.create();
 class Itemgroup {
@@ -156,12 +162,11 @@ class Itemgroup {
         // Check if this is the world space itemgroup
         if (this.itemgroupIdx === 0) return;
 
-        const rawTimeSeconds = animController.getTimeInSeconds();
-        const loopDuration = this.stagedef.loopEndSeconds - this.stagedef.loopStartSeconds;
-        // Game does this but adding loop start time before mod just seems wrong...
-        const loopedTimeSeconds =
-            ((rawTimeSeconds + this.stagedef.loopStartSeconds) % loopDuration) +
-            this.stagedef.loopStartSeconds;
+        const loopedTimeSeconds = loopWrap(
+            animController.getTimeInSeconds(),
+            this.stagedef.loopStartSeconds,
+            this.stagedef.loopEndSeconds
+        );
 
         const worldFromOrigin = scratchMat4a;
         interpolateAnimPose(
@@ -190,30 +195,75 @@ class Itemgroup {
     }
 }
 
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 class BgModelInst {
     private worldFromModel: mat4 = mat4.create();
+    private translucency: number;
 
-    constructor(private model: ModelInst, private bgModelData: SD.BgModel) {}
+    constructor(private model: ModelInst, private bgModelData: SD.BgModel) {
+        this.translucency = bgModelData.translucency;
+    }
 
     public update(animController: AnimationController): void {
-        // const bgAnim = this.bgModelData.bgAnim;
-        // const timeSeconds = animController.getTimeInSeconds() % bgAnim.loopPointSeconds;
-        // interpolateAnimPose(
-        //     this.worldFromModel,
-        //     timeSeconds,
-        //     bgAnim.posXKeyframes,
-        //     bgAnim.posYKeyframes,
-        //     bgAnim.posZKeyframes,
-        //     bgAnim.rotXKeyframes,
-        //     bgAnim.rotYKeyframes,
-        //     bgAnim.rotZKeyframes
-        // );
+        const anim = this.bgModelData.anim;
+        const loopedTimeSeconds = loopWrap(
+            animController.getTimeInSeconds(),
+            anim.loopStartSeconds,
+            anim.loopEndSeconds
+        );
 
-        mat4.fromTranslation(this.worldFromModel, this.bgModelData.pos);
-        mat4.rotateZ(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[2]);
-        mat4.rotateY(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[1]);
-        mat4.rotateZ(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[0]);
-        mat4.scale(this.worldFromModel, this.worldFromModel, this.bgModelData.scale);
+        // Use initial values if there are no corresponding keyframes
+        const pos = scratchVec3c;
+        vec3.copy(pos, this.bgModelData.pos);
+        let rotXRadians = this.bgModelData.rot[0] * S16_TO_RADIANS;
+        let rotYRadians = this.bgModelData.rot[1] * S16_TO_RADIANS;
+        let rotZRadians = this.bgModelData.rot[2] * S16_TO_RADIANS;
+        const scale = scratchVec3d;
+        vec3.copy(scale, this.bgModelData.scale);
+
+        if (anim.posXKeyframes.length !== 0) {
+            pos[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
+        }
+        if (anim.posYKeyframes.length !== 0) {
+            pos[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
+        }
+        if (anim.posZKeyframes.length !== 0) {
+            pos[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
+        }
+        if (anim.rotXKeyframes.length !== 0) {
+            rotXRadians =
+                interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) *
+                MathConstants.DEG_TO_RAD;
+        }
+        if (anim.rotYKeyframes.length !== 0) {
+            rotYRadians =
+                interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) *
+                MathConstants.DEG_TO_RAD;
+        }
+        if (anim.rotZKeyframes.length !== 0) {
+            rotZRadians =
+                interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) *
+                MathConstants.DEG_TO_RAD;
+        }
+        if (anim.scaleXKeyframes.length !== 0) {
+            scale[0] = interpolateKeyframes(loopedTimeSeconds, anim.scaleXKeyframes);
+        }
+        if (anim.scaleYKeyframes.length !== 0) {
+            scale[1] = interpolateKeyframes(loopedTimeSeconds, anim.scaleYKeyframes);
+        }
+        if (anim.scaleZKeyframes.length !== 0) {
+            scale[2] = interpolateKeyframes(loopedTimeSeconds, anim.scaleZKeyframes);
+        }
+        mat4.fromTranslation(this.worldFromModel, pos);
+        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotZRadians);
+        mat4.rotateY(this.worldFromModel, this.worldFromModel, rotYRadians);
+        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotXRadians);
+        mat4.scale(this.worldFromModel, this.worldFromModel, scale);
+
+        if (anim.translucencyKeyframes.length !== 0) {
+            this.translucency = interpolateKeyframes(loopedTimeSeconds, anim.translucencyKeyframes);
+        }
     }
 
     public prepareToRender(
