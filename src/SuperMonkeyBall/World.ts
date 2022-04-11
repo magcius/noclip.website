@@ -258,7 +258,7 @@ class BgModelInst {
         mat4.fromTranslation(this.worldFromModel, pos);
         mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotZRadians);
         mat4.rotateY(this.worldFromModel, this.worldFromModel, rotYRadians);
-        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotXRadians);
+        mat4.rotateX(this.worldFromModel, this.worldFromModel, rotXRadians);
         mat4.scale(this.worldFromModel, this.worldFromModel, scale);
 
         if (anim.translucencyKeyframes.length !== 0) {
@@ -271,9 +271,9 @@ class BgModelInst {
         renderInstManager: GfxRenderInstManager,
         viewerInput: Viewer.ViewerRenderInput
     ) {
-        const viewFromIg = scratchMat4a;
-        mat4.mul(viewFromIg, viewerInput.camera.viewMatrix, this.worldFromModel);
-        this.model.prepareToRender(device, renderInstManager, viewerInput, viewFromIg);
+        const viewFromModel = scratchMat4a;
+        mat4.mul(viewFromModel, viewerInput.camera.viewMatrix, this.worldFromModel);
+        this.model.prepareToRender(device, renderInstManager, viewerInput, viewFromModel);
     }
 }
 
