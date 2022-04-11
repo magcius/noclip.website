@@ -1,7 +1,7 @@
 import { CINF } from '../cinf';
 import { ReadonlyMat4, mat4, quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { AnimTreeNode } from './tree_nodes';
-import { setMatrixTranslation } from '../../MathHelpers';
+import { getMatrixTranslation, setMatrixTranslation } from '../../MathHelpers';
 
 const scratchVec3 = vec3.create();
 const scratchMat4 = mat4.create();
@@ -34,14 +34,33 @@ class ReentrantScratchStack {
 
 const reentrantScratchStack = new ReentrantScratchStack();
 
-export class PoseAsTransforms extends Map<number, mat4> {
-    public getOrCreateBoneXf(boneId: number): mat4 {
+class PoseTransform {
+    originToAccum: mat4 = mat4.create();
+    restPoseToAccum: mat4 = mat4.create();
+}
+
+export class PoseAsTransforms extends Map<number, PoseTransform> {
+    public getOrCreateBoneXf(boneId: number): PoseTransform {
         let boneXf = this.get(boneId);
         if (boneXf === undefined) {
-            boneXf = mat4.create();
+            boneXf = new PoseTransform();
             this.set(boneId, boneXf);
         }
         return boneXf;
+    }
+    public containsDataFor(boneId: number): boolean {
+        return this.has(boneId);
+    }
+    public getOffset(outOff: vec3, boneId: number) {
+        const boneXf = this.get(boneId)!;
+        getMatrixTranslation(outOff, boneXf.originToAccum);
+    }
+    public getRotation(outMat: mat4, boneId: number) {
+        const boneXf = this.get(boneId)!;
+        mat4.copy(outMat, boneXf.originToAccum);
+        outMat[12] = 0;
+        outMat[13] = 0;
+        outMat[14] = 0;
     }
 }
 
@@ -97,7 +116,7 @@ export class HierarchyPoseBuilder {
                                     parentXf: ReadonlyMat4, parentOffset: ReadonlyVec3) {
         const scratch = reentrantScratchStack.push();
 
-        let boneXf = pose.getOrCreateBoneXf(boneId);
+        const boneXf = pose.getOrCreateBoneXf(boneId);
         const bindOffset = this.cinf.getFromRootUnrotated(boneId);
 
         const rotationFromRoot = quat.mul(scratch.rotationFromRoot, parentRot, node.rotation);
@@ -106,9 +125,9 @@ export class HierarchyPoseBuilder {
         const offsetFromRoot = vec3.transformMat4(scratch.offsetFromRoot, node.offset, parentXf);
         vec3.add(offsetFromRoot, offsetFromRoot, parentOffset);
 
-        setMatrixTranslation(mat4.copy(boneXf, rotationFromRootMat), offsetFromRoot);
+        setMatrixTranslation(mat4.copy(boneXf.originToAccum, rotationFromRootMat), offsetFromRoot);
         const inverseBind = mat4.fromTranslation(scratchMat4, vec3.negate(scratchVec3, boneId !== this.cinf.rootId ? bindOffset : zeroVec3));
-        mat4.mul(boneXf, boneXf, inverseBind);
+        mat4.mul(boneXf.restPoseToAccum, boneXf.originToAccum, inverseBind);
 
         for (let bone = node.child; bone;) {
             const node = this.treeMap.get(bone);
@@ -123,7 +142,7 @@ export class HierarchyPoseBuilder {
                              parentXf: ReadonlyMat4, parentOffset: ReadonlyVec3) {
         const scratch = reentrantScratchStack.push();
 
-        let boneXf = pose.getOrCreateBoneXf(boneId);
+        const boneXf = pose.getOrCreateBoneXf(boneId);
         const bindOffset = this.cinf.getFromRootUnrotated(boneId);
 
         const rotationFromRoot = quat.mul(scratch.rotationFromRoot, parentRot, node.rotation);
@@ -133,9 +152,9 @@ export class HierarchyPoseBuilder {
         const offsetFromRoot = vec3.transformMat4(scratch.offsetFromRoot, node.offset, parentXf);
         vec3.add(offsetFromRoot, offsetFromRoot, parentOffset);
 
-        setMatrixTranslation(mat4.copy(boneXf, rotationScale), offsetFromRoot);
+        setMatrixTranslation(mat4.copy(boneXf.originToAccum, rotationScale), offsetFromRoot);
         const inverseBind = mat4.fromTranslation(scratchMat4, vec3.negate(scratchVec3, boneId !== this.cinf.rootId ? bindOffset : zeroVec3));
-        mat4.mul(boneXf, boneXf, inverseBind);
+        mat4.mul(boneXf.restPoseToAccum, boneXf.originToAccum, inverseBind);
 
         for (let bone = node.child; bone;) {
             const node = this.treeMap.get(bone);

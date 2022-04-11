@@ -20,7 +20,7 @@ import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
-import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
@@ -51,6 +51,7 @@ export const enum LateBindingTexture {
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
     WaterReflection     = `water-reflection`,
+    ProjectedLightDepth = `projected-light-depth`,
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
@@ -2062,7 +2063,7 @@ class Material_Generic extends BaseMaterial {
             wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
-            this.wantsStaticVertexLighting = false;
+            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
@@ -2388,8 +2389,7 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
 
         if (this.wantsProjectedTexture && renderContext.currentView.viewType !== SourceEngineViewType.ShadowMap) {
-            dst[12].gfxTexture = this.projectedLight!.depthTexture.getTextureForSampling();
-            dst[12].gfxSampler = renderContext.materialCache.staticResources.shadowSampler;
+            dst[12].lateBinding = LateBindingTexture.ProjectedLightDepth;
             this.projectedLight!.texture!.fillTextureMapping(dst[13], this.projectedLight!.textureFrame);
         }
     }
@@ -2398,13 +2398,16 @@ class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
-        let renderer = renderContext.currentProjectedLightRenderer;
-        if (renderer !== null) {
-            if (!renderer.light.frustumView.frustum.contains(bbox))
-                renderer = null;
+        let projectedLightRenderer = null;
+        if (renderContext.currentViewRenderer !== null)
+            projectedLightRenderer = renderContext.currentViewRenderer.currentProjectedLightRenderer;
+
+        if (projectedLightRenderer !== null) {
+            if (!projectedLightRenderer.light.frustumView.frustum.contains(bbox))
+                projectedLightRenderer = null;
         }
 
-        this.projectedLight = renderer !== null ? renderer.light : null;
+        this.projectedLight = projectedLightRenderer !== null ? projectedLightRenderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
         if (this.shaderInstance.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
@@ -3573,7 +3576,7 @@ layout(std140) uniform ub_ObjectParams {
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
-varying vec3 v_PositionWorld;
+varying vec4 v_PositionWorld;
 
 layout(binding = 0) uniform sampler2D u_TextureBase;
 layout(binding = 1) uniform sampler2D u_TextureDetail1;
@@ -3588,6 +3591,10 @@ void mainVS() {
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_PositionWorld.w = -gl_Position.z;
+#ifndef GFX_CLIPSPACE_NEAR_ZERO
+    v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
+#endif
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3620,6 +3627,10 @@ void mainVS() {
 #endif
 
 ${SampleFlowMap}
+
+float CalcCameraFade(in float t_PosProjZ) {
+    return smoothstep(0.0, 1.0, saturate(t_PosProjZ * 0.025));
+}
 
 #ifdef FRAG
 void mainPS() {
@@ -3691,6 +3702,8 @@ void mainPS() {
     t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
     t_FinalColor.a = 1.0;
 #endif
+
+    t_FinalColor.a *= CalcCameraFade(v_PositionWorld.w);
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -3815,8 +3828,8 @@ class Material_SolidEnergy extends BaseMaterial {
 
         if (this.wantsFlowmap) {
             offs += fillVec4(d, offs,
-                1.0 / this.paramGetNumber('$flow_worlduvscale'),
-                1.0 / this.paramGetNumber('$flow_normaluvscale'),
+                this.paramGetNumber('$flow_worlduvscale'),
+                this.paramGetNumber('$flow_normaluvscale'),
                 this.paramGetNumber('$flow_noise_scale'),
                 this.paramGetNumber('$outputintensity'));
 
@@ -4495,14 +4508,10 @@ export class ProjectedLight {
     public textureFrame: number = 0;
     public lightColor = colorNewCopy(White);
     public brightnessScale: number = 1.0;
-    public depthTexture = new GfxrTemporalTexture();
+    public resolveTextureID: GfxrResolveTextureID;
 
     constructor() {
         this.frustumView.viewType = SourceEngineViewType.ShadowMap;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.depthTexture.destroy(device);
     }
 }
 

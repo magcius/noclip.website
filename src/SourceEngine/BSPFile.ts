@@ -1092,12 +1092,12 @@ export class BSPFile {
             const texinfo = facelist.getUint16(idx + 0x0A, true);
             const tex = texinfoa[texinfo];
 
-            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
-                continue;
-
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
             vertnormalIdx += numedges;
+
+            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
+                continue;
 
             const lightofs = facelist.getInt32(idx + 0x14, true);
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist.getUint32(idx + 0x24 + i * 4, true));

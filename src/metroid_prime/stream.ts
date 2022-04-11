@@ -1,6 +1,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, align } from '../util';
 import { quat, vec3 } from 'gl-matrix';
+import { Color } from '../Color';
 
 export class InputStream {
     private view!: DataView;
@@ -65,6 +66,14 @@ export class InputStream {
         v[0] = this.readFloat32();
         v[1] = this.readFloat32();
         v[2] = this.readFloat32();
+        return v;
+    }
+
+    public readColor(v: Color): Color {
+        v.r = this.readFloat32();
+        v.g = this.readFloat32();
+        v.b = this.readFloat32();
+        v.a = this.readFloat32();
         return v;
     }
 
