@@ -1,5 +1,5 @@
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { lerp, lerpAngle } from '../MathHelpers';
+import { computeModelMatrixSRT, lerp, lerpAngle } from '../MathHelpers';
 import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
@@ -266,16 +266,14 @@ const scratchQuat = quat.create();
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();
 
-// Applies rotations in Z -> Y -> X order.
+// Applies rotations in the order: X then Y then Z.
+let useWorking = true;
+window.setInterval(() => { useWorking = !useWorking; }, 1000);
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
-    quat.identity(scratchQuat);
-    // TODO: verify correctness
-    quat.rotateZ(scratchQuat, scratchQuat, pose.axes[2].rotation);
-    quat.rotateY(scratchQuat, scratchQuat, pose.axes[1].rotation);
-    quat.rotateX(scratchQuat, scratchQuat, pose.axes[0].rotation);
-    vec3.set(scratchVec0, pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
-    vec3.set(scratchVec1, pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale);
-    mat4.fromRotationTranslationScale(dst, scratchQuat, scratchVec0, scratchVec1);
+    computeModelMatrixSRT(dst,
+        pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale,
+        pose.axes[0].rotation, pose.axes[1].rotation, pose.axes[2].rotation,
+        pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
 }
 
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
