@@ -57,29 +57,34 @@ export type ItemgroupAnim = {
     posZKeyframes: Keyframe[];
 };
 
-export type BgAnim = {
-    loopPointSeconds: number;
-    posXKeyframes: Keyframe[];
-    posYKeyframes: Keyframe[];
-    posZKeyframes: Keyframe[];
-    rotXKeyframes: Keyframe[];
-    rotYKeyframes: Keyframe[];
-    rotZKeyframes: Keyframe[];
-};
+// export type BgAnim = {
+//     loopPointSeconds: number;
+//     posXKeyframes: Keyframe[];
+//     posYKeyframes: Keyframe[];
+//     posZKeyframes: Keyframe[];
+//     rotXKeyframes: Keyframe[];
+//     rotYKeyframes: Keyframe[];
+//     rotZKeyframes: Keyframe[];
+// };
 
-export type BgAnim2 = {
-    loopPointSeconds: number;
-    unk1Keyframes: Keyframe[];
-    unk2Keyframes: Keyframe[];
-    posXKeyframes: Keyframe[];
-    posYKeyframes: Keyframe[];
-    posZKeyframes: Keyframe[];
+export type BgAnim = {
+    loopStartSeconds: number;
+    loopEndSeconds: number;
+
+    scaleXKeyframes: Keyframe[];
+    scaleYKeyframes: Keyframe[];
+    scaleZKeyframes: Keyframe[];
+
     rotXKeyframes: Keyframe[];
     rotYKeyframes: Keyframe[];
     rotZKeyframes: Keyframe[];
-    unk9Keyframes: Keyframe[];
-    unk10Keyframes: Keyframe[];
-    unk11Keyframes: Keyframe[];
+
+    posXKeyframes: Keyframe[];
+    posYKeyframes: Keyframe[];
+    posZKeyframes: Keyframe[];
+
+    visibleKeyframes: Keyframe[]; // Model visible if value >= 0.5?
+    translucencyKeyframes: Keyframe[]; // 1 - alpha?
 };
 
 export type BgModel = {
@@ -87,8 +92,8 @@ export type BgModel = {
     pos: vec3;
     rot: vec3;
     scale: vec3;
-    bgAnim: BgAnim;
-    bgAnim2: BgAnim2;
+    // bgAnim: BgAnim;
+    anim: BgAnim;
     // effectHeader: EffectHeader;
 };
 
@@ -509,52 +514,22 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const rot = parseVec3s(view, bgModelOffs + 0x18);
         const scale = parseVec3f(view, bgModelOffs + 0x20);
 
-        // Background anim header
-        const bgAnimOffs = view.getUint32(bgModelOffs + 0x2c);
-        const bgLoopPointSeconds = view.getFloat32(bgAnimOffs + 0x4);
-        const bgRotXKeyframes = parseKeyframeList(view, bgAnimOffs + 0x10);
-        const bgRotYKeyframes = parseKeyframeList(view, bgAnimOffs + 0x18);
-        const bgRotZKeyframes = parseKeyframeList(view, bgAnimOffs + 0x20);
-        const bgPosXKeyframes = parseKeyframeList(view, bgAnimOffs + 0x28);
-        const bgPosYKeyframes = parseKeyframeList(view, bgAnimOffs + 0x30);
-        const bgPosZKeyframes = parseKeyframeList(view, bgAnimOffs + 0x38);
-        const bgAnim: BgAnim = {
-            loopPointSeconds: bgLoopPointSeconds,
-            rotXKeyframes: bgRotXKeyframes,
-            rotYKeyframes: bgRotYKeyframes,
-            rotZKeyframes: bgRotZKeyframes,
-            posXKeyframes: bgPosXKeyframes,
-            posYKeyframes: bgPosYKeyframes,
-            posZKeyframes: bgPosZKeyframes,
-        };
-
-        // Background anim 2 header
-        const bgAnim2Offs = view.getUint32(bgModelOffs + 0x30);
-        const bg2LoopPointSeconds = view.getFloat32(bgAnim2Offs + 0x4);
-        const bg2Unk1Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x8);
-        const bg2Unk2Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x10);
-        const bg2RotXKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x18);
-        const bg2RotYKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x20);
-        const bg2RotZKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x28);
-        const bg2PosXKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x30);
-        const bg2PosYKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x38);
-        const bg2PosZKeyframes = parseKeyframeList(view, bgAnim2Offs + 0x40);
-        const bg2Unk9Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x48);
-        const bg2Unk10Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x50);
-        const bg2Unk11Keyframes = parseKeyframeList(view, bgAnim2Offs + 0x58);
-        const bgAnim2: BgAnim2 = {
-            loopPointSeconds: bg2LoopPointSeconds,
-            unk1Keyframes: bg2Unk1Keyframes,
-            unk2Keyframes: bg2Unk2Keyframes,
-            rotXKeyframes: bg2RotXKeyframes,
-            rotYKeyframes: bg2RotYKeyframes,
-            rotZKeyframes: bg2RotZKeyframes,
-            posXKeyframes: bg2PosXKeyframes,
-            posYKeyframes: bg2PosYKeyframes,
-            posZKeyframes: bg2PosZKeyframes,
-            unk9Keyframes: bg2Unk9Keyframes,
-            unk10Keyframes: bg2Unk10Keyframes,
-            unk11Keyframes: bg2Unk11Keyframes,
+        // Background anim
+        const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
+        const anim: BgAnim = {
+            loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
+            loopEndSeconds: view.getInt32(bgAnimOffs + 0x4),
+            scaleXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x8),
+            scaleYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x10),
+            scaleZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x18),
+            rotXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x20),
+            rotYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x28),
+            rotZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x30),
+            posXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x38),
+            posYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x40),
+            posZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x48),
+            visibleKeyframes: parseKeyframeList(view, bgAnimOffs + 0x50),
+            translucencyKeyframes: parseKeyframeList(view, bgAnimOffs + 0x58),
         };
 
         // Effect header
@@ -567,8 +542,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
             pos,
             rot,
             scale,
-            bgAnim,
-            bgAnim2,
+            anim,
         };
         bgModels.push(bgModel);
     }

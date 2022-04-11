@@ -72,7 +72,7 @@ type VtxConType4 = {
 // TODO(complexplane): GPU data probably belongs in ShapeInstance or similar
 export type Shape = {
     material: Material;
-    boundingSphere: vec3;
+    boundSphereCenter: vec3;
     dlistHeaders: DisplaylistHeader[];
     rawData: ArrayBufferSlice; // TODO(complexplane): Store individual dlist bufs instead
 };
@@ -91,6 +91,7 @@ export type Sampler = {
     mipmapAV: number;
     uvWrap: number;
     maxMipLod: number;
+
     gxTexture: TextureInputGX;
     lodBias: number;
     anisotropy: number;
@@ -106,8 +107,8 @@ export type Sampler = {
 export type Model = {
     name: string;
     attrs: ModelAttrs;
-    origin: vec3;
-    boundingRadius: number;
+    boundSphereCenter: vec3;
+    boundSphereRadius: number;
     opaqueShapeCount: number;
     translucentShapeCount: number;
     matrices: mat4[];
@@ -123,7 +124,7 @@ function parseSampler(buffer: ArrayBufferSlice, tpl: AVTpl): Sampler {
     const unk0x00 = view.getInt16(0x00);
     const mipmapAV = view.getInt8(0x02);
     const uvWrap = view.getInt8(0x03);
-    const maxMipLod = (view.getUint32(0x00) >> 7) & 0xF;
+    const maxMipLod = (view.getUint32(0x00) >> 7) & 0xf;
     const texIdx = view.getInt16(0x04);
     const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
@@ -265,7 +266,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     const view = buffer.createDataView();
 
     let mtxIdxs: number[] = [];
-    const boundingSphere = vec3.create();
+    const boundSphereCenter = vec3.create();
     let dlistSizes: number[] = [];
     const dlistHeaders: DisplaylistHeader[] = [];
 
@@ -278,7 +279,12 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
         let dlistSize = view.getInt32(0x28 + 0x04 * i);
         dlistSizes.push(dlistSize);
     }
-    vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
+    vec3.set(
+        boundSphereCenter,
+        view.getFloat32(0x30),
+        view.getFloat32(0x34),
+        view.getFloat32(0x38)
+    );
     const submeshEndOffs = view.byteOffset + 0x60;
     dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs });
     // TODO(complexplane): Parse individual dlist buffers
@@ -296,7 +302,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     //     dlistHeaders.push(dlistHeader);
     // }
 
-    return { material, boundingSphere, dlistHeaders, rawData: buffer };
+    return { material, boundSphereCenter: boundSphereCenter, dlistHeaders, rawData: buffer };
 }
 
 function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
@@ -385,8 +391,8 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     return {
         name,
         attrs,
-        origin,
-        boundingRadius,
+        boundSphereCenter: origin,
+        boundSphereRadius: boundingRadius,
         opaqueShapeCount,
         translucentShapeCount,
         matrices,
