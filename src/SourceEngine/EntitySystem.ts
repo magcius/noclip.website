@@ -2274,8 +2274,6 @@ class info_overlay_accessor extends BaseEntity {
             return bspRenderer.models[0].surfacesByIdx[surfaceIndex];
         });
         this.needsMaterialInit = this.overlaySurfaces.slice();
-
-        this.materialParams = new EntityMaterialParameters();
     }
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -2288,7 +2286,7 @@ class info_overlay_accessor extends BaseEntity {
                 if (surface !== null) {
                     if (surface.materialInstance === null)
                         continue;
-                    surface.materialInstance.entityParams = this.materialParams;
+                    surface.materialInstance.entityParams = this.ensureMaterialParams();
                 }
                 done++;
             }
