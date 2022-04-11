@@ -2480,10 +2480,13 @@ class point_template extends BaseEntity {
                     let v: string[] | string = mapData[k];
                     if (Array.isArray(v)) {
                         v = v.map((s) => {
-                            return s.replace(oldTargetName, newTargetName);
+                            if (s.includes(','))
+                                s = s.replace(oldTargetName, newTargetName);
+                            return s;
                         });
                     } else {
-                        v = v.replace(oldTargetName, newTargetName);
+                        if (v.includes(','))
+                            v = v.replace(oldTargetName, newTargetName);
                     }
 
                     mapData[k] = v as string;
