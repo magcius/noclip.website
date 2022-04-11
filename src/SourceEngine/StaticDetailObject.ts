@@ -573,13 +573,11 @@ export class StaticPropRenderer {
         mat4.copy(this.studioModelInstance.modelMatrix, scratchMatrix);
 
         // Bind static lighting data, if we have it...
-        if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
-            const spPrefix = (this.bspRenderer.bsp.usingHDR) ? `sp_hdr` : `sp`;
-            const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
-            if (staticLightingData !== null) {
-                this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
-                this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
-            }
+        const spPrefix = this.bspRenderer.bsp.usingHDR ? `sp_hdr` : `sp`;
+        const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
+        if (staticLightingData !== null) {
+            this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
+            this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
         }
     }
 

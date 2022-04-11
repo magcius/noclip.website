@@ -2063,7 +2063,7 @@ class Material_Generic extends BaseMaterial {
             wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
-            this.wantsStaticVertexLighting = false;
+            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
