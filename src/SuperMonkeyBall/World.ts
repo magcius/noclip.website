@@ -190,10 +190,48 @@ class Itemgroup {
     }
 }
 
+class BgModelInst {
+    private worldFromModel: mat4 = mat4.create();
+
+    constructor(private model: ModelInst, private bgModelData: SD.BgModel) {}
+
+    public update(animController: AnimationController): void {
+        // const bgAnim = this.bgModelData.bgAnim;
+        // const timeSeconds = animController.getTimeInSeconds() % bgAnim.loopPointSeconds;
+        // interpolateAnimPose(
+        //     this.worldFromModel,
+        //     timeSeconds,
+        //     bgAnim.posXKeyframes,
+        //     bgAnim.posYKeyframes,
+        //     bgAnim.posZKeyframes,
+        //     bgAnim.rotXKeyframes,
+        //     bgAnim.rotYKeyframes,
+        //     bgAnim.rotZKeyframes
+        // );
+
+        mat4.fromTranslation(this.worldFromModel, this.bgModelData.pos);
+        mat4.rotateZ(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[2]);
+        mat4.rotateY(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[1]);
+        mat4.rotateZ(this.worldFromModel, this.worldFromModel, this.bgModelData.rot[0]);
+        mat4.scale(this.worldFromModel, this.worldFromModel, this.bgModelData.scale);
+    }
+
+    public prepareToRender(
+        device: GfxDevice,
+        renderInstManager: GfxRenderInstManager,
+        viewerInput: Viewer.ViewerRenderInput
+    ) {
+        const viewFromIg = scratchMat4a;
+        mat4.mul(viewFromIg, viewerInput.camera.viewMatrix, this.worldFromModel);
+        this.model.prepareToRender(device, renderInstManager, viewerInput, viewFromIg);
+    }
+}
+
 export class World {
     private animTime: number;
     private animController: AnimationController;
     private itemgroups: Itemgroup[];
+    private bgModels: BgModelInst[];
 
     constructor(
         device: GfxDevice,
@@ -206,6 +244,14 @@ export class World {
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
         this.animTime = 0;
+
+        this.bgModels = [];
+        for (let i = 0; i < stageData.stagedef.bgModels.length; i++) {
+            const bgModelData = stageData.stagedef.bgModels[i];
+            const bgModel = modelCache.getModel(device, renderCache, bgModelData.modelName);
+            if (bgModel === null) continue;
+            this.bgModels.push(new BgModelInst(bgModel, bgModelData));
+        }
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
@@ -213,6 +259,9 @@ export class World {
         this.animController.setTimeInMilliseconds(this.animTime);
         for (let i = 0; i < this.itemgroups.length; i++) {
             this.itemgroups[i].update(this.animController);
+        }
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(this.animController);
         }
     }
 
@@ -223,6 +272,9 @@ export class World {
     ): void {
         for (let i = 0; i < this.itemgroups.length; i++) {
             this.itemgroups[i].prepareToRender(device, renderInstManager, viewerInput);
+        }
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(device, renderInstManager, viewerInput);
         }
     }
 

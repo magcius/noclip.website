@@ -507,7 +507,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
         const pos = parseVec3f(view, bgModelOffs + 0xc);
         const rot = parseVec3s(view, bgModelOffs + 0x18);
-        const scale = parseVec3s(view, bgModelOffs + 0x20);
+        const scale = parseVec3f(view, bgModelOffs + 0x20);
 
         // Background anim header
         const bgAnimOffs = view.getUint32(bgModelOffs + 0x2c);
