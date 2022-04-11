@@ -267,8 +267,6 @@ const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();
 
 // Applies rotations in the order: X then Y then Z.
-let useWorking = true;
-window.setInterval(() => { useWorking = !useWorking; }, 1000);
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
     computeModelMatrixSRT(dst,
         pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale,
