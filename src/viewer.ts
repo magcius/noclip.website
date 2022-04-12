@@ -358,7 +358,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
+    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {
