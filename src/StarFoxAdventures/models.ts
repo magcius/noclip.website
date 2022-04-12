@@ -9,7 +9,7 @@ import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
 import { MapLight, SFAMaterial } from './materials';
-import { SFAAnimationController } from './animation';
+import { Keyframe, SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
 import { dataSubarray, readUint32, setInt8Clamped, setInt16Clamped, mat4PostTranslate } from './util';
 import { loadRes } from './resource';
@@ -232,6 +232,7 @@ export class ModelInstance {
     public matrixPalette: mat4[] = [];
     private skinningDirty: boolean = true;
     private amap: DataView;
+    public poses: Keyframe;
 
     constructor(public model: Model) {
         const numMatrices = this.model.joints.length + this.model.coarseBlends.length;

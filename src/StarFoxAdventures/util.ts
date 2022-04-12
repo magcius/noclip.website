@@ -81,10 +81,6 @@ export function mat4SetTranslation(mtx: mat4, x: number, y: number, z: number): 
     mat4SetValue(mtx, 2, 3, z);
 }
 
-const scratchQuat = quat.create();
-const scratchVec0 = vec3.create();
-const scratchVec1 = vec3.create();
-
 // Compute model matrix from scale, rotation, and translation.
 // This version is unique to SFA:
 // Rotations are applied in the order: Z (roll), then X (pitch), then Y (yaw).

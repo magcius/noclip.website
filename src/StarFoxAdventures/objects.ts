@@ -11,7 +11,7 @@ import { SFAClass } from './Objects/SFAClass';
 
 import { ModelInstance } from './models';
 import { dataSubarray, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
-import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
+import { Anim, Keyframe, applyAnimationToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { getMatrixTranslation } from '../MathHelpers';
@@ -130,7 +130,7 @@ export class ObjectInstance {
 
     private ambienceIdx: number = 0;
 
-    public animSpeed: number = 0.1; // Default to a sensible value.
+    public animSpeed: number = 0.01; // Default to a sensible value.
     // In the game, each object class is responsible for driving its own animations
     // at the appropriate speed.
 
@@ -302,20 +302,7 @@ export class ObjectInstance {
         if (this.modelInst !== null && this.modelInst !== undefined && !this.isFrustumCulled(objectCtx.sceneCtx.viewerInput)) {
             // Update animation
             if (this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
-                // TODO: use time values from animation data?
-                const amap = this.modelInst.getAmap(this.modelAnimNum!);
-                const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
-
-                const kf0Num = Math.floor(kfTime);
-                let kf1Num = kf0Num + 1;
-                if (kf1Num >= this.anim.keyframes.length)
-                    kf1Num = 0;
-
-                const kf0 = this.anim.keyframes[kf0Num];
-                const kf1 = this.anim.keyframes[kf1Num];
-                const ratio = kfTime - kf0Num;
-                this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
-                applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
+                applyAnimationToModel(this.world.animController.animController.getTimeInFrames() * this.animSpeed, this.modelInst, this.anim, this.modelAnimNum!);
             }
 
             const worldMtx = scratchMtx0;

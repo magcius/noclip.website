@@ -8,7 +8,7 @@ import { White } from '../Color';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyPosesToModel, applyAnimationToModel } from './animation';
 import { SFARenderer, SceneRenderContext } from './render';
 import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
@@ -205,18 +205,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
             if (this.anim !== null && this.anim !== undefined) {
                 try {
-                    const modelAnimAmap = this.getAmapForModelAnim(this.modelAnimNum);
-                    const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
-                    const kf0Num = Math.floor(kfTime);
-                    let kf1Num = kf0Num + 1;
-                    if (kf1Num >= this.anim.keyframes.length) {
-                        kf1Num = 0;
-                    }
-                    const kf0 = this.anim.keyframes[kf0Num];
-                    const kf1 = this.anim.keyframes[kf1Num];
-                    const ratio = kfTime - kf0Num;
-                    const kf = interpolateKeyframes(kf0, kf1, ratio);
-                    applyKeyframeToModel(kf, this.modelInst, modelAnimAmap);
+                    applyAnimationToModel(this.animController.animController.getTimeInSeconds() * 8, this.modelInst, this.anim, this.modelAnimNum);
                 } catch (e) {
                     console.warn(`Failed to animate model due to exception:`);
                     console.error(e);
