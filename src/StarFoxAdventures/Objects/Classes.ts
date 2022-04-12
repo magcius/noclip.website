@@ -83,7 +83,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
         }
     },
     [251]: commonClass(0x18),
-    [254]: commonClass(0x1d, undefined, undefined, 0.03), // MagicPlant
+    [254]: commonClass(0x1d, undefined, undefined, 0.005), // MagicPlant
     [255]: class extends SFAClass { // MagicDustMi
         constructor(obj: ObjectInstance, data: DataView) {
             super(obj, data);
@@ -704,7 +704,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [681]: LGTPointLgt, // LGTPointLgt
     [682]: commonClass(0x18, 0x19),
     [683]: LGTProjecte,
-    [685]: decorClass(0.001),
+    [685]: decorClass(0.005), // TODO: Speed depends on romlist objtype
     [686]: decorClass(),
     [687]: decorClass(0.0025),
     [688]: decorClass(),
