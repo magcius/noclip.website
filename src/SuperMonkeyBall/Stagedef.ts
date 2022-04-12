@@ -94,7 +94,7 @@ export type BgModel = {
     scale: vec3;
     translucency: number;
     // bgAnim: BgAnim;
-    anim: BgAnim;
+    anim: BgAnim | null;
     // effectHeader: EffectHeader;
 };
 
@@ -302,6 +302,7 @@ const BG_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
 const LEVEL_MODEL_SIZE = 0xc;
+const BG_ANIM_SIZE = 0x60;
 
 function parseVec3f(view: DataView, offset: number): vec3 {
     const x = view.getFloat32(offset);
@@ -517,22 +518,25 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const translucency = view.getFloat32(bgModelOffs + 0x2c);
 
         // Background anim
+        let anim: BgAnim | null = null;
         const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
-        const anim: BgAnim = {
-            loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
-            loopEndSeconds: view.getInt32(bgAnimOffs + 0x4),
-            scaleXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x8),
-            scaleYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x10),
-            scaleZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x18),
-            rotXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x20),
-            rotYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x28),
-            rotZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x30),
-            posXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x38),
-            posYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x40),
-            posZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x48),
-            visibleKeyframes: parseKeyframeList(view, bgAnimOffs + 0x50),
-            translucencyKeyframes: parseKeyframeList(view, bgAnimOffs + 0x58),
-        };
+        if (bgAnimOffs !== 0) {
+            anim = {
+                loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
+                loopEndSeconds: view.getInt32(bgAnimOffs + 0x4),
+                scaleXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x8),
+                scaleYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x10),
+                scaleZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x18),
+                rotXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x20),
+                rotYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x28),
+                rotZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x30),
+                posXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x38),
+                posYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x40),
+                posZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x48),
+                visibleKeyframes: parseKeyframeList(view, bgAnimOffs + 0x50),
+                translucencyKeyframes: parseKeyframeList(view, bgAnimOffs + 0x58),
+            };
+        }
 
         // Effect header
         // const effectHeaderOffs = view.getUint32(bgModelOffs + 0x34);

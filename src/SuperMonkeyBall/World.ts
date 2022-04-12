@@ -197,16 +197,30 @@ class Itemgroup {
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
 class BgModelInst {
     private worldFromModel: mat4 = mat4.create();
     private translucency: number;
 
     constructor(private model: ModelInst, private bgModelData: SD.BgModel) {
         this.translucency = bgModelData.translucency;
+        const rotRadians = scratchVec3c;
+        vec3.scale(rotRadians, bgModelData.rot, S16_TO_RADIANS);
+        this.buildWorldFromModelMtx(bgModelData.pos, rotRadians, bgModelData.scale);
+    }
+
+    private buildWorldFromModelMtx(pos: vec3, rotRadians: vec3, scale: vec3): void {
+        mat4.fromTranslation(this.worldFromModel, pos);
+        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotRadians[2]);
+        mat4.rotateY(this.worldFromModel, this.worldFromModel, rotRadians[1]);
+        mat4.rotateX(this.worldFromModel, this.worldFromModel, rotRadians[0]);
+        mat4.scale(this.worldFromModel, this.worldFromModel, scale);
     }
 
     public update(animController: AnimationController): void {
         const anim = this.bgModelData.anim;
+        if (anim === null) return;
+
         const loopedTimeSeconds = loopWrap(
             animController.getTimeInSeconds(),
             anim.loopStartSeconds,
@@ -216,9 +230,8 @@ class BgModelInst {
         // Use initial values if there are no corresponding keyframes
         const pos = scratchVec3c;
         vec3.copy(pos, this.bgModelData.pos);
-        let rotXRadians = this.bgModelData.rot[0] * S16_TO_RADIANS;
-        let rotYRadians = this.bgModelData.rot[1] * S16_TO_RADIANS;
-        let rotZRadians = this.bgModelData.rot[2] * S16_TO_RADIANS;
+        const rotRadians = scratchVec3e;
+        vec3.scale(rotRadians, this.bgModelData.rot, S16_TO_RADIANS);
         const scale = scratchVec3d;
         vec3.copy(scale, this.bgModelData.scale);
 
@@ -232,17 +245,17 @@ class BgModelInst {
             pos[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
         }
         if (anim.rotXKeyframes.length !== 0) {
-            rotXRadians =
+            rotRadians[0] =
                 interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) *
                 MathConstants.DEG_TO_RAD;
         }
         if (anim.rotYKeyframes.length !== 0) {
-            rotYRadians =
+            rotRadians[1] =
                 interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) *
                 MathConstants.DEG_TO_RAD;
         }
         if (anim.rotZKeyframes.length !== 0) {
-            rotZRadians =
+            rotRadians[2] =
                 interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) *
                 MathConstants.DEG_TO_RAD;
         }
@@ -255,11 +268,8 @@ class BgModelInst {
         if (anim.scaleZKeyframes.length !== 0) {
             scale[2] = interpolateKeyframes(loopedTimeSeconds, anim.scaleZKeyframes);
         }
-        mat4.fromTranslation(this.worldFromModel, pos);
-        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotZRadians);
-        mat4.rotateY(this.worldFromModel, this.worldFromModel, rotYRadians);
-        mat4.rotateX(this.worldFromModel, this.worldFromModel, rotXRadians);
-        mat4.scale(this.worldFromModel, this.worldFromModel, scale);
+
+        this.buildWorldFromModelMtx(pos, rotRadians, scale);
 
         if (anim.translucencyKeyframes.length !== 0) {
             this.translucency = interpolateKeyframes(loopedTimeSeconds, anim.translucencyKeyframes);
