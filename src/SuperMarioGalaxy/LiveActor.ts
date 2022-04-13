@@ -238,20 +238,6 @@ function patchBMD(bmd: BMD): void {
                 shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
-
-    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
-    // This should only be done on opaque objects.
-    // TODO(jstpierre): This was used to clear the shadows in NoShadowed pass, but that doesn't
-    // work anymore given that we moved shadows to their own alpha RT now. Likely need multiple
-    // draws. Boo :/
-    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
-        const mat = bmd.mat3.materialEntries[i];
-        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
-            continue;
-
-        mat.gxMaterial.ropInfo.alphaUpdate = true;
-        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
-    }
 }
 
 // This is roughly ShapePacketUserData::callDL().
@@ -289,8 +275,8 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
 }
 
 function patchModelData(bmdModel: J3DModelData): void {
-    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
-    // of its own sort, which needs to be RE'd.
+    // Kill off the sort-key bias -- we don't need it.
+    // TODO(jstpierre): sortKeyBias should probably be moved to J3DGraphSimple.
     for (let i = 0; i < bmdModel.shapeData.length; i++)
         bmdModel.shapeData[i].sortKeyBias = 0;
 
