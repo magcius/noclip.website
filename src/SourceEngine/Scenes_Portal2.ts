@@ -190,6 +190,9 @@ class prop_indicator_panel extends BaseEntity {
     }
 
     private setIndicatorLights(entitySystem: EntitySystem, valueNum: number): void {
+        if (this.entity.indicatorlights === undefined)
+            return;
+
         for (let i = 0; i < entitySystem.entities.length; i++) {
             const entity = entitySystem.entities[i];
             if (!entitySystem.entityMatchesTargetName(entity, this.entity.indicatorlights))
@@ -225,11 +228,10 @@ class prop_indicator_panel extends BaseEntity {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderContext.materialCache.staticResources.particleStaticResource.setQuadOnRenderInst(renderInst);
+        renderContext.materialCache.staticResources.staticQuad.setQuadOnRenderInst(renderInst);
 
         mat4.translate(scratchMat4a, modelMatrix, Vec3NegX);
         scaleMatrix(scratchMat4a, scratchMat4a, 16);
-        mat4.rotateX(scratchMat4a, scratchMat4a, MathConstants.TAU / 2);
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
         this.materialInstance.setOnRenderInst(renderContext, renderInst);
 

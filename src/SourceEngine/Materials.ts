@@ -3,7 +3,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -11,16 +11,15 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixT } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
-import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
-import { GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
@@ -4054,6 +4053,52 @@ class Material_Sky extends BaseMaterial {
 //#endregion
 
 //#region Material Cache
+class StaticQuad {
+    private vertexBufferQuad: GfxBuffer;
+    private indexBufferQuad: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputStateQuad: GfxInputState;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        const n0 = 1, n1 = -1;
+        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
+            0, n0, n0, 1, 0, 1, 1, 1, 1,
+            0, n0, n1, 1, 1, 1, 1, 1, 1,
+            0, n1, n0, 0, 0, 1, 1, 1, 1,
+            0, n1, n1, 0, 1, 1, 1, 1, 1,
+        ]).buffer);
+        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
+            0, 1, 2, 2, 1, 3,
+        ]).buffer);
+
+        this.inputStateQuad = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBufferQuad, byteOffset: 0 },
+        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+    }
+
+    public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStateQuad);
+        renderInst.drawIndexes(6);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputState(this.inputStateQuad);
+        device.destroyBuffer(this.vertexBufferQuad);
+        device.destroyBuffer(this.indexBufferQuad);
+    }
+}
+
 class StaticResources {
     public whiteTexture2D: GfxTexture;
     public opaqueBlackTexture2D: GfxTexture;
@@ -4062,7 +4107,7 @@ class StaticResources {
     public linearRepeatSampler: GfxSampler;
     public pointClampSampler: GfxSampler;
     public shadowSampler: GfxSampler;
-    public particleStaticResource: ParticleStaticResource;
+    public staticQuad: StaticQuad;
     public zeroVertexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
@@ -4105,7 +4150,7 @@ class StaticResources {
             wrapT: GfxWrapMode.Clamp,
         });
         this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
-        this.particleStaticResource = new ParticleStaticResource(device, cache);
+        this.staticQuad = new StaticQuad(device, cache);
     }
 
     public destroy(device: GfxDevice): void {
@@ -4113,7 +4158,7 @@ class StaticResources {
         device.destroyTexture(this.opaqueBlackTexture2D);
         device.destroyTexture(this.transparentBlackTexture2D);
         device.destroyBuffer(this.zeroVertexBuffer);
-        this.particleStaticResource.destroy(device);
+        this.staticQuad.destroy(device);
     }
 }
 

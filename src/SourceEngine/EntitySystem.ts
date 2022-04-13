@@ -2727,7 +2727,7 @@ class env_steam extends BaseEntity {
             return;
 
         const view = renderContext.currentView;
-        const particleStaticRes = renderContext.materialCache.staticResources.particleStaticResource;
+        const staticQuad = renderContext.materialCache.staticResources.staticQuad;
         for (let i = 0; i < this.particlePool.length; i++) {
             const p = this.particlePool[i];
             const lifeT = (p.life / this.particleLifetime);
@@ -2738,7 +2738,7 @@ class env_steam extends BaseEntity {
             const size = lerp(this.startSize, this.endSize, lifeT);
 
             const renderInst = renderInstManager.newRenderInst();
-            particleStaticRes.setQuadOnRenderInst(renderInst);
+            staticQuad.setQuadOnRenderInst(renderInst);
 
             // This is a bit hacky -- set the color/alpha per-particle. Blergh.
             this.materialInstance.paramSetColor('$color', scratchColor);
@@ -3417,6 +3417,8 @@ export class EntitySystem {
     }
 
     public movement(renderContext: SourceRenderContext): void {
+        this.currentTime = renderContext.globalTime;
+
         this.flushCreateQueue();
 
         const spawnStateAction = this.getSpawnStateAction();
@@ -3431,8 +3433,6 @@ export class EntitySystem {
 
         this.processOutputQueue();
         this.debugger.movement(renderContext);
-
-        this.currentTime = renderContext.globalTime;
 
         for (let i = 0; i < this.entities.length; i++)
             if (this.entities[i].alive)
@@ -3516,7 +3516,7 @@ class EntityMessageDebugger {
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, activatorColor, 6);
             drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, targetColor, 6);
             drawWorldSpaceLine(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, scratchVec3b, lineColor, 3);
-            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.targetName, 6, lineColor, { outline: 3, font: '8pt monospace' });
+            drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, target.targetName!, 6, lineColor, { outline: 3, font: '8pt monospace' });
             drawWorldSpaceText(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3b, message.event.action.inputName, 18, lineColor, { outline: 3, font: '8pt monospace' });
         }
     }
