@@ -172,7 +172,6 @@ class prop_indicator_panel extends BaseEntity {
     public static classname = `prop_indicator_panel`;
     public materialInstance: BaseMaterial | null = null;
 
-
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
