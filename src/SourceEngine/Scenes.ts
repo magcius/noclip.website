@@ -24,11 +24,10 @@ export async function createScene(context: SceneContext, loadContext: SourceLoad
     if (bspFile.cubemaps[0] !== undefined)
         await renderContext.materialCache.bindLocalCubemap(bspFile.cubemaps[0]);
 
-    const bspRenderer = new BSPRenderer(renderContext, bspFile);
+    // const bspRenderer = new BSPRenderer(renderContext, bspFile);
     // Build skybox from worldname.
-    const worldspawn = bspRenderer.getWorldSpawn();
-    if (worldspawn.skyname)
-        renderer.skyboxRenderer = new SkyboxRenderer(renderContext, worldspawn.skyname);
-    renderer.bspRenderers.push(bspRenderer);
+    // const worldspawn = bspRenderer.getWorldSpawn();
+    // renderer.skyboxRenderer = new SkyboxRenderer(renderContext, 'sky_l4d_c4m1_hdr');
+    // renderer.bspRenderers.push(bspRenderer);
     return renderer;
 }

@@ -684,6 +684,8 @@ export class OrbitCameraController implements CameraController {
     public sceneMoveSpeedMult = 1;
 
     constructor(public shouldOrbit: boolean = false) {
+        this.x = -1;
+        this.y = 1.6;
     }
 
     public cameraUpdateForced(): void {
@@ -724,7 +726,7 @@ export class OrbitCameraController implements CameraController {
         const shouldOrbit = this.shouldOrbit;
 
         const invertXMult = inputManager.invertX ? -1 : 1;
-        const invertYMult = inputManager.invertY ? -1 : 1;
+        const invertYMult = 0; // inputManager.invertY ? -1 : 1;
 
         // Get new velocities from inputs.
         if (!!(inputManager.buttons & 4)) {
@@ -757,8 +759,11 @@ export class OrbitCameraController implements CameraController {
         }
 
         this.orbitXVel = clampRange(this.orbitXVel, 2);
-        this.xVel = clampRange(this.xVel, 2);
+        // this.xVel = clampRange(this.xVel, );
         this.yVel = clampRange(this.yVel, 2);
+
+        if (inputManager.isKeyDownEventTriggered('KeyY'))
+            this.xVel += 10;
 
         let zTargetAdjAmt = inputManager.dz * 80.0;
         if (inputManager.isKeyDown('KeyQ'))

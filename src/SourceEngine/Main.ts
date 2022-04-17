@@ -13,7 +13,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, invlerp, lerp, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -32,8 +32,10 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/Projection
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceAABB, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { dfRange, dfShow } from "../DebugFloaters";
+import { convertToTriangles, convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
+import { colorFromRGBA, colorNewFromRGBA } from "../Color";
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -191,7 +193,7 @@ export class SourceFileSystem {
 
 // In Source, the convention is +X for forward and -X for backward, +Y for left and -Y for right, and +Z for up and -Z for down.
 // Converts from Source conventions to noclip ones.
-const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
+export const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
     0,  0, -1, 0,
     -1, 0,  0, 0,
     0,  1,  0, 0,
@@ -321,6 +323,189 @@ export class SkyboxRenderer {
         }
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
+    }
+}
+
+export class CustomSurface {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private indexCount = 0;
+    private materialInstance: BaseMaterial | null = null;
+    private materialInstance2: BaseMaterial | null = null;
+    private modelMatrix = mat4.create();
+
+    constructor(renderContext: SourceRenderContext) {
+        const device = renderContext.device, cache = renderContext.renderCache;
+
+        const vertexData = new Float32Array(4 * 15);
+        let dstVert = 0;
+
+        const w = 16, h = 64;
+
+        vertexData[dstVert++] = 0; // pos
+        vertexData[dstVert++] = -w;
+        vertexData[dstVert++] = -h;
+        vertexData[dstVert++] = 1; // normal
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1.0; // alpha
+        vertexData[dstVert++] = 0; // tangent S
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1; // tangent T sign
+        vertexData[dstVert++] = 0; // tex coord
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0; // lightmap tex coord
+        vertexData[dstVert++] = 0;
+
+        vertexData[dstVert++] = 0; // pos
+        vertexData[dstVert++] = w;
+        vertexData[dstVert++] = -h;
+        vertexData[dstVert++] = 1; // normal
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1.0; // alpha
+        vertexData[dstVert++] = 0; // tangent S
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1; // tangent T sign
+        vertexData[dstVert++] = 1; // tex coord
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0; // lightmap tex coord
+        vertexData[dstVert++] = 0;
+
+        vertexData[dstVert++] = 0; // pos
+        vertexData[dstVert++] = w;
+        vertexData[dstVert++] = h;
+        vertexData[dstVert++] = 1; // normal
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1.0; // alpha
+        vertexData[dstVert++] = 0; // tangent S
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1; // tangent T sign
+        vertexData[dstVert++] = 1; // tex coord
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0; // lightmap tex coord
+        vertexData[dstVert++] = 0;
+
+        vertexData[dstVert++] = 0; // pos
+        vertexData[dstVert++] = -w;
+        vertexData[dstVert++] = h;
+        vertexData[dstVert++] = 1; // normal
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1.0; // alpha
+        vertexData[dstVert++] = 0; // tangent S
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0;
+        vertexData[dstVert++] = 1; // tangent T sign
+        vertexData[dstVert++] = 0; // tex coord
+        vertexData[dstVert++] = 1;
+        vertexData[dstVert++] = 0; // lightmap tex coord
+        vertexData[dstVert++] = 0;
+
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, 4);
+        this.indexCount = indexData.length;
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+        ], { buffer: this.indexBuffer, byteOffset: 0, });
+
+        this.bindMaterial(renderContext);
+
+        // window.main.ui.debugFloaterHolder.bindPanel(this);
+    }
+
+    private async createMaterialInstance(renderContext: SourceRenderContext, path: string, mode: number): Promise<BaseMaterial> {
+        const materialCache = renderContext.materialCache;
+        const materialInstance = await materialCache.createMaterialInstance(path);
+        (materialInstance as any).mode = mode;
+        await materialInstance.init(renderContext);
+        return materialInstance;
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext) {
+        this.materialInstance = await this.createMaterialInstance(renderContext, `glass/glasswindow_refract01`, 0);
+        this.materialInstance2 = await this.createMaterialInstance(renderContext, `glass/glasswindow_refract01`, 1);
+    }
+
+    @dfShow()
+    @dfRange(0, 1, 0.01)
+    public r1 = 0.4;
+    @dfShow()
+    @dfRange(0, 10, 0.01)
+    public r2 = 5;
+
+    public prepareToRenderMat(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, materialInstance: BaseMaterial | null): void {
+        if (materialInstance === null)
+            return;
+
+        if (!materialInstance.isMaterialLoaded())
+            return;
+
+        if (!materialInstance.isMaterialVisible(renderContext))
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        fillSceneParamsOnRenderInst(template, view, renderContext.toneMapParams);
+
+        const renderInst = renderInstManager.newRenderInst();
+        materialInstance.setOnRenderInst(renderContext, renderInst);
+
+        mat4.copy(scratchMatrix, this.modelMatrix);
+        /*
+        if (materialInstance === this.materialInstance) {
+            const t = lerp(-3.0, 1.0, invlerp(-1.0, 1.0, Math.sin(renderContext.globalTime * 1.0)));
+            scratchMatrix[12] = lerp(-20.0, 0.0, t);
+
+            (materialInstance as any).refractDepth = lerp(0.21, 0.05, t);
+            (materialInstance as any).refractAmount = lerp(0.15, 0.65, t);
+        } else {
+            scratchMatrix[12] = 2.4;
+        }
+        */
+        materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMatrix);
+        renderInst.drawIndexes(this.indexCount);
+        materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+
+        // getMatrixTranslation(scratchVec3, this.modelMatrix);
+        // drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, scratchVec3);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, ortho: boolean): void {
+        (this.materialInstance as any).ortho = ortho;
+        this.prepareToRenderMat(renderContext, renderInstManager, view, this.materialInstance);
+
+        // if (!ortho)
+        //     this.prepareToRenderMat(renderContext, renderInstManager, view, this.materialInstance2);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1056,7 +1241,7 @@ export class SourceRenderContext {
 
     // Public settings
     public enableFog = true;
-    public enableBloom = true;
+    public enableBloom = false;
     public enableAutoExposure = true;
     public enableExpensiveWater = true;
     public enableCamera = true;
@@ -1261,6 +1446,9 @@ export class SourceWorldViewRenderer {
             }
         }
 
+        renderer.customSurface.prepareToRender(renderContext, renderInstManager, this.mainView, false);
+        renderer.customSurface.prepareToRender(renderContext, renderInstManager, this.mainView, true);
+
         renderContext.currentView = null!;
     }
 
@@ -1291,7 +1479,7 @@ export class SourceWorldViewRenderer {
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.copyDimensions(renderTargetDesc);
-        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+        mainColorDesc.colorClearColor = colorNewFromRGBA(1, 0, 1, 1);
 
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         mainDepthDesc.copyDimensions(mainColorDesc);
@@ -1580,6 +1768,8 @@ export class SourceRenderer implements SceneGfx {
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
 
+    public customSurface: CustomSurface;
+
     private textureMapping = nArray(5, () => new TextureMapping());
     private bindingMapping: string[] = [LateBindingTexture.Camera, LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection, LateBindingTexture.ProjectedLightDepth];
 
@@ -1609,6 +1799,8 @@ export class SourceRenderer implements SceneGfx {
         this.bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
         this.fullscreenPostProgram = cache.createProgram(new FullscreenPostProgram(false));
         this.fullscreenPostProgramBloom = cache.createProgram(new FullscreenPostProgram(true));
+
+        this.customSurface = new CustomSurface(renderContext);
     }
 
     private resetTextureMappings(): void {
@@ -1779,7 +1971,7 @@ export class SourceRenderer implements SceneGfx {
         this.mainViewRenderer.prepareToRender(this, null);
 
         // Reflection is only supported on the first BSP renderer (maybe we should just kill the concept of having multiple...)
-        if (this.renderContext.enableExpensiveWater && this.mainViewRenderer.drawWorld) {
+        if (this.renderContext.enableExpensiveWater && this.mainViewRenderer.drawWorld && this.bspRenderers.length > 0) {
             const bspRenderer = this.bspRenderers[0], bsp = bspRenderer.bsp;
             bspRenderer.models[0].gatherLiveSets(null, null, bspRenderer.liveLeafSet, this.mainViewRenderer.mainView);
             const leafwater = bsp.findLeafWaterForPoint(this.mainViewRenderer.mainView.cameraPos, bspRenderer.liveLeafSet);

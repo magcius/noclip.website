@@ -88,7 +88,7 @@ import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
-import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
+import { serializeCamera, deserializeCamera, FPSCameraController, OrbitCameraController } from './Camera';
 import { assertExists, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { atob, btoa } from './Ascii85';
@@ -695,7 +695,7 @@ class Main {
         if (scene.createCameraController !== undefined)
             this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
-            this.viewer.setCameraController(new FPSCameraController());
+            this.viewer.setCameraController(new OrbitCameraController());
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
             const camera = this.viewer.camera;

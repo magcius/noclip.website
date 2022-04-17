@@ -132,7 +132,7 @@ export function getTriangleCountForTopologyIndexCount(topology: GfxTopology, ind
         return 2 * (indexCount / 4);
     case GfxTopology.QuadStrips:
         // Two triangles per two indexes, minus the first two.
-        return 2 * (indexCount - 2);
+        return (indexCount - 2);
     }
 }
 
