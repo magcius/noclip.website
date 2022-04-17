@@ -1,3 +1,4 @@
+
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
@@ -222,8 +223,8 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
         numIndices = indices.length / 2;
     }
 
-    let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data());
-    let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices);
+    let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data().buffer);
+    let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
     let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     let state = device.createInputState(layout, [
