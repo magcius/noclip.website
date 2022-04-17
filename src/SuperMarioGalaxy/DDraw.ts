@@ -3,15 +3,15 @@
 // A helper for all those times that Galaxy just writes triangles raw.
 
 import * as GX from '../gx/gx_enum';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { assert, assertExists, align } from '../util';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
 import { ReadonlyVec2, ReadonlyVec3 } from 'gl-matrix';
-import { Color } from '../Color';
+import { Color, colorToRGBA8 } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
@@ -108,16 +108,12 @@ abstract class TDDrawBase {
         this.ensureIndexBufferData(getTriangleIndexCountForTopologyIndexCount(topology, vertexCount));
     }
 
-    protected getOffs(v: number, attr: GX.Attr): number {
+    private getOffs(v: number, attr: GX.Attr): number {
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
         return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
     }
 
-    protected writeUint8(offs: number, v: number): void {
-        this.vertexData.setUint8(offs, v);
-    }
-
-    protected writeFloat32(offs: number, v: number): void {
+    private writeFloat32(offs: number, v: number): void {
         const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
         this.vertexData.setFloat32(offs, v, e);
     }
@@ -160,14 +156,14 @@ abstract class TDDrawBase {
 
     public color4rgba8(attr: GX.Attr, r: number, g: number, b: number, a: number): void {
         const offs = this.getOffs(this.currentVertex, attr);
-        this.writeUint8(offs + 0x00, r);
-        this.writeUint8(offs + 0x01, g);
-        this.writeUint8(offs + 0x02, b);
-        this.writeUint8(offs + 0x03, a);
+        // Always big-endian (R8G8B8A8)
+        this.vertexData.setUint32(offs + 0x00, (r << 24) | (g << 16) | (b << 8) | a, false);
     }
 
     public color4color(attr: GX.Attr, c: Color): void {
-        this.color4rgba8(attr, c.r * 0xFF, c.g * 0xFF, c.b * 0xFF, c.a * 0xFF);
+        const offs = this.getOffs(this.currentVertex, attr);
+        // Always big-endian (R8G8B8A8)
+        this.vertexData.setUint32(offs + 0x00, colorToRGBA8(c), false);
     }
 
     public begin(type: GX.Command, num: number | null = null): void {

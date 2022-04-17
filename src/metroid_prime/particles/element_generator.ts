@@ -13,17 +13,17 @@ import { GetSwooshGeneratorDesc, SwooshDescription, SwooshGenerator } from './sw
 import { ElectricDescription, ElectricGenerator, GetElectricGeneratorDesc } from './electric_generator';
 import { InputStream } from '../stream';
 import { ResourceSystem } from '../resource';
-import { assertExists, nArray } from '../../util';
+import { assert, assertExists, nArray } from '../../util';
 import { PART } from '../part';
 import { AABB } from '../../Geometry';
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../../gfx/platform/GfxPlatform';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, GXShapeHelperGfx, MaterialParams } from '../../gx/gx_render';
 import { computeViewMatrix } from '../../Camera';
 import { GfxRendererLayer, GfxRenderInst, makeSortKey } from '../../gfx/render/GfxRenderInstManager';
-import { Color, colorCopy, colorEqual, colorFromRGBA, colorNewFromRGBA, colorScale, OpaqueBlack, White } from '../../Color';
+import { Color, colorCopy, colorEqual, colorFromRGBA, colorNewFromRGBA, colorScale, colorToRGBA8, OpaqueBlack, White } from '../../Color';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { LoadedVertexLayout, VertexAttributeInput } from '../../gx/gx_displaylist';
+import { compileLoadedVertexLayout, GX_VtxDesc, LoadedVertexLayout } from '../../gx/gx_displaylist';
 import { GX_Program, lightSetSpot } from '../../gx/gx_material';
 import * as GX from '../../gx/gx_enum';
 import { TextureMapping } from '../../TextureHolder';
@@ -32,6 +32,9 @@ import * as GX_Material from '../../gx/gx_material';
 import { RetroSceneRenderer } from '../scenes';
 import { SWHC } from '../swhc';
 import { ELSC } from '../elsc';
+import { Endianness, getSystemEndianness } from '../../endian';
+import { GfxTopology, makeTriangleIndexBuffer } from '../../gfx/helpers/TopologyHelpers';
+import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
@@ -1729,88 +1732,42 @@ export class ElementGeneratorMaterialHelper {
     }
 }
 
-const texVertexLayout: LoadedVertexLayout = {
-    indexFormat: GfxFormat.U32_R,
-    vertexBufferStrides: [48],
-    singleVertexInputLayouts: [
-        {
-            attrInput: VertexAttributeInput.POS,
-            bufferOffset: 0,
-            bufferIndex: 0,
-            format: GfxFormat.F32_RGBA
-        },
-        {
-            attrInput: VertexAttributeInput.CLR0,
-            bufferOffset: 16,
-            bufferIndex: 0,
-            format: GfxFormat.F32_RGBA
-        },
-        {
-            attrInput: VertexAttributeInput.TEX01,
-            bufferOffset: 32,
-            bufferIndex: 0,
-            format: GfxFormat.F32_RGBA
-        }
-    ],
-    vertexAttributeOffsets: [0, 16, 32],
-    vertexAttributeFormats: [GfxFormat.F32_RGBA, GfxFormat.F32_RGBA, GfxFormat.F32_RGBA]
-};
-
-const noTexVertexLayout: LoadedVertexLayout = {
-    indexFormat: GfxFormat.U32_R,
-    vertexBufferStrides: [32],
-    singleVertexInputLayouts: [
-        {
-            attrInput: VertexAttributeInput.POS,
-            bufferOffset: 0,
-            bufferIndex: 0,
-            format: GfxFormat.F32_RGBA
-        },
-        {
-            attrInput: VertexAttributeInput.CLR0,
-            bufferOffset: 16,
-            bufferIndex: 0,
-            format: GfxFormat.F32_RGBA
-        }
-    ],
-    vertexAttributeOffsets: [0, 16],
-    vertexAttributeFormats: [GfxFormat.F32_RGBA, GfxFormat.F32_RGBA]
-};
-
 export class ElementGeneratorShapeHelper {
     public shapeHelper: GXShapeHelperGfx;
-    private readonly shadowBuffer: Float32Array;
+    private readonly shadowBuffer: DataView;
     private readonly vertexBuffer: GfxBuffer;
     private readonly indexBuffer: GfxBuffer;
 
     constructor(renderer: RetroSceneRenderer, vertexLayout: LoadedVertexLayout, private maxElementCount: number) {
         // Coincidentally multiplies to fit four vertices per generator element (particle quad)
         const wordCount = vertexLayout.vertexBufferStrides[0] * maxElementCount;
-        this.shadowBuffer = new Float32Array(wordCount);
+        const shadowBufferData = new ArrayBuffer(wordCount * 4);
+        this.shadowBuffer = new DataView(shadowBufferData);
         this.vertexBuffer = renderer.device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        this.indexBuffer = renderer.device.createBuffer(6 * maxElementCount, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
 
-        const indexData = new Uint32Array(6 * maxElementCount);
-        for (let i = 0; i < maxElementCount; ++i) {
-            // Quad indices
-            indexData[i * 6] = i * 4;
-            indexData[i * 6 + 1] = i * 4 + 1;
-            indexData[i * 6 + 2] = i * 4 + 3;
-            indexData[i * 6 + 3] = i * 4 + 2;
-            indexData[i * 6 + 4] = i * 4 + 3;
-            indexData[i * 6 + 5] = i * 4 + 1;
-        }
-        renderer.device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(indexData.buffer));
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Quads, 0, maxElementCount);
+        this.indexBuffer = makeStaticDataBuffer(renderer.device, GfxBufferUsage.Index, indexData.buffer);
 
         this.shapeHelper = new GXShapeHelperGfx(renderer.device, renderer.renderCache, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 }, vertexLayout);
     }
 
     static createTex(renderer: RetroSceneRenderer, maxElementCount: number): ElementGeneratorShapeHelper {
-        return new ElementGeneratorShapeHelper(renderer, texVertexLayout, maxElementCount);
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.Attr.POS] = { type: GX.AttrType.DIRECT };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.DIRECT };
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.DIRECT };
+        const loadedVertexLayout = compileLoadedVertexLayout(vcd);
+        assert(loadedVertexLayout.vertexBufferStrides[0] === 9*4);
+        return new ElementGeneratorShapeHelper(renderer, loadedVertexLayout, maxElementCount);
     }
 
     static createNoTex(renderer: RetroSceneRenderer, maxElementCount: number): ElementGeneratorShapeHelper {
-        return new ElementGeneratorShapeHelper(renderer, noTexVertexLayout, maxElementCount);
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.Attr.POS] = { type: GX.AttrType.DIRECT };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.DIRECT };
+        const loadedVertexLayout = compileLoadedVertexLayout(vcd);
+        assert(loadedVertexLayout.vertexBufferStrides[0] === 5*4);
+        return new ElementGeneratorShapeHelper(renderer, loadedVertexLayout, maxElementCount);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, elementCount: number): void {
@@ -1818,16 +1775,16 @@ export class ElementGeneratorShapeHelper {
     }
 
     public setTexVertex(idx: number, posX: number, posY: number, posZ: number, color: Color, uvX: number, uvY: number): void {
-        this.shadowBuffer[idx * 12] = posX;
-        this.shadowBuffer[idx * 12 + 1] = posY;
-        this.shadowBuffer[idx * 12 + 2] = posZ;
-        this.shadowBuffer[idx * 12 + 3] = 0.0;
-        this.shadowBuffer[idx * 12 + 4] = color.r;
-        this.shadowBuffer[idx * 12 + 5] = color.g;
-        this.shadowBuffer[idx * 12 + 6] = color.b;
-        this.shadowBuffer[idx * 12 + 7] = color.a;
-        this.shadowBuffer[idx * 12 + 8] = uvX;
-        this.shadowBuffer[idx * 12 + 9] = uvY;
+        const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
+        this.shadowBuffer.setFloat32(idx * 0x24 + 0x00, posX, e);
+        this.shadowBuffer.setFloat32(idx * 0x24 + 0x04, posY, e);
+        this.shadowBuffer.setFloat32(idx * 0x24 + 0x08, posZ, e);
+        // this.shadowBuffer.setFloat32(idx * 0x24 + 0x0C, 0.0, e);
+        // Always little-endian (R8G8B8A8)
+        this.shadowBuffer.setUint32(idx * 0x24 + 0x10, colorToRGBA8(color), false);
+        this.shadowBuffer.setFloat32(idx * 0x24 + 0x14, uvX, e);
+        this.shadowBuffer.setFloat32(idx * 0x24 + 0x18, uvY, e);
+        // TEX1 is unused.
     }
 
     public setTexVertexVec(idx: number, vec: ReadonlyVec3, color: Color, uvX: number, uvY: number): void {
@@ -1835,14 +1792,14 @@ export class ElementGeneratorShapeHelper {
     }
 
     public setNoTexVertex(idx: number, posX: number, posY: number, posZ: number, color: Color): void {
-        this.shadowBuffer[idx * 8] = posX;
-        this.shadowBuffer[idx * 8 + 1] = posY;
-        this.shadowBuffer[idx * 8 + 2] = posZ;
-        this.shadowBuffer[idx * 8 + 3] = 0.0;
-        this.shadowBuffer[idx * 8 + 4] = color.r;
-        this.shadowBuffer[idx * 8 + 5] = color.g;
-        this.shadowBuffer[idx * 8 + 6] = color.b;
-        this.shadowBuffer[idx * 8 + 7] = color.a;
+        const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
+        this.shadowBuffer.setFloat32(idx * 0x14 + 0x00, posX, e);
+        this.shadowBuffer.setFloat32(idx * 0x14 + 0x00, posX, e);
+        this.shadowBuffer.setFloat32(idx * 0x14 + 0x04, posY, e);
+        this.shadowBuffer.setFloat32(idx * 0x14 + 0x08, posZ, e);
+        // this.shadowBuffer.setFloat32(idx * 0x14 + 0x0C, 0.0, e);
+        // Always little-endian (R8G8B8A8)
+        this.shadowBuffer.setUint32(idx * 0x14 + 0x10, colorToRGBA8(color), false);
     }
 
     public setNoTexVertexVec(idx: number, vec: ReadonlyVec3, color: Color): void {
