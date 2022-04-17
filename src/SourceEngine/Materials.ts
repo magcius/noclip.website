@@ -3287,6 +3287,7 @@ ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
+    vec4 u_BumpScaleBias2;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
 #ifdef USE_ENVMAP
@@ -3301,7 +3302,7 @@ layout(std140) uniform ub_ObjectParams {
 // Base Texture Coordinates
 varying vec3 v_TexCoord0;
 // Normal Map Coordinates
-varying vec2 v_TexCoord1;
+varying vec4 v_TexCoord1;
 varying vec3 v_PositionWorld;
 
 // 3x3 matrix for our tangent space basis.
@@ -3338,6 +3339,7 @@ void mainVS() {
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
+    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias2);
 }
 #endif
 
@@ -3376,7 +3378,7 @@ void mainPS() {
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
-    vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
+    vec2 t_RefractTexCoord = v_TexCoord1.zw + t_RefractTexCoordOffs.xy;
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
@@ -3437,6 +3439,16 @@ void mainPS() {
 class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
+
+    @dfShow()
+    @dfRange(0, 1, 0.01)
+    public b2x = 0;
+    @dfShow()
+    @dfRange(0, 1, 0.01)
+    public b2y = 0;
+    @dfShow()
+    @dfRange(0, 1, 0.01)
+    public b2s = 1;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
@@ -3512,16 +3524,26 @@ class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
     }
 
+    private debugPop = false;
+
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
+        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
+            window.main.ui.debugFloaterHolder.bindPanel(this);
+            this.debugPop = true;
+        }
+
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 24);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
+        this.paramSetNumber('$localrefractdepth', 0);
+
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
+        offs += fillVec4(d, offs, this.b2s, this.b2s, this.b2x, this.b2y);
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
         offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
