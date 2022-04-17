@@ -121,7 +121,7 @@ export class LuminanceHistogram {
     private toneMapScaleHistory: number[] = [];
     private toneMapScaleHistoryCount = 10;
 
-    public debugDrawHistogram: boolean = IS_DEVELOPMENT;
+    public debugDrawHistogram: boolean = false;
     public debugDrawSquares: boolean = false;
 
     constructor(cache: GfxRenderCache) {
@@ -444,6 +444,7 @@ export class LuminanceHistogram {
         t = saturate(Math.min(t, 0.25 / this.buckets.length));
 
         toneMapParams.toneMapScale = lerp(toneMapParams.toneMapScale, goalScale, t);
+        toneMapParams.toneMapScale = 1.35;
     }
 
     public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {

@@ -3421,6 +3421,8 @@ export class EntitySystem {
 
         this.flushCreateQueue();
 
+        return;
+
         const spawnStateAction = this.getSpawnStateAction();
         if (spawnStateAction === SpawnState.FetchingResources) {
             // Still fetching; nothing to do.

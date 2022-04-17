@@ -11,18 +11,19 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixSRT } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { dfRange, dfShow } from "../DebugFloaters";
+import { dfBindMidiValue, dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
 import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
+import { calcTexMtx_Basic, calcTexMtx_Maya } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -3298,6 +3299,9 @@ layout(std140) uniform ub_ObjectParams {
 
 #define u_RefractAmount (u_RefractTint.a)
 #define u_RefractDepth  (u_Misc[0].x)
+#define u_LightAmt      (u_Misc[0].y)
+#define u_DispAmt       (u_Misc[0].z)
+#define u_ShadowAmt     (u_Misc[0].w)
 
 // Base Texture Coordinates
 varying vec3 v_TexCoord0;
@@ -3372,8 +3376,8 @@ void mainPS() {
     // Compute our bent texture coordinates into the texture.
     vec2 t_RefractTexCoordOffs = vec2(0.0);
     t_RefractTexCoordOffs += t_RefractPointOnPlane.xy;
-    t_RefractTexCoordOffs += t_BumpmapNormal.xy;
-    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
+    t_RefractTexCoordOffs += t_BumpmapNormal.xy * u_DispAmt;
+    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane * u_DispAmt;
 
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
@@ -3382,10 +3386,11 @@ void mainPS() {
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, u_ShadowAmt));
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
+    t_Fresnel = mix(1.0, t_Fresnel, u_LightAmt);
 
-    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb;
+    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb * 0.5;
 #else
     // "Classic" refract
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
@@ -3424,7 +3429,7 @@ void mainPS() {
     t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
     t_SpecularLighting = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_SpecularLighting)), t_SpecularLighting, u_EnvmapContrastSaturationFresnel.y);
 
-    t_FinalColor.rgb += t_SpecularLighting;
+    // t_FinalColor.rgb += t_SpecularLighting;
 #endif
 
     t_FinalColor.a = t_BumpmapSample.a;
@@ -3440,15 +3445,16 @@ class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
 
-    @dfShow()
-    @dfRange(0, 1, 0.01)
-    public b2x = 0;
-    @dfShow()
-    @dfRange(0, 1, 0.01)
-    public b2y = 0;
-    @dfShow()
-    @dfRange(0, 1, 0.01)
-    public b2s = 1;
+    @dfBindMidiValue('slider', 0)
+    public b2d = 0;
+
+    @dfBindMidiValue('slider', 1)
+    public lightAmt = 1;
+
+    @dfBindMidiValue('slider', 2)
+    public dispAmt = 1;
+
+    public shadowAmt = 1;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
@@ -3531,7 +3537,8 @@ class Material_Refract extends BaseMaterial {
         this.updateTextureMappings(textureMappings);
 
         if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
-            window.main.ui.debugFloaterHolder.bindPanel(this);
+            const midiControls = window.main.ui.debugFloaterHolder.midiControls;
+            midiControls.bindObject(this);
             this.debugPop = true;
         }
 
@@ -3540,12 +3547,21 @@ class Material_Refract extends BaseMaterial {
         let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 24);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
-        this.paramSetNumber('$localrefractdepth', 0);
-
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-        offs += fillVec4(d, offs, this.b2s, this.b2s, this.b2x, this.b2y);
+
+        mat4.identity(scratchMat4a);
+
+        if (this.debugPop) {
+            this.paramSetNumber('$localrefractdepth', this.b2d*0.05);
+            // const s = lerp(Math.max(1/this.b2s, 0.001), 1.0, this.b2d);
+            // calcTexMtx_Basic(scratchMat4a, s, s, 0, this.b2y*(1-this.b2d), -this.b2x*(1-this.b2d), 0.5, 0.5);
+            this.shadowAmt = this.lightAmt;
+        }
+
+        offs += fillScaleBias(d, offs, scratchMat4a);
+
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
-        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
+        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, this.shadowAmt);
 
         if (this.wantsEnvmap) {
             offs += this.paramFillGammaColor(d, offs, '$envmaptint');

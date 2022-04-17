@@ -1,8 +1,11 @@
 
-import { mat4, ReadonlyMat4, vec3, vec4 } from "gl-matrix";
+
+import bezier from 'bezier-easing';
+
+import { mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
-import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint, divideByW } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -13,7 +16,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
@@ -32,8 +35,9 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/Projection
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { dfRange, dfShow } from "../DebugFloaters";
+import { drawClipSpaceLine, drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D, transformToClipSpace } from "../DebugJunk";
+import { dfBindMidiValue, dfRange, dfShow } from "../DebugFloaters";
+import { Color, colorNewCopy, colorNewFromRGBA, colorToCSS, OpaqueBlack, White } from '../Color';
 
 export class CustomMount {
     constructor(public path: string, public files: string[] = []) {
@@ -1917,6 +1921,8 @@ export class SourceRenderer implements SceneGfx {
         return downsampleColorTargetID;
     }
 
+    private movieMagic = new MovieMagic();
+
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const renderContext = this.renderContext, cache = renderContext.renderCache;
@@ -1999,7 +2005,11 @@ export class SourceRenderer implements SceneGfx {
         this.resetViews();
         renderInstManager.resetRenderInsts();
 
-        this.renderContext.debugStatistics.addToConsole(viewerInput);
+        renderContext.currentView = this.mainViewRenderer.mainView;
+        this.movieMagic.draw(renderContext);
+        renderContext.currentView = null!;
+
+        renderContext.debugStatistics.addToConsole(viewerInput);
         const camPositionX = this.mainViewRenderer.mainView.cameraPos[0].toFixed(2), camPositionY = this.mainViewRenderer.mainView.cameraPos[1].toFixed(2), camPositionZ = this.mainViewRenderer.mainView.cameraPos[2].toFixed(2);
         viewerInput.debugConsole.addInfoLine(`Source Camera Pos: ${camPositionX} ${camPositionY} ${camPositionZ}`);
     }
@@ -2012,5 +2022,177 @@ export class SourceRenderer implements SceneGfx {
             this.skyboxRenderer.destroy(device);
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].destroy(device);
+    }
+}
+
+const aeanim = bezier(0.8, 0.0, 0.2, 1.0);
+
+function aelerp(start: number, end: number, t: number): number {
+    return aeanim(saturate(invlerp(start, end, t)));
+}
+
+class MovieMagic {
+    constructor() {
+        window.main.ui.debugFloaterHolder.midiControls.bindObject(this);
+    }
+
+    private drawBox(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, centerPos: ReadonlyVec3, axisX: ReadonlyVec3, axisY: ReadonlyVec3, t: number): void {
+        if (t <= 0.0)
+            return;
+
+        const animT = aelerp(0.0, 1.0, t);
+
+        drawStroke(ctx, (stroke) => {
+            ctx.strokeStyle = colorToCSS(stroke ? OpaqueBlack : White);
+            ctx.lineWidth = (stroke ? 24 : 12);
+            ctx.globalAlpha = invlerp(0.0, 0.2, animT);
+            pathBox(ctx, clipFromWorldMatrix, centerPos, axisX, axisY, animT);
+        });
+    }
+
+    private drawArrow(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, p0: ReadonlyVec3, p1: ReadonlyVec3, t: number): void {
+        if (t <= 0.0)
+            return;
+
+        const animT = aelerp(0.0, 1.0, t);
+
+        drawStroke(ctx, (stroke) => {
+            ctx.globalAlpha = invlerp(0.0, 0.2, animT);
+            ctx.strokeStyle = colorToCSS(stroke ? OpaqueBlack : White);
+            ctx.lineWidth = (stroke ? 24 : 12);
+            vec3.lerp(p3[4], p0, p1, animT);
+            pathLine(ctx, clipFromWorldMatrix, p0, p3[4]);
+            pathArrowHead(ctx, clipFromWorldMatrix, p3[4], Vec3UnitZ, animT * 4, animT * 2);
+        });
+    }
+
+    private drawBoxFill(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, centerPos: ReadonlyVec3, axisX: ReadonlyVec3, axisY: ReadonlyVec3, c: Color): void {
+        if (c.a <= 0.0)
+            return;
+
+        ctx.save();
+        ctx.beginPath();
+        pathBox(ctx, clipFromWorldMatrix, centerPos, axisX, axisY, 1.0);
+        ctx.closePath();
+        ctx.fillStyle = colorToCSS(c);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    @dfBindMidiValue('knob', 5)
+    public boxT = 1;
+    @dfBindMidiValue('knob', 6)
+    public boxFillT = 1;
+    @dfBindMidiValue('knob', 7)
+    public arrowT = 1;
+
+    public draw(renderContext: SourceRenderContext): void {
+        const ctx = getDebugOverlayCanvas2D();
+        const clipFromWorldMatrix = renderContext.currentView.clipFromWorldMatrix;
+
+        const center = vec3.fromValues(496, -320, -128);
+        const axisX = vec3.scale(vec3.create(), Vec3UnitX, 16);
+        const axisY = vec3.scale(vec3.create(), Vec3UnitY, -64);
+
+        this.drawBox(ctx, clipFromWorldMatrix, center, axisX, axisY, this.boxT);
+
+        const numSegments = 4;
+        for (let i = 0; i < numSegments; i++) {
+            const t = (renderContext.globalTime + (i/numSegments)) % 1.0;
+            const c = vec3.clone(center);
+
+            const animT = aeanim(this.boxFillT);
+            const h = animT * 24;
+            c[2] += lerp(0.0, h, t);
+
+            const color = colorNewFromRGBA(0.5, 0.3, 0.9, lerp(0.6, 0.0, t));
+            color.a *= saturate(invlerp(0.0, 0.2, t));
+            color.a *= saturate(invlerp(0.0, 0.1, animT));
+
+            this.drawBoxFill(ctx, clipFromWorldMatrix, c, axisX, axisY, color);
+        }
+
+        vec3.scaleAndAdd(p3[6], center, Vec3UnitZ, 24);
+        this.drawArrow(ctx, clipFromWorldMatrix, center, p3[6], this.arrowT);
+    }
+}
+
+type StrokeCB = (stroke: boolean) => void;
+
+function drawStroke(ctx: CanvasRenderingContext2D, cb: StrokeCB): void {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    cb(true);
+    ctx.stroke();
+    ctx.beginPath();
+    cb(false);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function set4(dst: vec4, src: ReadonlyVec3, w = 1.0): void {
+    vec4.set(dst, src[0], src[1], src[2], w);
+}
+
+const p3 = nArray(10, () => vec3.create());
+const p4 = nArray(10, () => vec4.create());
+
+function screenSpace(ctx: CanvasRenderingContext2D, c: ReadonlyVec4): [number, number] {
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    return [(c[0] + 1) * cw / 2, ((-c[1] + 1) * ch / 2)];
+}
+
+function pathBox(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, c: ReadonlyVec3, axisX: ReadonlyVec3, axisY: ReadonlyVec3, t: number): void {
+    vec3.scaleAndAdd(p3[0], c, axisX, -1);
+    vec3.scaleAndAdd(p3[0], p3[0], axisY, -1);
+
+    vec3.scaleAndAdd(p3[1], c, axisX, 1);
+    vec3.scaleAndAdd(p3[1], p3[1], axisY, -1);
+
+    vec3.scaleAndAdd(p3[2], c, axisX, 1);
+    vec3.scaleAndAdd(p3[2], p3[2], axisY, 1);
+
+    vec3.scaleAndAdd(p3[3], c, axisX, -1);
+    vec3.scaleAndAdd(p3[3], p3[3], axisY, 1);
+
+    for (let i = 0; i < 4; i++)
+        set4(p4[i], p3[i]);
+    transformToClipSpace(clipFromWorldMatrix, p4, 4);
+    for (let i = 0; i < 4; i++)
+        divideByW(p4[i], p4[i]);
+
+    ctx.moveTo(... screenSpace(ctx, p4[0]));
+    for (let i = 0; i < 4; i++) {
+        const t0 = i/4, t1 = (i+1)/4;
+        const tt = saturate(invlerp(t0, t1, t));
+        if (tt <= 0.0)
+            break;
+        vec4.lerp(p4[4], p4[i], p4[(i+1)%4], tt);
+        ctx.lineTo(... screenSpace(ctx, p4[4]));
+    }
+}
+
+function pathLine(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, p0: ReadonlyVec3, p1: ReadonlyVec3): void {
+    set4(p4[0], p0);
+    set4(p4[1], p1);
+    transformToClipSpace(clipFromWorldMatrix, p4, 2);
+    for (let i = 0; i < 2; i++)
+        divideByW(p4[i], p4[i]);
+
+    ctx.moveTo(... screenSpace(ctx, p4[0]));
+    ctx.lineTo(... screenSpace(ctx, p4[1]));
+}
+
+function pathArrowHead(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, p1: ReadonlyVec3, n: ReadonlyVec3, h: number, r: number): void {
+    const nPoints = 32;
+    for (let i = 0; i < nPoints; i++) {
+        const t0 = ((i + 0) / nPoints) * MathConstants.TAU;
+        mat4.fromRotation(scratchMatrix, t0, n);
+        transformVec3Mat4w0(p3[0], scratchMatrix, Vec3UnitX);
+        vec3.scaleAndAdd(p3[0], p1, p3[0], r);
+        vec3.scaleAndAdd(p3[0], p3[0], n, -h);
+        pathLine(ctx, clipFromWorldMatrix, p1, p3[0]);
     }
 }

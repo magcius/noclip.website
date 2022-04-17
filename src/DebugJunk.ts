@@ -160,7 +160,7 @@ export function prepareFrameDebugOverlayCanvas2D(): void {
 
 const p = nArray(10, () => vec4.create());
 
-function transformToClipSpace(m: ReadonlyMat4, p: vec4[], nPoints: number): void {
+export function transformToClipSpace(m: ReadonlyMat4, p: vec4[], nPoints: number): void {
     for (let i = 0; i < nPoints; i++)
         vec4.transformMat4(p[i], p[i], m);
 }
@@ -189,7 +189,7 @@ function clipLineToPlane(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4, p
 }
 
 const nearPlane = vec4.fromValues(0, 0, -1, 1);
-function clipLineAndDivide(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4): boolean {
+export function clipLineAndDivide(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4): boolean {
     if (!clipLineToPlane(da, db, a, b, nearPlane))
         return false;
 
@@ -198,7 +198,7 @@ function clipLineAndDivide(da: vec4, db: vec4, a: ReadonlyVec4, b: ReadonlyVec4)
     return true;
 }
 
-function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: ReadonlyVec4, p1: ReadonlyVec4, s0: vec4, s1: vec4): void {
+export function drawClipSpaceLine(ctx: CanvasRenderingContext2D, p0: ReadonlyVec4, p1: ReadonlyVec4, s0: vec4, s1: vec4): void {
     if (!clipLineAndDivide(s0, s1, p0, p1))
         return;
     const cw = ctx.canvas.width;

@@ -10,6 +10,7 @@ specifiers:
   '@types/webmidi': ^2.0.6
   '@wasm-tool/wasm-pack-plugin': ^1.6.0
   '@webgpu/types': ^0.1.13
+  bezier-easing: ^2.1.0
   buffer: ^6.0.3
   clean-webpack-plugin: ^3.0.0
   copy-webpack-plugin: ^7.0.0
@@ -36,6 +37,7 @@ specifiers:
 
 dependencies:
   '@sentry/browser': 5.30.0
+  bezier-easing: 2.1.0
   crc-32: 1.2.1
   gl-matrix: 3.4.3
   librw: 0.4.0
@@ -732,6 +734,10 @@ packages:
   /batch/0.6.1:
     resolution: {integrity: sha1-3DQxT05nkxgJP8dgJyUl+UvyXBY=}
     dev: true
+
+  /bezier-easing/2.1.0:
+    resolution: {integrity: sha1-wE3+i5JtbsrKGBPWn/F5t8ICXYY=}
+    dev: false
 
   /big.js/5.2.2:
     resolution: {integrity: sha512-vyL2OymJxmarO8gxMr0mhChsO9QGwhynfuu4+MHTAW6czfq9humCB7rKpUjDd9YUiDPU4mzpyupFSvOClAwbmQ==}
