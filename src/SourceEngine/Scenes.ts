@@ -28,7 +28,7 @@ export async function createScene(context: SceneContext, loadContext: SourceLoad
     // Build skybox from worldname.
     const worldspawn = bspRenderer.getWorldSpawn();
     if (worldspawn.skyname)
-        renderer.skyboxRenderer = new SkyboxRenderer(renderContext, worldspawn.skyname);
+        renderer.skyboxRenderer = new SkyboxRenderer(renderContext, `sky_borealis01`);
     renderer.bspRenderers.push(bspRenderer);
     return renderer;
 }

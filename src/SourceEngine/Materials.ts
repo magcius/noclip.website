@@ -3,29 +3,26 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType, noclipSpaceFromSourceEngineSpace } from "./Main";
+import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixSRT, projectionMatrixForCuboid } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { dfBindMidiValue, dfRange, dfShow } from "../DebugFloaters";
+import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
 import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { calcTexMtx_Basic, calcTexMtx_Maya } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
-import { TheWitnessGlobals } from "../TheWitness/Globals";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -3296,19 +3293,15 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
-    Mat4x4 u_ProjectionView2;
 };
 
 #define u_RefractAmount (u_RefractTint.a)
 #define u_RefractDepth  (u_Misc[0].x)
-#define u_LightAmt      (u_Misc[0].y)
-#define u_DispAmt       (u_Misc[0].z)
-#define u_Ortho         (u_Misc[0].w)
 
 // Base Texture Coordinates
 varying vec3 v_TexCoord0;
 // Normal Map Coordinates
-varying vec4 v_TexCoord1;
+varying vec2 v_TexCoord1;
 varying vec3 v_PositionWorld;
 
 // 3x3 matrix for our tangent space basis.
@@ -3329,6 +3322,7 @@ void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3342,12 +3336,6 @@ void mainVS() {
     // Convert from projected position to texture space.
     vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
-
-    if (u_Ortho == 1.0f) {
-        gl_Position = Mul(u_ProjectionView2, vec4(a_Position, 1.0));
-    } else {
-        gl_Position = Mul(u_ProjectionView2, vec4(t_PositionWorld, 1.0));
-    }
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
 }
@@ -3382,8 +3370,8 @@ void mainPS() {
     // Compute our bent texture coordinates into the texture.
     vec2 t_RefractTexCoordOffs = vec2(0.0);
     t_RefractTexCoordOffs += t_RefractPointOnPlane.xy;
-    t_RefractTexCoordOffs += t_BumpmapNormal.xy * u_DispAmt;
-    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane * u_DispAmt;
+    t_RefractTexCoordOffs += t_BumpmapNormal.xy;
+    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
 
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
@@ -3392,11 +3380,10 @@ void mainPS() {
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, u_LightAmt));
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
-    t_Fresnel = mix(1.0, t_Fresnel, u_LightAmt);
 
-    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb * 0.5;
+    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb;
 #else
     // "Classic" refract
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
@@ -3435,7 +3422,7 @@ void mainPS() {
     t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
     t_SpecularLighting = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_SpecularLighting)), t_SpecularLighting, u_EnvmapContrastSaturationFresnel.y);
 
-    // t_FinalColor.rgb += t_SpecularLighting;
+    t_FinalColor.rgb += t_SpecularLighting;
 #endif
 
     t_FinalColor.a = t_BumpmapSample.a;
@@ -3451,19 +3438,14 @@ export class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
 
-    // @dfBindMidiValue('slider', 0)
-    public depthAmt = 1;
-
-    @dfBindMidiValue('slider', 1)
-    public lightAmt = 1;
-
-    @dfBindMidiValue('slider', 2)
-    public dispAmt = 1;
-
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
+
+    public depthAmt = 1;
+    public lightAmt = 1;
+    public dispAmt = 1;
 
     protected override initParameters(): void {
         super.initParameters();
@@ -3534,42 +3516,18 @@ export class Material_Refract extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
     }
 
-    private debugPop = false;
-    public ortho = false;
-
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        /*if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[432].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
-            this.lightAmt = 0;
-            this.dispAmt = 0;
-        }*/
-
-        /*if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
-            const midiControls = window.main.ui.debugFloaterHolder.midiControls;
-            midiControls.bindObject(this);
-            this.ortho = true;
-            this.debugPop = true;
-            //this.lightAmt = -1;
-            //this.dispAmt = 0;
-        }*/
-
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20+16);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
-
-        if (this.debugPop) {
-            this.paramSetNumber('$localrefractdepth', this.depthAmt*0.05);
-            // const s = lerp(Math.max(1/this.b2s, 0.001), 1.0, this.b2d);
-            // calcTexMtx_Basic(scratchMat4a, s, s, 0, this.b2y*(1-this.b2d), -this.b2x*(1-this.b2d), 0.5, 0.5);
-        }
-
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
-        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, window.debug === 1 ? 1.0 : 0.0);
+        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'));
 
         if (this.wantsEnvmap) {
             offs += this.paramFillGammaColor(d, offs, '$envmaptint');
@@ -3577,22 +3535,6 @@ export class Material_Refract extends BaseMaterial {
             const envmapSaturation = this.paramGetNumber('$envmapsaturation');
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
-        }
-
-        if (window.debug === 1) {
-            const scale = 1/15;
-            const vr = window.main.viewer.viewerRenderInput, w = vr.backbufferWidth * scale, h = vr.backbufferHeight * scale;
-            projectionMatrixForCuboid(scratchMat4a, -w, w, h, -h, -10000.0, 10000.0);
-
-            mat4.mul(scratchMat4a, scratchMat4a, noclipSpaceFromSourceEngineSpace);
-            scratchMat4a[12] = -1.0 + 16/w;
-
-            const clipSpaceNearZ = renderContext.materialCache.device.queryVendorInfo().clipSpaceNearZ;
-            projectionMatrixConvertClipSpaceNearZ(scratchMat4a, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
-
-            offs += fillMatrix4x4(d, offs, scratchMat4a);
-        } else {
-            offs += fillMatrix4x4(d, offs, renderContext.currentView.clipFromWorldMatrix);
         }
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);

@@ -444,7 +444,6 @@ export class LuminanceHistogram {
         t = saturate(Math.min(t, 0.25 / this.buckets.length));
 
         toneMapParams.toneMapScale = lerp(toneMapParams.toneMapScale, goalScale, t);
-        toneMapParams.toneMapScale = 1.35;
     }
 
     public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {

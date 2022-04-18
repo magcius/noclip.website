@@ -3421,8 +3421,6 @@ export class EntitySystem {
 
         this.flushCreateQueue();
 
-        return;
-
         const spawnStateAction = this.getSpawnStateAction();
         if (spawnStateAction === SpawnState.FetchingResources) {
             // Still fetching; nothing to do.
@@ -3473,8 +3471,8 @@ interface EntityMessageDebuggerItem {
 
 class EntityMessageDebugger {
     private messages: EntityMessageDebuggerItem[] = [];
-    public capture = IS_DEVELOPMENT;
-    public draw = IS_DEVELOPMENT;
+    public capture = false;
+    public draw = false;
 
     public fireInput(target: BaseEntity, event: QueuedOutputEvent, time: number): void {
         if (!this.capture)

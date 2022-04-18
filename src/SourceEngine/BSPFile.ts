@@ -1099,6 +1099,9 @@ export class BSPFile {
             if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
                 continue;
 
+            if (tex.texName.includes('light_panel'))
+                continue;
+
             const lightofs = facelist.getInt32(idx + 0x14, true);
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist.getUint32(idx + 0x24 + i * 4, true));
 
@@ -1404,6 +1407,7 @@ export class BSPFile {
                 else if (faceToModelIdx[prevFace.index] !== faceToModelIdx[face.index])
                     canMerge = false;
 
+                canMerge = false;
                 if (canMerge)
                     mergeSurface = this.surfaces[this.surfaces.length - 1];
             }

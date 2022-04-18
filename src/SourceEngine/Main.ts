@@ -1283,6 +1283,8 @@ export class SourceWorldViewRenderer {
             renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(this.currentProjectedLightRenderer.outputDepthTextureID!), staticResources.shadowSampler);
     }
 
+    public limit = Infinity;
+
     public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
         assert(this.enabled);
         if (this.outputColorTextureID !== null)
@@ -1310,12 +1312,14 @@ export class SourceWorldViewRenderer {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
 
             pass.exec((passRenderer) => {
-                renderer.executeOnPass(passRenderer, this.skyboxView.mainList);
-                renderer.executeOnPass(passRenderer, this.skyboxView.translucentList);
+                renderer.executeOnPass(passRenderer, this.skyboxView.mainList, Infinity);
+                renderer.executeOnPass(passRenderer, this.skyboxView.translucentList, Infinity);
             });
         });
 
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Main Depth`);
+
+        let limit = this.limit;
 
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
@@ -1326,7 +1330,7 @@ export class SourceWorldViewRenderer {
 
             pass.exec((passRenderer, scope) => {
                 this.lateBindTextureSetOnPassRenderer(renderer, scope);
-                renderer.executeOnPass(passRenderer, this.mainView.mainList);
+                limit = renderer.executeOnPass(passRenderer, this.mainView.mainList, limit);
             });
         });
 
@@ -1359,7 +1363,7 @@ export class SourceWorldViewRenderer {
 
                     this.lateBindTextureSetOnPassRenderer(renderer, scope);
 
-                    renderer.executeOnPass(passRenderer, this.mainView.indirectList);
+                    limit = renderer.executeOnPass(passRenderer, this.mainView.indirectList, limit);
                 });
             });
         }
@@ -1374,7 +1378,7 @@ export class SourceWorldViewRenderer {
 
                 pass.exec((passRenderer, scope) => {
                     this.lateBindTextureSetOnPassRenderer(renderer, scope);
-                    renderer.executeOnPass(passRenderer, this.mainView.translucentList);
+                    limit = renderer.executeOnPass(passRenderer, this.mainView.translucentList, limit);
                 });
             });
         }
@@ -1626,11 +1630,19 @@ export class SourceRenderer implements SceneGfx {
         m.gfxSampler = sampler;
     }
 
-    public executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
+    public executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList, limit: number): number {
         const cache = this.renderContext.renderCache;
         for (let i = 0; i < this.bindingMapping.length; i++)
             list.resolveLateSamplerBinding(this.bindingMapping[i], this.textureMapping[i]);
-        list.drawOnPassRenderer(cache, passRenderer);
+
+        for (let i = 0; i < list.renderInsts.length; i++) {
+            if (limit <= 0)
+                break;
+            limit--;
+            list.renderInsts[i].drawOnPass(cache, passRenderer);
+        }
+        list.reset();
+        return limit;
     }
 
     private processInput(): void {
@@ -2412,12 +2424,45 @@ class MovieMagic {
             });
         });
 
+        const renderer = (window.main.scene as SourceRenderer);
+        sched.edge(0, () => {
+            renderer.mainViewRenderer.mainView
+        });
+
+        return sched;
+    }
+
+    private setupSched2(): AnimScheduler {
+        const cam = window.main.viewer.cameraController as FPSCameraController;
+        const sched = new AnimScheduler();
+
+        const camP0 = vec3.create();
+        getMatrixTranslation(camP0, cam.camera.worldMatrix);
+        const camAxisZ = vec3.create();
+        getMatrixAxisZ(camAxisZ, cam.camera.worldMatrix);
+        const camP1 = vec3.clone(camP0);
+        vec3.scaleAndAdd(camP1, camP1, camAxisZ, 300);
+        vec3.scaleAndAdd(camP0, camP0, camAxisZ, -100);
+
+        const renderer = (window.main.scene as SourceRenderer);
+        sched.edge(0, () => {
+            renderer.mainViewRenderer.limit = Infinity;
+        });
+        sched.animl(0, 16, (t) => {
+            setMatrixTranslation(cam.camera.worldMatrix, vec3.lerp(vec3.create(), camP0, camP1, t));
+            mat4.invert(cam.camera.viewMatrix, cam.camera.worldMatrix);
+            cam.camera.worldMatrixUpdated();
+        });
+        sched.animl(0, 14, (t) => {
+            renderer.mainViewRenderer.limit = lerp(0, 900-83, t);
+        });
+
         return sched;
     }
 
     public genSched() {
         const sched = new AnimScheduler();
-        sched.subsched(this.setupSched1());
+        sched.subsched(this.setupSched2());
         return sched;
     }
 }

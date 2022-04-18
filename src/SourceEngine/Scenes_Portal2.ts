@@ -258,6 +258,8 @@ async function createPortal2SourceLoadContext(context: SceneContext): Promise<So
             filesystem.createVPKMount(`${pathBase}/portal2/pak01`),
             filesystem.createVPKMount(`${pathBase}/portal2_dlc1/pak01`),
             filesystem.createVPKMount(`${pathBase}/portal2_dlc2/pak01`),
+            filesystem.createVPKMount(`HalfLife2/hl2_textures`),
+            filesystem.createVPKMount(`HalfLife2/hl2_misc`),
         ]);
         return filesystem;
     });
