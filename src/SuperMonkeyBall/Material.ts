@@ -193,22 +193,6 @@ export class MaterialInst {
             );
         }
 
-        // if ((material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0){
-        //     mb.setTevColorIn(i, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        // } else {
-        //     mb.setTevColorIn(i, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
-
-        // unk0x03 << 0 : ???           0x00000001
-        // unk0x03 << 1 : culling       0x00000002
-        // unk0x03 << 2 : ???           0x00000004 relate Zmode??
-        // unk0x03 << 3 : ???           0x00000008
-        // unk0x03 << 4 : ???           0x00000010
-        // unk0x03 << 5 : depthWrite?   0x00000020
-        // unk0x03 << 6 : blend?        0x00000040  (relate 0x3C's 0x00000010)
-        //
-        // 0x63 blending
-        // 0x65
-        // mb.setZMode(true, GX.CompareType.LEQUAL, (mat_unk0x03 & (1 << 5)) !== 0 ? false : true);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
 
         if (this.translucentShape) {
@@ -224,17 +208,16 @@ export class MaterialInst {
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         }
 
-        // let dstFactor = GX.BlendFactor.INVSRCALPHA;
-        // if ((mat_unk0x03 & (1 << 6)) !== 0) {
-        //     // Blend Dsetination Factor?
-        //     dstFactor = GX.BlendFactor.ONE;
-        // }
         mb.setBlendMode(
             GX.BlendMode.BLEND,
             GX.BlendFactor.SRCALPHA,
             GX.BlendFactor.INVSRCALPHA,
             GX.LogicOp.CLEAR
         );
+
+        // TODO(complexplane): Parameterize front/back cull depending on which display list /
+        // double-sided we're using
+        mb.setCullMode(GX.CullMode.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }

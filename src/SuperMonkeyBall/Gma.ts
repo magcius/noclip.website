@@ -16,6 +16,8 @@ import { TextureInputGX } from "../gx/gx_texture";
 import { assert, assertExists, hexzero, readString } from "../util";
 import { AVTpl } from "./AVTpl";
 
+const SHAPE_BASE_SIZE = 0x60;
+
 export const enum MaterialFlags {
     Unlit = 1 << 0,
     DoubleSided = 1 << 1, // Draw front and back sides of tris/quads
@@ -41,11 +43,11 @@ export type Material = {
     colors: Color[];
     transparents: number[];
     tevLayerCount: number;
-    dlistFlags: DlistFlags;
     tevLayerIdxs: number[]; // Shape materials can reference at most three tev layers stored in model
     vtxAttrs: GX.Attr;
     unk0x14: number; // sort index?? shader index?
     unk0x15: number;
+    blendFactors: number;
 };
 
 // GCMF VertexControlHeader
@@ -79,15 +81,12 @@ type VtxConType4 = {
 export type Shape = {
     material: Material;
     origin: vec3; // Reference point for depth sorting
-    dlistHeaders: ExtraDlists[];
-    rawData: ArrayBufferSlice; // TODO(complexplane): Store individual dlist bufs instead
-};
-
-// GCMF DisplaylistHeader
-export type ExtraDlists = {
-    mtxIdxs: number[];
-    dlistSizes: number[];
-    submeshEndOffs: number;
+    dlistFlags: DlistFlags;
+    frontCulledDlist: ArrayBufferSlice | null;
+    backCulledDlist: ArrayBufferSlice | null;
+    extraFrontCulledDlist: ArrayBufferSlice | null;
+    extraBackCulledDlist: ArrayBufferSlice | null;
+    size: number; // Total size of shape in bytes
 };
 
 export const enum TevLayerFlags {
@@ -241,7 +240,6 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         transparents[i] = view.getUint8(0x10 + i);
     }
     const tevLayerCount = view.getUint8(0x12);
-    const dlistFlags: DlistFlags = view.getUint8(0x13);
     const unk0x14 = view.getUint8(0x14);
     const unk0x15 = view.getUint8(0x15);
     for (let i = 0; i < 3; i++) {
@@ -258,6 +256,8 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         flags |= MaterialFlags.SimpleMaterial;
     }
 
+    const blendFactors = view.getUint32(0x38);
+
     return {
         flags,
         colors,
@@ -265,72 +265,61 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         tevLayerCount,
         unk0x14,
         unk0x15,
-        dlistFlags,
         tevLayerIdxs,
         vtxAttrs,
+        blendFactors,
     };
 }
 
-function parseExShape(buffer: ArrayBufferSlice): ExtraDlists {
-    const view = buffer.createDataView();
-    const mtxIdxs = [];
-    const dlistSizes = [];
-    let offs = 0x00;
-    for (let i = 0; i < 8; i++) {
-        let mtxIdx = view.getUint32(offs);
-        mtxIdxs.push(mtxIdx);
-        offs += 0x01 * i;
-    }
-    for (let i = 0; i < 2; i++) {
-        let dlistSize = view.getUint32(offs);
-        dlistSizes.push(dlistSize);
-        offs += 0x04 * i;
-    }
-    const submesh_end_offs = view.byteOffset + 0x20;
-
-    return { mtxIdxs, dlistSizes, submeshEndOffs: submesh_end_offs };
-}
-
+// Returns parsed shape and offset of end of this parsed shape
 function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     const view = buffer.createDataView();
 
-    let mtxIdxs: number[] = [];
-    const boundSphereCenter = vec3.create();
-    let dlistSizes: number[] = [];
-    const dlistHeaders: ExtraDlists[] = [];
+    const material = parseMaterial(buffer.slice(0x00, SHAPE_BASE_SIZE), idx);
+    const origin = vec3.create();
+    const dlistFlags: DlistFlags = view.getUint8(0x13);
+    const frontCulledDlistSize = view.getInt32(0x28);
+    const backCulledDlistSize = view.getInt32(0x2c);
+    vec3.set(origin, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
 
-    const material = parseMaterial(buffer.slice(0x00, 0x60), idx);
-    for (let i = 0; i < 8; i++) {
-        let mtxIdx = view.getInt8(0x20 + i);
-        mtxIdxs.push(mtxIdx);
+    let dlistOffs = SHAPE_BASE_SIZE;
+
+    let frontCulledDlist: ArrayBufferSlice | null = null;
+    if (dlistFlags & DlistFlags.HasDlist0) {
+        frontCulledDlist = buffer.slice(dlistOffs, dlistOffs + frontCulledDlistSize);
+        dlistOffs += frontCulledDlistSize;
     }
-    for (let i = 0; i < 2; i++) {
-        let dlistSize = view.getInt32(0x28 + 0x04 * i);
-        dlistSizes.push(dlistSize);
+
+    let backCulledDlist: ArrayBufferSlice | null = null;
+    if (dlistFlags & DlistFlags.HasDlist1) {
+        backCulledDlist = buffer.slice(dlistOffs, dlistOffs + backCulledDlistSize);
+        dlistOffs += backCulledDlistSize;
     }
-    vec3.set(
-        boundSphereCenter,
-        view.getFloat32(0x30),
-        view.getFloat32(0x34),
-        view.getFloat32(0x38)
-    );
-    const submeshEndOffs = view.byteOffset + 0x60;
-    dlistHeaders.push({ mtxIdxs, dlistSizes, submeshEndOffs });
-    // TODO(complexplane): Parse individual dlist buffers
 
-    // TODO(complexplane): These conditionals look wrong, fix/verify them
-    // let vtxRenderFlag = material.vtxRenderFlag;
-    // if (vtxRenderFlag & 1 >> 2 || vtxRenderFlag & 1 >> 3) {
-    //     //Exsit Extra DisplayList
-    //     let offs = 0x60;
-    //     for (let i = 0; i < 2; i++) {
-    //         offs += dlistHeaders[0].dlistSizes[i];
-    //     }
-    //     let dlistHeader = parseExShape(buffer.slice(offs, offs + 0x20));
-    //     dlistHeaders.push(dlistHeader);
-    // }
+    let extraFrontCulledDlist: ArrayBufferSlice | null = null;
+    let extraBackCulledDlist: ArrayBufferSlice | null = null;
+    if (dlistFlags & (DlistFlags.HasDlist2 | DlistFlags.HasDlist3)) {
+        // Parse extra dlists header
+        const extraFrontCulledDlistSize = view.getInt32(dlistOffs + 0x8);
+        const extraBackCulledDlistSize = view.getInt32(dlistOffs + 0xc);
+        dlistOffs += 0x20;
 
-    return { material, origin: boundSphereCenter, dlistHeaders, rawData: buffer };
+        extraFrontCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraFrontCulledDlistSize);
+        dlistOffs += extraFrontCulledDlistSize;
+        extraBackCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraBackCulledDlistSize);
+        dlistOffs += extraBackCulledDlistSize;
+    }
+
+    return {
+        material,
+        origin,
+        dlistFlags,
+        frontCulledDlist,
+        backCulledDlist,
+        extraFrontCulledDlist,
+        extraBackCulledDlist,
+        size: dlistOffs,
+    };
 }
 
 function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
@@ -343,7 +332,12 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
 
     const modelFlags = view.getUint32(0x04) as ModelFlags;
     let useVtxCon = modelFlags & (ModelFlags.Skin | ModelFlags.Effective);
-    vec3.set(boundSphereCenter, view.getFloat32(0x08), view.getFloat32(0x0c), view.getFloat32(0x10));
+    vec3.set(
+        boundSphereCenter,
+        view.getFloat32(0x08),
+        view.getFloat32(0x0c),
+        view.getFloat32(0x10)
+    );
     const boundSphereRadius = view.getFloat32(0x14);
 
     const tevLayerCount = view.getInt16(0x18);
@@ -386,25 +380,20 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
 
     let shapeOffs = useVtxCon ? 0x20 : 0x00;
     let shapeBuff = buffer.slice(texMtxSize);
-    // GcmfShape
+    
+    // Parse shapes
     for (let i = 0; i < allMaterialCount; i++) {
-        let vtxAttr = view.getUint32(texMtxSize + shapeOffs + 0x1c);
-        if ((vtxAttr & (1 << GX.Attr._NBT)) !== 0) {
-            // NBT unsupported
+        const shape = parseShape(shapeBuff.slice(shapeOffs), i);
+        if (shape.material.vtxAttrs & (1 << GX.Attr._NBT)) {
+            // TODO: support this?
             continue;
         }
-        const shape = parseShape(shapeBuff.slice(shapeOffs), i);
         if (shape.material.tevLayerIdxs[0] < 0) {
             // TODO(complexplane): Support 0 TEV layer shapes
             continue;
         }
         shapes.push(shape);
-        let offs = 0x60;
-        let dlistHeader = shape.dlistHeaders[shape.dlistHeaders.length - 1];
-        for (let j = 0; j < 2; j++) {
-            offs += dlistHeader.dlistSizes[j];
-        }
-        shapeOffs += offs;
+        shapeOffs += shape.size;
     }
 
     return {
@@ -415,7 +404,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
         opaqueShapeCount,
         translucentShapeCount,
         matrices,
-        tevLayers: tevLayers,
+        tevLayers,
         shapes,
     };
 }
@@ -457,7 +446,8 @@ export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
 
         // TODO parse attribute into nicer type first
         const modelFlags = view.getUint32(gcmfBaseOffs + modelOffs + 0x04) as ModelFlags;
-        const unsupported = modelFlags & (ModelFlags.Stitching | ModelFlags.Skin | ModelFlags.Effective);
+        const unsupported =
+            modelFlags & (ModelFlags.Stitching | ModelFlags.Skin | ModelFlags.Effective);
         if (unsupported) {
             // TODO: Support these types of models
             continue;

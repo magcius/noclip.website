@@ -143,32 +143,25 @@ export class ShapeInst {
 
         // 16-bit models use VTXFMT1
         const vtxFmt = modelFlags & Gma.ModelFlags.Vat16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
-        let dlistOffs = 0x60;
         const loadedVertexDatas: LoadedVertexData[] = [];
-        shapeData.dlistHeaders.forEach((dlistHeader) => {
-            let dlistSizes = dlistHeader.dlistSizes;
-            for (let i = 0; i < dlistSizes.length; i++) {
-                let size = dlistSizes[i];
-                if (size <= 0) {
-                    continue;
-                }
-                let isCW = i % 2 == 1;
-                let dlisEndOffs = dlistOffs + size;
-                // TODO(complexplane): Parse separate dlist slices beforehand, and clean this up?
-                let dlist = shapeData.rawData.slice(dlistOffs + 0x01, dlisEndOffs);
-                const loadedVertexData = generateLoadedVertexData(
-                    dlist,
-                    vat,
-                    vtxFmt,
-                    isNBT,
-                    loader,
-                    isCW
-                );
-                loadedVertexDatas.push(loadedVertexData);
-
-                dlistOffs = dlisEndOffs;
-            }
-        });
+        const dlists = [
+            shapeData.frontCulledDlist,
+            shapeData.backCulledDlist,
+            shapeData.extraFrontCulledDlist,
+            shapeData.extraBackCulledDlist,
+        ];
+        for (let i = 0; i < dlists.length; i++) {
+            if (dlists[i] === null) continue;
+            const loadedVertexData = generateLoadedVertexData(
+                dlists[i]!.slice(1),
+                vat,
+                vtxFmt,
+                isNBT,
+                loader,
+                i % 2 === 1,
+            );
+            loadedVertexDatas.push(loadedVertexData);
+        }
 
         // TODO(complexplane): Either get rid of GfxBufferCoalescer or go ham and coalesce all shape
         // buffers in model (is cross-model buffer coalescing possible?)
