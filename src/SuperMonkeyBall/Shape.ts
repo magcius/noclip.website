@@ -20,8 +20,8 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
-import { MaterialInst } from "./MaterialInst";
-import { SamplerInst } from "./SamplerInst";
+import { MaterialInst } from "./Material";
+import { TevLayerInst } from "./TevLayer";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     const vatFormat: GX_VtxAttrFmt[] = [];
@@ -120,7 +120,7 @@ export class ShapeInst {
         device: GfxDevice,
         renderCache: GfxRenderCache,
         public shapeData: Gma.Shape,
-        modelSamplers: SamplerInst[],
+        modelTevLayers: TevLayerInst[],
         modelFlags: Gma.ModelFlags,
         translucent: boolean
     ) {
@@ -187,7 +187,7 @@ export class ShapeInst {
                 )
         );
 
-        this.material = new MaterialInst(shapeData.material, modelSamplers, translucent);
+        this.material = new MaterialInst(shapeData.material, modelTevLayers, translucent);
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {

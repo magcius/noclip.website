@@ -8,19 +8,19 @@ import * as GX from "../gx/gx_enum";
 import { TextureHolder } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
 
-export class SamplerInst {
+export class TevLayerInst {
     private loadedTex: LoadedTexture;
     private gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public samplerData: Gma.TevLayer, textureHolder: TextureHolder) {
-        this.loadedTex = textureHolder.getTexture(device, samplerData.gxTexture);
+    constructor(device: GfxDevice, public tevLayerData: Gma.TevLayer, textureHolder: TextureHolder) {
+        this.loadedTex = textureHolder.getTexture(device, tevLayerData.gxTexture);
 
-        const wrapS = ((samplerData.flags >> 2) & 0x03) as GX.WrapMode;
-        const wrapT = ((samplerData.flags >> 4) & 0x03) as GX.WrapMode;
+        const wrapS = ((tevLayerData.flags >> 2) & 0x03) as GX.WrapMode;
+        const wrapT = ((tevLayerData.flags >> 4) & 0x03) as GX.WrapMode;
 
-        const width = samplerData.gxTexture.width;
-        const height = samplerData.gxTexture.height;
-        let maxLod = (samplerData.flags >> 7) & 0xf;
+        const width = tevLayerData.gxTexture.width;
+        const height = tevLayerData.gxTexture.height;
+        let maxLod = (tevLayerData.flags >> 7) & 0xf;
         if (width !== height) {
             maxLod = 0;
         } else if (maxLod === 15) {

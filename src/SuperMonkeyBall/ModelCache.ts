@@ -1,4 +1,4 @@
-import { ModelInst } from "./ModelInst";
+import { ModelInst } from "./Model";
 import * as Gma from "./Gma";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
 import { GfxCullMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";

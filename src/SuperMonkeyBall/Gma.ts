@@ -123,7 +123,6 @@ export type TevLayer = {
     lodBias: number;
     maxAniso: number;
     unk0x0C: number; // TEV?
-    samplerIdx: number; // Index of this sampler in gcmf's list
     unk0x10: number; // TEV
     alphaType: number;
     colorType: number;
@@ -150,13 +149,13 @@ export type Model = {
     opaqueShapeCount: number;
     translucentShapeCount: number;
     matrices: mat4[];
-    samplers: TevLayer[];
+    tevLayers: TevLayer[];
     shapes: Shape[];
 };
 
 export type Gma = Map<string, Model>;
 
-function parseSampler(buffer: ArrayBufferSlice, tpl: AVTpl): TevLayer {
+function parseTevLayer(buffer: ArrayBufferSlice, tpl: AVTpl): TevLayer {
     const view = buffer.createDataView();
     const flags = view.getUint32(0x00);
     const texIdx = view.getInt16(0x04);
@@ -164,7 +163,6 @@ function parseSampler(buffer: ArrayBufferSlice, tpl: AVTpl): TevLayer {
     const anisotropy = view.getInt8(0x07);
     const unk0x0C = view.getInt8(0x0c);
     const swappable = !!view.getUint8(0x0d);
-    const samplerIdx = view.getInt16(0x0e);
     const unk0x10 = view.getInt32(0x10);
     const type = view.getUint8(0x13);
     const alphaType = (type >> 4) & 0x07;
@@ -176,7 +174,6 @@ function parseSampler(buffer: ArrayBufferSlice, tpl: AVTpl): TevLayer {
         lodBias,
         maxAniso: anisotropy,
         unk0x0C,
-        samplerIdx,
         unk0x10,
         alphaType,
         colorType,
@@ -340,7 +337,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
 function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === "GCMF");
-    const samplers: TevLayer[] = [];
+    const tevLayers: TevLayer[] = [];
     const matrices: mat4[] = [];
     const shapes: Shape[] = [];
     const boundSphereCenter = vec3.create();
@@ -350,7 +347,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     vec3.set(boundSphereCenter, view.getFloat32(0x08), view.getFloat32(0x0c), view.getFloat32(0x10));
     const boundSphereRadius = view.getFloat32(0x14);
 
-    const samplerCount = view.getInt16(0x18);
+    const tevLayerCount = view.getInt16(0x18);
     const opaqueShapeCount = view.getInt16(0x1a);
     const translucentShapeCount = view.getInt16(0x1c);
     const mtxCount = view.getInt8(0x1e);
@@ -359,9 +356,10 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
 
     let allMaterialCount = opaqueShapeCount + translucentShapeCount;
     let offs = 0x40;
-    // GcmfSampler
-    for (let i = 0; i < samplerCount; i++) {
-        samplers.push(parseSampler(buffer.slice(offs), tpl));
+
+    // TEV layers
+    for (let i = 0; i < tevLayerCount; i++) {
+        tevLayers.push(parseTevLayer(buffer.slice(offs), tpl));
         offs += 0x20;
     }
 
@@ -398,7 +396,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
         }
         const shape = parseShape(shapeBuff.slice(shapeOffs), i);
         if (shape.material.tevLayerIdxs[0] < 0) {
-            // TODO(complexplane): Support 0 sampler shapes
+            // TODO(complexplane): Support 0 TEV layer shapes
             continue;
         }
         shapes.push(shape);
@@ -418,7 +416,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
         opaqueShapeCount,
         translucentShapeCount,
         matrices,
-        samplers,
+        tevLayers: tevLayers,
         shapes,
     };
 }

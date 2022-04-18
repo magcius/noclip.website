@@ -3,7 +3,7 @@
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
 import * as Gma from "./Gma";
-import { SamplerInst } from "./SamplerInst";
+import { TevLayerInst } from "./TevLayer";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
@@ -12,21 +12,21 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
 const scratchMaterialParams = new MaterialParams();
 export class MaterialInst {
-    private samplers: SamplerInst[];
+    private tevLayers: TevLayerInst[];
     private materialHelper: GXMaterialHelperGfx;
 
     constructor(
         private materialData: Gma.Material,
-        modelSamplers: SamplerInst[],
+        modelTevLayers: TevLayerInst[],
         private translucentShape: boolean
     ) {
-        this.samplers = [];
+        this.tevLayers = [];
         for (let i = 0; i < materialData.tevLayerIdxs.length; i++) {
-            const samplerIdx = materialData.tevLayerIdxs[i];
-            // Materials can use 0 to 3 samplers defined in the model. The first -1 sampler index
+            const tevLayerIdx = materialData.tevLayerIdxs[i];
+            // Materials can use 0 to 3 TEV layers defined in the model. The first -1 TEV layer  index
             // denotes the end of the list.
-            if (samplerIdx < 0) break;
-            this.samplers.push(modelSamplers[samplerIdx]);
+            if (tevLayerIdx < 0) break;
+            this.tevLayers.push(modelTevLayers[tevLayerIdx]);
         }
 
         this.genGXMaterial();
@@ -78,7 +78,7 @@ export class MaterialInst {
                 (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID,
                 GX.RasColorChannelID.COLOR0A0
             );
-            const tevLayerData = this.samplers[i].samplerData;
+            const tevLayerData = this.tevLayers[i].tevLayerData;
             const colorType = tevLayerData.colorType;
             const alphaType = tevLayerData.alphaType;
 
@@ -229,7 +229,12 @@ export class MaterialInst {
         //     // Blend Dsetination Factor?
         //     dstFactor = GX.BlendFactor.ONE;
         // }
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
+        mb.setBlendMode(
+            GX.BlendMode.BLEND,
+            GX.BlendFactor.SRCALPHA,
+            GX.BlendFactor.INVSRCALPHA,
+            GX.LogicOp.CLEAR
+        );
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
@@ -249,8 +254,8 @@ export class MaterialInst {
 
         // Sampler bindings
         const materialParams = scratchMaterialParams;
-        for (let i = 0; i < this.samplers.length; i++) {
-            this.samplers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
+        for (let i = 0; i < this.tevLayers.length; i++) {
+            this.tevLayers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
         }
         this.materialHelper.allocateMaterialParamsDataOnInst(inst, materialParams);
         inst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

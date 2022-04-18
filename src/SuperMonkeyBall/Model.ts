@@ -6,12 +6,12 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { TextureHolder } from "./ModelCache";
-import { SamplerInst } from "./SamplerInst";
-import { ShapeInst } from "./ShapeInst";
+import { TevLayerInst } from "./TevLayer";
+import { ShapeInst } from "./Shape";
 
 export class ModelInst {
     private shapes: ShapeInst[];
-    private samplers: SamplerInst[]; // Each shape material uses a subset of these samplers
+    private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these
 
     constructor(
         device: GfxDevice,
@@ -19,8 +19,8 @@ export class ModelInst {
         modelData: Gma.Model,
         texCache: TextureHolder
     ) {
-        this.samplers = modelData.samplers.map(
-            (samplerData) => new SamplerInst(device, samplerData, texCache)
+        this.tevLayers = modelData.tevLayers.map(
+            (tevLayerData) => new TevLayerInst(device, tevLayerData, texCache)
         );
         this.shapes = modelData.shapes.map(
             (shapeData, i) =>
@@ -28,7 +28,7 @@ export class ModelInst {
                     device,
                     renderCache,
                     shapeData,
-                    this.samplers,
+                    this.tevLayers,
                     modelData.flags,
                     i >= modelData.opaqueShapeCount
                 )
@@ -56,8 +56,8 @@ export class ModelInst {
         for (let i = 0; i < this.shapes.length; i++) {
             this.shapes[i].destroy(device);
         }
-        for (let i = 0; i < this.samplers.length; i++) {
-            this.samplers[i].destroy(device);
+        for (let i = 0; i < this.tevLayers.length; i++) {
+            this.tevLayers[i].destroy(device);
         }
     }
 }

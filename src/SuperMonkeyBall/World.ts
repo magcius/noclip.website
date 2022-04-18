@@ -9,7 +9,7 @@ import { assert, bisectRight } from "../util";
 import * as Viewer from "../viewer";
 import * as Gma from "./Gma";
 import { ModelCache } from "./ModelCache";
-import { ModelInst } from "./ModelInst";
+import { ModelInst } from "./Model";
 import * as SD from "./Stagedef";
 
 const S16_TO_RADIANS = Math.PI / 0x8000;
