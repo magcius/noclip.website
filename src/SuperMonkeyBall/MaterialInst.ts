@@ -21,8 +21,8 @@ export class MaterialInst {
         private translucentShape: boolean
     ) {
         this.samplers = [];
-        for (let i = 0; i < materialData.samplerIdxs.length; i++) {
-            const samplerIdx = materialData.samplerIdxs[i];
+        for (let i = 0; i < materialData.tevLayerIdxs.length; i++) {
+            const samplerIdx = materialData.tevLayerIdxs[i];
             // Materials can use 0 to 3 samplers defined in the model. The first -1 sampler index
             // denotes the end of the list.
             if (samplerIdx < 0) break;
@@ -53,11 +53,11 @@ export class MaterialInst {
         // };
 
         // const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
-        let mat_unk0x02 = this.materialData.unk0x02;
-        let mat_unk0x03 = this.materialData.unk0x03;
+        // let mat_unk0x02 = this.materialData.unk0x02;
+        // let mat_unk0x03 = this.materialData.unk0x03;
 
         const mb = new GXMaterialBuilder();
-        const tevStageCount = this.materialData.tevStageCount;
+        const tevStageCount = this.materialData.tevLayerCount;
         let i = 0;
         for (i = 0; i < tevStageCount; i++) {
             mb.setTevDirect(i);
@@ -78,16 +78,14 @@ export class MaterialInst {
                 (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID,
                 GX.RasColorChannelID.COLOR0A0
             );
-            const samplerData = this.samplers[i].samplerData;
-            let samp_unk0x0C = samplerData.unk0x0C;
-            const colorType = samplerData.colorType;
-            const alphaType = samplerData.alphaType;
-            const mipmapAV = samplerData.mipmapAV;
+            const tevLayerData = this.samplers[i].samplerData;
+            const colorType = tevLayerData.colorType;
+            const alphaType = tevLayerData.alphaType;
 
             // Color
             let colorInA = GX.CC.ZERO;
             let colorInB =
-                (this.materialData.vtxAttr & (1 << GX.Attr.CLR0)) !== 0 ? GX.CC.RASC : GX.CC.KONST;
+                (this.materialData.vtxAttrs & (1 << GX.Attr.CLR0)) !== 0 ? GX.CC.RASC : GX.CC.KONST;
             let colorInC = GX.CC.TEXC;
             let colorInD = GX.CC.ZERO;
             let colorOp = GX.TevOp.ADD;
@@ -175,17 +173,23 @@ export class MaterialInst {
             mb.setTevAlphaOp(i, alphaOp, TevOp, alphaScale, true, alphaRegId);
             mb.setTevKAlphaSel(i, GX.KonstAlphaSel.KASEL_1);
 
-            const uvWrap = samplerData.uvWrap;
-            const unk0x00 = samplerData.unk0x00;
+            // const uvWrap = tevLayerData.uvWrap;
+            // const unk0x00 = tevLayerData.unk0x00;
+            // mb.setTexCoordGen(
+            //     i,
+            //     GX.TexGenType.MTX2x4,
+            //     (GX.TexGenSrc.TEX0 + i) as GX.TexGenSrc,
+            //     (uvWrap & 1) !== 0 ? GX.TexGenMatrix.PNMTX0 : GX.TexGenMatrix.IDENTITY,
+            //     false,
+            //     (unk0x00 & (1 << 8)) !== 0
+            //         ? GX.PostTexGenMatrix.PTTEXMTX0
+            //         : GX.PostTexGenMatrix.PTIDENTITY
+            // );
             mb.setTexCoordGen(
                 i,
                 GX.TexGenType.MTX2x4,
                 (GX.TexGenSrc.TEX0 + i) as GX.TexGenSrc,
-                (uvWrap & 1) !== 0 ? GX.TexGenMatrix.PNMTX0 : GX.TexGenMatrix.IDENTITY,
-                false,
-                (unk0x00 & (1 << 8)) !== 0
-                    ? GX.PostTexGenMatrix.PTTEXMTX0
-                    : GX.PostTexGenMatrix.PTIDENTITY
+                GX.TexGenMatrix.IDENTITY
             );
         }
 
@@ -204,7 +208,8 @@ export class MaterialInst {
         //
         // 0x63 blending
         // 0x65
-        mb.setZMode(true, GX.CompareType.LEQUAL, (mat_unk0x03 & (1 << 5)) !== 0 ? false : true);
+        // mb.setZMode(true, GX.CompareType.LEQUAL, (mat_unk0x03 & (1 << 5)) !== 0 ? false : true);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
 
         if (this.translucentShape) {
             // texture conatins "alpha" value
@@ -219,12 +224,12 @@ export class MaterialInst {
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         }
 
-        let dstFactor = GX.BlendFactor.INVSRCALPHA;
-        if ((mat_unk0x03 & (1 << 6)) !== 0) {
-            // Blend Dsetination Factor?
-            dstFactor = GX.BlendFactor.ONE;
-        }
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, dstFactor, GX.LogicOp.COPY);
+        // let dstFactor = GX.BlendFactor.INVSRCALPHA;
+        // if ((mat_unk0x03 & (1 << 6)) !== 0) {
+        //     // Blend Dsetination Factor?
+        //     dstFactor = GX.BlendFactor.ONE;
+        // }
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }

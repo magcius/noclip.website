@@ -8,58 +8,33 @@ import * as GX from "../gx/gx_enum";
 import { TextureHolder } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
 
-function translateAVTexFilterGfx(mipmapAV: number): [GfxTexFilterMode, GfxMipFilterMode] {
-    // "Debug Mode" Menu showing like this
-    // 0x00: "LINER & MIPMAP NEAR, LINER"  (mipmap: 0) linear?
-    // 0x01: "LINER & MIPMAP LINER, LINER" (mipmap: 1) binear?
-    // 0x02: "LINER & MIPMAP LINER, LINER" (mipmap: 3) trilinear?
-    // 0x04: "LINER & MIPMAP LINER, LINER"
-    // 0x08: "NEAR & MIPMAP NEAR, NEAR (NEAR FLAG)" (mipmap: 0)
-    // 0x10: "LINER & MIPMAP NEAR, LINER"
-    let texFilter = GfxTexFilterMode.Bilinear;
-    let MipFilter = GfxMipFilterMode.NoMip;
-
-    if ((mipmapAV & (1 << 1)) !== 0) {
-        texFilter = GfxTexFilterMode.Bilinear; // TODO(complexplane): Redundant?
-        MipFilter = GfxMipFilterMode.Linear;
-    }
-
-    return [texFilter, MipFilter];
-}
-
 export class SamplerInst {
     private loadedTex: LoadedTexture;
     private gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public samplerData: Gma.Sampler, textureHolder: TextureHolder) {
+    constructor(device: GfxDevice, public samplerData: Gma.TevLayer, textureHolder: TextureHolder) {
         this.loadedTex = textureHolder.getTexture(device, samplerData.gxTexture);
 
-        const uvWrap = samplerData.uvWrap;
-        const wrapS = (uvWrap >> 2) & (0x03 as GX.WrapMode);
-        const wrapT = (uvWrap >> 4) & (0x03 as GX.WrapMode);
-
-        const [minFilter, mipFilter] = translateAVTexFilterGfx(samplerData.mipmapAV);
-        const [magFilter] = translateAVTexFilterGfx(samplerData.mipmapAV);
+        const wrapS = ((samplerData.flags >> 2) & 0x03) as GX.WrapMode;
+        const wrapT = ((samplerData.flags >> 4) & 0x03) as GX.WrapMode;
 
         const width = samplerData.gxTexture.width;
         const height = samplerData.gxTexture.height;
-        let maxLod;
+        let maxLod = (samplerData.flags >> 7) & 0xf;
         if (width !== height) {
             maxLod = 0;
-        } else if (samplerData.maxMipLod === 15) {
+        } else if (maxLod === 15) {
             // Use 16x16 as the max LOD
             const minDim = Math.min(width, height);
             maxLod = Math.max(0, Math.log2(minDim) - 4);
-        } else {
-            maxLod = samplerData.maxMipLod;
         }
 
         this.gfxSampler = device.createSampler({
             wrapS: translateWrapModeGfx(wrapS),
             wrapT: translateWrapModeGfx(wrapT),
-            minFilter,
-            mipFilter,
-            magFilter,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: maxLod === 0 ? GfxMipFilterMode.NoMip : GfxMipFilterMode.Linear,
             minLOD: 0,
             maxLOD: maxLod,
         });

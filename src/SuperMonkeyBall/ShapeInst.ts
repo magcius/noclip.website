@@ -121,10 +121,10 @@ export class ShapeInst {
         renderCache: GfxRenderCache,
         public shapeData: Gma.Shape,
         modelSamplers: SamplerInst[],
-        modelAttrs: Gma.ModelAttrs,
+        modelFlags: Gma.ModelFlags,
         translucent: boolean
     ) {
-        const vtxAttr = shapeData.material.vtxAttr;
+        const vtxAttr = shapeData.material.vtxAttrs;
         const vcd: GX_VtxDesc[] = [];
         for (let i = 0; i <= GX.Attr.MAX; i++) {
             if ((vtxAttr & (1 << i)) !== 0) {
@@ -144,7 +144,7 @@ export class ShapeInst {
         const loadedVertexLayout = loader.loadedVertexLayout;
 
         // 16-bit models use VTXFMT1
-        const fmtVat = modelAttrs.value16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
+        const vtxFmt = modelFlags & Gma.ModelFlags.Vat16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
         let dlistOffs = 0x60;
         const loadedVertexDatas: LoadedVertexData[] = [];
         shapeData.dlistHeaders.forEach((dlistHeader) => {
@@ -161,7 +161,7 @@ export class ShapeInst {
                 const loadedVertexData = generateLoadedVertexData(
                     dlist,
                     vat,
-                    fmtVat,
+                    vtxFmt,
                     isNBT,
                     loader,
                     isCW

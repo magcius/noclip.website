@@ -29,7 +29,7 @@ export class ModelInst {
                     renderCache,
                     shapeData,
                     this.samplers,
-                    modelData.attrs,
+                    modelData.flags,
                     i >= modelData.opaqueShapeCount
                 )
         );
