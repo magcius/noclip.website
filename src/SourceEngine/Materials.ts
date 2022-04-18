@@ -3390,13 +3390,9 @@ void mainPS() {
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
-    float lightAmt = u_LightAmt;
-    t_RefractTexCoord.xy = vec2(0.0);
-    lightAmt = 0.0;
-
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, lightAmt));
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, u_LightAmt));
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
     t_Fresnel = mix(1.0, t_Fresnel, u_LightAmt);
 
@@ -3550,14 +3546,14 @@ export class Material_Refract extends BaseMaterial {
             this.dispAmt = 0;
         }*/
 
-        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
+        /*if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
             const midiControls = window.main.ui.debugFloaterHolder.midiControls;
             midiControls.bindObject(this);
             this.ortho = true;
             this.debugPop = true;
             //this.lightAmt = -1;
             //this.dispAmt = 0;
-        }
+        }*/
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 

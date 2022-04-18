@@ -2278,6 +2278,7 @@ class MovieMagic {
         const ctx = getDebugOverlayCanvas2D();
         const clipFromWorldMatrix = renderContext.currentView.clipFromWorldMatrix;
 
+        /*
         const center = vec3.fromValues(496, -320, -128);
         const axisX = vec3.scale(vec3.create(), Vec3UnitX, 16);
         const axisY = vec3.scale(vec3.create(), Vec3UnitY, -64);
@@ -2303,6 +2304,7 @@ class MovieMagic {
 
         vec3.scaleAndAdd(p3[6], center, Vec3UnitZ, this.arrowHH);
         this.drawArrow(ctx, clipFromWorldMatrix, center, p3[6], this.arrowT);
+        */
 
         this.drawFrame(ctx);
     }
@@ -2322,8 +2324,8 @@ class MovieMagic {
         ctx.strokeRect(cx-w, cy-h, w*2, h*2);
     }
 
-    private getMat(): Material_Refract {
-        return (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance;
+    private getMat(idx: number): Material_Refract {
+        return (window.main.scene as any).bspRenderers[0].staticPropRenderers[idx].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance;
     }
 
     private setupSched0(): AnimScheduler {
@@ -2336,7 +2338,7 @@ class MovieMagic {
         const camP1 = vec3.create();
         vec3.scaleAndAdd(camP1, camP0, camAxisZ, -45);
 
-        const mat = this.getMat();
+        const mat = this.getMat(427);
 
         sched.edge(0, () => {
             // RESET!
@@ -2374,9 +2376,48 @@ class MovieMagic {
         return sched;
     }
 
+    private setupSched1(): AnimScheduler {
+        const cam = window.main.viewer.cameraController as FPSCameraController;
+        const sched = new AnimScheduler();
+
+        const camP0 = vec3.fromValues(342, -36, -370);
+        const camAxisZ = vec3.create();
+        getMatrixAxisZ(camAxisZ, cam.camera.worldMatrix);
+        const camP1 = vec3.create();
+        vec3.scaleAndAdd(camP0, camP0, camAxisZ, 45);
+        vec3.scaleAndAdd(camP1, camP0, camAxisZ, -50);
+
+        const mats = [this.getMat(431), this.getMat(432)];
+
+        sched.edge(0, () => {
+            mats.forEach((mat) => {
+                mat.lightAmt = 0;
+                mat.dispAmt = 0;
+            });
+        });
+
+        sched.animl(0, 13, (t) => {
+            setMatrixTranslation(cam.camera.worldMatrix, vec3.lerp(vec3.create(), camP0, camP1, t));
+            mat4.invert(cam.camera.viewMatrix, cam.camera.worldMatrix);
+            cam.camera.worldMatrixUpdated();
+        });
+        sched.animl(4, 2, (t) => {
+            mats.forEach((mat) => {
+                mat.lightAmt = aeanim(t)*1.5;
+            });
+        });
+        sched.animl(7, 2, (t) => {
+            mats.forEach((mat) => {
+                mat.dispAmt = aeanim(t)*2;
+            });
+        });
+
+        return sched;
+    }
+
     public genSched() {
         const sched = new AnimScheduler();
-        sched.subsched(this.setupSched0());
+        sched.subsched(this.setupSched1());
         return sched;
     }
 }
