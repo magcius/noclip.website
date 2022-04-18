@@ -14,48 +14,33 @@ type BuildState = {
     stage: number;
     texCoord: GX.TexCoordID;
     texMap: GX.TexMapID;
+    texGenSrc: GX.TexGenSrc;
 };
 
-function buildDiffuseLayer(
-    mb: GXMaterialBuilder,
-    state: BuildState,
-    colorIn: GX.CC,
-    alphaIn: GX.CA
-) {
+function buildDiffuseLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
     mb.setTevDirect(state.stage);
+    // TODO(complexplane): Swap mode
+    // TODO(complexplane): TEXMTX1 here (texture scroll?)
+    mb.setTexCoordGen(state.stage, GX.TexGenType.MTX2x4, state.texGenSrc, GX.TexGenMatrix.IDENTITY);
+    mb.setTevOrder(state.stage, state.texCoord, state.texMap, GX.RasColorChannelID.COLOR0A0);
+
+    mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.TEXC, colorIn, GX.CC.ZERO);
+    mb.setTevColorOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevAlphaIn(state.stage, GX.CA.ZERO, GX.CA.TEXA, alphaIn, GX.CA.ZERO);
+    mb.setTevAlphaOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+    state.stage++;
+    state.texCoord++;
+    state.texMap++;
 }
 
-function buildDummyPassthroughLayer(
-    mb: GXMaterialBuilder,
-    state: BuildState,
-    colorIn: GX.CC,
-    alphaIn: GX.CA
-) {
+function buildDummyPassthroughLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
     mb.setTevDirect(state.stage);
-    mb.setTevOrder(
-        state.stage,
-        GX.TexCoordID.TEXCOORD_NULL,
-        GX.TexMapID.TEXMAP_NULL,
-        GX.RasColorChannelID.COLOR0A0
-    );
+    mb.setTevOrder(state.stage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
     mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
-    mb.setTevColorOp(
-        state.stage,
-        GX.TevOp.ADD,
-        GX.TevBias.ZERO,
-        GX.TevScale.SCALE_1,
-        true,
-        GX.Register.PREV
-    );
+    mb.setTevColorOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaIn(state.stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, alphaIn);
-    mb.setTevAlphaOp(
-        state.stage,
-        GX.TevOp.ADD,
-        GX.TevBias.ZERO,
-        GX.TevScale.SCALE_1,
-        true,
-        GX.Register.PREV
-    );
+    mb.setTevAlphaOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
     state.stage++;
 }
@@ -112,16 +97,31 @@ export class MaterialInst {
             stage: 0,
             texCoord: GX.TexCoordID.TEXCOORD0,
             texMap: GX.TexMapID.TEXMAP0,
+            texGenSrc: GX.TexGenSrc.TEX0,
         };
+
+        for (let layerIdx = 0; layerIdx < this.tevLayers.length; layerIdx++) {
+            const layer = this.tevLayers[layerIdx];
+            const layerTypeFlags =
+                layer.tevLayerData.flags &
+                (Gma.TevLayerFlags.TypeAlphaBlend |
+                    Gma.TevLayerFlags.TypeViewSpecular |
+                    Gma.TevLayerFlags.TypeWorldSpecular);
+            if (layerTypeFlags === 0) {
+                buildDiffuseLayer(mb, buildState, colorIn, alphaIn);
+            } else {
+                // TODO(complexplane): The other kinds of layers
+                buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
+            }
+
+            colorIn = GX.CC.CPREV;
+            alphaIn = GX.CA.APREV;
+        }
+
         buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
 
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-        mb.setBlendMode(
-            GX.BlendMode.BLEND,
-            GX.BlendFactor.SRCALPHA,
-            GX.BlendFactor.INVSRCALPHA,
-            GX.LogicOp.CLEAR
-        );
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
