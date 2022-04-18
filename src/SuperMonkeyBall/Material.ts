@@ -1,6 +1,6 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
-import { GXMaterialHacks } from "../gx/gx_material";
+import { GXMaterialHacks, SwapTable } from "../gx/gx_material";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
 import * as Gma from "./Gma";
 import { TevLayerInst } from "./TevLayer";
@@ -9,6 +9,13 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+
+const SWAP_TABLES: SwapTable[] = [
+    [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
+    [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R], // Used for alpha textures
+    [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.G],
+    [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.B],
+]
 
 type BuildState = {
     stage: number;
@@ -19,12 +26,26 @@ type BuildState = {
 
 function buildDiffuseLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
     mb.setTevDirect(state.stage);
-    // TODO(complexplane): Swap mode
+    mb.setTevSwapMode(state.stage, SWAP_TABLES[0], SWAP_TABLES[0]);
     // TODO(complexplane): TEXMTX1 here (texture scroll?)
     mb.setTexCoordGen(state.stage, GX.TexGenType.MTX2x4, state.texGenSrc, GX.TexGenMatrix.IDENTITY);
     mb.setTevOrder(state.stage, state.texCoord, state.texMap, GX.RasColorChannelID.COLOR0A0);
 
     mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.TEXC, colorIn, GX.CC.ZERO);
+    mb.setTevColorOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevAlphaIn(state.stage, GX.CA.ZERO, GX.CA.TEXA, alphaIn, GX.CA.ZERO);
+    mb.setTevAlphaOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+    state.stage++;
+    state.texCoord++;
+    state.texMap++;
+}
+
+function buildAlphaBlendLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
+    mb.setTevDirect(state.stage);
+    mb.setTevSwapMode(state.stage, SWAP_TABLES[0], SWAP_TABLES[1]);
+
+    mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
     mb.setTevColorOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaIn(state.stage, GX.CA.ZERO, GX.CA.TEXA, alphaIn, GX.CA.ZERO);
     mb.setTevAlphaOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -109,6 +130,8 @@ export class MaterialInst {
                     Gma.TevLayerFlags.TypeWorldSpecular);
             if (layerTypeFlags === 0) {
                 buildDiffuseLayer(mb, buildState, colorIn, alphaIn);
+            } else if (layerTypeFlags & Gma.TevLayerFlags.TypeAlphaBlend) {
+                buildAlphaBlendLayer(mb, buildState, colorIn, alphaIn);
             } else {
                 // TODO(complexplane): The other kinds of layers
                 buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
@@ -117,8 +140,6 @@ export class MaterialInst {
             colorIn = GX.CC.CPREV;
             alphaIn = GX.CA.APREV;
         }
-
-        buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
 
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
