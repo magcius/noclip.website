@@ -133,8 +133,6 @@ export class ShapeInst {
         }
         const isNBT = (vtxAttr & (1 << GX.Attr._NBT)) !== 0;
         if (isNBT) {
-            console.log("NBT detected");
-            // console.log(`vtxAttr: ${hexzero(vtxAttr, 8)} submesh offset: ${hexzero(view.byteOffset, 8)}`);
             vcd[GX.Attr.NRM] = { type: GX.AttrType.DIRECT };
         }
         const vat: GX_VtxAttrFmt[][] = [];

@@ -322,7 +322,6 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     // let vtxRenderFlag = material.vtxRenderFlag;
     // if (vtxRenderFlag & 1 >> 2 || vtxRenderFlag & 1 >> 3) {
     //     //Exsit Extra DisplayList
-    //     console.log(`Decetct Extra DisplayList`);
     //     let offs = 0x60;
     //     for (let i = 0; i < 2; i++) {
     //         offs += dlistHeaders[0].dlistSizes[i];
@@ -457,23 +456,15 @@ export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
         const name = readString(nameBuf, nameOffs);
 
         // TODO parse attribute into nicer type first
-        let attr = view.getUint32(gcmfBaseOffs + modelOffs + 0x04);
-        let notSupport =
-            (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
-        if (notSupport) {
-            // ignore "Stiching Model", "Skin Model" and "Effective Model".
-            // TODO: Support those model.
-            console.log(`not support this model ${hexzero(gcmfBaseOffs + modelOffs, 8)}`);
-            console.log(
-                `Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${
-                    (attr & (1 << 4)) !== 0
-                } Effective Model:${(attr & (1 << 5)) !== 0}`
-            );
+        const modelFlags = view.getUint32(gcmfBaseOffs + modelOffs + 0x04) as ModelFlags;
+        const unsupported = modelFlags & (ModelFlags.Stitching | ModelFlags.Skin | ModelFlags.Effective);
+        if (unsupported) {
+            // TODO: Support these types of models
             continue;
         }
         const model = parseModel(modelBuf.slice(modelOffs), name, tpl);
         if (model.opaqueShapeCount + model.translucentShapeCount < 1) {
-            // ignore invaild gcmf
+            // Ignore invalid zero shape models
             continue;
         }
 
