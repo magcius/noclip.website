@@ -55,7 +55,6 @@ function generateLoadedVertexData(
     fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1,
     isNBT: boolean,
     loader: VtxLoader,
-    isCW: boolean
 ): LoadedVertexData {
     const arrays: GX_Array[] = [];
     arrays[GX.Attr.POS] = {
@@ -94,19 +93,6 @@ function generateLoadedVertexData(
         stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2),
     };
     const loadedVertexData = loader.runVertices(arrays, dlist);
-    if (isCW) {
-        // convert cw triangle-strip to ccw triangle-strip
-        // TODO(complexplane): Does game just draw back faces instead? Maybe do that instead
-        const dstIndexData = new Uint16Array(loadedVertexData.indexData);
-        for (let i = 1; i < loadedVertexData.totalIndexCount + 1; i++) {
-            if (i % 3 == 0 && i > 0) {
-                let temp_indexData = dstIndexData[i - 3];
-                dstIndexData[i - 3] = dstIndexData[i - 1];
-                dstIndexData[i - 1] = temp_indexData;
-            }
-        }
-        loadedVertexData.indexData = dstIndexData.buffer;
-    }
     return loadedVertexData;
 }
 
@@ -158,7 +144,6 @@ export class ShapeInst {
                 vtxFmt,
                 isNBT,
                 loader,
-                i % 2 === 1,
             );
             loadedVertexDatas.push(loadedVertexData);
         }
