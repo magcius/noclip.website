@@ -96,8 +96,7 @@ function generateLoadedVertexData(
     return loadedVertexData;
 }
 
-// Each display list needs its own material as different GXCullMode's may need to be set. It might
-// be nice if cull mode was a material param instead.
+// Each display list needs its own material as different GXCullMode's may need to be set
 type SubShapeInst = {
     shapeHelper: GXShapeHelperGfx;
     material: MaterialInst;
