@@ -1,11 +1,12 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstList, GfxRenderInstManager, makeDepthKey } from "../gfx/render/GfxRenderInstManager";
 import {
     compileVtxLoaderMultiVat,
     getAttributeByteSize,
@@ -21,6 +22,7 @@ import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { MaterialInst } from "./Material";
+import { RenderContext } from "./Renderer";
 import { TevLayerInst } from "./TevLayer";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
@@ -103,6 +105,7 @@ type SubShapeInst = {
 };
 
 const scratchDrawParams = new DrawParams();
+const scratchVec3a = vec3.create();
 export class ShapeInst {
     private bufferCoalescer: GfxBufferCoalescerCombo;
     private subShapes: SubShapeInst[];
@@ -113,7 +116,7 @@ export class ShapeInst {
         public shapeData: Gma.Shape,
         modelTevLayers: TevLayerInst[],
         modelFlags: Gma.ModelFlags,
-        translucent: boolean
+        private translucent: boolean
     ) {
         const vtxAttr = shapeData.material.vtxAttrs;
         const vcd: GX_VtxDesc[] = [];
@@ -148,12 +151,7 @@ export class ShapeInst {
                 loadedVertexLayout,
                 loadedVertexDatas[i]
             );
-            const material = new MaterialInst(
-                shapeData.material,
-                modelTevLayers,
-                translucent,
-                dlist.cullMode
-            );
+            const material = new MaterialInst(shapeData.material, modelTevLayers, translucent, dlist.cullMode);
             return { shapeHelper, material };
         });
     }
@@ -164,25 +162,23 @@ export class ShapeInst {
         }
     }
 
-    public prepareToRender(
-        device: GfxDevice,
-        renderInstManager: GfxRenderInstManager,
-        viewerInput: ViewerRenderInput,
-        viewFromModel: mat4
-    ) {
+    public prepareToRender(ctx: RenderContext, viewFromModel: mat4) {
         const drawParams = scratchDrawParams;
         mat4.copy(drawParams.u_PosMtx[0], viewFromModel);
 
         for (let i = 0; i < this.subShapes.length; i++) {
-            const inst = renderInstManager.newRenderInst();
-            this.subShapes[i].material.setOnRenderInst(
-                device,
-                renderInstManager.gfxRenderCache,
-                inst,
-                drawParams
-            );
+            const inst = ctx.instMan.newRenderInst();
+            this.subShapes[i].material.setOnRenderInst(ctx.device, ctx.instMan.gfxRenderCache, inst, drawParams);
             this.subShapes[i].shapeHelper.setOnRenderInst(inst);
-            renderInstManager.submitRenderInst(inst);
+
+            if (this.translucent) {
+                const origin_rt_view = scratchVec3a;
+                vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
+                inst.sortKey = makeDepthKey(origin_rt_view[2], true);
+                ctx.translucentInstList.submitRenderInst(inst);
+            } else {
+                ctx.opaqueInstList.submitRenderInst(inst);
+            }
         }
     }
 

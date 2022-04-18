@@ -1,13 +1,14 @@
 import { mat4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { TextureHolder } from "./ModelCache";
 import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
+import { RenderContext } from "./Renderer";
 
 export class ModelInst {
     private shapes: ShapeInst[];
@@ -16,7 +17,7 @@ export class ModelInst {
     constructor(
         device: GfxDevice,
         renderCache: GfxRenderCache,
-        modelData: Gma.Model,
+        private modelData: Gma.Model,
         texCache: TextureHolder
     ) {
         this.tevLayers = modelData.tevLayers.map(
@@ -41,14 +42,9 @@ export class ModelInst {
         }
     }
 
-    public prepareToRender(
-        device: GfxDevice,
-        renderInstManager: GfxRenderInstManager,
-        viewerInput: ViewerRenderInput,
-        viewFromModel: mat4
-    ) {
+    public prepareToRender(ctx: RenderContext, viewFromModel: mat4) {
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, viewFromModel);
+            this.shapes[i].prepareToRender(ctx, viewFromModel);
         }
     }
 

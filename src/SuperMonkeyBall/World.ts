@@ -3,7 +3,7 @@ import AnimationController from "../AnimationController";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers";
 import { assert, bisectRight } from "../util";
 import * as Viewer from "../viewer";
@@ -11,6 +11,7 @@ import * as Gma from "./Gma";
 import { ModelCache } from "./ModelCache";
 import { ModelInst } from "./Model";
 import * as SD from "./Stagedef";
+import { RenderContext } from "./Renderer";
 
 const S16_TO_RADIANS = Math.PI / 0x8000;
 
@@ -138,16 +139,8 @@ class Itemgroup {
         if (itemgroupIdx > 0) {
             // Not in world space, animate
             mat4.fromXRotation(this.originFromIg, -this.igData.originRot[0] * S16_TO_RADIANS);
-            mat4.rotateY(
-                this.originFromIg,
-                this.originFromIg,
-                -this.igData.originRot[1] * S16_TO_RADIANS
-            );
-            mat4.rotateZ(
-                this.originFromIg,
-                this.originFromIg,
-                -this.igData.originRot[2] * S16_TO_RADIANS
-            );
+            mat4.rotateY(this.originFromIg, this.originFromIg, -this.igData.originRot[1] * S16_TO_RADIANS);
+            mat4.rotateZ(this.originFromIg, this.originFromIg, -this.igData.originRot[2] * S16_TO_RADIANS);
             const negOrigin = scratchVec3a;
             vec3.negate(negOrigin, this.igData.originPos);
             mat4.translate(this.originFromIg, this.originFromIg, negOrigin);
@@ -182,15 +175,11 @@ class Itemgroup {
         mat4.mul(this.worldFromIg, worldFromOrigin, this.originFromIg);
     }
 
-    public prepareToRender(
-        device: GfxDevice,
-        renderInstManager: GfxRenderInstManager,
-        viewerInput: Viewer.ViewerRenderInput
-    ) {
+    public prepareToRender(ctx: RenderContext) {
         const viewFromIg = scratchMat4a;
-        mat4.mul(viewFromIg, viewerInput.camera.viewMatrix, this.worldFromIg);
+        mat4.mul(viewFromIg, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
         for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(device, renderInstManager, viewerInput, viewFromIg);
+            this.models[i].prepareToRender(ctx, viewFromIg);
         }
     }
 }
@@ -245,19 +234,13 @@ class BgModelInst {
             pos[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
         }
         if (anim.rotXKeyframes.length !== 0) {
-            rotRadians[0] =
-                interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) *
-                MathConstants.DEG_TO_RAD;
+            rotRadians[0] = interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
         }
         if (anim.rotYKeyframes.length !== 0) {
-            rotRadians[1] =
-                interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) *
-                MathConstants.DEG_TO_RAD;
+            rotRadians[1] = interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
         }
         if (anim.rotZKeyframes.length !== 0) {
-            rotRadians[2] =
-                interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) *
-                MathConstants.DEG_TO_RAD;
+            rotRadians[2] = interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
         }
         if (anim.scaleXKeyframes.length !== 0) {
             scale[0] = interpolateKeyframes(loopedTimeSeconds, anim.scaleXKeyframes);
@@ -276,14 +259,10 @@ class BgModelInst {
         }
     }
 
-    public prepareToRender(
-        device: GfxDevice,
-        renderInstManager: GfxRenderInstManager,
-        viewerInput: Viewer.ViewerRenderInput
-    ) {
+    public prepareToRender(ctx: RenderContext) {
         const viewFromModel = scratchMat4a;
-        mat4.mul(viewFromModel, viewerInput.camera.viewMatrix, this.worldFromModel);
-        this.model.prepareToRender(device, renderInstManager, viewerInput, viewFromModel);
+        mat4.mul(viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
+        this.model.prepareToRender(ctx, viewFromModel);
     }
 }
 
@@ -325,16 +304,12 @@ export class World {
         }
     }
 
-    public prepareToRender(
-        device: GfxDevice,
-        renderInstManager: GfxRenderInstManager,
-        viewerInput: Viewer.ViewerRenderInput
-    ): void {
+    public prepareToRender(ctx: RenderContext): void {
         for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].prepareToRender(device, renderInstManager, viewerInput);
+            this.itemgroups[i].prepareToRender(ctx);
         }
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(device, renderInstManager, viewerInput);
+            this.bgModels[i].prepareToRender(ctx);
         }
     }
 
