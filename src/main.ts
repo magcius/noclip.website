@@ -826,6 +826,7 @@ class Main {
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
+        // this.ui.toggleUI(false);
         this.ui.setEmbedMode(this.isEmbedMode);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);

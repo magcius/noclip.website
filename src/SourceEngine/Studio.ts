@@ -1827,31 +1827,38 @@ class StudioModelMeshInstance {
 
         this.materialInstance.calcProjectedLight(renderContext, bbox);
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, template);
-        this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
+        for (let mode = 0; mode < 2; mode++) {
+            if (mode === 1 && !(this.materialInstance as any).ortho)
+                break;
 
-        // Bind color mesh if we have a per-instance version.
-        if (this.inputStateWithColorMesh !== null)
-            template.setInputLayoutAndState(this.meshData.inputLayoutWithColorMesh, this.inputStateWithColorMesh);
-        else
-            template.setInputLayoutAndState(this.meshData.inputLayoutWithoutColorMesh, this.meshData.inputStateWithoutColorMesh);
+            window.debug = mode;
 
-        for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
-            const stripGroupData = this.meshData.stripGroupData[i];
+            const template = renderInstManager.pushTemplateRenderInst();
+            this.materialInstance.setOnRenderInst(renderContext, template);
+            this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
-            for (let j = 0; j < stripGroupData.stripData.length; j++) {
-                const stripData = stripGroupData.stripData[j];
-                const renderInst = renderInstManager.newRenderInst();
-                this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
-                renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
-                renderInst.debug = this;
-                renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
-                this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
+            // Bind color mesh if we have a per-instance version.
+            if (this.inputStateWithColorMesh !== null)
+                template.setInputLayoutAndState(this.meshData.inputLayoutWithColorMesh, this.inputStateWithColorMesh);
+            else
+                template.setInputLayoutAndState(this.meshData.inputLayoutWithoutColorMesh, this.meshData.inputStateWithoutColorMesh);
+
+            for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
+                const stripGroupData = this.meshData.stripGroupData[i];
+
+                for (let j = 0; j < stripGroupData.stripData.length; j++) {
+                    const stripData = stripGroupData.stripData[j];
+                    const renderInst = renderInstManager.newRenderInst();
+                    this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
+                    renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
+                    renderInst.debug = this;
+                    renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+                    this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);
+                }
             }
-        }
 
-        renderInstManager.popTemplateRenderInst();
+            renderInstManager.popTemplateRenderInst();
+        }
     }
 
     public destroy(device: GfxDevice): void {

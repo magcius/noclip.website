@@ -2,10 +2,10 @@
 
 import bezier from 'bezier-easing';
 
-import { mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
-import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint, divideByW } from "../Camera";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint, divideByW, FPSCameraController } from "../Camera";
 import { DataFetcher } from "../DataFetcher";
 import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -16,16 +16,16 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { clamp, computeModelMatrixS, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, transformVec3Mat4w0, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
+import { clamp, computeModelMatrixS, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3NegZ, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
 import { TextureMapping } from "../TextureHolder";
-import { arrayRemove, assert, assertExists, nArray } from "../util";
+import { arrayRemove, assert, assertExists, bisectRight, leftPad, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem";
-import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
+import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight, Material_Refract } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
@@ -35,8 +35,8 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/Projection
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers";
 import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { drawClipSpaceLine, drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D, transformToClipSpace } from "../DebugJunk";
-import { dfBindMidiValue, dfRange, dfShow } from "../DebugFloaters";
+import { clipLineAndDivide, drawClipSpaceLine, drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpaceText, getDebugOverlayCanvas2D, transformToClipSpace } from "../DebugJunk";
+import { dfBindMidiBoolean, dfBindMidiCallback, dfBindMidiValue, dfRange, dfShow } from "../DebugFloaters";
 import { Color, colorNewCopy, colorNewFromRGBA, colorToCSS, OpaqueBlack, White } from '../Color';
 
 export class CustomMount {
@@ -195,7 +195,7 @@ export class SourceFileSystem {
 
 // In Source, the convention is +X for forward and -X for backward, +Y for left and -Y for right, and +Z for up and -Z for down.
 // Converts from Source conventions to noclip ones.
-const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
+export const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
     0,  0, -1, 0,
     -1, 0,  0, 0,
     0,  1,  0, 0,
@@ -2031,9 +2031,176 @@ function aelerp(start: number, end: number, t: number): number {
     return aeanim(saturate(invlerp(start, end, t)));
 }
 
+type Callback = (t: number, s: number) => boolean | void;
+class AnimSchedulerTrack {
+    public start: number;
+    public end: number;
+
+    constructor(public sat: boolean, public limit: boolean, public exile: boolean, startTimeInSeconds: number, durationInSeconds: number, public callback: Callback) {
+        this.start = startTimeInSeconds * 1000;
+        this.end = durationInSeconds > 0.0 ? (this.start + durationInSeconds * 1000) : -1;
+    }
+
+    public getStartTime(): number {
+        return this.start;
+    }
+
+    public getEndTime(): number {
+        return this.end;
+    }
+
+    public update(time: number): boolean {
+        if (this.limit) {
+            if (time < this.start)
+                return false;
+            if (this.end >= this.start && time >= this.end) {
+                this.callback(1.0, this.end);
+                return false;
+            }
+        }
+        let t = this.end >= this.start ? invlerp(this.start, this.end, time) : 0.0;
+        const s = (time - this.start) / 1000.0;
+        if (this.sat)
+            t = saturate(t);
+        this.callback(t, s);
+        return this.exile;
+    }
+}
+
+function mod(a: number, b: number): number {
+    return (a + b) % b;
+}
+
+function spliceBisectExcl<T>(L: T[], e: T, compare: (a: T, b: T) => number): void {
+    const idx = bisectRight(L, e, compare);
+    if (compare(L[idx - 1], e) !== 0)
+        L.splice(idx, 0, e);
+}
+
+function compareNumber(a: number, b: number, desc: boolean = false): number {
+    if (a === b)
+        return 0;
+    return a < b ? ((desc ? -1 : 1)) * -1 : 1;
+}
+
+class AnimScheduler {
+    public time = 0;
+    public idx = 0;
+    public rate = 0.0;
+
+    public testStart: number | null = null;
+    public testEnd: number | null = null;
+
+    public chapters: number[] = [];
+    public track: (AnimScheduler | AnimSchedulerTrack)[] = [];
+
+    public reset(): void {
+        this.time = 0;
+        this.idx = 0;
+        this.rate = 0.0;
+        this.track.length = 0;
+    }
+
+    public getStartTime(): number {
+        if (this.testStart !== null)
+            return this.testStart;
+
+        let time = Infinity;
+        for (let i = 0; i < this.track.length; i++)
+            time = Math.min(time, this.track[i].getStartTime());
+        return time;
+    }
+
+    public getEndTime(): number {
+        if (this.testEnd !== null)
+            return this.testEnd;
+
+        let time = 0;
+        for (let i = 0; i < this.track.length; i++)
+            time = Math.max(time, this.track[i].getEndTime());
+        return time;
+    }
+
+    public setRate(rate: number): void {
+        this.rate = rate;
+    }
+
+    public update(time: number): boolean {
+        this.time = time;
+        if (this.time < this.getStartTime())
+            return false;
+        for (let i = 0; i < this.track.length; i++)
+            if (this.track[i].update(this.time))
+                this.track.splice(i--, 1);
+        return this.time > this.getEndTime();
+    }
+
+    public updateDT(dt: number, force: boolean = false): void {
+        if (this.rate <= 0.0 && !force)
+            return;
+        const newTime = clamp(this.time + (dt * this.rate), 0.0, this.getEndTime());
+        this.update(newTime);
+    }
+
+    public edge(startTimeInSeconds: number, callback: Callback): void {
+        this.track.push(new AnimSchedulerTrack(true, true, true, startTimeInSeconds, -1, callback));
+    }
+
+    public anim(startTimeInSeconds: number, durationInSeconds: number, callback: Callback): void {
+        this.track.push(new AnimSchedulerTrack(true, false, false, startTimeInSeconds, durationInSeconds, callback));
+    }
+
+    public animl(startTimeInSeconds: number, durationInSeconds: number, callback: Callback): void {
+        this.track.push(new AnimSchedulerTrack(true, true, false, startTimeInSeconds, durationInSeconds, callback));
+    }
+
+    public test(): void {
+        const track = this.track[this.track.length - 1];
+        this.testStart = track.getStartTime();
+        this.testEnd = track.getEndTime();
+    }
+
+    public chapter(): void {
+        const track = this.track[this.track.length - 1];
+        this.addChapter(track.getStartTime());
+    }
+
+    private addChapter(ch: number): void {
+        spliceBisectExcl(this.chapters, ch, compareNumber);
+    }
+
+    public isAtChapterStart(timecode: number, thresh: number = 1*1000): boolean {
+        for (let i = 0; i < this.chapters.length; i++)
+            if (timecode >= this.chapters[i] && timecode < (this.chapters[i] + thresh))
+                return true;
+        return false;
+    }
+
+    public advChapter(time: number, offs: number): void {
+        for (let i = this.chapters.length - 1; i >= 0; i--) {
+            if (time >= this.chapters[i]) {
+                this.time = this.chapters[mod(i + offs, this.chapters.length)];
+                return;
+            }
+        }
+    }
+
+    public subsched(sched: AnimScheduler): void {
+        this.addChapter(sched.getStartTime());
+        for (let i = 0; i < sched.chapters.length; i++)
+            this.addChapter(sched.chapters[i]);
+
+        this.track.push(sched);
+    }
+}
+
 class MovieMagic {
+    private animDriver: AnimDriver;
+
     constructor() {
         window.main.ui.debugFloaterHolder.midiControls.bindObject(this);
+
+        // this.animDriver = new AnimDriver(this);
     }
 
     private drawBox(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, centerPos: ReadonlyVec3, axisX: ReadonlyVec3, axisY: ReadonlyVec3, t: number): void {
@@ -2050,6 +2217,14 @@ class MovieMagic {
         });
     }
 
+    @dfBindMidiValue('knob', 1)
+    @dfRange(0, 34, 0.001)
+    private arrowR = 28;
+
+    @dfBindMidiValue('slider', 4)
+    @dfRange(0, 32, 0.001)
+    private arrowHH = 32;
+
     private drawArrow(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, p0: ReadonlyVec3, p1: ReadonlyVec3, t: number): void {
         if (t <= 0.0)
             return;
@@ -2059,10 +2234,11 @@ class MovieMagic {
         drawStroke(ctx, (stroke) => {
             ctx.globalAlpha = invlerp(0.0, 0.2, animT);
             ctx.strokeStyle = colorToCSS(stroke ? OpaqueBlack : White);
-            ctx.lineWidth = (stroke ? 24 : 12);
+            ctx.lineWidth = (stroke ? 18 : 10);
             vec3.lerp(p3[4], p0, p1, animT);
             pathLine(ctx, clipFromWorldMatrix, p0, p3[4]);
-            pathArrowHead(ctx, clipFromWorldMatrix, p3[4], Vec3UnitZ, animT * 4, animT * 2);
+            // pathArrowHead(ctx, clipFromWorldMatrix, p3[4], Vec3UnitZ, animT * this.arrowH, animT * this.arrowR);
+            pathVectorHat(ctx, clipFromWorldMatrix, p0, p3[4], animT * 22.0, animT * this.arrowR);
         });
     }
 
@@ -2083,10 +2259,24 @@ class MovieMagic {
     public boxT = 1;
     @dfBindMidiValue('knob', 6)
     public boxFillT = 1;
+    public boxFillA = 1;
     @dfBindMidiValue('knob', 7)
     public arrowT = 1;
 
+    //@dfBindMidiValue('slider', 0)
+    public colorR = 0.3;
+    //@dfBindMidiValue('slider', 1)
+    public colorG = 0.7;
+    //@dfBindMidiValue('slider', 2)
+    public colorB = 1;
+    //@dfBindMidiValue('slider', 3)
+    public colorA = 1;
+
     public draw(renderContext: SourceRenderContext): void {
+        return;
+
+        // this.animDriver.movement(renderContext.globalDeltaTime * 1000.0);
+
         const ctx = getDebugOverlayCanvas2D();
         const clipFromWorldMatrix = renderContext.currentView.clipFromWorldMatrix;
 
@@ -2098,22 +2288,183 @@ class MovieMagic {
 
         const numSegments = 4;
         for (let i = 0; i < numSegments; i++) {
-            const t = (renderContext.globalTime + (i/numSegments)) % 1.0;
+            const segT = (renderContext.globalTime + (i/numSegments)) % 1.0;
             const c = vec3.clone(center);
 
             const animT = aeanim(this.boxFillT);
-            const h = animT * 24;
-            c[2] += lerp(0.0, h, t);
+            const h = lerp(0, 24, animT);
+            c[2] += lerp(0.0, h, segT);
 
-            const color = colorNewFromRGBA(0.5, 0.3, 0.9, lerp(0.6, 0.0, t));
-            color.a *= saturate(invlerp(0.0, 0.2, t));
-            color.a *= saturate(invlerp(0.0, 0.1, animT));
+            const color = colorNewFromRGBA(this.colorR, this.colorG, this.colorB, this.colorA * this.boxFillA);
+            color.a *= lerp(0.6, 0.0, segT);
+            color.a *= saturate(invlerp(0.0, 0.2, segT));
+            color.a *= animT;
 
             this.drawBoxFill(ctx, clipFromWorldMatrix, c, axisX, axisY, color);
         }
 
-        vec3.scaleAndAdd(p3[6], center, Vec3UnitZ, 24);
+        vec3.scaleAndAdd(p3[6], center, Vec3UnitZ, this.arrowHH);
         this.drawArrow(ctx, clipFromWorldMatrix, center, p3[6], this.arrowT);
+
+        this.drawFrame(ctx);
+    }
+
+    @dfBindMidiBoolean(0)
+    private showFrame = false;
+    private drawFrame(ctx: CanvasRenderingContext2D): void {
+        if (!this.showFrame)
+            return;
+
+        const cx = ctx.canvas.width / 2, cy = ctx.canvas.height / 2;
+        const pad = 10;
+        const h = (cy-pad);
+        const w = (720/1280)*h;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'red';
+        ctx.strokeRect(cx-w, cy-h, w*2, h*2);
+    }
+
+    private getMat(): Material_Refract {
+        return (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance;
+    }
+
+    private setupSched0(): AnimScheduler {
+        const cam = window.main.viewer.cameraController as FPSCameraController;
+        const sched = new AnimScheduler();
+
+        const camP0 = vec3.fromValues(467, -18, -450);
+        const camAxisZ = vec3.create();
+        getMatrixAxisZ(camAxisZ, cam.camera.worldMatrix);
+        const camP1 = vec3.create();
+        vec3.scaleAndAdd(camP1, camP0, camAxisZ, -30);
+
+        const mat = this.getMat();
+
+        sched.edge(0, () => {
+            // RESET!
+            this.boxT = 0;
+            this.arrowT = 0;
+            this.boxFillT = 0;
+            this.boxFillA = 1;
+            this.arrowHH = 20;
+
+            mat.depthAmt = 0;
+            mat.lightAmt = 0;
+            mat.dispAmt = 0;
+        });
+
+        sched.animl(0, 12, (t) => {
+            setMatrixTranslation(cam.camera.worldMatrix, vec3.lerp(vec3.create(), camP0, camP1, t));
+            mat4.invert(cam.camera.viewMatrix, cam.camera.worldMatrix);
+            cam.camera.worldMatrixUpdated();
+        });
+        sched.animl(3, 1.5, (t) => {
+            this.boxT = t;
+        });
+        sched.animl(5.5, 2, (t) => {
+            this.boxFillT = t;
+        });
+        sched.animl(7, 1, (t) => {
+            this.arrowT = t;
+        });
+        sched.animl(8.5, 1, (t) => {
+            this.boxFillA = aeanim(1-t);
+        });
+        sched.animl(9, 1.5, (t) => {
+            mat.depthAmt = aeanim(t)*1.4;
+        });
+
+        return sched;
+    }
+
+    public genSched() {
+        const sched = new AnimScheduler();
+        sched.subsched(this.setupSched0());
+        return sched;
+    }
+}
+
+function timecode(ms: number): string {
+    // mm:ss.mss
+    const mss = leftPad('' + ((ms % 1000) | 0), 3);
+    ms /= 1000;
+    const ss = leftPad('' + ((ms % 60) | 0), 2);
+    ms /= 60;
+    const mm = leftPad('' + ((ms) | 0), 2);
+    return `${mm}:${ss}.${mss}`;
+}
+
+class AnimDriver {
+    private animSched = new AnimScheduler();
+    private timecode: HTMLElement;
+
+    constructor(private movieMagic: MovieMagic) {
+        window.main.ui.debugFloaterHolder.midiControls.bindObject(this);
+
+        this.timecode = document.createElement('div');
+        this.timecode.style.font = '18pt monospace';
+        this.timecode.style.position = 'absolute';
+        this.timecode.style.textAlign = 'right';
+        this.timecode.style.bottom = '1em';
+        this.timecode.style.right = '1em';
+        this.timecode.style.padding = '.5em';
+        this.timecode.style.backgroundColor = 'black';
+        this.timecode.style.color = 'white';
+        this.timecode.textContent = '00:00.000';
+        window.main.ui.sceneUIContainer.appendChild(this.timecode);
+    }
+
+    public movement(deltaTime: number): void {
+        this.animSched.updateDT(deltaTime);
+
+        this.timecode.textContent = timecode(this.animSched.time);
+        this.timecode.style.color = this.animSched.isAtChapterStart(this.animSched.time) ? '#00FF00' : 'white';
+    }
+
+    @dfBindMidiCallback(10)
+    private trackStop(): void {
+        this.animSched.setRate(0.0);
+    }
+
+    @dfBindMidiCallback(11)
+    private trackRewind(): void {
+        this.setupSched();
+        this.animSched.setRate(0.0);
+    }
+
+    @dfBindMidiCallback(12)
+    private trackFastForward(): void {
+    }
+
+    @dfBindMidiCallback(9)
+    private trackPlay(): void {
+        if (this.animSched.rate < 1.0)
+            this.animSched.setRate(1.0);
+        else
+            this.animSched.setRate(this.animSched.rate * 3.0);
+        window.main.ui.toggleUI(false);
+    }
+
+    @dfBindMidiCallback(59-32)
+    private trackNext(): void {
+        const time = this.animSched.time;
+        this.setupSched();
+        this.animSched.advChapter(time, 1);
+        this.animSched.setRate(1.0);
+    }
+
+    @dfBindMidiCallback(58-32)
+    private trackPrev(): void {
+        const time = this.animSched.time;
+        this.setupSched();
+        this.animSched.advChapter(time, -1);
+        this.animSched.setRate(1.0);
+    }
+
+    private setupSched(): void {
+        this.animSched.reset();
+        this.animSched.subsched(this.movieMagic.genSched());
+        this.animSched.updateDT(0, true);
     }
 }
 
@@ -2195,4 +2546,44 @@ function pathArrowHead(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: Reado
         vec3.scaleAndAdd(p3[0], p3[0], n, -h);
         pathLine(ctx, clipFromWorldMatrix, p1, p3[0]);
     }
+}
+
+function transformToScreenSpace(ctx: CanvasRenderingContext2D, dst: vec2, p: ReadonlyVec4): void {
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    dst[0] =  (p[0] + 1) * cw / 2;
+    dst[1] = (-p[1] + 1) * ch / 2;
+}
+
+function pathScreenSpaceLine(ctx: CanvasRenderingContext2D, p0: ReadonlyVec2, p1: ReadonlyVec2): void {
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
+}
+
+function lineWorldToScreen(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, dst0: vec2, dst1: vec2, v0: ReadonlyVec3, v1: ReadonlyVec3): void {
+    vec4.set(p4[0], v0[0], v0[1], v0[2], 1.0);
+    vec4.set(p4[1], v1[0], v1[1], v1[2], 1.0);
+    transformToClipSpace(clipFromWorldMatrix, p4, 2);
+    clipLineAndDivide(p4[0], p4[1], p4[0], p4[1]);
+    transformToScreenSpace(ctx, dst0, p4[0]);
+    transformToScreenSpace(ctx, dst1, p4[1]);
+}
+
+const scratchVec2a = vec2.create();
+const scratchVec2b = vec2.create();
+const scratchVec2c = vec2.create();
+function pathVectorHat(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v0: ReadonlyVec3, v1: ReadonlyVec3, arrowSize: number, angle: number): void {
+    lineWorldToScreen(ctx, clipFromWorldMatrix, scratchVec2b, scratchVec2a, v0, v1);
+
+    vec2.sub(scratchVec2c, scratchVec2b, scratchVec2a);
+    vec2.normalize(scratchVec2c, scratchVec2c);
+    vec2.rotate(scratchVec2b, scratchVec2c, [0, 0], angle * MathConstants.DEG_TO_RAD);
+    vec2.rotate(scratchVec2c, scratchVec2c, [0, 0], -angle * MathConstants.DEG_TO_RAD);
+
+    vec2.scaleAndAdd(scratchVec2b, scratchVec2a, scratchVec2b, arrowSize);
+    vec2.scaleAndAdd(scratchVec2c, scratchVec2a, scratchVec2c, arrowSize);
+
+    pathScreenSpaceLine(ctx, scratchVec2a, scratchVec2b);
+    pathScreenSpaceLine(ctx, scratchVec2a, scratchVec2c);
+    pathScreenSpaceLine(ctx, scratchVec2b, scratchVec2c);
 }

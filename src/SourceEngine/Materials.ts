@@ -3,15 +3,15 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
+import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType, noclipSpaceFromSourceEngineSpace } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixSRT } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixSRT, projectionMatrixForCuboid } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
@@ -24,6 +24,7 @@ import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { calcTexMtx_Basic, calcTexMtx_Maya } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -3288,20 +3289,20 @@ ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
-    vec4 u_BumpScaleBias2;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
+    Mat4x4 u_ProjectionView2;
 };
 
 #define u_RefractAmount (u_RefractTint.a)
 #define u_RefractDepth  (u_Misc[0].x)
 #define u_LightAmt      (u_Misc[0].y)
 #define u_DispAmt       (u_Misc[0].z)
-#define u_ShadowAmt     (u_Misc[0].w)
+#define u_Ortho         (u_Misc[0].w)
 
 // Base Texture Coordinates
 varying vec3 v_TexCoord0;
@@ -3327,7 +3328,6 @@ void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
-    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3342,8 +3342,13 @@ void mainVS() {
     vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
+    if (u_Ortho == 1.0f) {
+        gl_Position = Mul(u_ProjectionView2, vec4(a_Position, 1.0));
+    } else {
+        gl_Position = Mul(u_ProjectionView2, vec4(t_PositionWorld, 1.0));
+    }
+
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
-    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias2);
 }
 #endif
 
@@ -3382,11 +3387,17 @@ void mainPS() {
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
     t_RefractTexCoordOffs *= t_Aspect * u_RefractDepth;
-    vec2 t_RefractTexCoord = v_TexCoord1.zw + t_RefractTexCoordOffs.xy;
+    vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
+
+    float lightAmt = u_LightAmt;
+    if (u_Ortho == 2.0) {
+        t_RefractTexCoord.xy = vec2(0.0);
+        lightAmt = 0.0;
+    }
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, u_ShadowAmt));
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, mix(0.0, 0.025, lightAmt));
     float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
     t_Fresnel = mix(1.0, t_Fresnel, u_LightAmt);
 
@@ -3441,20 +3452,18 @@ void mainPS() {
 `;
 }
 
-class Material_Refract extends BaseMaterial {
+export class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
 
-    @dfBindMidiValue('slider', 0)
-    public b2d = 0;
+    // @dfBindMidiValue('slider', 0)
+    public depthAmt = 1;
 
     @dfBindMidiValue('slider', 1)
     public lightAmt = 1;
 
     @dfBindMidiValue('slider', 2)
     public dispAmt = 1;
-
-    public shadowAmt = 1;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
@@ -3531,37 +3540,43 @@ class Material_Refract extends BaseMaterial {
     }
 
     private debugPop = false;
+    public ortho = false;
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
+        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[432].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
             const midiControls = window.main.ui.debugFloaterHolder.midiControls;
             midiControls.bindObject(this);
+            this.ortho = true;
+            this.debugPop = true;
+
+            this.lightAmt = 0;
+            this.dispAmt = 0;
+        }
+
+        /*
+        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
             this.debugPop = true;
         }
+        */
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 24);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20+16);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
 
-        mat4.identity(scratchMat4a);
-
         if (this.debugPop) {
-            this.paramSetNumber('$localrefractdepth', this.b2d*0.05);
+            this.paramSetNumber('$localrefractdepth', this.depthAmt*0.05);
             // const s = lerp(Math.max(1/this.b2s, 0.001), 1.0, this.b2d);
             // calcTexMtx_Basic(scratchMat4a, s, s, 0, this.b2y*(1-this.b2d), -this.b2x*(1-this.b2d), 0.5, 0.5);
-            this.shadowAmt = this.lightAmt;
         }
 
-        offs += fillScaleBias(d, offs, scratchMat4a);
-
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
-        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, this.shadowAmt);
+        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, !this.debugPop ? 2.0 : window.debug === 1 ? 1.0 : 0.0);
 
         if (this.wantsEnvmap) {
             offs += this.paramFillGammaColor(d, offs, '$envmaptint');
@@ -3569,6 +3584,22 @@ class Material_Refract extends BaseMaterial {
             const envmapSaturation = this.paramGetNumber('$envmapsaturation');
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
+        }
+
+        if (window.debug === 1) {
+            const scale = 1/10;
+            const vr = window.main.viewer.viewerRenderInput, w = vr.backbufferWidth * scale, h = vr.backbufferHeight * scale;
+            projectionMatrixForCuboid(scratchMat4a, -w, w, h, -h, -10000.0, 10000.0);
+
+            mat4.mul(scratchMat4a, scratchMat4a, noclipSpaceFromSourceEngineSpace);
+            scratchMat4a[12] = -1.0 + 16/w;
+
+            const clipSpaceNearZ = renderContext.materialCache.device.queryVendorInfo().clipSpaceNearZ;
+            projectionMatrixConvertClipSpaceNearZ(scratchMat4a, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
+            offs += fillMatrix4x4(d, offs, scratchMat4a);
+        } else {
+            offs += fillMatrix4x4(d, offs, renderContext.currentView.clipFromWorldMatrix);
         }
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);

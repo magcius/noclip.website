@@ -457,6 +457,10 @@ export class FPSCameraController implements CameraController {
             vec3.copy(camera.linearVelocity, Vec3Zero);
         }
 
+        camera.worldMatrix[12] = Math.max(camera.worldMatrix[12], 266);
+        camera.worldMatrix[13] = -40;
+        camera.worldMatrix[14] = Math.max(camera.worldMatrix[14], -500);
+
         const mouseMoveLowSpeedCap = 0.0001;
 
         const invertXMult = inputManager.invertX ? -1 : 1;

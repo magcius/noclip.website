@@ -787,3 +787,7 @@ export function dfBindMidiValueCallback(kind: 'knob' | 'slider', index: number, 
 export function dfBindMidiBoolean(index: number, channel: number = 0) {
     return Reflect.metadata('df:midi', { kind: 'button', index, channel });
 }
+
+export function dfBindMidiCallback(index: number, channel: number = 0) {
+    return Reflect.metadata('df:midi', { kind: 'button', index, channel, callback: true });
+}
