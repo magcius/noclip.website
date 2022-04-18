@@ -18,7 +18,8 @@ export class MaterialInst {
     constructor(
         private materialData: Gma.Material,
         modelTevLayers: TevLayerInst[],
-        private translucentShape: boolean
+        private translucentShape: boolean,
+        private cullMode: GX.CullMode
     ) {
         this.tevLayers = [];
         for (let i = 0; i < materialData.tevLayerIdxs.length; i++) {
@@ -215,9 +216,7 @@ export class MaterialInst {
             GX.LogicOp.CLEAR
         );
 
-        // TODO(complexplane): Parameterize front/back cull depending on which display list /
-        // double-sided we're using
-        mb.setCullMode(GX.CullMode.NONE);
+        mb.setCullMode(this.cullMode);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }

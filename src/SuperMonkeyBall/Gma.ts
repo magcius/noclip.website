@@ -78,14 +78,15 @@ type VtxConType4 = {
     offs: number[];
 };
 
+export type Dlist = {
+    data: ArrayBufferSlice;
+    cullMode: GX.CullMode;
+};
+
 export type Shape = {
     material: Material;
     origin: vec3; // Reference point for depth sorting
-    dlistFlags: DlistFlags;
-    frontCulledDlist: ArrayBufferSlice | null;
-    backCulledDlist: ArrayBufferSlice | null;
-    extraFrontCulledDlist: ArrayBufferSlice | null;
-    extraBackCulledDlist: ArrayBufferSlice | null;
+    dlists: Dlist[];
     size: number; // Total size of shape in bytes
 };
 
@@ -310,14 +311,32 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
         dlistOffs += extraBackCulledDlistSize;
     }
 
+    const dlists: Dlist[] = [];
+    if (frontCulledDlist !== null) {
+        dlists.push({
+            data: frontCulledDlist,
+            cullMode:
+                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.FRONT,
+        });
+    }
+    if (backCulledDlist !== null) {
+        dlists.push({
+            data: backCulledDlist,
+            cullMode:
+                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.BACK,
+        });
+    }
+    if (extraFrontCulledDlist !== null) {
+        dlists.push({ data: extraFrontCulledDlist, cullMode: GX.CullMode.FRONT });
+    }
+    if (extraBackCulledDlist !== null) {
+        dlists.push({ data: extraBackCulledDlist, cullMode: GX.CullMode.BACK });
+    }
+
     return {
         material,
         origin,
-        dlistFlags,
-        frontCulledDlist,
-        backCulledDlist,
-        extraFrontCulledDlist,
-        extraBackCulledDlist,
+        dlists,
         size: dlistOffs,
     };
 }
@@ -380,7 +399,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
 
     let shapeOffs = useVtxCon ? 0x20 : 0x00;
     let shapeBuff = buffer.slice(texMtxSize);
-    
+
     // Parse shapes
     for (let i = 0; i < allMaterialCount; i++) {
         const shape = parseShape(shapeBuff.slice(shapeOffs), i);

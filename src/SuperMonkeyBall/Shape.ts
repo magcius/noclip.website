@@ -54,7 +54,7 @@ function generateLoadedVertexData(
     vat: GX_VtxAttrFmt[][],
     fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1,
     isNBT: boolean,
-    loader: VtxLoader,
+    loader: VtxLoader
 ): LoadedVertexData {
     const arrays: GX_Array[] = [];
     arrays[GX.Attr.POS] = {
@@ -96,11 +96,17 @@ function generateLoadedVertexData(
     return loadedVertexData;
 }
 
+// Each display list needs its own material as different GXCullMode's may need to be set. It might
+// be nice if cull mode was a material param instead.
+type SubShapeInst = {
+    shapeHelper: GXShapeHelperGfx;
+    material: MaterialInst;
+};
+
 const scratchDrawParams = new DrawParams();
 export class ShapeInst {
-    private material: MaterialInst;
     private bufferCoalescer: GfxBufferCoalescerCombo;
-    private shapeHelpers: GXShapeHelperGfx[];
+    private subShapes: SubShapeInst[];
 
     constructor(
         device: GfxDevice,
@@ -129,45 +135,34 @@ export class ShapeInst {
 
         // 16-bit models use VTXFMT1
         const vtxFmt = modelFlags & Gma.ModelFlags.Vat16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
-        const loadedVertexDatas: LoadedVertexData[] = [];
-        const dlists = [
-            shapeData.frontCulledDlist,
-            shapeData.backCulledDlist,
-            shapeData.extraFrontCulledDlist,
-            shapeData.extraBackCulledDlist,
-        ];
-        for (let i = 0; i < dlists.length; i++) {
-            if (dlists[i] === null) continue;
-            const loadedVertexData = generateLoadedVertexData(
-                dlists[i]!.slice(1),
-                vat,
-                vtxFmt,
-                isNBT,
-                loader,
-            );
-            loadedVertexDatas.push(loadedVertexData);
-        }
-
-        // TODO(complexplane): Either get rid of GfxBufferCoalescer or go ham and coalesce all shape
-        // buffers in model (is cross-model buffer coalescing possible?)
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
-        this.shapeHelpers = this.bufferCoalescer.coalescedBuffers.map(
-            (buf, i) =>
-                new GXShapeHelperGfx(
-                    device,
-                    renderCache,
-                    buf.vertexBuffers,
-                    buf.indexBuffer,
-                    loadedVertexLayout,
-                    loadedVertexDatas[i]
-                )
+        const loadedVertexDatas = shapeData.dlists.map((dlist) =>
+            generateLoadedVertexData(dlist.data.slice(1), vat, vtxFmt, isNBT, loader)
         );
-
-        this.material = new MaterialInst(shapeData.material, modelTevLayers, translucent);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
+        this.subShapes = shapeData.dlists.map((dlist, i) => {
+            const buf = this.bufferCoalescer.coalescedBuffers[i];
+            const shapeHelper = new GXShapeHelperGfx(
+                device,
+                renderCache,
+                buf.vertexBuffers,
+                buf.indexBuffer,
+                loadedVertexLayout,
+                loadedVertexDatas[i]
+            );
+            const material = new MaterialInst(
+                shapeData.material,
+                modelTevLayers,
+                translucent,
+                dlist.cullMode
+            );
+            return { shapeHelper, material };
+        });
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {
-        this.material.setMaterialHacks(hacks);
+        for (let i = 0; i < this.subShapes.length; i++) {
+            this.subShapes[i].material.setMaterialHacks(hacks);
+        }
     }
 
     public prepareToRender(
@@ -176,28 +171,25 @@ export class ShapeInst {
         viewerInput: ViewerRenderInput,
         viewFromModel: mat4
     ) {
-        const template = renderInstManager.pushTemplateRenderInst();
         const drawParams = scratchDrawParams;
         mat4.copy(drawParams.u_PosMtx[0], viewFromModel);
-        this.material.setOnRenderInst(
-            device,
-            renderInstManager.gfxRenderCache,
-            template,
-            drawParams
-        );
 
-        for (let i = 0; i < this.shapeHelpers.length; i++) {
+        for (let i = 0; i < this.subShapes.length; i++) {
             const inst = renderInstManager.newRenderInst();
-            this.shapeHelpers[i].setOnRenderInst(inst);
+            this.subShapes[i].material.setOnRenderInst(
+                device,
+                renderInstManager.gfxRenderCache,
+                inst,
+                drawParams
+            );
+            this.subShapes[i].shapeHelper.setOnRenderInst(inst);
             renderInstManager.submitRenderInst(inst);
         }
-
-        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.shapeHelpers.length; i++) {
-            this.shapeHelpers[i].destroy(device);
+        for (let i = 0; i < this.subShapes.length; i++) {
+            this.subShapes[i].shapeHelper.destroy(device);
         }
         this.bufferCoalescer.destroy(device);
     }
