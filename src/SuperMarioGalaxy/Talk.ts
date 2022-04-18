@@ -397,8 +397,8 @@ function countMessageLine(line: string): number {
 }
 
 function calcScreenPosition(dst: vec3, v: ReadonlyVec3, viewerInput: ViewerRenderInput): void {
-    dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
-    dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[0] = (v[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
+    dst[1] = (v[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
     dst[2] = 0.0;
 }
 

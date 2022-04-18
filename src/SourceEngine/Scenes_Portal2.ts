@@ -1,8 +1,11 @@
 
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { getMatrixTranslation, MathConstants, scaleMatrix, Vec3NegX } from "../MathHelpers";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { EmptyScene } from "../Scenes_Test";
 import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
@@ -10,6 +13,7 @@ import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
 import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
 import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
+import { BaseMaterial } from "./Materials";
 import { createScene } from "./Scenes";
 import { BSPEntity } from "./VMT";
 
@@ -162,6 +166,78 @@ class prop_testchamber_door extends BaseEntity {
     }
 }
 
+const scratchVec3a = vec3.create();
+const scratchMat4a = mat4.create();
+class prop_indicator_panel extends BaseEntity {
+    public static classname = `prop_indicator_panel`;
+    public materialInstance: BaseMaterial | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.setMaterial(renderContext, `vgui/signage/vgui_indicator_unchecked.vmt`);
+
+        this.registerInput('check', this.input_check.bind(this));
+        this.registerInput('uncheck', this.input_uncheck.bind(this));
+    }
+
+    public async setMaterial(renderContext: SourceRenderContext, materialName: string) {
+        const materialInstance = await renderContext.materialCache.createMaterialInstance(materialName);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
+    }
+
+    private setIndicatorLights(entitySystem: EntitySystem, valueNum: number): void {
+        if (this.entity.indicatorlights === undefined)
+            return;
+
+        for (let i = 0; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+            if (!entitySystem.entityMatchesTargetName(entity, this.entity.indicatorlights))
+                continue;
+
+            const materialParams = entity.materialParams;
+            if (materialParams !== null)
+                materialParams.textureFrameIndex = valueNum;
+        }
+    }
+
+    private input_check(entitySystem: EntitySystem): void {
+        this.setIndicatorLights(entitySystem, 1);
+        this.setMaterial(entitySystem.renderContext, `vgui/signage/vgui_indicator_checked.vmt`);
+    }
+
+    private input_uncheck(entitySystem: EntitySystem): void {
+        this.setIndicatorLights(entitySystem, 0);
+        this.setMaterial(entitySystem.renderContext, `vgui/signage/vgui_indicator_unchecked.vmt`);
+    }
+
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (!this.shouldDraw())
+            return;
+
+        if (this.materialInstance === null)
+            return;
+
+        const view = renderContext.currentView;
+        const modelMatrix = this.updateModelMatrix();
+        getMatrixTranslation(scratchVec3a, modelMatrix);
+        if (!view.frustum.containsSphere(scratchVec3a, 16))
+            return;
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderContext.materialCache.staticResources.staticQuad.setQuadOnRenderInst(renderInst);
+
+        mat4.translate(scratchMat4a, modelMatrix, Vec3NegX);
+        scaleMatrix(scratchMat4a, scratchMat4a, 16);
+        this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst);
+
+        this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+    }
+}
+
 async function createPortal2SourceLoadContext(context: SceneContext): Promise<SourceLoadContext> {
     function registerEntityFactories(registry: EntityFactoryRegistry): void {
         registry.registerFactory(trigger_portal_button);
@@ -172,6 +248,7 @@ async function createPortal2SourceLoadContext(context: SceneContext): Promise<So
         registry.registerFactory(prop_under_button);
         registry.registerFactory(prop_under_floor_button);
         registry.registerFactory(prop_testchamber_door);
+        registry.registerFactory(prop_indicator_panel);
     }
 
     const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {

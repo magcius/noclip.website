@@ -7,7 +7,7 @@ import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionH
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
-import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
@@ -1057,16 +1057,8 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
     dst[15] = 9999.0;
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipYScale: number): void {
-    // Map from -1 to 1, to viewport coords.
-
+export function texProjCameraSceneTex(dst: mat4, camera: Camera, flipYScale: number): void {
     // Map from -1 to 1 to 0 to 1.
     let scaleS = 0.5, scaleT = -0.5 * flipYScale, transS = 0.5, transT = 0.5;
-    // Map from 0 to 1 to viewport.
-    scaleS = scaleS * viewport.w;
-    scaleT = scaleT * viewport.h;
-    transS = transS * viewport.w + viewport.x;
-    transT = transT * viewport.h + viewport.y;
-
     texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
 }

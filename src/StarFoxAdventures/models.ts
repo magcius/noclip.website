@@ -9,16 +9,16 @@ import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
 import { MapLight, SFAMaterial } from './materials';
-import { SFAAnimationController } from './animation';
+import { Keyframe, SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
-import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
+import { dataSubarray, readUint32, setInt8Clamped, setInt16Clamped, mat4PostTranslate } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
-import { Shape } from './shapes';
+import { Shape, ShapeRenderContext } from './shapes';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
-import { computeNormalMatrix, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
+import { transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 import { LightType } from './WorldLights';
 import { ObjectInstance } from './objects';
 
@@ -43,74 +43,99 @@ interface Fur {
     numLayers: number;
 }
 
-interface Water {
-    shape: Shape;
-}
-
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     ambienceIdx: number;
     outdoorAmbientColor: Color;
     object?: ObjectInstance;
-    setupPointLights: (lights: GX_Material.Light[], sceneCtx: SceneRenderContext) => void;
+    setupLights: (lights: GX_Material.Light[], typeMask: LightType) => void;
     mapLights?: MapLight[];
 }
 
 const BLOCK_FUR_RENDER_LAYER = 23;
 
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
+const scratchMtx2 = mat4.create();
+const scratchMtx3 = mat4.create();
+const scratchVec0 = vec3.create();
+
 export class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
     public shapes: Shape[][] = [];
     public furs: Fur[] = [];
-    public waters: Water[] = [];
+    public waters: Shape[] = [];
 
     constructor(public model: Model, public posBuffer: DataView, public nrmBuffer?: DataView) {
     }
 
     public reloadVertices() {
-        // TODO: reload waters and furs
         for (let i = 0; i < this.shapes.length; i++) {
             const shapes = this.shapes[i];
             for (let j = 0; j < shapes.length; j++)
                 shapes[j].reloadVertices();
         }
+
+        for (let i = 0; i < this.furs.length; i++)
+            this.furs[i].shape.reloadVertices();
+
+        for (let i = 0; i < this.waters.length; i++)
+            this.waters[i].reloadVertices();
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        const lights = nArray(8, () => new GX_Material.Light());
+
+        if (!this.model.isMapBlock && ((this.model.lightFlags & 0xc) === 0))
+            modelCtx.setupLights(lights, LightType.POINT | LightType.DIRECTIONAL);
+        else
+            modelCtx.setupLights(lights, LightType.POINT);
+
+        const shapeCtx: ShapeRenderContext = {
+            modelCtx,
+            setupLights: (dst: GX_Material.Light[]) => {
+                for (let i = 0; i < dst.length; i++)
+                    dst[i].copy(lights[i]);
+            }
+        };
+
         for (let i = 0; i < 3; i++) {
             if (this.shapes[i] !== undefined) {
                 if (renderLists !== null)
                     renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
-                for (const shape of this.shapes[i]) {
+                for (let j = 0; j < this.shapes[i].length; j++) {
+                    const shape = this.shapes[i][j];
                     if (shape.isDevGeometry && !modelCtx.showDevGeometry)
                         continue;
 
-                    mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
-                    mat4.mul(scratchMtx0, matrix, scratchMtx0);
-                    shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
+                    mat4.copy(scratchMtx0, matrix);
+                    mat4PostTranslate(scratchMtx0, this.model.modelTranslate);
+                    shape.addRenderInsts(device, renderInstManager, scratchMtx0, shapeCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
                 }
             }
         }
         
         if (renderLists !== null)
             renderInstManager.setCurrentRenderInstList(renderLists.waters);
-        for (const water of this.waters) {
-            mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
-            mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            water.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
+        for (let i = 0; i < this.waters.length; i++) {
+            mat4.copy(scratchMtx0, matrix);
+            mat4PostTranslate(scratchMtx0, this.model.modelTranslate);
+            this.waters[i].addRenderInsts(device, renderInstManager, scratchMtx0, shapeCtx, {}, matrixPalette);
         }
         
         if (renderLists !== null)
             renderInstManager.setCurrentRenderInstList(renderLists.furs);
-        for (const fur of this.furs) {
+        for (let i = 0; i < this.furs.length; i++) {
+            const fur = this.furs[i];
             for (let j = 0; j < fur.numLayers; j++) {
-                mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
-                mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
-                mat4.mul(scratchMtx0, matrix, scratchMtx0);
+                mat4.copy(scratchMtx0, matrix);
+                mat4PostTranslate(scratchMtx0, 
+                    [this.model.modelTranslate[0],
+                    this.model.modelTranslate[1] + 0.4 * (j + 1),
+                    this.model.modelTranslate[2]]);
 
-                // Caution: a different scale_exp may be used when drawing objects
-                fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
+                fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, shapeCtx, {
                     furLayer: j,
                 }, matrixPalette, undefined, BLOCK_FUR_RENDER_LAYER);
             }
@@ -118,21 +143,19 @@ export class ModelShapes {
     }
 
     public destroy(device: GfxDevice) {
-        for (let shapes of this.shapes) {
-            for (let shape of shapes) {
-                shape.destroy(device);
-            }
+        for (let i = 0; i < this.shapes.length; i++) {
+            const shapes = this.shapes[i];
+            for (let j = 0; j < shapes.length; j++)
+                shapes[j].destroy(device);
         }
         this.shapes = [];
 
-        for (let fur of this.furs) {
-            fur.shape.destroy(device);
-        }
+        for (let i = 0; i < this.furs.length; i++)
+            this.furs[i].shape.destroy(device);
         this.furs = [];
 
-        for (let water of this.waters) {
-            water.shape.destroy(device);
-        }
+        for (let i = 0; i < this.waters.length; i++)
+            this.waters[i].destroy(device);
         this.waters = [];
     }
 }
@@ -157,6 +180,7 @@ export class Model {
 
     public modelTranslate: vec3 = vec3.create();
     public cullRadius: number = 10;
+    public lightFlags: number = 0;
 
     public materials: (SFAMaterial | undefined)[] = [];
 
@@ -200,14 +224,6 @@ export class Model {
     }
 }
 
-const scratchMtx0 = mat4.create();
-const scratchMtx1 = mat4.create();
-const scratchMtx2 = mat4.create();
-const scratchMtx3 = mat4.create();
-const scratchVec0 = vec3.create();
-const scratchVec1 = vec3.create();
-const scratchVec2 = vec3.create();
-
 export class ModelInstance {
     private modelShapes: ModelShapes;
 
@@ -216,6 +232,7 @@ export class ModelInstance {
     public matrixPalette: mat4[] = [];
     private skinningDirty: boolean = true;
     private amap: DataView;
+    public poses: Keyframe;
 
     constructor(public model: Model) {
         const numMatrices = this.model.joints.length + this.model.coarseBlends.length;

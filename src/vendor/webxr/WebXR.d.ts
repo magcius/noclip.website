@@ -409,3 +409,7 @@ interface XRImageTrackingResult {
     readonly trackingState: XRImageTrackingState;
     readonly measuredWidthInMeters: number;
 }
+
+interface WebGL2RenderingContext {
+    makeXRCompatible(): PromiseLike<void>;
+}

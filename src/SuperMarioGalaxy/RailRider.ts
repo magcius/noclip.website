@@ -396,7 +396,7 @@ export class RailRider {
     public currentPos = vec3.create();
     public currentDir = vec3.create();
     public currentPointId: number = -1;
-    public coord: number = 0;
+    public coord: number = -1;
     public speed: number = 0;
     public direction: RailDirection = RailDirection.TowardsEnd;
     public startPos = vec3.create();
@@ -460,7 +460,12 @@ export class RailRider {
     }
 
     public setCoord(v: number): void {
-        this.coord = this.bezierRail.normalizePos(v, 1);
+        if (this.coord === v)
+            return;
+        const coord = this.bezierRail.normalizePos(v, 1);
+        if (this.coord === coord)
+            return;
+        this.coord = coord;
         this.syncPosDir();
     }
 

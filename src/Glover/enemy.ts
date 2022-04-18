@@ -1192,5 +1192,4 @@ export class GloverEnemy implements GenericRenderable {
             this.particles.prepareToRender(device, renderInstManager, viewerInput);
         }
     }
-
-};
+}

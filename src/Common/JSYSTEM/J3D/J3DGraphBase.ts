@@ -11,7 +11,7 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex 
 import { TextureMapping } from '../../../TextureHolder';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
@@ -83,7 +83,7 @@ export class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, drawParams: DrawParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -129,7 +129,7 @@ export class ShapeInstance {
     constructor(public shapeData: ShapeData) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, materialInstance: MaterialInstance, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, materialInstance: MaterialInstance, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         if (!this.visible)
             return;
 
@@ -149,7 +149,7 @@ export class ShapeInstance {
 
         const multi = shape.displayFlags === ShapeDisplayFlags.MULTI;
         if (!multi)
-            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, drawParams);
+            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, drawParams);
 
         for (let i = 0; i < shape.mtxGroups.length; i++) {
             if (!prepareShapeMtxGroup(drawParams, shapeInstanceState, shape, shape.mtxGroups[i]))
@@ -160,7 +160,7 @@ export class ShapeInstance {
             materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
             if (multi)
-                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, drawParams);
+                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, drawParams);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -443,7 +443,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
@@ -531,7 +531,7 @@ export class MaterialInstance {
                     // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
 
                     // Replaces the effectMatrix. EnvMtx is built into this call, as well.
-                    texProjCameraSceneTex(tmp1, camera, viewport, flipYScale);
+                    texProjCameraSceneTex(tmp1, camera, flipYScale);
 
                     // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
                     J3DMtxProjConcat(tmp1, tmp2, tmp1);
@@ -598,7 +598,7 @@ export class MaterialInstance {
         }
     }
 
-    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
+    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, drawParams: DrawParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0],   ColorRegType.S10);
@@ -644,7 +644,7 @@ export class MaterialInstance {
             this.calcTexMtxInput(dst, texMtx, scratchModelViewMatrix, modelMatrix);
             const texSRT = scratchMat4c;
             this.calcTexSRT(texSRT, i);
-            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
+            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
         }
 
         for (let i = 0; i < material.indTexMatrices.length; i++) {
@@ -661,21 +661,21 @@ export class MaterialInstance {
         materialParams.u_FogBlock.copy(this.fogBlock);
 
         if (this.materialData.fillMaterialParamsCallback !== null)
-            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, drawParams);
+            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, drawParams);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
-        this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, drawParams, viewMatrix);
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, drawParams: DrawParams): void {
+        this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, drawParams, viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
-    public prepareToRenderShapes(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRenderShapes(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         if (!this.visible)
             return;
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this, modelData, materialInstanceState, shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, this, modelData, materialInstanceState, shapeInstanceState);
     }
 }
 
@@ -1139,7 +1139,7 @@ export class J3DModelInstance {
         return depth;
     }
 
-    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, translucent: boolean): void {
+    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, translucent: boolean): void {
         if (!this.isAnyShapeVisible())
             return;
 
@@ -1148,16 +1148,16 @@ export class J3DModelInstance {
             const materialInstance = this.materialInstances[i];
             if (materialInstance.materialData.material.translucent !== translucent)
                 continue;
-            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 
-    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.draw(device, renderInstManager, camera, viewport, false);
+    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+        this.draw(device, renderInstManager, camera, false);
     }
 
-    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.draw(device, renderInstManager, camera, viewport, true);
+    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+        this.draw(device, renderInstManager, camera, true);
     }
 
     private calcJointAnimRecurse(node: JointTreeNode, parentNode: JointTreeNode | null): void {

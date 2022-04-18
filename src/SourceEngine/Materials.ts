@@ -3,7 +3,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -11,16 +11,15 @@ import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixT } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
-import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
-import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
@@ -51,6 +50,7 @@ export const enum LateBindingTexture {
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
     WaterReflection     = `water-reflection`,
+    ProjectedLightDepth = `projected-light-depth`,
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
@@ -2062,7 +2062,7 @@ class Material_Generic extends BaseMaterial {
             wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
-            this.wantsStaticVertexLighting = false;
+            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
@@ -2388,8 +2388,7 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
 
         if (this.wantsProjectedTexture && renderContext.currentView.viewType !== SourceEngineViewType.ShadowMap) {
-            dst[12].gfxTexture = this.projectedLight!.depthTexture.getTextureForSampling();
-            dst[12].gfxSampler = renderContext.materialCache.staticResources.shadowSampler;
+            dst[12].lateBinding = LateBindingTexture.ProjectedLightDepth;
             this.projectedLight!.texture!.fillTextureMapping(dst[13], this.projectedLight!.textureFrame);
         }
     }
@@ -2398,13 +2397,16 @@ class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
-        let renderer = renderContext.currentProjectedLightRenderer;
-        if (renderer !== null) {
-            if (!renderer.light.frustumView.frustum.contains(bbox))
-                renderer = null;
+        let projectedLightRenderer = null;
+        if (renderContext.currentViewRenderer !== null)
+            projectedLightRenderer = renderContext.currentViewRenderer.currentProjectedLightRenderer;
+
+        if (projectedLightRenderer !== null) {
+            if (!projectedLightRenderer.light.frustumView.frustum.contains(bbox))
+                projectedLightRenderer = null;
         }
 
-        this.projectedLight = renderer !== null ? renderer.light : null;
+        this.projectedLight = projectedLightRenderer !== null ? projectedLightRenderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
         if (this.shaderInstance.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
@@ -3573,7 +3575,7 @@ layout(std140) uniform ub_ObjectParams {
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
-varying vec3 v_PositionWorld;
+varying vec4 v_PositionWorld;
 
 layout(binding = 0) uniform sampler2D u_TextureBase;
 layout(binding = 1) uniform sampler2D u_TextureDetail1;
@@ -3588,6 +3590,10 @@ void mainVS() {
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_PositionWorld.w = -gl_Position.z;
+#ifndef GFX_CLIPSPACE_NEAR_ZERO
+    v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
+#endif
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3620,6 +3626,10 @@ void mainVS() {
 #endif
 
 ${SampleFlowMap}
+
+float CalcCameraFade(in float t_PosProjZ) {
+    return smoothstep(0.0, 1.0, saturate(t_PosProjZ * 0.025));
+}
 
 #ifdef FRAG
 void mainPS() {
@@ -3691,6 +3701,8 @@ void mainPS() {
     t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
     t_FinalColor.a = 1.0;
 #endif
+
+    t_FinalColor.a *= CalcCameraFade(v_PositionWorld.w);
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -3815,8 +3827,8 @@ class Material_SolidEnergy extends BaseMaterial {
 
         if (this.wantsFlowmap) {
             offs += fillVec4(d, offs,
-                1.0 / this.paramGetNumber('$flow_worlduvscale'),
-                1.0 / this.paramGetNumber('$flow_normaluvscale'),
+                this.paramGetNumber('$flow_worlduvscale'),
+                this.paramGetNumber('$flow_normaluvscale'),
                 this.paramGetNumber('$flow_noise_scale'),
                 this.paramGetNumber('$outputintensity'));
 
@@ -4041,6 +4053,52 @@ class Material_Sky extends BaseMaterial {
 //#endregion
 
 //#region Material Cache
+class StaticQuad {
+    private vertexBufferQuad: GfxBuffer;
+    private indexBufferQuad: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputStateQuad: GfxInputState;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        const n0 = 1, n1 = -1;
+        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
+            0, n0, n0, 1, 0, 1, 1, 1, 1,
+            0, n0, n1, 1, 1, 1, 1, 1, 1,
+            0, n1, n0, 0, 0, 1, 1, 1, 1,
+            0, n1, n1, 0, 1, 1, 1, 1, 1,
+        ]).buffer);
+        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
+            0, 1, 2, 2, 1, 3,
+        ]).buffer);
+
+        this.inputStateQuad = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBufferQuad, byteOffset: 0 },
+        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+    }
+
+    public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStateQuad);
+        renderInst.drawIndexes(6);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputState(this.inputStateQuad);
+        device.destroyBuffer(this.vertexBufferQuad);
+        device.destroyBuffer(this.indexBufferQuad);
+    }
+}
+
 class StaticResources {
     public whiteTexture2D: GfxTexture;
     public opaqueBlackTexture2D: GfxTexture;
@@ -4049,7 +4107,7 @@ class StaticResources {
     public linearRepeatSampler: GfxSampler;
     public pointClampSampler: GfxSampler;
     public shadowSampler: GfxSampler;
-    public particleStaticResource: ParticleStaticResource;
+    public staticQuad: StaticQuad;
     public zeroVertexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
@@ -4092,7 +4150,7 @@ class StaticResources {
             wrapT: GfxWrapMode.Clamp,
         });
         this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
-        this.particleStaticResource = new ParticleStaticResource(device, cache);
+        this.staticQuad = new StaticQuad(device, cache);
     }
 
     public destroy(device: GfxDevice): void {
@@ -4100,7 +4158,7 @@ class StaticResources {
         device.destroyTexture(this.opaqueBlackTexture2D);
         device.destroyTexture(this.transparentBlackTexture2D);
         device.destroyBuffer(this.zeroVertexBuffer);
-        this.particleStaticResource.destroy(device);
+        this.staticQuad.destroy(device);
     }
 }
 
@@ -4495,14 +4553,10 @@ export class ProjectedLight {
     public textureFrame: number = 0;
     public lightColor = colorNewCopy(White);
     public brightnessScale: number = 1.0;
-    public depthTexture = new GfxrTemporalTexture();
+    public resolveTextureID: GfxrResolveTextureID;
 
     constructor() {
         this.frustumView.viewType = SourceEngineViewType.ShadowMap;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.depthTexture.destroy(device);
     }
 }
 
@@ -5084,6 +5138,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
         this.registerProxyFactory(MaterialProxy_EntityRandom);
+        this.registerProxyFactory(MaterialProxy_FizzlerVortex);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -5573,6 +5628,17 @@ class MaterialProxy_EntityRandom {
 
         const scale = paramGetNum(map, this.scale);
         paramSetNum(map, this.resultvar, entityParams.randomNumber * scale);
+    }
+}
+
+class MaterialProxy_FizzlerVortex {
+    public static type = `fizzlervortex`;
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        const param = map['$flow_color_intensity'] as ParameterNumber;
+        if (param === undefined)
+            return;
+        param.value = 1.0;
     }
 }
 //#endregion

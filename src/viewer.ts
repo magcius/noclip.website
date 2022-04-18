@@ -4,7 +4,7 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxRenderPassDescriptor, makeTextureDescriptor2D, GfxFormat, GfxProgram } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
@@ -43,7 +43,6 @@ export interface ViewerRenderInput {
     deltaTime: number;
     backbufferWidth: number;
     backbufferHeight: number;
-    viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
     antialiasingMode: AntialiasingMode;
     mouseLocation: MouseLocation;
@@ -102,7 +101,6 @@ export class Viewer {
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
     public renderStatisticsTracker = new RenderStatisticsTracker();
-    public viewport: GfxNormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
     public scene: SceneGfx | null = null;
 
@@ -124,7 +122,6 @@ export class Viewer {
             deltaTime: 0,
             backbufferWidth: 0,
             backbufferHeight: 0,
-            viewport: this.viewport,
             onscreenTexture: null!,
             antialiasingMode: AntialiasingMode.None,
             mouseLocation: this.inputManager,
@@ -163,7 +160,6 @@ export class Viewer {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
-        this.viewerRenderInput.viewport = this.viewport;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
@@ -362,7 +358,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
+    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {

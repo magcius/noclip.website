@@ -428,24 +428,23 @@ function flashItem(item: any, fieldName: string, step: number = 0) {
         setTimeout(() => { flashItem(item, fieldName, step + 1) }, 200);
 }
 
-export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => string | void, done: (itemIndex: number) => void): void {
-    const ui: UI = (window as any).main.ui;
-    const debugFloater = ui.debugFloaterHolder.makeFloatingPanel('SliderSelect');
+function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => string | void, done: (itemIndex: number) => void): void {
+    const panel = window.main.ui.debugFloaterHolder.makeFloatingPanel('SliderSelect');
     const slider = new Slider();
     // Revert to default style for clarity
     slider.elem.querySelector('input')!.classList.remove('Slider');
-    debugFloater.contents.append(slider.elem);
+    panel.contents.append(slider.elem);
 
     const textLabel = document.createElement('div');
     textLabel.style.padding = '1em';
-    debugFloater.contents.append(textLabel);
+    panel.contents.append(textLabel);
 
     const doneButton = document.createElement('div');
     doneButton.textContent = 'Select';
     doneButton.style.background = '#333';
     doneButton.style.cursor = 'pointer';
     doneButton.style.padding = '1em';
-    debugFloater.contents.append(doneButton);
+    panel.contents.append(doneButton);
 
     slider.setRange(-1, items.length - 1, 1);
 
@@ -466,11 +465,11 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
 
     doneButton.onclick = () => {
         const index = slider.getValue();
-        debugFloater.close();
+        panel.close();
         done(index);
     };
 
-    debugFloater.onclose = () => {
+    panel.onclose = () => {
         done(-1);
     };
 }

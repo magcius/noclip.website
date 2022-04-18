@@ -12,7 +12,7 @@ import { TXTR } from './txtr';
 import { ResourceSystem } from './resource';
 import { assert, align, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
+import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
@@ -20,7 +20,6 @@ import { AABB } from '../Geometry';
 import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';
 import { CSKR } from './cskr';
-import { TexGenMatrix } from '../gx/gx_enum';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -629,7 +628,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type, enableOutput: true };
+            vcd[format.vtxAttrib] = { type: format.type };
         }
 
         // GX_VTXFMT0 | GX_VA_NRM = GX_F32
@@ -678,9 +677,9 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
                 if (!(vtxAttrFormat & format.mask))
                     continue;
                 if (format.vtxAttrib === GX.Attr.POS)
-                    vcd[format.vtxAttrib] = { type: GX.AttrType.UNRESOLVED_INDEX16, enableOutput: true };
+                    vcd[format.vtxAttrib] = { type: GX.AttrType.INDEX16, outputMode: GX_VtxDescOutputMode.Index, };
                 else
-                    vcd[format.vtxAttrib] = { type: format.type, enableOutput: false };
+                    vcd[format.vtxAttrib] = { type: format.type, outputMode: GX_VtxDescOutputMode.None };
             }
             const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
             const loadedPosIndexData = vtxLoader.runVertices([], dlData);
@@ -743,7 +742,9 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <= 0x00FFFFFF) };
+            const enableOutput = format.mask <= 0x00FFFFFF;
+            const outputMode = enableOutput ? GX_VtxDescOutputMode.VertexData : GX_VtxDescOutputMode.None;
+            vcd[format.vtxAttrib] = { type: format.type, outputMode };
         }
 
         const vatFormat: GX_VtxAttrFmt[] = [];

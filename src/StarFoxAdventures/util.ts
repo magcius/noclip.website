@@ -1,7 +1,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
-import { Camera, computeViewMatrix } from '../Camera';
-import { getMatrixTranslation } from '../MathHelpers';
+import { mat4, vec3, quat, ReadonlyVec3 } from 'gl-matrix';
+import { Camera } from '../Camera';
+import { computeModelMatrixSRT, getMatrixTranslation, transformVec3Mat4w0 } from '../MathHelpers';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);
@@ -81,25 +81,37 @@ export function mat4SetTranslation(mtx: mat4, x: number, y: number, z: number): 
     mat4SetValue(mtx, 2, 3, z);
 }
 
-const scratchQuat = quat.create();
-const scratchVec0 = vec3.create();
-const scratchVec1 = vec3.create();
-
 // Compute model matrix from scale, rotation, and translation.
-// This version is unique to SFA: Rotations are applied in Y -> X -> Z order.
+// This version is unique to SFA:
+// Rotations are applied in the order: Z (roll), then X (pitch), then Y (yaw).
 export function mat4FromSRT(dst: mat4,
     sx: number, sy: number, sz: number,
     yaw: number, pitch: number, roll: number,
     tx: number, ty: number, tz: number)
 {
-    quat.identity(scratchQuat);
-    // TODO: verify correctness
-    quat.rotateY(scratchQuat, scratchQuat, yaw);
-    quat.rotateX(scratchQuat, scratchQuat, pitch);
-    quat.rotateZ(scratchQuat, scratchQuat, roll);
-    vec3.set(scratchVec0, tx, ty, tz);
-    vec3.set(scratchVec1, sx, sy, sz);
-    mat4.fromRotationTranslationScale(dst, scratchQuat, scratchVec0, scratchVec1);
+    const sinX = Math.sin(pitch), cosX = Math.cos(pitch);
+    const sinY = Math.sin(yaw),   cosY = Math.cos(yaw);
+    const sinZ = Math.sin(roll),  cosZ = Math.cos(roll);
+
+    dst[0] =  sx * (sinY * sinX * sinZ + cosY * cosZ);
+    dst[1] =  sx * (cosX * sinZ);
+    dst[2] =  sx * (cosY * sinX * sinZ - sinY * cosZ);
+    dst[3] =  0.0;
+
+    dst[4] =  sy * (sinY * sinX * cosZ - cosY * sinZ);
+    dst[5] =  sy * (cosX * cosZ);
+    dst[6] =  sy * (cosY * sinX * cosZ + sinY * sinZ);
+    dst[7] =  0.0;
+
+    dst[8] =  sz * (sinY * cosX);
+    dst[9] =  sz * (-sinX);
+    dst[10] = sz * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = tx;
+    dst[13] = ty;
+    dst[14] = tz;
+    dst[15] = 1.0;
 }
 
 // Post-translate a matrix. Note that mat4.translate pre-translates a matrix.

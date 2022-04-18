@@ -592,13 +592,13 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.TexGenSrc.TEX6:      return `vec4(a_Tex67.xy, 1.0, 1.0)`;
         case GX.TexGenSrc.TEX7:      return `vec4(a_Tex67.zw, 1.0, 1.0)`;
         // Use a previously generated texcoordgen.
-        case GX.TexGenSrc.TEXCOORD0: return `vec4(v_TexCoord0, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD1: return `vec4(v_TexCoord1, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD2: return `vec4(v_TexCoord2, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD3: return `vec4(v_TexCoord3, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD4: return `vec4(v_TexCoord4, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD5: return `vec4(v_TexCoord5, 1.0)`;
-        case GX.TexGenSrc.TEXCOORD6: return `vec4(v_TexCoord6, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD0: return `vec4(t_TexCoord0, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD1: return `vec4(t_TexCoord1, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD2: return `vec4(t_TexCoord2, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD3: return `vec4(t_TexCoord3, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD4: return `vec4(t_TexCoord4, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD5: return `vec4(t_TexCoord5, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD6: return `vec4(t_TexCoord6, 1.0)`;
         default:
             throw new Error("whoops");
         }
@@ -627,6 +627,18 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     // Output is a vec3, src is a vec4.
+    private generateTexGenBump(texCoordGenIndex: number, src: string) {
+        const texCoordGen = this.material.texGens[texCoordGenIndex];
+
+        assert(texCoordGen.type >= GX.TexGenType.BUMP0 && texCoordGen.type <= GX.TexGenType.BUMP7);
+        const lightIdx = (texCoordGen.type - GX.TexGenType.BUMP0);
+        const lightDir = `normalize(u_LightParams[${lightIdx}].Position.xyz - v_Position.xyz)`;
+        const b = this.generateMulNrm(1);
+        const t = this.generateMulNrm(2);
+        return `${src}.xyz + vec3(dot(${lightDir}, ${b}.xyz), dot(${lightDir}, ${t}.xyz), 0.0)`;
+    }
+
+    // Output is a vec3, src is a vec4.
     private generateTexGenType(texCoordGenIndex: number) {
         const texCoordGen = this.material.texGens[texCoordGenIndex];
         const src = this.generateTexGenSource(texCoordGen.source);
@@ -638,7 +650,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         else if (texCoordGen.type === GX.TexGenType.MTX3x4)
             return `${this.generateTexGenMatrixMult(texCoordGenIndex, src)}`;
         else
-            throw new Error("whoops");
+            return `${this.generateTexGenBump(texCoordGenIndex, src)}`;
     }
 
     // Output is a vec3.
@@ -670,14 +682,13 @@ ${this.generateLightAttnFn(chan, lightName)}
         let suffix: string;
         if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
             suffix = `.xy`;
-        else if (tg.type === GX.TexGenType.MTX3x4)
-            suffix = `.xyz`;
         else
-            throw "whoops";
+            suffix = `.xyz`;
 
         return `
     // TexGen ${i} Type: ${tg.type} Source: ${tg.source} Matrix: ${tg.matrix}
-    v_TexCoord${i} = ${this.generateTexGenPost(i)}${suffix};`;
+    vec3 t_TexCoord${i} = ${this.generateTexGenPost(i)};
+    v_TexCoord${i} = t_TexCoord${i}${suffix};`;
     }
 
     private generateTexGens(): string {
@@ -690,10 +701,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         return this.material.texGens.map((tg, i) => {
             if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
                 return `varying vec2 v_TexCoord${i};\n`;
-            else if (tg.type === GX.TexGenType.MTX3x4)
-                return `varying highp vec3 v_TexCoord${i};\n`;
             else
-                throw "whoops";
+                return `varying highp vec3 v_TexCoord${i};\n`;
         }).join('');
     }
 
@@ -701,10 +710,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         return this.material.texGens.map((tg, i) => {
             if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
                 return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy; }\n`;
-            else if (tg.type === GX.TexGenType.MTX3x4)
-                return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy / v_TexCoord${i}.z; }\n`;
             else
-                throw "whoops";
+                return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy / v_TexCoord${i}.z; }\n`;
         }).join('');
     }
 
@@ -1311,14 +1318,20 @@ ${this.generateFogFunc(`t_Fog`)}
         });
     }
 
+    private usesBump(): boolean {
+        return this.material.texGens.some((g) => {
+            return g.type >= GX.TexGenType.BUMP0 && g.type <= GX.TexGenType.BUMP7;
+        });
+    }
+
     private usesAttrib(a: VertexAttributeGenDef): boolean {
         switch (a.attrInput) {
         case VertexAttributeInput.POS: return true;
         case VertexAttributeInput.TEX0123MTXIDX: return materialUseTexMtxIdx(this.material, 0) || materialUseTexMtxIdx(this.material, 1) || materialUseTexMtxIdx(this.material, 2) || materialUseTexMtxIdx(this.material, 3);
         case VertexAttributeInput.TEX4567MTXIDX: return materialUseTexMtxIdx(this.material, 4) || materialUseTexMtxIdx(this.material, 5) || materialUseTexMtxIdx(this.material, 6) || materialUseTexMtxIdx(this.material, 7);
         case VertexAttributeInput.NRM: return this.usesNormal() || this.usesTexGenInput(GX.TexGenSrc.NRM);
-        case VertexAttributeInput.TANGENT: return this.usesTexGenInput(GX.TexGenSrc.TANGENT);
-        case VertexAttributeInput.BINRM: return this.usesTexGenInput(GX.TexGenSrc.BINRM);
+        case VertexAttributeInput.TANGENT: return this.usesTexGenInput(GX.TexGenSrc.TANGENT) || this.usesBump();
+        case VertexAttributeInput.BINRM: return this.usesTexGenInput(GX.TexGenSrc.BINRM) || this.usesBump();
         case VertexAttributeInput.CLR0: return this.usesLightChannel(this.material.lightChannels[0]);
         case VertexAttributeInput.CLR1: return this.usesLightChannel(this.material.lightChannels[1]);
         case VertexAttributeInput.TEX01: return this.usesTexGenInput(GX.TexGenSrc.TEX0) || this.usesTexGenInput(GX.TexGenSrc.TEX1);
@@ -1345,12 +1358,14 @@ ${this.generateFogFunc(`t_Fog`)}
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateMulNrm(): string {
-        const src = this.usesNormal() ? `vec4(a_Normal.xyz, 0.0)` : `vec4(0.0)`;
+    private generateMulNrm(which: number): string {
+        const src = (which === 0) ? `vec4(a_Normal.xyz, 0.0)` :
+            (which === 1) ? `vec4(a_Binormal.xyz, 0.0)` : `vec4(a_Tangent.xyz, 0.0)`;
+
         if (materialUsePnMtxIdx(this.material))
-            return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
+            return `normalize(${this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`)})`;
         else
-            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);
+            return `normalize(${this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`)})`;
     }
 
     private generateShaders(): void {
@@ -1398,7 +1413,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = normalize(${this.generateMulNrm()});
+    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(0) : `vec3(0.0)`};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;

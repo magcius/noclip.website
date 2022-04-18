@@ -80,6 +80,11 @@ export class CINF {
     public getFromRootUnrotated(boneId: number): ReadonlyVec3 {
         return this.bones.get(boneId)!.origin;
     }
+
+    public getBoneIdFromName(name: string): number | null {
+        const boneId = this.boneNames.get(name);
+        return boneId !== undefined ? boneId : null;
+    }
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem): CINF {

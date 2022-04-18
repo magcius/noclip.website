@@ -3,7 +3,7 @@ import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, JMapLinkInfo } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead } from "./LiveActor";
-import { fallback, assertExists, nArray, spliceBisectRight } from "../util";
+import { fallback, nArray, spliceBisectRight, assert } from "../util";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0 } from "../MathHelpers";
 import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
@@ -40,6 +40,7 @@ export class PlanetGravityManager extends NameObj {
     public calcTotalGravityVector(dst: vec3, gravityInfo: GravityInfo | null, pos: ReadonlyVec3, gravityTypeMask: GravityTypeMask, hostFilter: NameObj | null): boolean {
         let bestPriority = -1;
         let bestMag = -1.0;
+        assert(dst !== pos);
         vec3.zero(dst);
 
         for (let i = 0; i < this.gravities.length; i++) {

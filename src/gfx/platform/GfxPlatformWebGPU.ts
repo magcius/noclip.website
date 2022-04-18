@@ -1267,8 +1267,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return o;
     }
 
-    public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
-        // TODO WebXR: currently now way to use WebGPU with WebXR.
+    public createWebXRLayer(webXRSession: XRSession): Promise<XRWebGLLayer> {
+        // There is currently no way to use WebGPU with WebXR.
         // This method should never be called.
         throw "createWebXRLayer not implemented on WebGPU";
     }

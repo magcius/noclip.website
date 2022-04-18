@@ -163,7 +163,7 @@ class BARRenderer implements SceneGfx {
         gridDiv.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 0.1fr";
         gridDiv.style.alignItems = "center";
         gridDiv.style.cursor = "pointer";
-        gridDiv.style.gridGap = "10px";
+        gridDiv.style.gap = "10px";
 
         let l1 = document.createElement('div');
         l1.style.userSelect = 'none';
@@ -201,7 +201,7 @@ class BARRenderer implements SceneGfx {
         gridDiv.style.gridTemplateColumns = "1fr 1fr 0.1fr";
         gridDiv.style.alignItems = "center";
         gridDiv.style.cursor = "pointer";
-        gridDiv.style.gridGap = "10px";
+        gridDiv.style.gap = "10px";
         gridDiv.style.paddingBottom = "5px";
 
         let v1 = document.createElement('div');

@@ -7,7 +7,6 @@ import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimato
 import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
@@ -890,8 +889,8 @@ export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
-export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-    texProjCameraSceneTex(m, camera, viewport, -1);
+export function loadTexProjectionMtx(m: mat4, camera: Camera): void {
+    texProjCameraSceneTex(m, camera, -1);
     mat4.mul(m, m, camera.viewMatrix);
 }
 

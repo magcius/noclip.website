@@ -292,6 +292,7 @@ class Main {
 
         this.canvas = document.createElement('canvas');
         this.canvas.style.imageRendering = 'pixelated';
+        this.canvas.style.outline = 'none';
 
         this.toplevel.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);

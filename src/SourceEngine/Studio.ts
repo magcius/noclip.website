@@ -1634,6 +1634,7 @@ export class HardwareVertData {
 
             // 0x10 bytes of padding.
             meshHeaderIdx += 0x1C;
+            indexInsideLOD++;
         }
 
         this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.Vertex, vertexData.buffer);

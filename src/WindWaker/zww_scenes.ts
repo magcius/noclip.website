@@ -208,7 +208,6 @@ class dDlst_alphaModel_c {
         projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
@@ -697,7 +696,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);

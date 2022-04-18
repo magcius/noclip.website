@@ -64,7 +64,7 @@ export class WebXRContext {
             this.xrSession.requestReferenceSpace('local'),
         ]);
 
-        const layer = this.swapChain.createWebXRLayer(this.xrSession);
+        const layer = await this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: layer, depthNear: 5, depthFar: 1000000.0 });
 
         if (this.onstart !== null)
