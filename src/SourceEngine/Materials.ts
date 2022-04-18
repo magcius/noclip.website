@@ -3358,20 +3358,16 @@ void mainPS() {
 
 #ifdef USE_LOCAL_REFRACT
     vec3 t_LookDirWorld = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    // Get the tangent-space look direction so we can refract into the texture.
+    // Get the tangent-space look direction to offset our texture.
     vec3 t_LookDirTangent = normalize(CalcWorldToTangent(t_LookDirWorld, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2));
-    // "Refract" it. Currently, that doesn't do anything.
-    vec3 t_LookDirRefract = t_LookDirTangent;
-    // Refracted look direction dot surface normal. Since we're in tangent space, N is just (0,0,1)
-    float t_RoN = -t_LookDirRefract.z;
 
-    // Intersect with plane.
-    vec2 t_RefractPointOnPlane = t_LookDirRefract.xy / t_RoN;
-    // Compute our bent texture coordinates into the texture.
-    vec2 t_RefractTexCoordOffs = vec2(0.0);
-    t_RefractTexCoordOffs += t_RefractPointOnPlane.xy;
-    t_RefractTexCoordOffs += t_BumpmapNormal.xy;
-    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
+    // Look dir in tangent space gives us the texture offset.
+    // That is, when viewed in view-space, we move parallel to the view-space surface normal.
+    vec2 t_RefractOffs = -t_LookDirTangent.xy / t_LookDirTangent.zz;
+    vec2 t_RefractTexCoordOffs = t_RefractOffs.xy;
+
+    // Add on the bumpmap normal for displacement.
+    t_RefractTexCoordOffs += t_BumpmapNormal.xy + (1.0 - t_BumpmapNormal.z) * t_RefractOffs.xy;
 
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
@@ -3379,11 +3375,16 @@ void mainPS() {
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
-    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
-    float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
 
-    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb;
+    // "Shadow" since this is used to emulate light.
+    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
+
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
+
+    // Add some cheap, fake, glass-y lighting using the bumpmap.
+    float t_GlassLighting = pow(t_BumpmapNormal.z, 3.0);
+
+    t_FinalColor.rgb += t_Refract.rgb * t_GlassLighting * t_RefractTint.rgb;
 #else
     // "Classic" refract
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
