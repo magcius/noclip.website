@@ -2200,7 +2200,7 @@ class MovieMagic {
     constructor() {
         window.main.ui.debugFloaterHolder.midiControls.bindObject(this);
 
-        // this.animDriver = new AnimDriver(this);
+        this.animDriver = new AnimDriver(this);
     }
 
     private drawBox(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, centerPos: ReadonlyVec3, axisX: ReadonlyVec3, axisY: ReadonlyVec3, t: number): void {
@@ -2223,7 +2223,7 @@ class MovieMagic {
 
     @dfBindMidiValue('slider', 4)
     @dfRange(0, 32, 0.001)
-    private arrowHH = 32;
+    private arrowHH = 21;
 
     private drawArrow(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, p0: ReadonlyVec3, p1: ReadonlyVec3, t: number): void {
         if (t <= 0.0)
@@ -2234,11 +2234,11 @@ class MovieMagic {
         drawStroke(ctx, (stroke) => {
             ctx.globalAlpha = invlerp(0.0, 0.2, animT);
             ctx.strokeStyle = colorToCSS(stroke ? OpaqueBlack : White);
-            ctx.lineWidth = (stroke ? 18 : 10);
+            ctx.lineWidth = (stroke ? 32 : 16);
             vec3.lerp(p3[4], p0, p1, animT);
             pathLine(ctx, clipFromWorldMatrix, p0, p3[4]);
             // pathArrowHead(ctx, clipFromWorldMatrix, p3[4], Vec3UnitZ, animT * this.arrowH, animT * this.arrowR);
-            pathVectorHat(ctx, clipFromWorldMatrix, p0, p3[4], animT * 22.0, animT * this.arrowR);
+            pathVectorHat(ctx, clipFromWorldMatrix, p0, p3[4], animT * 32.0, animT * this.arrowR);
         });
     }
 
@@ -2273,9 +2273,7 @@ class MovieMagic {
     public colorA = 1;
 
     public draw(renderContext: SourceRenderContext): void {
-        return;
-
-        // this.animDriver.movement(renderContext.globalDeltaTime * 1000.0);
+        this.animDriver.movement(renderContext.globalDeltaTime * 1000.0);
 
         const ctx = getDebugOverlayCanvas2D();
         const clipFromWorldMatrix = renderContext.currentView.clipFromWorldMatrix;
@@ -2336,7 +2334,7 @@ class MovieMagic {
         const camAxisZ = vec3.create();
         getMatrixAxisZ(camAxisZ, cam.camera.worldMatrix);
         const camP1 = vec3.create();
-        vec3.scaleAndAdd(camP1, camP0, camAxisZ, -30);
+        vec3.scaleAndAdd(camP1, camP0, camAxisZ, -45);
 
         const mat = this.getMat();
 
@@ -2346,7 +2344,6 @@ class MovieMagic {
             this.arrowT = 0;
             this.boxFillT = 0;
             this.boxFillA = 1;
-            this.arrowHH = 20;
 
             mat.depthAmt = 0;
             mat.lightAmt = 0;
@@ -2418,7 +2415,7 @@ class AnimDriver {
         this.animSched.updateDT(deltaTime);
 
         this.timecode.textContent = timecode(this.animSched.time);
-        this.timecode.style.color = this.animSched.isAtChapterStart(this.animSched.time) ? '#00FF00' : 'white';
+        this.timecode.style.color = this.animSched.rate === 0 ? 'yellow' : this.animSched.isAtChapterStart(this.animSched.time) ? '#00FF00' : 'white';
     }
 
     @dfBindMidiCallback(10)

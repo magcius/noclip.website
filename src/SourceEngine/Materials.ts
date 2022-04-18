@@ -25,6 +25,7 @@ import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { calcTexMtx_Basic, calcTexMtx_Maya } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
+import { TheWitnessGlobals } from "../TheWitness/Globals";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -3390,10 +3391,8 @@ void mainPS() {
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
     float lightAmt = u_LightAmt;
-    if (u_Ortho == 2.0) {
-        t_RefractTexCoord.xy = vec2(0.0);
-        lightAmt = 0.0;
-    }
+    t_RefractTexCoord.xy = vec2(0.0);
+    lightAmt = 0.0;
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
     vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
@@ -3546,21 +3545,19 @@ export class Material_Refract extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings(textureMappings);
 
-        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[432].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
+        /*if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[432].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
+            this.lightAmt = 0;
+            this.dispAmt = 0;
+        }*/
+
+        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
             const midiControls = window.main.ui.debugFloaterHolder.midiControls;
             midiControls.bindObject(this);
             this.ortho = true;
             this.debugPop = true;
-
-            this.lightAmt = 0;
-            this.dispAmt = 0;
+            //this.lightAmt = -1;
+            //this.dispAmt = 0;
         }
-
-        /*
-        if (this === (window.main.scene as any).bspRenderers[0].staticPropRenderers[427].studioModelInstance.lodInstance[0].meshInstance[0].materialInstance && !this.debugPop) {
-            this.debugPop = true;
-        }
-        */
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
@@ -3576,7 +3573,7 @@ export class Material_Refract extends BaseMaterial {
         }
 
         offs += this.paramFillGammaColor(d, offs, '$refracttint', this.paramGetNumber('$refractamount'));
-        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, !this.debugPop ? 2.0 : window.debug === 1 ? 1.0 : 0.0);
+        offs += fillVec4(d, offs, this.paramGetNumber('$localrefractdepth'), this.lightAmt, this.dispAmt, window.debug === 1 ? 1.0 : 0.0);
 
         if (this.wantsEnvmap) {
             offs += this.paramFillGammaColor(d, offs, '$envmaptint');
@@ -3587,7 +3584,7 @@ export class Material_Refract extends BaseMaterial {
         }
 
         if (window.debug === 1) {
-            const scale = 1/10;
+            const scale = 1/15;
             const vr = window.main.viewer.viewerRenderInput, w = vr.backbufferWidth * scale, h = vr.backbufferHeight * scale;
             projectionMatrixForCuboid(scratchMat4a, -w, w, h, -h, -10000.0, 10000.0);
 
