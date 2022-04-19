@@ -1,3 +1,6 @@
+import { Color, colorNewFromRGBA8 } from "../Color";
+import { assertExists } from "../util";
+
 export const enum StageId {
     St001_Plain = 1,
     St002_Diamond = 2,
@@ -24,30 +27,38 @@ export const enum BgType {
     Master = 26,
 }
 
-// Maybe these should be some object type instead of a bunch of maps?
-
-export const STAGE_TO_BG_MAP = {
-    [StageId.St001_Plain]: BgType.Jungle,
-    [StageId.St002_Diamond]: BgType.Jungle,
-    [StageId.St003_Hairpin]: BgType.Jungle,
-    [StageId.St004_WideBridge]: BgType.Jungle,
-    [StageId.St005_Slopes]: BgType.Sunset,
-    [StageId.St006_Steps]: BgType.Sunset,
-    [StageId.St007_Blocks]: BgType.Sunset,
-    [StageId.St008_JumpSingle]: BgType.Sunset,
-    [StageId.St009_ExamA]: BgType.Sunset,
-    [StageId.St023_Jumpies]: BgType.Night,
+export type BgInfo = {
+    fileName: string;
+    clearColor: Color;
 };
 
-export const BG_TO_FILENAME_MAP = {
-    [BgType.Jungle]: "bg_jun",
-    [BgType.Water]: "bg_wat",
-    [BgType.Night]: "bg_nig",
-    [BgType.Sunset]: "bg_sun",
-    [BgType.Space]: "bg_spa",
-    [BgType.Sand]: "bg_snd",
-    [BgType.Ice]: "bg_ice",
-    [BgType.Storm]: "bg_stm",
-    [BgType.Bonus]: "bg_bns",
-    [BgType.Master]: "bg_mst",
+export type StageInfo = {
+    bgInfo: BgInfo;
+    // TODO(complexplane): Next stage
 };
+
+export const BG_INFO_MAP: Map<BgType, BgInfo> = new Map([
+    [BgType.Jungle, { fileName: "bg_jun", clearColor: colorNewFromRGBA8(0xffffffff) }],
+    [BgType.Water, { fileName: "bg_wat", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Night, { fileName: "bg_nig", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Sunset, { fileName: "bg_sun", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Space, { fileName: "bg_spa", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Sand, { fileName: "bg_snd", clearColor: colorNewFromRGBA8(0xd8bc77ff) }],
+    [BgType.Ice, { fileName: "bg_ice", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Storm, { fileName: "bg_stm", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Bonus, { fileName: "bg_bns", clearColor: colorNewFromRGBA8(0x000000ff) }],
+    [BgType.Master, { fileName: "bg_mst", clearColor: colorNewFromRGBA8(0xffffcdff) }],
+]);
+
+export const STAGE_INFO_MAP: Map<StageId, StageInfo> = new Map([
+    [StageId.St001_Plain, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Jungle)) }],
+    [StageId.St002_Diamond, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Jungle)) }],
+    [StageId.St003_Hairpin, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Jungle)) }],
+    [StageId.St004_WideBridge, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Jungle)) }],
+    [StageId.St005_Slopes, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
+    [StageId.St006_Steps, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
+    [StageId.St007_Blocks, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
+    [StageId.St008_JumpSingle, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
+    [StageId.St009_ExamA, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
+    [StageId.St023_Jumpies, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Night)) }],
+]);

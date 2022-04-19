@@ -4,10 +4,10 @@ import { SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
 import { parseStagedefLz } from "./Stagedef";
 import { Renderer } from "./Renderer";
-import { BG_TO_FILENAME_MAP, StageId, STAGE_TO_BG_MAP } from "./StageInfo";
+import { BG_INFO_MAP, StageId, STAGE_INFO_MAP } from "./StageInfo";
 import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
-import { leftPad } from "../util";
+import { assertExists, leftPad } from "../util";
 import { StageData } from "./World";
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
@@ -32,7 +32,8 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
         const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
         const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
-        const bgFilename = BG_TO_FILENAME_MAP[STAGE_TO_BG_MAP[stageId]];
+        const stageInfo = assertExists(STAGE_INFO_MAP.get(stageId));
+        const bgFilename = stageInfo.bgInfo.fileName;
         const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
         const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
 
@@ -50,7 +51,7 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
         const bgGma = Gma.parseGma(bgGmaBuf, bgTpl);
 
-        return { stagedef, stageGma, bgGma };
+        return { stageInfo, stagedef, stageGma, bgGma };
     }
 }
 

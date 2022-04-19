@@ -12,11 +12,13 @@ import { ModelCache } from "./ModelCache";
 import { ModelInst } from "./Model";
 import * as SD from "./Stagedef";
 import { RenderContext } from "./Renderer";
+import { StageInfo } from "./StageInfo";
 
 const S16_TO_RADIANS = Math.PI / 0x8000;
 
 // Immutable parsed stage definition
 export type StageData = {
+    stageInfo: StageInfo;
     stagedef: SD.Stage;
     stageGma: Gma.Gma;
     bgGma: Gma.Gma;

@@ -173,7 +173,7 @@ export class ShapeInst {
             if (this.translucent) {
                 const origin_rt_view = scratchVec3a;
                 vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
-                inst.sortKey = -vec3.len(origin_rt_view);
+                inst.sortKey = -vec3.sqrLen(origin_rt_view);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {
                 ctx.opaqueInstList.submitRenderInst(inst);

@@ -1,5 +1,6 @@
 import { CameraController } from "../Camera";
 import {
+    makeAttachmentClearDescriptor,
     makeBackbufferDescSimple,
     opaqueBlackFullClearRenderPassDescriptor,
     pushAntialiasingPostProcessPass,
@@ -16,11 +17,11 @@ import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRender
 
 // TODO(complexplane): Put somewhere else
 export type RenderContext = {
-    device: GfxDevice,
-    instMan: GfxRenderInstManager,
-    viewerInput: Viewer.ViewerRenderInput,
-    opaqueInstList: GfxRenderInstList,
-    translucentInstList: GfxRenderInstList,
+    device: GfxDevice;
+    instMan: GfxRenderInstManager;
+    viewerInput: Viewer.ViewerRenderInput;
+    opaqueInstList: GfxRenderInstList;
+    translucentInstList: GfxRenderInstList;
 };
 
 export class Renderer implements Viewer.SceneGfx {
@@ -32,7 +33,7 @@ export class Renderer implements Viewer.SceneGfx {
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
 
-    constructor(device: GfxDevice, stageData: StageData) {
+    constructor(device: GfxDevice, private stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.modelCache = new ModelCache(stageData);
         this.world = new World(device, this.renderHelper.getCache(), this.modelCache, stageData);
@@ -105,7 +106,7 @@ export class Renderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.Color0,
             viewerInput,
-            opaqueBlackFullClearRenderPassDescriptor
+            makeAttachmentClearDescriptor(this.stageData.stageInfo.bgInfo.clearColor)
         );
         const mainDepthDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.DepthStencil,
@@ -123,17 +124,11 @@ export class Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.opaqueInstList.drawOnPassRenderer(this.renderHelper.getCache(), passRenderer);
-                this.translucentInstList.drawOnPassRenderer(
-                    this.renderHelper.getCache(),
-                    passRenderer
-                );
+                this.translucentInstList.drawOnPassRenderer(this.renderHelper.getCache(), passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(
-            mainColorTargetID,
-            viewerInput.onscreenTexture
-        );
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput, this.opaqueInstList, this.translucentInstList);
 
