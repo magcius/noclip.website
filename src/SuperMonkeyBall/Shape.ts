@@ -6,7 +6,6 @@ import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstList, GfxRenderInstManager, makeDepthKey } from "../gfx/render/GfxRenderInstManager";
 import {
     compileVtxLoaderMultiVat,
     getAttributeByteSize,
@@ -174,7 +173,7 @@ export class ShapeInst {
             if (this.translucent) {
                 const origin_rt_view = scratchVec3a;
                 vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
-                inst.sortKey = origin_rt_view[2];
+                inst.sortKey = -vec3.len(origin_rt_view);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {
                 ctx.opaqueInstList.submitRenderInst(inst);
