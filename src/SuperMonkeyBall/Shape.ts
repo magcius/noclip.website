@@ -21,7 +21,7 @@ import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { MaterialInst } from "./Material";
-import { RenderContext } from "./Renderer";
+import { RenderContext } from "./Render";
 import { TevLayerInst } from "./TevLayer";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {

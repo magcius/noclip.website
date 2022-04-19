@@ -3,7 +3,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
 import { parseStagedefLz } from "./Stagedef";
-import { Renderer } from "./Renderer";
+import { Renderer } from "./Render";
 import { BG_INFO_MAP, StageId, STAGE_INFO_MAP } from "./StageInfo";
 import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";

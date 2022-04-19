@@ -11,7 +11,7 @@ import * as Gma from "./Gma";
 import { ModelCache } from "./ModelCache";
 import { ModelInst } from "./Model";
 import * as SD from "./Stagedef";
-import { RenderContext } from "./Renderer";
+import { RenderContext } from "./Render";
 import { StageInfo } from "./StageInfo";
 
 const S16_TO_RADIANS = Math.PI / 0x8000;

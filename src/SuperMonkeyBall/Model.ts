@@ -8,7 +8,7 @@ import * as Gma from "./Gma";
 import { TextureHolder } from "./ModelCache";
 import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
-import { RenderContext } from "./Renderer";
+import { RenderContext } from "./Render";
 
 export class ModelInst {
     private shapes: ShapeInst[];
