@@ -137,7 +137,7 @@ export const enum ModelFlags {
     Stitching = 0x04,
     // Linear blend skin meshes (>=1 bone per vertex) to be computed on CPU? Uses indexed meshes
     Skin = 0x08,
-    // Meshes where each vertex is explicitly positioned by CPU each frame?  Uses indexed meshes
+    // Meshes where each vertex is explicitly positioned by CPU each frame? Uses indexed meshes
     Effective = 0x10,
 }
 
@@ -283,54 +283,42 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
     const backCulledDlistSize = view.getInt32(0x2c);
     vec3.set(origin, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
 
+    const dlists: Dlist[] = [];
     let dlistOffs = SHAPE_BASE_SIZE;
 
-    let frontCulledDlist: ArrayBufferSlice | null = null;
     if (dlistFlags & DlistFlags.HasDlist0) {
-        frontCulledDlist = buffer.slice(dlistOffs, dlistOffs + frontCulledDlistSize);
+        const frontCulledDlist = buffer.slice(dlistOffs, dlistOffs + frontCulledDlistSize);
+        dlists.push({
+            data: frontCulledDlist,
+            cullMode:
+                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.FRONT,
+        });
         dlistOffs += frontCulledDlistSize;
     }
 
-    let backCulledDlist: ArrayBufferSlice | null = null;
     if (dlistFlags & DlistFlags.HasDlist1) {
-        backCulledDlist = buffer.slice(dlistOffs, dlistOffs + backCulledDlistSize);
+        const backCulledDlist = buffer.slice(dlistOffs, dlistOffs + backCulledDlistSize);
+        dlists.push({
+            data: backCulledDlist,
+            cullMode:
+                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.BACK,
+        });
         dlistOffs += backCulledDlistSize;
     }
 
-    let extraFrontCulledDlist: ArrayBufferSlice | null = null;
-    let extraBackCulledDlist: ArrayBufferSlice | null = null;
     if (dlistFlags & (DlistFlags.HasDlist2 | DlistFlags.HasDlist3)) {
         // Parse extra dlists header
         const extraFrontCulledDlistSize = view.getInt32(dlistOffs + 0x8);
         const extraBackCulledDlistSize = view.getInt32(dlistOffs + 0xc);
         dlistOffs += 0x20;
 
-        extraFrontCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraFrontCulledDlistSize);
-        dlistOffs += extraFrontCulledDlistSize;
-        extraBackCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraBackCulledDlistSize);
-        dlistOffs += extraBackCulledDlistSize;
-    }
-
-    const dlists: Dlist[] = [];
-    if (frontCulledDlist !== null) {
-        dlists.push({
-            data: frontCulledDlist,
-            cullMode:
-                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.FRONT,
-        });
-    }
-    if (backCulledDlist !== null) {
-        dlists.push({
-            data: backCulledDlist,
-            cullMode:
-                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.BACK,
-        });
-    }
-    if (extraFrontCulledDlist !== null) {
+        const extraFrontCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraFrontCulledDlistSize);
         dlists.push({ data: extraFrontCulledDlist, cullMode: GX.CullMode.FRONT });
-    }
-    if (extraBackCulledDlist !== null) {
+        dlistOffs += extraFrontCulledDlistSize;
+
+        const extraBackCulledDlist = buffer.slice(dlistOffs, dlistOffs + extraBackCulledDlistSize);
         dlists.push({ data: extraBackCulledDlist, cullMode: GX.CullMode.BACK });
+        dlistOffs += extraBackCulledDlistSize;
     }
 
     return {
