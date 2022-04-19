@@ -85,7 +85,7 @@ export class Renderer implements Viewer.SceneGfx {
         // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for
         // us. Use it once, then use the underlying GfxRenderInstManager's pushTemplateRenderInst().
         const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
 
         const renderCtx: RenderContext = {
             device,
