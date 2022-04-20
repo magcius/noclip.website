@@ -87,7 +87,12 @@ export type BgAnim = {
     translucencyKeyframes: Keyframe[]; // 1 - alpha?
 };
 
+export const enum BgModelFlags {
+    Visible = 1 << 0, // Sometimes other flags used for visibility?
+}
+
 export type BgModel = {
+    flags: BgModelFlags;
     modelName: string;
     pos: vec3;
     rot: vec3;
@@ -239,7 +244,7 @@ export type Stage = {
     bananas: Banana[];
     levelModels: LevelModel[];
     bgModels: BgModel[];
-    // fgModels: FgModel[];
+    fgModels: BgModel[]; // Like bg models but tilt with the stage, equivalent for us
     // reflectiveModels: ReflectiveModel[];
 };
 
@@ -378,6 +383,60 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stage {
     return parseStagedefUncompressed(uncompressedBuffer);
 }
 
+function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgModel[] {
+    const view = buffer.createDataView();
+    const bgModelCount = view.getUint32(offset);
+    const bgModelListOffs = view.getUint32(offset + 0x4);
+    const bgModels: BgModel[] = [];
+    for (let i = 0; i < bgModelCount; i++) {
+        const bgModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
+        const flags = view.getUint32(bgModelOffs + 0x0) as BgModelFlags;
+        const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
+        const pos = parseVec3f(view, bgModelOffs + 0xc);
+        const rot = parseVec3s(view, bgModelOffs + 0x18);
+        const scale = parseVec3f(view, bgModelOffs + 0x20);
+        const translucency = view.getFloat32(bgModelOffs + 0x2c);
+
+        // Background anim
+        let anim: BgAnim | null = null;
+        const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
+        if (bgAnimOffs !== 0) {
+            anim = {
+                loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
+                loopEndSeconds: view.getInt32(bgAnimOffs + 0x4),
+                scaleXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x8),
+                scaleYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x10),
+                scaleZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x18),
+                rotXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x20),
+                rotYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x28),
+                rotZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x30),
+                posXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x38),
+                posYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x40),
+                posZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x48),
+                visibleKeyframes: parseKeyframeList(view, bgAnimOffs + 0x50),
+                translucencyKeyframes: parseKeyframeList(view, bgAnimOffs + 0x58),
+            };
+        }
+
+        // Effect header
+        // const effectHeaderOffs = view.getUint32(bgModelOffs + 0x34);
+        // TODO fx1 and fx2 keyfranmes
+        // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
+
+        const bgModel: BgModel = {
+            flags,
+            modelName,
+            pos,
+            rot,
+            scale,
+            anim,
+            translucency,
+        };
+        bgModels.push(bgModel);
+    }
+    return bgModels;
+}
+
 function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     const view = buffer.createDataView();
 
@@ -505,60 +564,8 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         levelModels.push({ flags, modelName });
     }
 
-    // Background models
-    const bgModelCount = view.getUint32(0x68);
-    const bgModelListOffs = view.getUint32(0x6c);
-    const bgModels: BgModel[] = [];
-    for (let i = 0; i < bgModelCount; i++) {
-        const bgModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
-        const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
-        const pos = parseVec3f(view, bgModelOffs + 0xc);
-        const rot = parseVec3s(view, bgModelOffs + 0x18);
-        const scale = parseVec3f(view, bgModelOffs + 0x20);
-        const translucency = view.getFloat32(bgModelOffs + 0x2c);
-
-        // Background anim
-        let anim: BgAnim | null = null;
-        const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
-        if (bgAnimOffs !== 0) {
-            anim = {
-                loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
-                loopEndSeconds: view.getInt32(bgAnimOffs + 0x4),
-                scaleXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x8),
-                scaleYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x10),
-                scaleZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x18),
-                rotXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x20),
-                rotYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x28),
-                rotZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x30),
-                posXKeyframes: parseKeyframeList(view, bgAnimOffs + 0x38),
-                posYKeyframes: parseKeyframeList(view, bgAnimOffs + 0x40),
-                posZKeyframes: parseKeyframeList(view, bgAnimOffs + 0x48),
-                visibleKeyframes: parseKeyframeList(view, bgAnimOffs + 0x50),
-                translucencyKeyframes: parseKeyframeList(view, bgAnimOffs + 0x58),
-            };
-        }
-
-        // Effect header
-        // const effectHeaderOffs = view.getUint32(bgModelOffs + 0x34);
-        // TODO fx1 and fx2 keyfranmes
-        // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
-
-        const bgModel: BgModel = {
-            modelName,
-            pos,
-            rot,
-            scale,
-            anim,
-            translucency,
-        };
-        bgModels.push(bgModel);
-    }
-
-    // // Foreground models
-    // const foregroundModelCount = view.getUint32(0x60);
-    // const foregroundModelListOffs = view.getUint32(0x64);
-    // const fgModels: FgModel[] = [];
-    // // TODO actually parse 'em
+    const bgModels = parseBgModelList(buffer, 0x68);
+    const fgModels = parseBgModelList(buffer, 0x70);
 
     // // Reflective stage models
     // const reflectiveModelCount = view.getUint32(0x70);
@@ -669,41 +676,11 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         }
 
         // "sub" means a subset of the stage's list
-        const subGoals = parseSlicedList(
-            view,
-            coliHeaderOffs + 0x3c,
-            goals,
-            goalListOffs,
-            GOAL_SIZE
-        );
-        const subBumpers = parseSlicedList(
-            view,
-            coliHeaderOffs + 0x4c,
-            bumpers,
-            bumperListOffs,
-            BUMPER_SIZE
-        );
-        const subJamabars = parseSlicedList(
-            view,
-            coliHeaderOffs + 0x54,
-            jamabars,
-            jamabarListOffs,
-            JAMABAR_SIZE
-        );
-        const subBananas = parseSlicedList(
-            view,
-            coliHeaderOffs + 0x5c,
-            bananas,
-            bananaListOffs,
-            BANANA_SIZE
-        );
-        const subColiCones = parseSlicedList(
-            view,
-            coliHeaderOffs + 0x64,
-            coliCones,
-            coliConeListOffs,
-            COLI_CONE_SIZE
-        );
+        const subGoals = parseSlicedList(view, coliHeaderOffs + 0x3c, goals, goalListOffs, GOAL_SIZE);
+        const subBumpers = parseSlicedList(view, coliHeaderOffs + 0x4c, bumpers, bumperListOffs, BUMPER_SIZE);
+        const subJamabars = parseSlicedList(view, coliHeaderOffs + 0x54, jamabars, jamabarListOffs, JAMABAR_SIZE);
+        const subBananas = parseSlicedList(view, coliHeaderOffs + 0x5c, bananas, bananaListOffs, BANANA_SIZE);
+        const subColiCones = parseSlicedList(view, coliHeaderOffs + 0x64, coliCones, coliConeListOffs, COLI_CONE_SIZE);
         const subColiSpheres = parseSlicedList(
             view,
             coliHeaderOffs + 0x6c,
@@ -776,7 +753,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         bananas,
         levelModels,
         bgModels,
-        // fgModels: [],
+        fgModels,
         // reflectiveModels: [],
     };
 }

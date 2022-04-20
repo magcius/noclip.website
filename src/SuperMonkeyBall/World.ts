@@ -287,11 +287,12 @@ export class World {
         this.animTime = 0;
 
         this.bgModels = [];
-        for (let i = 0; i < stageData.stagedef.bgModels.length; i++) {
-            const bgModelData = stageData.stagedef.bgModels[i];
-            const bgModel = modelCache.getModel(device, renderCache, bgModelData.modelName);
+        const bgFgModels = stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels);
+        for (let i = 0; i < bgFgModels.length; i++) {
+            if (!(bgFgModels[i].flags & SD.BgModelFlags.Visible)) continue;
+            const bgModel = modelCache.getModel(device, renderCache, bgFgModels[i].modelName);
             if (bgModel === null) continue;
-            this.bgModels.push(new BgModelInst(bgModel, bgModelData));
+            this.bgModels.push(new BgModelInst(bgModel, bgFgModels[i]));
         }
     }
 
