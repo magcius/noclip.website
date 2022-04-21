@@ -10,24 +10,17 @@ import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
 
-export interface RenderParam {
-    alpha?: number;
-    sort?: "translucent" | "all" | "none";
+export type RenderParams = {
+    alpha: number;
+    sort: "translucent" | "all" | "none";
 };
 
 export class ModelInst {
     private shapes: ShapeInst[];
     private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these
 
-    constructor(
-        device: GfxDevice,
-        renderCache: GfxRenderCache,
-        private modelData: Gma.Model,
-        texCache: TextureHolder
-    ) {
-        this.tevLayers = modelData.tevLayers.map(
-            (tevLayerData) => new TevLayerInst(device, tevLayerData, texCache)
-        );
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelData: Gma.Model, texCache: TextureHolder) {
+        this.tevLayers = modelData.tevLayers.map((tevLayerData) => new TevLayerInst(device, tevLayerData, texCache));
         this.shapes = modelData.shapes.map(
             (shapeData, i) =>
                 new ShapeInst(
@@ -47,9 +40,9 @@ export class ModelInst {
         }
     }
 
-    public prepareToRender(ctx: RenderContext, viewFromModel: mat4) {
+    public prepareToRender(ctx: RenderContext, viewFromModel: mat4, renderParams: RenderParams) {
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(ctx, viewFromModel);
+            this.shapes[i].prepareToRender(ctx, viewFromModel, renderParams);
         }
     }
 

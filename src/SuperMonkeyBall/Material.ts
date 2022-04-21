@@ -10,6 +10,7 @@ import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Color, colorCopy, colorNewCopy, White } from "../Color";
+import { RenderParams } from "./Model";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
@@ -159,7 +160,8 @@ export class MaterialInst {
         device: GfxDevice,
         renderCache: GfxRenderCache,
         inst: GfxRenderInst,
-        drawParams: DrawParams
+        drawParams: DrawParams,
+        renderParams: RenderParams
     ): void {
         // Shader program
         this.materialHelper.setOnRenderInst(device, renderCache, inst);
@@ -177,6 +179,7 @@ export class MaterialInst {
             // TODO(complexplane): Multiply passed alpha parameter
             colorCopy(materialColor, this.materialData.materialColor, this.materialData.alpha);
         }
+        materialColor.a *= renderParams.alpha;
 
         // Ambient color
         const ambientColor = scratchColor2;

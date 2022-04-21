@@ -1,20 +1,21 @@
 import { mat4, vec3 } from "gl-matrix";
 import AnimationController from "../AnimationController";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers";
-import { assert, bisectRight } from "../util";
+import { assert } from "../util";
 import * as Viewer from "../viewer";
 import * as Gma from "./Gma";
+import { ModelInst, RenderParams } from "./Model";
 import { ModelCache } from "./ModelCache";
-import { ModelInst } from "./Model";
-import * as SD from "./Stagedef";
 import { RenderContext } from "./Render";
+import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
 
 const S16_TO_RADIANS = Math.PI / 0x8000;
+const EPSILON = 1.1920928955078125e-7;
+
+const scratchRenderParams: RenderParams = { alpha: 0, sort: "none" };
 
 // Immutable parsed stage definition
 export type StageData = {
@@ -178,10 +179,14 @@ class Itemgroup {
     }
 
     public prepareToRender(ctx: RenderContext) {
+        const rp = scratchRenderParams;
+        rp.alpha = 1.0;
+        rp.sort = "translucent";
+
         const viewFromIg = scratchMat4a;
         mat4.mul(viewFromIg, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
         for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(ctx, viewFromIg);
+            this.models[i].prepareToRender(ctx, viewFromIg, rp);
         }
     }
 }
@@ -191,7 +196,8 @@ const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
 class BgModelInst {
     private worldFromModel: mat4 = mat4.create();
-    private translucency: number;
+    private visible = true;
+    private translucency = 0; // 1 - alpha
 
     constructor(private model: ModelInst, private bgModelData: SD.BgModel) {
         this.translucency = bgModelData.translucency;
@@ -217,6 +223,20 @@ class BgModelInst {
             anim.loopStartSeconds,
             anim.loopEndSeconds
         );
+
+        if (anim.visibleKeyframes.length !== 0) {
+            const visibleFloat = interpolateKeyframes(loopedTimeSeconds, anim.visibleKeyframes);
+            this.visible = visibleFloat >= 0.5;
+            if (!this.visible) return;
+        }
+
+        if (anim.translucencyKeyframes.length !== 0) {
+            this.translucency = interpolateKeyframes(loopedTimeSeconds, anim.translucencyKeyframes);
+            if (this.translucency >= 1) {
+                this.visible = false;
+                return;
+            }
+        }
 
         // Use initial values if there are no corresponding keyframes
         const pos = scratchVec3c;
@@ -255,16 +275,18 @@ class BgModelInst {
         }
 
         this.buildWorldFromModelMtx(pos, rotRadians, scale);
-
-        if (anim.translucencyKeyframes.length !== 0) {
-            this.translucency = interpolateKeyframes(loopedTimeSeconds, anim.translucencyKeyframes);
-        }
     }
 
     public prepareToRender(ctx: RenderContext) {
+        if (!this.visible) return;
+
+        const renderParams = scratchRenderParams;
+        renderParams.alpha = 1 - this.translucency;
+        renderParams.sort = this.translucency < EPSILON ? "translucent" : "all";
+
         const viewFromModel = scratchMat4a;
         mat4.mul(viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
-        this.model.prepareToRender(ctx, viewFromModel);
+        this.model.prepareToRender(ctx, viewFromModel, renderParams);
     }
 }
 

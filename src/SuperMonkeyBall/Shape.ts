@@ -18,9 +18,11 @@ import {
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { fallbackUndefined } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { MaterialInst } from "./Material";
+import { RenderParams } from "./Model";
 import { RenderContext } from "./Render";
 import { TevLayerInst } from "./TevLayer";
 
@@ -105,6 +107,7 @@ type SubShapeInst = {
 
 const scratchDrawParams = new DrawParams();
 const scratchVec3a = vec3.create();
+
 export class ShapeInst {
     private bufferCoalescer: GfxBufferCoalescerCombo;
     private subShapes: SubShapeInst[];
@@ -161,16 +164,22 @@ export class ShapeInst {
         }
     }
 
-    public prepareToRender(ctx: RenderContext, viewFromModel: mat4) {
+    public prepareToRender(ctx: RenderContext, viewFromModel: mat4, renderParams: RenderParams) {
         const drawParams = scratchDrawParams;
         mat4.copy(drawParams.u_PosMtx[0], viewFromModel);
 
         for (let i = 0; i < this.subShapes.length; i++) {
             const inst = ctx.instMan.newRenderInst();
-            this.subShapes[i].material.setOnRenderInst(ctx.device, ctx.instMan.gfxRenderCache, inst, drawParams);
+            this.subShapes[i].material.setOnRenderInst(
+                ctx.device,
+                ctx.instMan.gfxRenderCache,
+                inst,
+                drawParams,
+                renderParams
+            );
             this.subShapes[i].shapeHelper.setOnRenderInst(inst);
 
-            if (this.translucent) {
+            if ((this.translucent && renderParams.sort === "translucent") || renderParams.sort === "all") {
                 const origin_rt_view = scratchVec3a;
                 vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
                 inst.sortKey = -vec3.sqrLen(origin_rt_view);
