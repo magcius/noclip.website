@@ -9,9 +9,10 @@ import { readString, assert, assertExists } from '../util';
 
 import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
+import * as JPA from '../Common/JSYSTEM/JPA';
 import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { LoopMode, BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -105,8 +106,23 @@ interface SceneBinObjLight extends SceneBinObjBase {
     intensity: number;
 }
 
-interface SceneBinObjModel extends SceneBinObjBase {
-    type: 'Model';
+interface SceneBinObjMapObj extends SceneBinObjBase {
+    type: 'MapObj';
+    x: number;
+    y: number;
+    z: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+    manager: string;
+    model: string;
+}
+
+interface SceneBinObjStaticObj extends SceneBinObjBase {
+    type: 'StaticObj';
     x: number;
     y: number;
     z: number;
@@ -126,7 +142,7 @@ interface SceneBinObjGroup extends SceneBinObjBase {
     children: SceneBinObj[];
 }
 
-type SceneBinObj = SceneBinObjGroup | SceneBinObjAmbColor | SceneBinObjLight | SceneBinObjModel | SceneBinObjUnk;
+type SceneBinObj = SceneBinObjGroup | SceneBinObjAmbColor | SceneBinObjLight | SceneBinObjMapObj | SceneBinObjStaticObj | SceneBinObjUnk;
 
 function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     let offs = 0x00;
@@ -171,7 +187,7 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     case 'IdxGroup':
     case 'MarScene':
     {
-        const [paramsSize, flags, numChildren] = unpack(params, 'II.');
+        const [paramsSize, groupId, numChildren] = unpack(params, 'II.');
         offs += paramsSize;
         const children = readChildren(numChildren);
         return { type: 'Group', klass, name, size, children };
@@ -186,69 +202,236 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
         const [paramsSize, x, y, z, r, g, b, a, intensity] = unpack(params, 'fffBBBBf');
         return { type: 'Light', klass, name, size, x, y, z, r, g, b, a, intensity };
     }
-    // Models
+    case 'MapStaticObj':
+    {
+        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s.');
+        return { type: 'StaticObj', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
+    }
+    case 'AirportPool':
+    case 'AirportSwitch':
+    case 'AmiKing':
+    case 'back_nozzle_item':
+    case 'BalloonKoopaJr':
+    case 'bambooFence_revolve_inner':
     case 'BananaTree':
+    case 'BasketReverse':
+    case 'Bathtub':
+    case 'BellDolpicPolice':
+    case 'BellDolpicTV':
+    case 'BellWatermill':
+    case 'BiaBell':
     case 'BiaTurnBridge':
     case 'BiaWatermill':
+    case 'BiaWatermillVertical':
+    case 'BigWindmill':
+    case 'bigWindmillBlock':
+    case 'Billboard':
+    case 'breakable_block':
+    case 'BreakableBlock':
+    case 'BrickBlock':
+    case 'CasinoPanelGate':
+    case 'CasinoRoulette':
+    case 'Castella':
+    case 'ChangeStage':
+    case 'ChangeStageMerrygoround':
+    case 'ChestRevolve':
+    case 'Closet':
+    case 'Cogwheel':
+    case 'cogwheel_plate':
+    case 'cogwheel_pot':
     case 'Coin':
+    case 'coin_blue':
+    case 'CoinBlue':
+    case 'CoinFish':
+    case 'coin_red':
     case 'CoinRed':
+    case 'CoverFruit':
+    case 'crane_cargo':
+    case 'craneCargoUpDown':
+    case 'CraneRotY':
+    case 'craneUpDown':
+    case 'DemoCannon':
+    case 'DolWeathercock':
+    case 'Donchou':
+    case 'Door':
+    case 'DptMonteFence':
+    case 'EggYoshi':
+    case 'EXKickBoard':
+    case 'EXRollCube':
     case 'Fence':
     case 'FenceInner':
     case 'FenceRevolve':
+    case 'fence_revolve_inner':
     case 'FenceWaterH':
     case 'FenceWaterV':
+    case 'FerrisGondola':
     case 'FerrisWheel':
+    case 'FileLoadBlockA':
+    case 'FileLoadBlockB':
+    case 'FileLoadBlockC':
+    case 'FlowerCoin':
+    case 'FluffManager':
+    case 'Football':
+    case 'Fruit':
+    case 'FruitBanana':
+    case 'FruitBasket':
+    case 'FruitBasketEvent':
+    case 'FruitDurian':
+    case 'FruitHitHideObj':
+    case 'FruitPapaya':
+    case 'FruitPine':
+    case 'FruitTree':
+    case 'GateManta':
+    case 'GateShell':
+    case 'GesoSurfBoard':
+    case 'GetaGreen':
+    case 'GetaOrange':
+    case 'GlassBreak':
+    case 'GoalFlag':
+    case 'GoalWatermelon':
+    case 'HangingBridgeBoard':
+    case 'HideObj':
+    case 'Hikidashi':
+    case 'HipDropHideObj':
     case 'IceBlock':
+    case 'IceCar':
+    case 'Item':
+    case 'ItemNozzle':
+    case 'ItemSlotDrum':
+    case 'joint_coin':
+    case 'JuiceBlock':
+    case 'JumpBase':
+    case 'JumpMushroom':
+    case 'Kamaboko':
+    case 'LampSeesaw':
+    case 'LampSeesawMain':
+    case 'LampTrapIron':
+    case 'LampTrapSpike':
+    case 'LeafBoat':
+    case 'LeafBoatRotten':
+    case 'lean_block':
+    case 'LeanMirror':
+    case 'MammaBlockRotate':
+    case 'MammaSurfboard':
+    case 'MammaYacht':
     case 'Manhole':
     case 'MapObjBase':
-    case 'MapStaticObj':
+    case 'MapObjChangeStage':
+    case 'MapObjChangeStageHipDrop':
+    case 'MapObjElasticCode':
+    case 'MapObjFloatOnSea':
+    case 'MapObjGeneral':
+    case 'MapObjGrowTree':
+    case 'MapObjNail':
+    case 'MapObjRootPakkun':
+    case 'MapObjSmoke':
+    case 'MapObjStartDemo':
+    case 'MapObjSteam':
+    case 'MapObjSwitch':
+    case 'MapObjTreeScale':
+    case 'MapObjWaterSpray':
+    case 'MareCork':
+    case 'MareEventBumpyWall':
+    case 'MareFall':
+    case 'maregate':
+    case 'MareGate':
+    case 'merry_egg':
     case 'Merrygoround':
+    case 'merry_pole':
+    case 'MiniWindmill':
+    case 'MonteRoot':
     case 'MonumentShine':
+    case 'MuddyBoat':
+    case 'Mushroom1up':
+    case 'mushroom1up':
+    case 'Mushroom1upR':
+    case 'mushroom1upR':
+    case 'mushroom1upX':
+    case 'Mushroom1upX':
+    case 'no_data':
+    case 'NormalBlock':
+    case 'NormalLift':
+    case 'normal_nozzle_item':
+    case 'NozzleBox':
     case 'Palm':
     case 'PalmNatume':
     case 'PalmOugi':
+    case 'PalmSago':
+    case 'PanelBreak':
+    case 'PanelRevolve':
+    case 'PictureTeresa':
+    case 'PinnaCoaster':
     case 'PinnaDoor':
-    case 'ShellCup':
+    case 'PinnaDoorOpen':
+    case 'PinnaHangingBridgeBoard':
+    case 'PolluterBase':
+    case 'Pool':
+    case 'PosterTeresa':
+    case 'Puncher':
+    case 'RailBlock':
+    case 'RailBlockB':
+    case 'RailBlockR':
+    case 'RailBlockY':
+    case 'RailFence':
+    case 'RandomFruit':
+    case 'RedCoinSwitch':
+    case 'ResetFruit':
+    case 'RiccoLog':
+    case 'RiccoSwitch':
+    case 'RiccoSwitchShine':
+    case 'riccoWatermill':
+    case 'RideCloud':
+    case 'rocket_nozzle_item':
+    case 'RollBlock':
+    case 'RollBlockB':
+    case 'RollBlockR':
+    case 'RollBlockY':
+    case 'Roulette':
+    case 'SakuCasino':
+    case 'SandBird':
+    case 'SandBirdBlock':
+    case 'sand_bird_test':
+    case 'SandBlock':
+    case 'SandBomb':
+    case 'SandBombBase':
+    case 'SandCastle':
+    case 'SandEgg':
+    case 'SandLeaf':
+    case 'SandLeafBase':
+    case 'Shine':
+    case 'SirenabossWall':
+    case 'SirenaCasinoRoof':
+    case 'SirenaGate':
+    case 'SlotDrum':
+    case 'submarine':
+    case 'SuperHipDropBlock':
+    case 'SurfGesoGreen':
+    case 'SurfGesoRed':
+    case 'SurfGesoYellow':
+    case 'SwingBoard':
+    case 'TelesaBlock':
+    case 'TelesaSlot':
+    case 'TurboNozzleDoor':
+    case 'Uirou':
+    case 'Umaibou':
+    case 'Viking':
+    case 'WaterHitHideObj':
+    case 'WaterHitPictureHideObj':
+    case 'WaterMelon':
+    case 'WatermelonBlock':
+    case 'WatermelonStatic':
+    case 'WaterMoveBlock': // appears in test11, not actually implemented in game
+    case 'WaterRecoverObj':
+    case 'WindmillRoof':
+    case 'WireBell':
     case 'WoodBarrel':
     case 'WoodBlock':
-    case 'Viking':
+    case 'WoodBox':
+    case 'YoshiBlock':
+    case 'yoshi_whistle_item':
     {
         const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s.');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    // Extra unk junk
-    case 'CoinBlue':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s i');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    case 'NozzleBox':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s ssff');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    case 'Shine':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s sii');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    case 'FruitsBoat':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s s');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    case 'Billboard':
-    case 'BrickBlock':
-    case 'DolWeathercock':
-    case 'WoodBox':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsI s IffI');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
-    }
-    case 'MapObjWaterSpray':
-    {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsI s IIIIII');
-        return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
+        return { type: 'MapObj', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
     }
     default:
         let warnUnknown = true;
@@ -318,6 +501,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
+    public effectsCache = new Map<RARC.RARCFile, JPA.JPACData>();
     private clearDescriptor = makeAttachmentClearDescriptor(colorNewCopy(OpaqueBlack));
 
     public objLightConfig: LightConfig | null = null;
@@ -536,8 +720,10 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 this.objectsAmbIndex = obj.children.findIndex((ambColor) => ambColor.name === "太陽アンビエント（オブジェクト）");
                 this.playerAmbIndex = obj.children.findIndex((ambColor) => ambColor.name === "太陽アンビエント（プレイヤー）");
             }
-        } else if (obj.type === 'Model') {
-            this.createRendererForSceneBinModel(device, cache, renderer, rarc, obj);
+        } else if (obj.type === 'MapObj') {
+            this.createRendererForSceneBinMapObj(device, cache, renderer, rarc, obj);
+        } else if (obj.type === 'StaticObj') {
+            this.createRendererForSceneBinStaticObj(device, cache, renderer, rarc, obj);
         }
     }
     
@@ -548,12 +734,332 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
          }
      }
 
-    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObjModel): J3DModelInstanceSimple | null {
+    private createRendererForSceneBinMapObj(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObjMapObj): J3DModelInstanceSimple | null {
         interface ModelLookup {
-            k: string; // klass
-            m: string; // model
-            p?: string; // resulting file prefix
-            s?: () => J3DModelInstanceSimple | null;
+            k: string; // model key
+            m?: string; // model name
+            t?: string; // material
+            n?: string; // animation
+            u?: number; // animation type
+        };
+
+        const modelCache = renderer.modelCache;
+        function lookupModel(bmdFile: RARC.RARCFile): J3DModelData {
+            assert(!!bmdFile);
+            if (modelCache.has(bmdFile)) {
+                return modelCache.get(bmdFile)!;
+            } else {
+                const bmd = BMD.parse(bmdFile.buffer);
+                const bmdModel = new J3DModelData(device, cache, bmd);
+                modelCache.set(bmdFile, bmdModel);
+                return bmdModel;
+            }
+        }
+        
+        const modelLookup: ModelLookup[] = [
+{ k: 'AirportPole' },
+{ k: 'amiking', m: 'amiking_model1.bmd' },
+{ k: 'ArrowBoardDown', t: 'ArrowBoard'},
+{ k: 'ArrowBoardLR', t: 'ArrowBoard'},
+{ k: 'ArrowBoardUp', t: 'ArrowBoard'},
+{ k: 'balloonKoopaJr', m: 'balloonKoopaJr.bmd', n: 'balloonkoopajr_wait', u: 0 },
+{ k: 'baloonball', m: 'soccerball.bmd' },
+{ k: 'bambooRailFence', m: 'bambooFence_rail.bmd' },
+{ k: 'BananaTree', m: 'BananaTree.bmd' },
+{ k: 'barrel_oil', m: 'barrel_oil.bmd' },
+{ k: 'BasketReverse', m: 'Basket.bmd' },
+{ k: 'bath', m: 'bath.bmd' },
+{ k: 'belldolpic', m: 'BellDolpic.bmd' },
+{ k: 'BiaBell', m: 'BiaBell.bmd' },
+{ k: 'BiaWatermill00', m: 'BiaWatermill00.bmd' },
+{ k: 'bigWindmill', t: 'bianco', m: 'bigWindmill.bmd' },
+{ k: 'billboard_dolphin', m: 'billboardDol.bmd' },
+{ k: 'billboard_fish', m: 'billboardFish.bmd' },
+{ k: 'billboard_restaurant', m: 'billboardRestaurant.bmd' },
+{ k: 'billboard_sun', m: 'billboardSun.bmd' },
+{ k: 'breakable_block', m: 'breakable_block.bmd' },
+{ k: 'BrickBlock', t: 'BrickBlock', m: 'BrickBlock.bmd' },
+{ k: 'castella', m: 'castella.bmd' },
+{ k: 'ChangeStage' },
+{ k: 'ChangeStageMerrygoround' },
+{ k: 'ChestRevolve', m: 'ChestRevolve.bmd' },
+{ k: 'ChipShine', m: 'chip_shine_model1.bmd' },
+{ k: 'Closet', m: 'closet.bmd', n: 'ClosetOpen', u: 0 },
+{ k: 'cloud', m: 'cloud.bmd', n: 'cloud_wait', u: 0 },
+{ k: 'cluster_block', m: 'test_cluster.bmd' },
+{ k: 'coconut_ball', m: 'soccerball.bmd' },
+{ k: 'cogwheel', m: 'cogwheel_wheel.bmd' },
+{ k: 'CoinFish', m: 'CoinFish.bmd', n: 'coinfish', u: 0 },
+{ k: 'DokanGate', m: 'efDokanGate.bmd', n: 'efdokangate', u: 4 },
+{ k: 'doorHotel', m: 'doorHotel.bmd' },
+{ k: 'dptlight', m: 'dptlight.bmd' },
+{ k: 'dptWeathercock', m: 'DptWeathercock.bmd', n: 'dptweathercock', u: 0 },
+{ k: 'drum_can', m: 'drum_can_model.bmd' },
+{ k: 'eggYoshiEvent', m: 'eggYoshi_normal.bmd', n: 'eggyoshi_wait', u: 0 },
+{ k: 'eggYoshi', m: 'eggYoshi_normal.bmd', n: 'eggyoshi_wait', u: 0 },
+{ k: 'ex1_turn_lift', m: 'TurnLift.bmd' },
+{ k: 'exkickboard', m: 'EXKickBoard.bmd' },
+{ k: 'expand_block', m: 'breakable_block.bmd' },
+{ k: 'exrollcube', m: 'EXRollCube.bmd' },
+{ k: 'fall_slow_block', m: 'breakable_block.bmd' },
+{ k: 'fence3x3', m: 'fence_half.bmd' },
+{ k: 'fence_revolve', m: 'fence_revolve_outer.bmd' },
+{ k: 'FerrisLOD', m: 'FerrisLOD.bmd', n: 'ferrislod', u: 0 },
+{ k: 'FerrisWheel', m: 'FerrisWheel.bmd', n: 'ferriswheel', u: 0 },
+{ k: 'FileLoadBlockA', m: 'FileLoadBlockA.bmd' },
+{ k: 'FileLoadBlockB', m: 'FileLoadBlockB.bmd' },
+{ k: 'FileLoadBlockC', m: 'FileLoadBlockC.bmd' },
+{ k: 'flowerOrange', t: 'flower', m: 'flowerOrange.bmd' },
+{ k: 'flowerPink', t: 'flower', m: 'flowerPink.bmd' },
+{ k: 'flowerPurple', t: 'flower', m: 'flowerPurple.bmd' },
+{ k: 'flowerRed', t: 'flower', m: 'flowerRed.bmd' },
+{ k: 'flowerSunflower', t: 'flower', m: 'flowerSunflower.bmd' },
+{ k: 'flowerYellow', t: 'flower', m: 'flowerYellow.bmd' },
+{ k: 'FluffManager' },
+{ k: 'Fluff', m: 'Watage.bmd' },
+{ k: 'football_goal', m: 'soccergoal_model.bmd' },
+{ k: 'football', m: 'soccerball.bmd' },
+{ k: 'FruitBasket', m: 'Basket.bmd' },
+{ k: 'FruitCoverPine', m: 'FruitPine.bmd' },
+{ k: 'FruitHitHideObj' },
+{ k: 'GateManta', m: 'GateManta.bmd', n: 'gatemanta', u: 0 },
+{ k: 'Gateshell', m: 'Gateshell.bmd', n: 'gateshell', u: 0 },
+{ k: 'GeneralHitObj' },
+{ k: 'GesoSurfBoard', m: 'surf_geso.bmd' },
+{ k: 'GesoSurfBoardStatic', m: 'surf_geso.bmd' },
+{ k: 'getag', m: 'getaGreen.bmd' },
+{ k: 'getao', m: 'getaOrange.bmd' },
+{ k: 'GlassBreak', m: 'GlassBreak.bmd' },
+{ k: 'GoalWatermelon' },
+{ k: 'HangingBridge' },
+{ k: 'HangingBridgeBoard', m: 'mon_bri.bmd' },
+{ k: 'HatoPop', m: 'hatopop_model1.bmd' },
+{ k: 'HideObj' },
+{ k: 'hikidashi', m: 'hikidashi.bmd' },
+{ k: 'HipDropHideObj' },
+{ k: 'ice_car', m: 'yatai.bmd' },
+{ k: 'invisible_coin' },
+{ k: 'joint_coin', m: 'coin.bmd' },
+{ k: 'jumpbase', m: 'jumpbase.bmd' },
+{ k: 'JumpMushroom', m: 'JumpKinoko.bmd' },
+{ k: 'kamaboko', m: 'kamaboko.bmd' },
+{ k: 'KoopaJrSignM', m: 'koopa_jr_sign.bmd' },
+{ k: 'lampBianco', m: 'lampBianco.bmd' },
+{ k: 'LampSeesaw', m: 'lampBianco.bmd' },
+{ k: 'lamptrapiron', m: 'lamptrapiron.bmd' },
+{ k: 'lamptrapspike', m: 'lamptrapspike.bmd' },
+{ k: 'LeafBoatRotten', t: 'LeafBoat'},
+{ k: 'LeafBoat', t: 'LeafBoat'},
+{ k: 'lean_block', m: 'breakable_block.bmd' },
+{ k: 'lean_direct_block', m: 'breakable_block.bmd' },
+{ k: 'lean_indirect_block', m: 'breakable_block.bmd' },
+{ k: 'manhole', m: 'manhole.bmd', n: 'manhole', u: 0 },
+{ k: 'MapObjNail', m: 'kugi.bmd' },
+{ k: 'MapObjPachinkoNail', m: 'PachinkoKugi.bmd' },
+{ k: 'MapSmoke' },
+{ k: 'MareEventBumpyWall' },
+{ k: 'mareFall', m: 'MareFall.bmd', n: 'marefall', u: 4 },
+{ k: 'maregate', m: 'maregate.bmd', n: 'maregate', u: 4 },
+{ k: 'mario_cap', m: 'mariocap.bmd' },
+{ k: 'merry', m: 'merry.bmd', n: 'merry', u: 0 },
+{ k: 'merry_pole' },
+{ k: 'MiniWindmillL', t: 'bianco'},
+{ k: 'MiniWindmillS', t: 'bianco'},
+{ k: 'monte_chair', m: 'monte_chair_model.bmd' },
+{ k: 'MonteGoalFlag', m: 'monteflag.bmd', n: 'monteflag_wait', u: 0 },
+{ k: 'MonteRoot', m: 'nekko.bmd' },
+{ k: 'monumentshine', m: 'monumentshine.bmd' },
+{ k: 'move_block', m: 'breakable_block.bmd' },
+{ k: 'MoveCoin', m: 'SandMoveCoin.bmd', n: 'sandmovecoin', u: 0 },
+{ k: 'Moyasi', m: 'Moyasi.bmd', n: 'moyasi_wait', u: 0 },
+{ k: 'MuddyBoat', m: 'MuddyBoat.bmd' },
+{ k: 'mushroom1up', m: 'mushroom1up.bmd' },
+{ k: 'mushroom1upR', m: 'mushroom1up.bmd' },
+{ k: 'mushroom1upX', m: 'mushroom1up.bmd' },
+{ k: 'no_data' },
+{ k: 'normallift', m: 'NormalBlock.bmd' },
+{ k: 'normal_nozzle_item', t: 'nozzleItem'},
+{ k: 'NozzleBox', t: 'nozzleBox', m: 'nozzleBox.bmd' },
+{ k: 'nozzleDoor', m: 'nozzleDoor.bmd' },
+{ k: 'palmLeaf', m: 'palmLeaf.bmd' },
+{ k: 'palmNormal', m: 'palmNormal.bmd' },
+{ k: 'PanelBreak', m: 'PanelBreak.bmd' },
+{ k: 'PanelRevolve', m: 'PanelRevolve.bmd' },
+{ k: 'PinnaHangingBridgeBoard', m: 'PinnaBoard.bmd' },
+{ k: 'PoleNormal' },
+{ k: 'Puncher', m: 'puncher_model1.bmd' },
+{ k: 'railblockb', m: 'AllPurposeBoardB.bmd' },
+{ k: 'railblockr', m: 'AllPurposeBoardR.bmd' },
+{ k: 'railblocky', m: 'AllPurposeBoardY.bmd' },
+{ k: 'RailFence', m: 'fence_normal.bmd' },
+{ k: 'riccoBoatL', t: 'riccoShip'},
+{ k: 'riccoBoatS', t: 'riccoShip'},
+{ k: 'riccoPole' },
+{ k: 'riccoShipDol', t: 'riccoShip'},
+{ k: 'riccoShipLog', t: 'riccoShip'},
+{ k: 'riccoShip', t: 'riccoShip'},
+{ k: 'riccoSwitchShine' },
+{ k: 'riccoYachtL', t: 'riccoShip'},
+{ k: 'riccoYachtS', t: 'riccoShip'},
+{ k: 'rollblockb', m: 'AllPurposeBoardB.bmd' },
+{ k: 'rollblockr', m: 'AllPurposeBoardR.bmd' },
+{ k: 'rollblocky', m: 'AllPurposeBoardY.bmd' },
+{ k: 'rulet00', m: 'rulet00.bmd', n: 'rulet00', u: 0 },
+{ k: 'SandBird', m: 'SandBird.bmd', n: 'sandbird', u: 0 },
+{ k: 'sand_block', m: 'SandBlock.bmd' },
+{ k: 'SandBombBase00', t: 'SandBombBase', m: 'SandBombBase00.bmd' },
+{ k: 'SandBombBaseFoot', t: 'SandBombBase', m: 'SandBombBaseFoot.bmd' },
+{ k: 'SandBombBaseHand', t: 'SandBombBase', m: 'SandBombBaseHand.bmd' },
+{ k: 'SandBombBaseMushroom', t: 'SandBombBase', m: 'SandBombBaseMushroom.bmd' },
+{ k: 'SandBombBasePyramid', t: 'SandBombBase', m: 'SandBombBasePyramid.bmd' },
+{ k: 'SandBombBaseShit', t: 'SandBombBase', m: 'SandBombBaseShit.bmd' },
+{ k: 'SandBombBaseStairs', t: 'SandBombBase', m: 'SandBombBaseStairs.bmd' },
+{ k: 'SandBombBaseStar', t: 'SandBombBase', m: 'SandBombBaseStar.bmd' },
+{ k: 'SandBombBaseTurtle', t: 'SandBombBase', m: 'SandBombBaseTurtle.bmd' },
+{ k: 'SandBomb', m: 'SandBomb.bmd', n: 'sandbomb_wait', u: 0 },
+{ k: 'SandCastle', t: 'SandBombBase', m: 'SandCastle.bmd' },
+{ k: 'SandLeafBase00', m: 'SandLeafBase00.bmd' },
+{ k: 'SandLeafBase01', m: 'SandLeafBase01.bmd' },
+{ k: 'SandLeafBase02', m: 'SandLeafBase02.bmd' },
+{ k: 'SandLeafBase03', m: 'SandLeafBase03.bmd' },
+{ k: 'SandLeaf', m: 'SandLeaf.bmd', n: 'sandleaf_wait', u: 0 },
+{ k: 'ShellCup', m: 'ShellCup.bmd', n: 'shellcup', u: 0 },
+{ k: 'shine' },
+{ k: 'SignCircle', m: 'maru_sign.bmd' },
+{ k: 'SignCross', m: 'batu_sign.bmd' },
+{ k: 'SignTriangle', m: '3kaku_sign.bmd' },
+{ k: 'SirenabossWall', m: 'boss_wall.bmd' },
+{ k: 'SirenaCasinoRoof', m: 'casino_lighting.bmd', n: 'casino_lighting', u: 5 },
+{ k: 'skate_block', m: 'breakable_block.bmd' },
+{ k: 'SkyIsland', m: 'SkyIsland.bmd', n: 'skyisland', u: 0 },
+{ k: 'spread_block', m: 'breakable_block.bmd' },
+{ k: 'stand_break', m: 'stand_break.bmd', n: 'stand_break0', u: 0 },
+{ k: 'StartDemo' },
+{ k: 'SuperHipDropBlock', m: 'super_rock.bmd' },
+{ k: 'supermario_block', m: 'breakable_block.bmd' },
+{ k: 'SurfGesoGreen' },
+{ k: 'SurfGesoRed' },
+{ k: 'SurfGesoYellow' },
+{ k: 'TeethOfJuicer', m: 'TeethOfJuicer.bmd', n: 'teethofjuicer', u: 0 },
+{ k: 'uirou', m: 'uirou.bmd' },
+{ k: 'umaibou', m: 'umaibou.bmd' },
+{ k: 'WaterHitHideObj' },
+{ k: 'WaterMelonBlock', t: 'WaterMelon', m: 'WaterMelonBlock.bmd' },
+{ k: 'watermelon', m: 'watermelon.bmd' },
+{ k: 'WatermelonStatic', m: 'watermelon.bmd' },
+{ k: 'water_power_inertial_lift', m: 'breakable_block.bmd' },
+{ k: 'water_power_lift', m: 'breakable_block.bmd' },
+{ k: 'water_power_ship', m: 'breakable_block.bmd' },
+{ k: 'WaterRecoverObj' },
+{ k: 'water_roll_block', m: 'water_roll_block.bmd' },
+{ k: 'WaterSprayBox' },
+{ k: 'WaterSprayCylinder' },
+{ k: 'windmill_far', m: 'bigWindmill.bmd' },
+{ k: 'wood_barrel_once', t: 'barrel', m: 'barrel_normal.bmd' },
+{ k: 'wood_barrel', t: 'barrel', m: 'barrel_normal.bmd' },
+{ k: 'WoodBox', t: 'kibako', m: 'kibako.bmd' },
+{ k: 'yoshiblock', m: 'yoshiblock.bmd' },
+{ k: 'yTurnLift', m: 'yTurnLift.bmd' },
+        ];
+
+        let modelEntry = modelLookup.find((lt) => obj.model === lt.k);
+        if (modelEntry === undefined || (modelEntry.t && !modelEntry.m)) {
+            const bmdFile = rarc.findFile(`mapobj/${obj.model.toLowerCase()}.bmd`);
+            if (bmdFile) {
+                //console.log("trying bmd heuristic for "+obj.model);
+                if (modelEntry === undefined)
+                    modelEntry = { k: obj.model, m: `${obj.model}.bmd` };
+                else
+                    modelEntry.m = `${obj.model}.bmd`;
+            }
+        }
+
+        if (modelEntry === undefined) {
+            console.warn(`No model for ${obj.klass} ${obj.model}`);
+            return null;
+        }
+
+        let scene = null;
+        if (modelEntry.m !== undefined) {
+            const bmdFilename = `mapobj/${modelEntry.m.toLowerCase()}`;
+            const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
+            const bmdModel = lookupModel(bmdFile);
+            scene = new J3DModelInstanceSimple(bmdModel);
+            scene.passMask = SMSPass.OPAQUE;
+        }
+
+        if (scene === null) {
+            console.log("couldn't load "+JSON.stringify(modelEntry));
+            return null;
+        }
+        
+        if (modelEntry.t !== undefined) {
+            const bmtFilename = `mapobj/${modelEntry.t.toLowerCase()}.bmt`;
+            const bmtFile = rarc.findFile(bmtFilename);
+            if (bmtFile !== null) {
+                const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
+                renderer.destroyables.push(modelMaterialData);
+                scene.setModelMaterialData(modelMaterialData);
+            }
+        }
+        
+        if (modelEntry.n) {
+            switch (modelEntry.u) {
+            case 0:
+            {
+                const anmFile = rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.bck`);
+                if (anmFile !== null) {
+                    const anm = BCK.parse(anmFile.buffer);
+                    //anm.loopMode = LoopMode.REPEAT;
+                    scene.bindANK1(anm);
+                }
+                break;
+            }
+            case 2:
+            {
+                const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.bpk`));
+                const anm = BPK.parse(anmFile.buffer);
+                scene.bindTRK1(anm);
+                break;
+            }
+            case 3:
+            {
+                const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.btp`));
+                const anm = BTP.parse(anmFile.buffer);
+                scene.bindTPT1(anm);
+                break;
+            }
+            case 4:
+            {
+                const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.btk`));
+                const anm = BTK.parse(anmFile.buffer);
+                scene.bindTTK1(anm);
+                break;
+            }
+            case 5:
+            {
+                const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.brk`));
+                const anm = BRK.parse(anmFile.buffer);
+                scene.bindTRK1(anm);
+                break;
+            }
+            default:
+                throw `unhandled animation type ${modelEntry.u}`;
+            }
+        }
+        
+        const q = quat.create();
+        quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
+        mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
+        renderer.modelInstances.push(scene);
+        return scene;
+    }
+    
+    private createRendererForSceneBinStaticObj(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObjStaticObj): J3DModelInstanceSimple | null {
+        interface ModelLookup {
+            k: string; // model key
+            m?: string; // model name
+            p?: string; // particle system path
         };
 
         const modelCache = renderer.modelCache;
@@ -569,141 +1075,68 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        function bmtm(bmd: string, bmt: string): J3DModelInstanceSimple {
-            const bmdFile = assertExists(rarc.findFile(bmd));
-            const bmtFile = assertExists(rarc.findFile(bmt));
-            const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new J3DModelInstanceSimple(bmdModel);
-            if (bmt !== null) {
-                const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
-                renderer.destroyables.push(modelMaterialData);
-                modelInstance.setModelMaterialData(modelMaterialData);
+        const effectsCache = renderer.effectsCache;
+        function lookupEffect(jpaFile: RARC.RARCFile): JPA.JPACData {
+            assert(!!jpaFile);
+            if (effectsCache.has(jpaFile)) {
+                return effectsCache.get(jpaFile)!;
+            } else {
+                const jpa = JPA.parse(jpaFile.buffer);
+                const jpaEffect = new JPA.JPACData(jpa);
+                effectsCache.set(jpaFile, jpaEffect);
+                return jpaEffect;
             }
-            modelInstance.passMask = SMSPass.OPAQUE;
-            return modelInstance;
-        }
-
-        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): J3DModelInstanceSimple {
-            const bmdFile = assertExists(rarc.findFile(bmdFilename));
-            const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new J3DModelInstanceSimple(bmdModel);
-            modelInstance.passMask = SMSPass.OPAQUE;
-            const bckFile = assertExists(rarc.findFile(bckFilename));
-            const bck = BCK.parse(bckFile.buffer);
-            bck.loopMode = loopMode;
-            modelInstance.bindANK1(bck);
-            return modelInstance;
-        }
-
-        function basenameModel(basename: string): J3DModelInstanceSimple | null {
-            const bmdFile = rarc.findFile(`${basename}.bmd`);
-            if (!bmdFile)
-                return null;
-            const btkFile = rarc.findFile(`${basename}.btk`);
-            const brkFile = rarc.findFile(`${basename}.brk`);
-            const bckFile = rarc.findFile(`${basename}.bck`);
-            const bmtFile = rarc.findFile(`${basename}.bmt`);
-
-            const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new J3DModelInstanceSimple(bmdModel);
-            if (bmtFile !== null) {
-                const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
-                renderer.destroyables.push(modelMaterialData);
-                modelInstance.setModelMaterialData(modelMaterialData);
-            }
-            modelInstance.passMask = SMSPass.OPAQUE;
-
-            if (btkFile !== null) {
-                const btk = BTK.parse(btkFile.buffer);
-                modelInstance.bindTTK1(btk);
-            }
-        
-            if (brkFile !== null) {
-                const brk = BRK.parse(brkFile.buffer);
-                modelInstance.bindTRK1(brk);
-            }
-        
-            if (bckFile !== null) {
-                const bck = BCK.parse(bckFile.buffer);
-                modelInstance.bindANK1(bck);
-            }
-
-            modelInstance.name = basename;
-            return modelInstance;
         }
 
         const modelLookup: ModelLookup[] = [
-            { k: 'BananaTree', m: 'BananaTree', p: 'mapobj/bananatree' },
-            { k: 'BiaTurnBridge', m: 'BiaTurnBridge', s: () => bmtm('mapobj/biaturnbridge.bmd', 'mapobj/bianco.bmt') },
-            { k: 'BiaWatermill', m: 'BiaWatermill', s: () => bmtm('mapobj/biawatermill.bmd', 'mapobj/bianco.bmt') },
-            { k: 'BrickBlock', m: 'BrickBlock', p: 'mapobj/brickblock' },
-            { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
-            { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
-            { k: 'CoinRed', m: 'coin_red', p: 'mapobj/coin_red' },
-            { k: 'CoinBlue', m: 'coin_blue', p: 'mapobj/coin_blue' },
-            { k: 'DolWeathercock', m: 'dptWeathercock', p: 'mapobj/dptweathercock' },
-            { k: 'Fence', m: 'fence_normal', p: 'mapobj/fence_normal' },
-            { k: 'Fence', m: 'fence3x3', p: 'mapobj/fence_half' },
-            { k: 'FenceRevolve', m: 'fence_revolve', p: 'mapobj/fence_revolve_outer' },
-            { k: 'FenceInner', m: 'fenceInnerGreen', p: 'mapobj/fenceinnergreen' },
-            { k: 'FenceWaterH', m: 'FenceWaterH', p: 'mapobj/fencewaterh' },
-            { k: 'FenceWaterV', m: 'FenceWaterV', p: 'mapobj/fencewaterv' },
-            { k: 'FerrisWheel', m: 'FerrisWheel', p: 'mapobj/ferriswheel' },
-            { k: 'IceBlock', m: 'IceBlock', p: 'mapobj/iceblock' },
-            { k: 'Manhole', m: 'manhole', p: 'mapobj/manhole' },
-            { k: 'MapObjBase', m: 'DokanGate', p: 'mapobj/efdokangate' },
-            { k: 'MapObjBase', m: 'ArrowBoardLR', s: () => bmtm('mapobj/arrowboardlr.bmd', 'mapobj/arrowboard.bmt') },
-            { k: 'MapObjBase', m: 'ArrowBoardUp', s: () => bmtm('mapobj/arrowboardup.bmd', 'mapobj/arrowboard.bmt') },
-            { k: 'MapObjBase', m: 'ArrowBoardDown', s: () => bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt') },
-            { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
-            { k: 'MapStaticObj', m: 'ReflectSky', s: () => null },
-            // Disable SeaIndirect loading...
-            { k: 'MapStaticObj', m: 'SeaIndirect', s: () => null },
-            { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
-            { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
-            { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
-            { k: 'Palm', m: 'palmLeaf', p: 'mapobj/palmleaf' },
-            { k: 'PalmNatume', m: 'palmNatume', p: 'mapobj/palmnatume' },
-            { k: 'PalmOugi', m: 'palmOugi', p: 'mapobj/palmougi' },
-            { k: 'PinnaDoor', m: 'PinnaDoor', p: 'mapobj/pinnadoor' },
-            { k: 'ShellCup', m: 'ShellCup', p: 'mapobj/shellcup' },
-            { k: 'Shine', m: 'shine', s: () => bckm('mapobj/shine.bmd', 'mapobj/shine_float.bck') },
-            { k: 'Viking', m: 'viking', p: 'mapobj/viking' },
-            { k: 'WoodBox', m: 'WoodBox', p: 'mapobj/kibako' },
-            { k: 'WoodBarrel', m: 'wood_barrel', s: () => bmtm('mapobj/barrel_normal.bmd', 'mapobj/barrel.bmt') },
+{ k: 'BiancoBossEffectLight', p: 'map/map/ms_wmlin_light.jpa' },
+{ k: 'BiancoRiver', m: 'BiancoRiver' },
+{ k: 'BiaWaterPollution', m: 'BiaWaterPollution' },
+{ k: 'IndirectObj', m: 'IndirectObj' },
+{ k: 'Mare5ExGate', m: 'Mare5ExGate' },
+{ k: 'mareSeaPollutionS0', m: 'mareSeaPollutionS0' },
+{ k: 'mareSeaPollutionS12', m: 'mareSeaPollutionS12' },
+{ k: 'MonteRiver', m: 'MonteRiver' },
+//{ k: 'ReflectParts', m: 'ReflectParts' },
+//{ k: 'ReflectSky', m: 'ReflectSky' },
+{ k: 'riccoSeaPollutionS0', m: 'riccoSeaPollutionS0' },
+{ k: 'riccoSeaPollutionS1', m: 'riccoSeaPollutionS1' },
+{ k: 'riccoSeaPollutionS2', m: 'riccoSeaPollutionS2' },
+{ k: 'riccoSeaPollutionS3', m: 'riccoSeaPollutionS3' },
+{ k: 'riccoSeaPollutionS4', m: 'riccoSeaPollutionS4' },
+//{ k: 'SeaIndirect', m: 'SeaIndirect' },
+//{ k: 'sea', m: 'sea' },
+{ k: 'sun_mirror', m: 'sun_mirror' },
+{ k: 'TargetArrow', m: 'TargetArrow' },
+{ k: 'TopOfCorona', p: 'mapObj/ms_coronasmoke.jpa' },
         ];
-
-        let modelEntry = modelLookup.find((lt) => obj.klass === lt.k && obj.model === lt.m);
-        if (modelEntry === undefined) {
-            // Load heuristics -- maybe should be explicit...
-            let prefix;
-            if (obj.klass === 'MapStaticObj') {
-                prefix = `map/map/${obj.model.toLowerCase()}`;
-            } else if (obj.klass === 'MapObjBase') {
-                prefix = `mapobj/${obj.model.toLowerCase()}`;
-            }
-
-            if (prefix) {
-                const file = rarc.findFile(`${prefix}.bmd`);
-                if (file)
-                    modelEntry = { k: obj.klass, m: obj.model, p: prefix };
-            }
-        }
-
+        
+        let modelEntry = modelLookup.find((lt) => obj.model === lt.k);
         if (modelEntry === undefined) {
             console.warn(`No model for ${obj.klass} ${obj.model}`);
             return null;
         }
 
         let scene = null;
+
+        if (modelEntry.m !== undefined) {
+            const bmdFilename = `map/map/${modelEntry.m.toLowerCase()}.bmd`;
+            const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
+            const bmdModel = lookupModel(bmdFile);
+            scene = new J3DModelInstanceSimple(bmdModel);
+            scene.passMask = SMSPass.OPAQUE;
+        }
+        
         if (modelEntry.p !== undefined) {
-            scene = basenameModel(modelEntry.p);
-        } else if (modelEntry.s !== undefined) {
-            scene = modelEntry.s();
+            const jpaFilename = modelEntry.p.toLowerCase();
+            const jpaFile = assertExists(rarc.findFile(jpaFilename), jpaFilename);
+            const jpaData = lookupEffect(jpaFile);
         }
 
-        if (scene === null)
+        if (scene === null) {
+            console.log("couldn't load "+JSON.stringify(modelEntry));
             return null;
+        }
 
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
