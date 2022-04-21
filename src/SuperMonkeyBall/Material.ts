@@ -9,13 +9,14 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { Color, colorCopy, colorNewCopy, White } from "../Color";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R], // Used for alpha textures
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.G],
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.B],
-]
+];
 
 type BuildState = {
     stage: number;
@@ -67,6 +68,8 @@ function buildDummyPassthroughLayer(mb: GXMaterialBuilder, state: BuildState, co
 }
 
 const scratchMaterialParams = new MaterialParams();
+const scratchColor1: Color = colorNewCopy(White);
+const scratchColor2: Color = colorNewCopy(White);
 export class MaterialInst {
     private tevLayers: TevLayerInst[];
     private materialHelper: GXMaterialHelperGfx;
@@ -167,8 +170,28 @@ export class MaterialInst {
             this.tevLayers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
         }
 
-        // "Ambient" light when both light channel and vertex colors disabled
-        materialParams.u_Color[ColorKind.C0] = { r: 1, g: 1, b: 1, a: 1 };
+        // Material color
+        const materialColor = scratchColor1;
+        colorCopy(materialColor, White);
+        if (this.materialData.flags & (Gma.MaterialFlags.CustomMatAmbColors | Gma.MaterialFlags.SimpleMaterial)) {
+            // TODO(complexplane): Multiply passed alpha parameter
+            colorCopy(materialColor, this.materialData.materialColor, this.materialData.alpha);
+        }
+
+        // Ambient color
+        const ambientColor = scratchColor2;
+        if (this.materialData.flags & Gma.MaterialFlags.CustomMatAmbColors) {
+            colorCopy(ambientColor, this.materialData.ambientColor); // Alpha should be irrelevant
+        } else {
+            colorCopy(ambientColor, White);
+        }
+        // TODO multiply by ambient color parameter
+
+        colorCopy(materialParams.u_Color[ColorKind.MAT0], materialColor);
+        colorCopy(materialParams.u_Color[ColorKind.AMB0], ambientColor);
+        // Game uses TEVREG0 instead of RASC when lighting and vertex colors are disabled. Not sure
+        // why it didn't just use the MAT0 register...
+        colorCopy(materialParams.u_Color[ColorKind.C0], materialColor);
 
         this.materialHelper.allocateMaterialParamsDataOnInst(inst, materialParams);
         inst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

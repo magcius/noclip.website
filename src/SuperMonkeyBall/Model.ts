@@ -10,6 +10,11 @@ import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
 
+export interface RenderParam {
+    alpha?: number;
+    sort?: "translucent" | "all" | "none";
+};
+
 export class ModelInst {
     private shapes: ShapeInst[];
     private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these

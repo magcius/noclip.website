@@ -10,7 +10,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorNewFromRGBA } from "../Color";
+import { Color, colorNewFromRGBA8 } from "../Color";
 import * as GX from "../gx/gx_enum";
 import { TextureInputGX } from "../gx/gx_texture";
 import { assert, assertExists, hexzero, readString } from "../util";
@@ -22,7 +22,7 @@ export const enum MaterialFlags {
     Unlit = 1 << 0,
     DoubleSided = 1 << 1, // Draw front and back sides of tris/quads
     NoFog = 1 << 2,
-    Unk3 = 1 << 3,
+    CustomMatAmbColors = 1 << 3,
     CustomBlendSrc = 1 << 5,
     CustomBlendDest = 1 << 6,
     SimpleMaterial = 1 << 7, // Only 1 tev stage that spits out color/alpha input
@@ -40,8 +40,10 @@ export const enum DlistFlags {
 // GCMF Material
 export type Material = {
     flags: MaterialFlags;
-    colors: Color[];
-    transparents: number[];
+    materialColor: Color;
+    ambientColor: Color;
+    specularColor: Color;
+    alpha: number;
     tevLayerCount: number;
     tevLayerIdxs: number[]; // Shape materials can reference at most three tev layers stored in model
     vtxAttrs: GX.Attr;
@@ -209,37 +211,13 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4 {
 
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     const view = buffer.createDataView();
-    const colors: Color[] = [];
     const transparents: number[] = [];
     const tevLayerIdxs: number[] = [];
 
-    colors.push(
-        colorNewFromRGBA(
-            view.getUint8(0x04),
-            view.getUint8(0x05),
-            view.getUint8(0x06),
-            view.getUint8(0x07)
-        )
-    );
-    colors.push(
-        colorNewFromRGBA(
-            view.getUint8(0x08),
-            view.getUint8(0x09),
-            view.getUint8(0x0a),
-            view.getUint8(0x0b)
-        )
-    );
-    colors.push(
-        colorNewFromRGBA(
-            view.getUint8(0x0c),
-            view.getUint8(0x0d),
-            view.getUint8(0x0e),
-            view.getUint8(0x0f)
-        )
-    );
-    for (let i = 0; i < 3; i++) {
-        transparents[i] = view.getUint8(0x10 + i);
-    }
+    const materialColor = colorNewFromRGBA8(view.getUint32(0x04));
+    const ambientColor = colorNewFromRGBA8(view.getUint32(0x08));
+    const specularColor = colorNewFromRGBA8(view.getUint32(0x0c));
+    const alpha = view.getUint8(0x11) / 0xff;
     const tevLayerCount = view.getUint8(0x12);
     const unk0x14 = view.getUint8(0x14);
     const unk0x15 = view.getUint8(0x15);
@@ -261,8 +239,10 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
 
     return {
         flags,
-        colors,
-        transparents,
+        materialColor,
+        ambientColor,
+        specularColor,
+        alpha,
         tevLayerCount,
         unk0x14,
         unk0x15,
@@ -290,8 +270,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
         const frontCulledDlist = buffer.slice(dlistOffs, dlistOffs + frontCulledDlistSize);
         dlists.push({
             data: frontCulledDlist,
-            cullMode:
-                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.FRONT,
+            cullMode: material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.FRONT,
         });
         dlistOffs += frontCulledDlistSize;
     }
@@ -300,8 +279,7 @@ function parseShape(buffer: ArrayBufferSlice, idx: number): Shape {
         const backCulledDlist = buffer.slice(dlistOffs, dlistOffs + backCulledDlistSize);
         dlists.push({
             data: backCulledDlist,
-            cullMode:
-                material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.BACK,
+            cullMode: material.flags & MaterialFlags.DoubleSided ? GX.CullMode.NONE : GX.CullMode.BACK,
         });
         dlistOffs += backCulledDlistSize;
     }
@@ -339,12 +317,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
 
     const modelFlags = view.getUint32(0x04) as ModelFlags;
     let useVtxCon = modelFlags & (ModelFlags.Skin | ModelFlags.Effective);
-    vec3.set(
-        boundSphereCenter,
-        view.getFloat32(0x08),
-        view.getFloat32(0x0c),
-        view.getFloat32(0x10)
-    );
+    vec3.set(boundSphereCenter, view.getFloat32(0x08), view.getFloat32(0x0c), view.getFloat32(0x10));
     const boundSphereRadius = view.getFloat32(0x14);
 
     const tevLayerCount = view.getInt16(0x18);
@@ -453,8 +426,7 @@ export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
 
         // TODO parse attribute into nicer type first
         const modelFlags = view.getUint32(gcmfBaseOffs + modelOffs + 0x04) as ModelFlags;
-        const unsupported =
-            modelFlags & (ModelFlags.Stitching | ModelFlags.Skin | ModelFlags.Effective);
+        const unsupported = modelFlags & (ModelFlags.Stitching | ModelFlags.Skin | ModelFlags.Effective);
         if (unsupported) {
             // TODO: Support these types of models
             continue;
