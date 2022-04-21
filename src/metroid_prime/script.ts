@@ -1,6 +1,6 @@
 // Implements support for Retro Studios actor data
 
-import { ResourceSystem } from './resource';
+import { ResourceGame, ResourceSystem } from './resource';
 import { readString, assert, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
@@ -197,12 +197,16 @@ export class Effect extends Entity {
     public electric: ELSC | null = null;
 
     public override readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
+        const shouldParseParticles = (resourceSystem.game === ResourceGame.MP1 || resourceSystem.game === ResourceGame.MP2);
+
         switch (propertyID) {
         case 0x0A479D6F: {
             const id = stream.readAssetID();
-            const resource = resourceSystem.findResourceByID(id);
-            if (resource?.fourCC === 'PART')
-                this.particle = resourceSystem.loadAssetByID<PART>(id, 'PART');
+            if (shouldParseParticles) {
+                const resource = resourceSystem.findResourceByID(id);
+                if (resource?.fourCC === 'PART')
+                    this.particle = resourceSystem.loadAssetByID<PART>(id, 'PART');
+            }
             break;
         }
         }
