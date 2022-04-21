@@ -1943,6 +1943,7 @@ void mainPS() {
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
     t_ProjectedLightCoord.xy = t_ProjectedLightCoord.xy * 0.5 + 0.5;
+    t_ProjectedLightCoord.y = 1.0 - t_ProjectedLightCoord.y;
 #ifndef GFX_CLIPSPACE_NEAR_ZERO
     t_ProjectedLightCoord.z = t_ProjectedLightCoord.z * 0.5 + 0.5;
 #endif
@@ -1959,7 +1960,7 @@ void mainPS() {
         float t_DistanceAttenuation = saturate(invlerp(1.0, 0.6, t_DistanceNorm));
         t_ProjectedLightColor *= t_DistanceAttenuation * t_AngleAttenuation;
 
-        if (all(greaterThan(t_ProjectedLightColor.rgb, vec3(0.0)))) {
+        if (any(greaterThan(t_ProjectedLightColor.rgb, vec3(0.0)))) {
             float t_ShadowVisibility = 1.0 - CalcShadowPCF(PP_SAMPLER_2DShadow(u_TextureProjectedLightDepth), t_ProjectedLightCoord.xyz, 0.01);
             t_ProjectedLightColor.rgb *= t_ShadowVisibility;
 
