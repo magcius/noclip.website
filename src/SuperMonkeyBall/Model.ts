@@ -10,9 +10,16 @@ import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
 
+export const enum RenderSort {
+    Translucent, // Depth sort "translucent" shapes only
+    All, // Sort both translucent and opaque shapes
+    None, // Don't sort any shapes
+}
+
 export type RenderParams = {
     alpha: number;
-    sort: "translucent" | "all" | "none";
+    sort: RenderSort;
+    texMtx: mat4;
 };
 
 export class ModelInst {

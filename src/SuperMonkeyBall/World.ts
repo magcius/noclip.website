@@ -7,14 +7,14 @@ import { interpolateAnimPose, loopWrap } from "./Anim";
 import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
-import { ModelInst, RenderParams } from "./Model";
+import { ModelInst, RenderParams, RenderSort } from "./Model";
 import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
 import { S16_TO_RADIANS } from "./Utils";
 
-const scratchRenderParams: RenderParams = { alpha: 0, sort: "none" };
+const scratchRenderParams: RenderParams = { alpha: 0, sort: RenderSort.None, texMtx: mat4.create() };
 
 // Immutable parsed stage definition
 export type StageData = {
@@ -94,7 +94,7 @@ class Itemgroup {
     public prepareToRender(ctx: RenderContext) {
         const rp = scratchRenderParams;
         rp.alpha = 1.0;
-        rp.sort = "translucent";
+        rp.sort = RenderSort.Translucent;
 
         const viewFromIg = scratchMat4a;
         mat4.mul(viewFromIg, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
@@ -110,12 +110,7 @@ export class World {
     private itemgroups: Itemgroup[];
     private background: Background;
 
-    constructor(
-        device: GfxDevice,
-        renderCache: GfxRenderCache,
-        private modelCache: ModelCache,
-        private stageData: StageData
-    ) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.animController = new AnimationController(60);
         this.itemgroups = stageData.stagedef.itemgroups.map(
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)

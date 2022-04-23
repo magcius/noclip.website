@@ -1,6 +1,7 @@
 import AnimationController from "../AnimationController";
 import { RenderContext } from "./Render";
 import {BgModelInst} from "./BgModel";
+import { RenderParams } from "./Model";
 
 export interface Background {
     update(animController: AnimationController): void;
@@ -68,20 +69,35 @@ export class BgNight implements Background {
 
 export class BgSunset implements Background {
     private bgModels: BgModelInst[] = [];
+    private cloudModels: BgModelInst[] = []; // Models to apply texture scroll to
 
     constructor(bgModels: BgModelInst[]) {
-        this.bgModels = bgModels;
+        for (const bgModel of bgModels) {
+            const name = bgModel.bgModelData.modelName;
+            if (name === "CLOUD_GROUND" || name.startsWith("SUN_CLOUD_")) {
+                this.cloudModels.push(bgModel);
+            } else {
+                this.bgModels.push(bgModel);
+            }
+        }
     }
 
     public update(animController: AnimationController): void {
         for (let i = 0; i < this.bgModels.length; i++) {
             this.bgModels[i].update(animController);
         }
+        for (let i = 0; i < this.cloudModels.length; i++) {
+            this.cloudModels[i].update(animController);
+        }
     }
 
     public prepareToRender(ctx: RenderContext): void {
         for (let i = 0; i < this.bgModels.length; i++) {
             this.bgModels[i].prepareToRender(ctx);
+        }
+
+        for (let i = 0; i < this.cloudModels.length; i++) {
+            // Apply custom texture scroll
         }
     }
 }

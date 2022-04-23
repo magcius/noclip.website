@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import AnimationController from "../AnimationController";
-import { ModelInst, RenderParams } from "./Model";
+import { ModelInst, RenderParams, RenderSort } from "./Model";
 import * as SD from "./Stagedef";
 import { loopWrap, interpolateKeyframes } from "./Anim";
 import { MathConstants } from "../MathHelpers";
@@ -11,13 +11,13 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
 const scratchMat4a = mat4.create();
-const scratchRenderParams: RenderParams = { alpha: 0, sort: "none" };
+const scratchRenderParams: RenderParams = { alpha: 0, sort: RenderSort.None, texMtx: mat4.create() };
 export class BgModelInst {
     private worldFromModel: mat4 = mat4.create();
     private visible = true;
     private translucency = 0; // 1 - alpha
 
-    constructor(private model: ModelInst, private bgModelData: SD.BgModel) {
+    constructor(private model: ModelInst, public bgModelData: SD.BgModel) {
         this.translucency = bgModelData.translucency;
         const rotRadians = scratchVec3c;
         vec3.scale(rotRadians, bgModelData.rot, S16_TO_RADIANS);
@@ -95,12 +95,16 @@ export class BgModelInst {
         this.buildWorldFromModelMtx(pos, rotRadians, scale);
     }
 
-    public prepareToRender(ctx: RenderContext) {
+    public prepareToRender(ctx: RenderContext, texMtx?: mat4) {
         if (!this.visible) return;
 
         const renderParams = scratchRenderParams;
         renderParams.alpha = 1 - this.translucency;
-        renderParams.sort = this.translucency < EPSILON ? "translucent" : "all";
+        renderParams.sort = this.translucency < EPSILON ? RenderSort.Translucent : RenderSort.All;
+        if (texMtx !== undefined) {
+            mat4.copy(renderParams.texMtx, texMtx);
+        }
+        Object.assign(renderParams, renderParams);
 
         const viewFromModel = scratchMat4a;
         mat4.mul(viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);

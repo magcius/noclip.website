@@ -22,7 +22,7 @@ import { fallbackUndefined } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { MaterialInst } from "./Material";
-import { RenderParams } from "./Model";
+import { RenderParams, RenderSort } from "./Model";
 import { RenderContext } from "./Render";
 import { TevLayerInst } from "./TevLayer";
 
@@ -179,7 +179,10 @@ export class ShapeInst {
             );
             this.subShapes[i].shapeHelper.setOnRenderInst(inst);
 
-            if ((this.translucent && renderParams.sort === "translucent") || renderParams.sort === "all") {
+            if (
+                (this.translucent && renderParams.sort === RenderSort.Translucent) ||
+                renderParams.sort === RenderSort.All
+            ) {
                 const origin_rt_view = scratchVec3a;
                 vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
                 inst.sortKey = -vec3.sqrLen(origin_rt_view);
