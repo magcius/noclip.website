@@ -2,18 +2,17 @@ import { mat4, vec3 } from "gl-matrix";
 import AnimationController from "../AnimationController";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers";
-import { assert } from "../util";
 import * as Viewer from "../viewer";
+import { interpolateAnimPose, loopWrap } from "./Anim";
+import { Background } from "./Background";
+import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams } from "./Model";
 import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
-
-const S16_TO_RADIANS = Math.PI / 0x8000;
-const EPSILON = 1.1920928955078125e-7;
+import { S16_TO_RADIANS } from "./Utils";
 
 const scratchRenderParams: RenderParams = { alpha: 0, sort: "none" };
 
@@ -24,92 +23,6 @@ export type StageData = {
     stageGma: Gma.Gma;
     bgGma: Gma.Gma;
 };
-
-function searchKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number {
-    assert(keyframes.length > 0);
-
-    if (timeSeconds < keyframes[0].timeSeconds) {
-        return 0;
-    }
-    if (timeSeconds >= keyframes[keyframes.length - 1].timeSeconds) {
-        return keyframes.length - 1;
-    }
-
-    let start = 0;
-    let end = keyframes.length;
-    while (end > start) {
-        const mid = Math.floor((end - start) / 2) + start;
-        if (timeSeconds < keyframes[mid].timeSeconds) {
-            end = mid;
-        } else {
-            start = mid + 1;
-        }
-    }
-    return start;
-}
-
-function interpolateKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number {
-    if (keyframes.length === 0) return 0;
-    if (timeSeconds <= keyframes[0].timeSeconds) {
-        return keyframes[0].value;
-    }
-    if (timeSeconds >= keyframes[keyframes.length - 1].timeSeconds) {
-        return keyframes[keyframes.length - 1].value;
-    }
-
-    const nextIdx = searchKeyframes(timeSeconds, keyframes);
-    if (nextIdx === 0) {
-        return keyframes[nextIdx].value;
-    }
-    const prev = keyframes[nextIdx - 1];
-    const next = keyframes[nextIdx];
-    if (prev.easeType === SD.EaseType.Constant) {
-        return prev.value;
-    }
-    const t = invlerp(prev.timeSeconds, next.timeSeconds, timeSeconds);
-    if (prev.easeType === SD.EaseType.Linear) {
-        return lerp(prev.value, next.value, t);
-    }
-    // Any other ease value means smoothstep
-    const deltaSeconds = next.timeSeconds - prev.timeSeconds;
-    const baseValue = lerp(prev.value, next.value, smoothstep(t));
-    const t2 = t * t;
-    const t3 = t2 * t;
-    const inAdjust = next.tangentIn * (t3 - t2);
-    const outAdjust = prev.tangentOut * (t + (t3 - 2 * t2));
-    return baseValue + deltaSeconds * (inAdjust + outAdjust);
-}
-
-const scratchVec3b = vec3.create();
-function interpolateAnimPose(
-    outPose: mat4,
-    timeSeconds: number,
-    posXKeyframes: SD.Keyframe[],
-    posYKeyframes: SD.Keyframe[],
-    posZKeyframes: SD.Keyframe[],
-    rotXKeyframes: SD.Keyframe[],
-    rotYKeyframes: SD.Keyframe[],
-    rotZKeyframes: SD.Keyframe[]
-): void {
-    const translation = scratchVec3b;
-    translation[0] = interpolateKeyframes(timeSeconds, posXKeyframes);
-    translation[1] = interpolateKeyframes(timeSeconds, posYKeyframes);
-    translation[2] = interpolateKeyframes(timeSeconds, posZKeyframes);
-    const rotX = interpolateKeyframes(timeSeconds, rotXKeyframes);
-    const rotY = interpolateKeyframes(timeSeconds, rotYKeyframes);
-    const rotZ = interpolateKeyframes(timeSeconds, rotZKeyframes);
-
-    mat4.fromTranslation(outPose, translation);
-    mat4.rotateZ(outPose, outPose, rotZ * MathConstants.DEG_TO_RAD);
-    mat4.rotateY(outPose, outPose, rotY * MathConstants.DEG_TO_RAD);
-    mat4.rotateX(outPose, outPose, rotX * MathConstants.DEG_TO_RAD);
-}
-
-function loopWrap(timeSeconds: number, loopStartSeconds: number, loopEndSeconds: number): number {
-    const loopDuration = loopEndSeconds - loopStartSeconds;
-    // Game does this but adding loop start time just seems weird...
-    return ((timeSeconds + loopStartSeconds) % loopDuration) + loopStartSeconds;
-}
 
 const scratchVec3a = vec3.create();
 const scratchMat4a = mat4.create();
@@ -191,110 +104,11 @@ class Itemgroup {
     }
 }
 
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
-const scratchVec3e = vec3.create();
-class BgModelInst {
-    private worldFromModel: mat4 = mat4.create();
-    private visible = true;
-    private translucency = 0; // 1 - alpha
-
-    constructor(private model: ModelInst, private bgModelData: SD.BgModel) {
-        this.translucency = bgModelData.translucency;
-        const rotRadians = scratchVec3c;
-        vec3.scale(rotRadians, bgModelData.rot, S16_TO_RADIANS);
-        this.buildWorldFromModelMtx(bgModelData.pos, rotRadians, bgModelData.scale);
-    }
-
-    private buildWorldFromModelMtx(pos: vec3, rotRadians: vec3, scale: vec3): void {
-        mat4.fromTranslation(this.worldFromModel, pos);
-        mat4.rotateZ(this.worldFromModel, this.worldFromModel, rotRadians[2]);
-        mat4.rotateY(this.worldFromModel, this.worldFromModel, rotRadians[1]);
-        mat4.rotateX(this.worldFromModel, this.worldFromModel, rotRadians[0]);
-        mat4.scale(this.worldFromModel, this.worldFromModel, scale);
-    }
-
-    public update(animController: AnimationController): void {
-        const anim = this.bgModelData.anim;
-        if (anim === null) return;
-
-        const loopedTimeSeconds = loopWrap(
-            animController.getTimeInSeconds(),
-            anim.loopStartSeconds,
-            anim.loopEndSeconds
-        );
-
-        if (anim.visibleKeyframes.length !== 0) {
-            const visibleFloat = interpolateKeyframes(loopedTimeSeconds, anim.visibleKeyframes);
-            this.visible = visibleFloat >= 0.5;
-            if (!this.visible) return;
-        }
-
-        if (anim.translucencyKeyframes.length !== 0) {
-            this.translucency = interpolateKeyframes(loopedTimeSeconds, anim.translucencyKeyframes);
-            if (this.translucency >= 1) {
-                this.visible = false;
-                return;
-            }
-        }
-
-        // Use initial values if there are no corresponding keyframes
-        const pos = scratchVec3c;
-        vec3.copy(pos, this.bgModelData.pos);
-        const rotRadians = scratchVec3e;
-        vec3.scale(rotRadians, this.bgModelData.rot, S16_TO_RADIANS);
-        const scale = scratchVec3d;
-        vec3.copy(scale, this.bgModelData.scale);
-
-        if (anim.posXKeyframes.length !== 0) {
-            pos[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
-        }
-        if (anim.posYKeyframes.length !== 0) {
-            pos[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
-        }
-        if (anim.posZKeyframes.length !== 0) {
-            pos[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
-        }
-        if (anim.rotXKeyframes.length !== 0) {
-            rotRadians[0] = interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
-        }
-        if (anim.rotYKeyframes.length !== 0) {
-            rotRadians[1] = interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
-        }
-        if (anim.rotZKeyframes.length !== 0) {
-            rotRadians[2] = interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
-        }
-        if (anim.scaleXKeyframes.length !== 0) {
-            scale[0] = interpolateKeyframes(loopedTimeSeconds, anim.scaleXKeyframes);
-        }
-        if (anim.scaleYKeyframes.length !== 0) {
-            scale[1] = interpolateKeyframes(loopedTimeSeconds, anim.scaleYKeyframes);
-        }
-        if (anim.scaleZKeyframes.length !== 0) {
-            scale[2] = interpolateKeyframes(loopedTimeSeconds, anim.scaleZKeyframes);
-        }
-
-        this.buildWorldFromModelMtx(pos, rotRadians, scale);
-    }
-
-    public prepareToRender(ctx: RenderContext) {
-        if (!this.visible) return;
-
-        const renderParams = scratchRenderParams;
-        renderParams.alpha = 1 - this.translucency;
-        renderParams.sort = this.translucency < EPSILON ? "translucent" : "all";
-
-        const viewFromModel = scratchMat4a;
-        mat4.mul(viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
-        this.model.prepareToRender(ctx, viewFromModel, renderParams);
-    }
-}
-
 export class World {
     private animTime: number;
     private animController: AnimationController;
     private itemgroups: Itemgroup[];
-    private bgModels: BgModelInst[];
+    private background: Background;
 
     constructor(
         device: GfxDevice,
@@ -308,14 +122,14 @@ export class World {
         );
         this.animTime = 0;
 
-        this.bgModels = [];
-        const bgFgModels = stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels);
-        for (let i = 0; i < bgFgModels.length; i++) {
-            if (!(bgFgModels[i].flags & SD.BgModelFlags.Visible)) continue;
-            const bgModel = modelCache.getModel(device, renderCache, bgFgModels[i].modelName);
-            if (bgModel === null) continue;
-            this.bgModels.push(new BgModelInst(bgModel, bgFgModels[i]));
+        const bgModels: BgModelInst[] = [];
+        for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
+            if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
+            const model = modelCache.getModel(device, renderCache, bgModel.modelName);
+            if (model === null) continue;
+            bgModels.push(new BgModelInst(model, bgModel));
         }
+        this.background = new stageData.stageInfo.bgInfo.bgConstructor(bgModels);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
@@ -324,18 +138,14 @@ export class World {
         for (let i = 0; i < this.itemgroups.length; i++) {
             this.itemgroups[i].update(this.animController);
         }
-        for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].update(this.animController);
-        }
+        this.background.update(this.animController);
     }
 
     public prepareToRender(ctx: RenderContext): void {
         for (let i = 0; i < this.itemgroups.length; i++) {
             this.itemgroups[i].prepareToRender(ctx);
         }
-        for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
-        }
+        this.background.prepareToRender(ctx);
     }
 
     public destroy(device: GfxDevice): void {

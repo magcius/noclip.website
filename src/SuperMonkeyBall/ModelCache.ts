@@ -56,7 +56,6 @@ class CacheEntry {
     }
 }
 
-// TODO(complexplane): Consider doing something closer to TextureHolder for textures instead.
 export class ModelCache {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];

@@ -1,5 +1,18 @@
 import { Color, colorNewFromRGBA8 } from "../Color";
 import { assertExists } from "../util";
+import {
+    BackgroundConstructor,
+    BgBonus,
+    BgIce,
+    BgJungle,
+    BgMaster,
+    BgNight,
+    BgSand,
+    BgSpace,
+    BgStorm,
+    BgSunset,
+    BgWater,
+} from "./Background";
 
 export const enum StageId {
     St001_Plain = 1,
@@ -12,6 +25,7 @@ export const enum StageId {
     St008_JumpSingle = 8,
     St009_ExamA = 9,
     St023_Jumpies = 23,
+    St035_Labyrinth = 35,
 }
 
 export const enum BgType {
@@ -30,6 +44,7 @@ export const enum BgType {
 export type BgInfo = {
     fileName: string;
     clearColor: Color;
+    bgConstructor: BackgroundConstructor;
 };
 
 export type StageInfo = {
@@ -38,16 +53,16 @@ export type StageInfo = {
 };
 
 export const BG_INFO_MAP: Map<BgType, BgInfo> = new Map([
-    [BgType.Jungle, { fileName: "bg_jun", clearColor: colorNewFromRGBA8(0xffffffff) }],
-    [BgType.Water, { fileName: "bg_wat", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Night, { fileName: "bg_nig", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Sunset, { fileName: "bg_sun", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Space, { fileName: "bg_spa", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Sand, { fileName: "bg_snd", clearColor: colorNewFromRGBA8(0xd8bc77ff) }],
-    [BgType.Ice, { fileName: "bg_ice", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Storm, { fileName: "bg_stm", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Bonus, { fileName: "bg_bns", clearColor: colorNewFromRGBA8(0x000000ff) }],
-    [BgType.Master, { fileName: "bg_mst", clearColor: colorNewFromRGBA8(0xffffcdff) }],
+    [BgType.Jungle, { fileName: "bg_jun", clearColor: colorNewFromRGBA8(0xffffffff), bgConstructor: BgJungle }],
+    [BgType.Water, { fileName: "bg_wat", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgWater }],
+    [BgType.Night, { fileName: "bg_nig", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgNight }],
+    [BgType.Sunset, { fileName: "bg_sun", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgSunset }],
+    [BgType.Space, { fileName: "bg_spa", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgSpace }],
+    [BgType.Sand, { fileName: "bg_snd", clearColor: colorNewFromRGBA8(0xd8bc77ff), bgConstructor: BgSand }],
+    [BgType.Ice, { fileName: "bg_ice", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgIce }],
+    [BgType.Storm, { fileName: "bg_stm", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgStorm }],
+    [BgType.Bonus, { fileName: "bg_bns", clearColor: colorNewFromRGBA8(0x000000ff), bgConstructor: BgBonus }],
+    [BgType.Master, { fileName: "bg_mst", clearColor: colorNewFromRGBA8(0xffffcdff), bgConstructor: BgMaster }],
 ]);
 
 export const STAGE_INFO_MAP: Map<StageId, StageInfo> = new Map([
@@ -61,4 +76,5 @@ export const STAGE_INFO_MAP: Map<StageId, StageInfo> = new Map([
     [StageId.St008_JumpSingle, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
     [StageId.St009_ExamA, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Sunset)) }],
     [StageId.St023_Jumpies, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Night)) }],
+    [StageId.St035_Labyrinth, { bgInfo: assertExists(BG_INFO_MAP.get(BgType.Water)) }],
 ]);

@@ -72,6 +72,8 @@ const sceneDescs = [
     new SuperMonkeyBallSceneDesc(StageId.St009_ExamA, "Beginner 10 - Exam-A"),
     "Night",
     new SuperMonkeyBallSceneDesc(StageId.St023_Jumpies, "Advanced 13 - Jumpies"),
+    "Water",
+    new SuperMonkeyBallSceneDesc(StageId.St035_Labyrinth, "Advanced 25 - Labyrinth"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
