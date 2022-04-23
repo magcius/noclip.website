@@ -3,7 +3,7 @@ import { BgModelInst } from "./BgModel";
 import { RenderParams } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
-import { MkbTime } from "./Utils";
+import { MkbTime, MKB_FPS } from "./Utils";
 
 export interface Background {
     update(t: MkbTime): void;
@@ -73,10 +73,16 @@ type SunsetModel = {
     desiredTexVel: vec3;
 };
 
+const enum BgSunsetMode {
+    Default,
+    HurryUp,
+}
+
 export class BgSunset implements Background {
     private bgModels: BgModelInst[] = [];
     private cloudModels: SunsetModel[] = []; // Models to apply texture scroll to
     private lastTimeFrames: number = 0;
+    private mode = BgSunsetMode.Default;
 
     constructor(bgModels: BgModelInst[]) {
         for (const bgModel of bgModels) {
@@ -105,9 +111,23 @@ export class BgSunset implements Background {
             this.bgModels[i].update(t);
         }
 
+        // At 11s remaining on the clock ("hurry up!"), change cloud scroll direction and speed up
+        let speedUpClouds = false;
+        if (this.mode === BgSunsetMode.Default && t.getStageTimeFrames() < 660) {
+            this.mode = BgSunsetMode.HurryUp;
+            speedUpClouds = true;
+        }
+
         for (let i = 0; i < this.cloudModels.length; i++) {
             const cloudModel = this.cloudModels[i];
             cloudModel.bgModel.update(t);
+            if (speedUpClouds) {
+                vec3.set(cloudModel.desiredTexVel, 0, (Math.random() * 0.2 + 0.9) * 0.0030303029343485832, 0);
+                vec3.rotateZ(cloudModel.desiredTexVel, cloudModel.desiredTexVel, Vec3Zero, Math.random() * Math.PI);
+            }
+            // Exponential interpolate desired tex vel towards current tex vel
+            const lerp = Math.pow(0.95, t.getDeltaTimeFrames()); // Adjust lerp multipler for framerate
+            vec3.lerp(cloudModel.currTexVel, cloudModel.desiredTexVel, cloudModel.currTexVel, lerp);
             vec3.scaleAndAdd(
                 cloudModel.currTexTranslate,
                 cloudModel.currTexTranslate,

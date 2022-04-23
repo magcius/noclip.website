@@ -110,7 +110,7 @@ export class World {
     private background: Background;
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
-        this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
+        this.mkbTime = new MkbTime(17); // TODO(complexplane): Per-stage time limit
         this.itemgroups = stageData.stagedef.itemgroups.map(
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
