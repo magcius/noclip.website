@@ -39,11 +39,21 @@ export class BgJungle implements Background {
 export class BgWater implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgNight implements Background {
@@ -154,59 +164,119 @@ export class BgSunset implements Background {
 export class BgSpace implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgSand implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgIce implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgStorm implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgBonus implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
 
 export class BgMaster implements Background {
     private bgModels: BgModelInst[] = [];
 
-    constructor(bgModels: BgModelInst[]) {}
+    constructor(bgModels: BgModelInst[]) {
+        this.bgModels = bgModels;
+    }
 
-    public update(t: MkbTime): void {}
+    public update(t: MkbTime): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].update(t);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext): void {}
+    public prepareToRender(ctx: RenderContext): void {
+        for (let i = 0; i < this.bgModels.length; i++) {
+            this.bgModels[i].prepareToRender(ctx);
+        }
+    }
 }
