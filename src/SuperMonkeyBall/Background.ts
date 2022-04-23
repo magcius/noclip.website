@@ -1,12 +1,12 @@
-import AnimationController from "../AnimationController";
 import { RenderContext } from "./Render";
 import { BgModelInst } from "./BgModel";
 import { RenderParams } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
+import { MkbTime } from "./Utils";
 
 export interface Background {
-    update(animController: AnimationController): void;
+    update(t: MkbTime): void;
     prepareToRender(ctx: RenderContext): void;
 }
 
@@ -23,9 +23,9 @@ export class BgJungle implements Background {
         this.bgModels = bgModels;
     }
 
-    public update(animController: AnimationController): void {
+    public update(t: MkbTime): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].update(animController);
+            this.bgModels[i].update(t);
         }
     }
 
@@ -41,7 +41,7 @@ export class BgWater implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -53,9 +53,9 @@ export class BgNight implements Background {
         this.bgModels = bgModels;
     }
 
-    public update(animController: AnimationController): void {
+    public update(t: MkbTime): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].update(animController);
+            this.bgModels[i].update(t);
         }
     }
 
@@ -100,22 +100,19 @@ export class BgSunset implements Background {
         }
     }
 
-    public update(animController: AnimationController): void {
-        const deltaFrames = animController.getTimeInFrames() - this.lastTimeFrames;
-        this.lastTimeFrames = animController.getTimeInFrames();
-
+    public update(t: MkbTime): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].update(animController);
+            this.bgModels[i].update(t);
         }
 
         for (let i = 0; i < this.cloudModels.length; i++) {
             const cloudModel = this.cloudModels[i];
-            cloudModel.bgModel.update(animController);
+            cloudModel.bgModel.update(t);
             vec3.scaleAndAdd(
                 cloudModel.currTexTranslate,
                 cloudModel.currTexTranslate,
                 cloudModel.currTexVel,
-                deltaFrames
+                t.getDeltaTimeFrames()
             );
         }
     }
@@ -139,7 +136,7 @@ export class BgSpace implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -149,7 +146,7 @@ export class BgSand implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -159,7 +156,7 @@ export class BgIce implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -169,7 +166,7 @@ export class BgStorm implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -179,7 +176,7 @@ export class BgBonus implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }
@@ -189,7 +186,7 @@ export class BgMaster implements Background {
 
     constructor(bgModels: BgModelInst[]) {}
 
-    public update(animController: AnimationController): void {}
+    public update(t: MkbTime): void {}
 
     public prepareToRender(ctx: RenderContext): void {}
 }

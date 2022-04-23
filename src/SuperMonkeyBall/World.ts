@@ -1,5 +1,4 @@
 import { mat4, vec3 } from "gl-matrix";
-import AnimationController from "../AnimationController";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import * as Viewer from "../viewer";
@@ -12,7 +11,7 @@ import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
-import { S16_TO_RADIANS } from "./Utils";
+import { MkbTime, S16_TO_RADIANS } from "./Utils";
 
 const scratchRenderParams: RenderParams = { alpha: 0, sort: RenderSort.None, texMtx: mat4.create() };
 
@@ -67,12 +66,12 @@ class Itemgroup {
         }
     }
 
-    public update(animController: AnimationController): void {
+    public update(t: MkbTime): void {
         // Check if this is the world space itemgroup
         if (this.itemgroupIdx === 0) return;
 
         const loopedTimeSeconds = loopWrap(
-            animController.getTimeInSeconds(),
+            t.getAnimTimeSeconds(),
             this.stagedef.loopStartSeconds,
             this.stagedef.loopEndSeconds
         );
@@ -106,12 +105,12 @@ class Itemgroup {
 
 export class World {
     private animTime: number;
-    private animController: AnimationController;
+    private mkbTime: MkbTime;
     private itemgroups: Itemgroup[];
     private background: Background;
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
-        this.animController = new AnimationController(60);
+        this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
         this.itemgroups = stageData.stagedef.itemgroups.map(
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
@@ -128,12 +127,11 @@ export class World {
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
-        this.animTime += viewerInput.deltaTime;
-        this.animController.setTimeInMilliseconds(this.animTime);
+        this.mkbTime.updateDeltaTimeSeconds(viewerInput.deltaTime / 1000);
         for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].update(this.animController);
+            this.itemgroups[i].update(this.mkbTime);
         }
-        this.background.update(this.animController);
+        this.background.update(this.mkbTime);
     }
 
     public prepareToRender(ctx: RenderContext): void {

@@ -1,11 +1,10 @@
 import { mat4, vec3 } from "gl-matrix";
-import AnimationController from "../AnimationController";
 import { ModelInst, RenderParams, RenderSort } from "./Model";
 import * as SD from "./Stagedef";
 import { loopWrap, interpolateKeyframes } from "./Anim";
 import { MathConstants } from "../MathHelpers";
 import { RenderContext } from "./Render";
-import { EPSILON, S16_TO_RADIANS } from "./Utils";
+import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils";
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
@@ -32,12 +31,12 @@ export class BgModelInst {
         mat4.scale(this.worldFromModel, this.worldFromModel, scale);
     }
 
-    public update(animController: AnimationController): void {
+    public update(t: MkbTime): void {
         const anim = this.bgModelData.anim;
         if (anim === null) return;
 
         const loopedTimeSeconds = loopWrap(
-            animController.getTimeInSeconds(),
+            t.getAnimTimeSeconds(),
             anim.loopStartSeconds,
             anim.loopEndSeconds
         );

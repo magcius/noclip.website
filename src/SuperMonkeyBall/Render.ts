@@ -29,7 +29,6 @@ export class Renderer implements Viewer.SceneGfx {
     private world: World;
     private modelCache: ModelCache;
     public textureHolder: UI.TextureListHolder;
-    private renderCollision: boolean = false;
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
 
@@ -62,13 +61,6 @@ export class Renderer implements Viewer.SceneGfx {
             });
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
-
-        // Debug draw collision (eventually do it with polys)
-        const drawColi = new UI.Checkbox("Draw Collision", false);
-        drawColi.onchanged = () => {
-            this.renderCollision = drawColi.checked;
-        };
-        renderHacksPanel.contents.appendChild(drawColi.elem);
 
         return [renderHacksPanel];
     }
