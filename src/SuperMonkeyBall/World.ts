@@ -13,7 +13,7 @@ import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
 import { MkbTime, S16_TO_RADIANS } from "./Utils";
 
-const scratchRenderParams: RenderParams = { alpha: 0, sort: RenderSort.None, texMtx: mat4.create() };
+const scratchRenderParams = new RenderParams();
 
 // Immutable parsed stage definition
 export type StageData = {
@@ -94,11 +94,12 @@ class Itemgroup {
         const rp = scratchRenderParams;
         rp.alpha = 1.0;
         rp.sort = RenderSort.Translucent;
+        rp.worldFromModel = this.worldFromIg;
 
-        const viewFromIg = scratchMat4a;
-        mat4.mul(viewFromIg, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
+        mat4.mul(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
+
         for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(ctx, viewFromIg, rp);
+            this.models[i].prepareToRender(ctx, rp);
         }
     }
 }

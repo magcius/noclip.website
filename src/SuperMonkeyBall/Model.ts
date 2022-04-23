@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -16,12 +16,15 @@ export const enum RenderSort {
     None, // Don't sort any shapes
 }
 
-export type RenderParams = {
-    alpha: number;
-    sort: RenderSort;
-    texMtx: mat4;
-};
+export class RenderParams {
+    public viewFromModel = mat4.create();
+    public worldFromModel = mat4.create();
+    public alpha = 1;
+    public sort = RenderSort.Translucent;
+    public texMtx = mat4.create();
+}
 
+const scratchVec3a = vec3.create();
 export class ModelInst {
     private shapes: ShapeInst[];
     private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these
@@ -47,9 +50,21 @@ export class ModelInst {
         }
     }
 
-    public prepareToRender(ctx: RenderContext, viewFromModel: mat4, renderParams: RenderParams) {
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams) {
+        const scale = scratchVec3a;
+        mat4.getScaling(scale, renderParams.worldFromModel);
+        const maxScale = Math.max(...scale);
+
+         const center_rt_world = scratchVec3a;
+        vec3.transformMat4(center_rt_world, this.modelData.boundSphereCenter, renderParams.worldFromModel);
+        const inFrustum = ctx.viewerInput.camera.frustum.containsSphere(
+            center_rt_world,
+            this.modelData.boundSphereRadius * maxScale
+        );
+        if (!inFrustum) return;
+
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(ctx, viewFromModel, renderParams);
+            this.shapes[i].prepareToRender(ctx, renderParams);
         }
     }
 

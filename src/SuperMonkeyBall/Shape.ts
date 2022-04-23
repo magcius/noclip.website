@@ -164,9 +164,9 @@ export class ShapeInst {
         }
     }
 
-    public prepareToRender(ctx: RenderContext, viewFromModel: mat4, renderParams: RenderParams) {
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams) {
         const drawParams = scratchDrawParams;
-        mat4.copy(drawParams.u_PosMtx[0], viewFromModel);
+        mat4.copy(drawParams.u_PosMtx[0], renderParams.viewFromModel);
 
         for (let i = 0; i < this.subShapes.length; i++) {
             const inst = ctx.instMan.newRenderInst();
@@ -184,7 +184,7 @@ export class ShapeInst {
                 renderParams.sort === RenderSort.All
             ) {
                 const origin_rt_view = scratchVec3a;
-                vec3.transformMat4(origin_rt_view, this.shapeData.origin, viewFromModel);
+                vec3.transformMat4(origin_rt_view, this.shapeData.origin, renderParams.viewFromModel);
                 inst.sortKey = -vec3.sqrLen(origin_rt_view);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {

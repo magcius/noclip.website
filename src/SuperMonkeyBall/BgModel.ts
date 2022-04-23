@@ -10,7 +10,8 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
 const scratchMat4a = mat4.create();
-const scratchRenderParams: RenderParams = { alpha: 0, sort: RenderSort.None, texMtx: mat4.create() };
+const scratchRenderParams = new RenderParams();
+
 export class BgModelInst {
     private worldFromModel: mat4 = mat4.create();
     private visible = true;
@@ -107,8 +108,8 @@ export class BgModelInst {
         }
         Object.assign(renderParams, renderParams);
 
-        const viewFromModel = scratchMat4a;
-        mat4.mul(viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
-        this.model.prepareToRender(ctx, viewFromModel, renderParams);
+        mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
+        renderParams.worldFromModel = this.worldFromModel;
+        this.model.prepareToRender(ctx, renderParams);
     }
 }
