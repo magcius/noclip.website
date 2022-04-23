@@ -103,6 +103,8 @@ export class BgModelInst {
         renderParams.sort = this.translucency < EPSILON ? RenderSort.Translucent : RenderSort.All;
         if (texMtx !== undefined) {
             mat4.copy(renderParams.texMtx, texMtx);
+        } else {
+            mat4.identity(renderParams.texMtx);
         }
         Object.assign(renderParams, renderParams);
 

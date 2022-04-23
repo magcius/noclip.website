@@ -11,6 +11,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Color, colorCopy, colorNewCopy, White } from "../Color";
 import { RenderParams } from "./Model";
+import { mat4 } from "gl-matrix";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
@@ -29,8 +30,7 @@ type BuildState = {
 function buildDiffuseLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
     mb.setTevDirect(state.stage);
     mb.setTevSwapMode(state.stage, SWAP_TABLES[0], SWAP_TABLES[0]);
-    // TODO(complexplane): TEXMTX1 here (texture scroll?)
-    mb.setTexCoordGen(state.stage, GX.TexGenType.MTX2x4, state.texGenSrc, GX.TexGenMatrix.IDENTITY);
+    mb.setTexCoordGen(state.texCoord, GX.TexGenType.MTX2x4, state.texGenSrc, GX.TexGenMatrix.TEXMTX1);
     mb.setTevOrder(state.stage, state.texCoord, state.texMap, GX.RasColorChannelID.COLOR0A0);
 
     mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.TEXC, colorIn, GX.CC.ZERO);
@@ -41,11 +41,14 @@ function buildDiffuseLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX
     state.stage++;
     state.texCoord++;
     state.texMap++;
+    state.texGenSrc++;
 }
 
 function buildAlphaBlendLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
     mb.setTevDirect(state.stage);
     mb.setTevSwapMode(state.stage, SWAP_TABLES[0], SWAP_TABLES[1]);
+    mb.setTexCoordGen(state.texCoord, GX.TexGenType.MTX2x4, state.texGenSrc, GX.TexGenMatrix.TEXMTX1);
+    mb.setTevOrder(state.stage, state.texCoord, state.texMap, GX.RasColorChannelID.COLOR0A0);
 
     mb.setTevColorIn(state.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
     mb.setTevColorOp(state.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -55,6 +58,7 @@ function buildAlphaBlendLayer(mb: GXMaterialBuilder, state: BuildState, colorIn:
     state.stage++;
     state.texCoord++;
     state.texMap++;
+    state.texGenSrc++;
 }
 
 function buildDummyPassthroughLayer(mb: GXMaterialBuilder, state: BuildState, colorIn: GX.CC, alphaIn: GX.CA) {
@@ -176,7 +180,6 @@ export class MaterialInst {
         const materialColor = scratchColor1;
         colorCopy(materialColor, White);
         if (this.materialData.flags & (Gma.MaterialFlags.CustomMatAmbColors | Gma.MaterialFlags.SimpleMaterial)) {
-            // TODO(complexplane): Multiply passed alpha parameter
             colorCopy(materialColor, this.materialData.materialColor, this.materialData.alpha);
         }
         materialColor.a *= renderParams.alpha;
@@ -188,7 +191,8 @@ export class MaterialInst {
         } else {
             colorCopy(ambientColor, White);
         }
-        // TODO multiply by ambient color parameter
+
+        mat4.copy(materialParams.u_TexMtx[1], renderParams.texMtx);
 
         colorCopy(materialParams.u_Color[ColorKind.MAT0], materialColor);
         colorCopy(materialParams.u_Color[ColorKind.AMB0], ambientColor);
