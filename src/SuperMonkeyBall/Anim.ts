@@ -27,7 +27,9 @@ function searchKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number 
 }
 
 export function interpolateKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number {
-    if (keyframes.length === 0) return 0;
+    if (keyframes.length === 0) {
+        throw new Error("Cannot interpolate empty keyframe list");
+    }
     if (timeSeconds <= keyframes[0].timeSeconds) {
         return keyframes[0].value;
     }

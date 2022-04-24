@@ -1,8 +1,9 @@
 import { mat4, vec3 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { MathConstants } from "../MathHelpers";
 import * as Viewer from "../viewer";
-import { interpolateAnimPose, loopWrap } from "./Anim";
+import { interpolateAnimPose, interpolateKeyframes, loopWrap } from "./Anim";
 import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
@@ -24,7 +25,7 @@ export type StageData = {
 };
 
 const scratchVec3a = vec3.create();
-const scratchMat4a = mat4.create();
+const scratchVec3b = vec3.create();
 class Itemgroup {
     private models: ModelInst[];
     private worldFromIg: mat4;
@@ -76,18 +77,37 @@ class Itemgroup {
             this.stagedef.loopEndSeconds
         );
 
-        const worldFromOrigin = scratchMat4a;
-        interpolateAnimPose(
-            worldFromOrigin,
-            loopedTimeSeconds,
-            this.igData.anim.posXKeyframes,
-            this.igData.anim.posYKeyframes,
-            this.igData.anim.posZKeyframes,
-            this.igData.anim.rotXKeyframes,
-            this.igData.anim.rotYKeyframes,
-            this.igData.anim.rotZKeyframes
-        );
-        mat4.mul(this.worldFromIg, worldFromOrigin, this.originFromIg);
+        // Use initial values if there are no corresponding keyframes
+        const translation = scratchVec3a;
+        vec3.copy(translation, this.igData.originPos);
+        const rotRadians = scratchVec3b;
+        vec3.scale(rotRadians, this.igData.originRot, S16_TO_RADIANS);
+        const anim = this.igData.anim;
+
+        if (anim.posXKeyframes.length !== 0) {
+            translation[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
+        }
+        if (anim.posYKeyframes.length !== 0) {
+            translation[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
+        }
+        if (anim.posZKeyframes.length !== 0) {
+            translation[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
+        }
+        if (anim.rotXKeyframes.length !== 0) {
+            rotRadians[0] = interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
+        }
+        if (anim.rotYKeyframes.length !== 0) {
+            rotRadians[1] = interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
+        }
+        if (anim.rotZKeyframes.length !== 0) {
+            rotRadians[2] = interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
+        }
+        
+        mat4.fromTranslation(this.worldFromIg, translation);
+        mat4.rotateZ(this.worldFromIg, this.worldFromIg, rotRadians[2]);
+        mat4.rotateY(this.worldFromIg, this.worldFromIg, rotRadians[1]);
+        mat4.rotateX(this.worldFromIg, this.worldFromIg, rotRadians[0]);
+        mat4.mul(this.worldFromIg, this.worldFromIg, this.originFromIg);
     }
 
     public prepareToRender(ctx: RenderContext) {
