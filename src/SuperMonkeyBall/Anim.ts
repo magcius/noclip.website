@@ -60,31 +60,6 @@ export function interpolateKeyframes(timeSeconds: number, keyframes: SD.Keyframe
     return baseValue + deltaSeconds * (inAdjust + outAdjust);
 }
 
-const scratchVec3b = vec3.create();
-export function interpolateAnimPose(
-    outPose: mat4,
-    timeSeconds: number,
-    posXKeyframes: SD.Keyframe[],
-    posYKeyframes: SD.Keyframe[],
-    posZKeyframes: SD.Keyframe[],
-    rotXKeyframes: SD.Keyframe[],
-    rotYKeyframes: SD.Keyframe[],
-    rotZKeyframes: SD.Keyframe[]
-): void {
-    const translation = scratchVec3b;
-    translation[0] = interpolateKeyframes(timeSeconds, posXKeyframes);
-    translation[1] = interpolateKeyframes(timeSeconds, posYKeyframes);
-    translation[2] = interpolateKeyframes(timeSeconds, posZKeyframes);
-    const rotX = interpolateKeyframes(timeSeconds, rotXKeyframes);
-    const rotY = interpolateKeyframes(timeSeconds, rotYKeyframes);
-    const rotZ = interpolateKeyframes(timeSeconds, rotZKeyframes);
-
-    mat4.fromTranslation(outPose, translation);
-    mat4.rotateZ(outPose, outPose, rotZ * MathConstants.DEG_TO_RAD);
-    mat4.rotateY(outPose, outPose, rotY * MathConstants.DEG_TO_RAD);
-    mat4.rotateX(outPose, outPose, rotX * MathConstants.DEG_TO_RAD);
-}
-
 export function loopWrap(timeSeconds: number, loopStartSeconds: number, loopEndSeconds: number): number {
     const loopDuration = loopEndSeconds - loopStartSeconds;
     // Game does this but adding loop start time just seems weird...

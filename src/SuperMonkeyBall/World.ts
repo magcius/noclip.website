@@ -3,7 +3,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { MathConstants } from "../MathHelpers";
 import * as Viewer from "../viewer";
-import { interpolateAnimPose, interpolateKeyframes, loopWrap } from "./Anim";
+import { interpolateKeyframes, loopWrap } from "./Anim";
 import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
