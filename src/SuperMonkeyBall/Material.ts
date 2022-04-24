@@ -150,7 +150,17 @@ export class MaterialInst {
         }
 
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
+
+        let srcBlendFactor = GX.BlendFactor.SRCALPHA;
+        if (this.materialData.flags & Gma.MaterialFlags.CustomBlendSrc) {
+            srcBlendFactor = this.materialData.blendFactors & 0xf;
+        }
+        let destBlendFactor = GX.BlendFactor.INVSRCALPHA;
+        if (this.materialData.flags & Gma.MaterialFlags.CustomBlendDest) {
+            destBlendFactor = (this.materialData.blendFactors >> 4) & 0xf;
+        }
+        mb.setBlendMode(GX.BlendMode.BLEND, srcBlendFactor, destBlendFactor, GX.LogicOp.CLEAR);
+
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());

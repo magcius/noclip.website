@@ -211,7 +211,6 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4 {
 
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
     const view = buffer.createDataView();
-    const transparents: number[] = [];
     const tevLayerIdxs: number[] = [];
 
     const materialColor = colorNewFromRGBA8(view.getUint32(0x04));
@@ -235,7 +234,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): Material {
         flags |= MaterialFlags.SimpleMaterial;
     }
 
-    const blendFactors = view.getUint32(0x38);
+    const blendFactors = view.getUint32(0x40);
 
     return {
         flags,
