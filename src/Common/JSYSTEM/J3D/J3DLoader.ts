@@ -402,15 +402,15 @@ export interface MtxGroup {
     loadedVertexData: LoadedVertexData;
 }
 
-export const enum ShapeDisplayFlags {
-    NORMAL = 0,
-    BILLBOARD = 1,
-    Y_BILLBOARD = 2,
-    MULTI = 3,
+export const enum ShapeMtxType {
+    Mtx = 0,
+    BBoard = 1,
+    YBBoard = 2,
+    Multi = 3,
 }
 
 export interface Shape {
-    displayFlags: ShapeDisplayFlags;
+    shapeMtxType: ShapeMtxType;
     loadedVertexLayout: LoadedVertexLayout;
     mtxGroups: MtxGroup[];
     bbox: AABB;
@@ -425,14 +425,14 @@ export interface SHP1 {
 function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     const view = buffer.createDataView();
     const shapeCount = view.getUint16(0x08);
-    const shapeTableOffs = view.getUint32(0x0C);
+    const shapeInitDataOffs = view.getUint32(0x0C);
     const remapTableOffs = view.getUint32(0x10);
     const nameTableOffs = view.getUint32(0x14);
-    const attribTableOffs = view.getUint32(0x18);
+    const vtxDeclTableOffs = view.getUint32(0x18);
     const matrixTableOffs = view.getUint32(0x1C);
-    const primDataOffs = view.getUint32(0x20);
-    const matrixDataOffs = view.getUint32(0x24);
-    const matrixGroupTableOffs = view.getUint32(0x28);
+    const displayListOffs = view.getUint32(0x20);
+    const shapeMtxInitDataOffs = view.getUint32(0x24);
+    const shapeDrawInitDataOffs = view.getUint32(0x28);
 
     // Ensure that the remap table is identity.
     for (let i = 0; i < shapeCount; i++) {
@@ -444,23 +444,23 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         console.log('Found a SHP1 that has a name table!');
 
     const shapes: Shape[] = [];
-    let shapeIdx = shapeTableOffs;
+    let shapeInitDataIdx = shapeInitDataOffs;
     for (let i = 0; i < shapeCount; i++) {
-        const displayFlags = view.getUint8(shapeIdx + 0x00);
-        assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
-        const mtxGroupCount = view.getUint16(shapeIdx + 0x02);
-        const attribOffs = view.getUint16(shapeIdx + 0x04);
-        const firstMatrix = view.getUint16(shapeIdx + 0x06);
-        const firstMtxGroup = view.getUint16(shapeIdx + 0x08);
+        const shapeMtxType = view.getUint8(shapeInitDataIdx + 0x00);
+        assert(view.getUint8(shapeInitDataIdx + 0x01) == 0xFF);
+        const mtxGroupCount = view.getUint16(shapeInitDataIdx + 0x02);
+        const vtxDeclListIndex = view.getUint16(shapeInitDataIdx + 0x04);
+        const shapeMtxInitDataIndex = view.getUint16(shapeInitDataIdx + 0x06);
+        const shapeDrawInitDataIndex = view.getUint16(shapeInitDataIdx + 0x08);
 
         const vcd: GX_VtxDesc[] = [];
         const vat: GX_VtxAttrFmt[] = [];
         const vtxArrays: GX_Array[] = [];
 
         let usesNBT = false;
-        let attribIdx = attribTableOffs + attribOffs;
+        let vtxDeclIdx = vtxDeclTableOffs + vtxDeclListIndex;
         while (true) {
-            let vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
+            let vtxAttrib: GX.Attr = view.getUint32(vtxDeclIdx + 0x00);
             if (vtxAttrib === GX.Attr.NULL)
                 break;
 
@@ -477,25 +477,25 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             if (arrayData !== undefined)
                 vtxArrays[vtxAttrib] = { buffer: arrayData!, offs: 0, stride: getAttributeByteSize(vat, vtxAttrib) };
 
-            const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
+            const indexDataType: GX.AttrType = view.getUint32(vtxDeclIdx + 0x04);
             vcd[vtxAttrib] = { type: indexDataType };
-            attribIdx += 0x08;
+            vtxDeclIdx += 0x08;
         }
 
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
         const loadedVertexLayout = compileLoadedVertexLayout(vcd, usesNBT);
         const vtxLoader = compileVtxLoader(vat, vcd);
 
-        let mtxGroupIdx = matrixGroupTableOffs + (firstMtxGroup * 0x08);
+        let shapeDrawInitDataIdx = shapeDrawInitDataOffs + (shapeDrawInitDataIndex * 0x08);
         const mtxGroups: MtxGroup[] = [];
 
         let totalIndexCount = 0;
         let totalVertexCount = 0;
-        for (let j = 0; j < mtxGroupCount; j++) {
-            const primSize = view.getUint32(mtxGroupIdx + 0x00);
-            const primStart = primDataOffs + view.getUint32(mtxGroupIdx + 0x04);
+        for (let j = 0; j < mtxGroupCount; j++, shapeDrawInitDataIdx += 0x08) {
+            const displayListSize = view.getUint32(shapeDrawInitDataIdx + 0x00);
+            const displayListStart = displayListOffs + view.getUint32(shapeDrawInitDataIdx + 0x04);
 
-            const mtxGroupDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
+            const mtxGroupDataOffs = shapeMtxInitDataOffs + (shapeMtxInitDataIndex + j) * 0x08;
             const useMtxIndex = view.getUint16(mtxGroupDataOffs + 0x00);
             const useMtxCount = view.getUint16(mtxGroupDataOffs + 0x02);
             const useMtxFirstIndex = view.getUint32(mtxGroupDataOffs + 0x04);
@@ -504,14 +504,13 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             const useMtxTableSize = useMtxCount;
             const useMtxTable = buffer.createTypedArray(Uint16Array, useMtxTableOffs, useMtxTableSize, Endianness.BIG_ENDIAN);
 
-            if (displayFlags === ShapeDisplayFlags.NORMAL) {
+            if (shapeMtxType === ShapeMtxType.Mtx) {
                 assert(useMtxCount === 1);
                 assert(useMtxIndex === useMtxTable[0]);
             }
 
-            const srcOffs = primStart;
-            const subBuffer = buffer.subarray(srcOffs, primSize);
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer, { firstVertexId: totalVertexCount });
+            const displayList = buffer.subarray(displayListStart, displayListSize);
+            const loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList, { firstVertexId: totalVertexCount });
 
             const indexOffset = totalIndexCount;
             const indexCount = loadedVertexData.totalIndexCount;
@@ -519,24 +518,23 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             totalVertexCount += loadedVertexData.totalVertexCount;
 
             mtxGroups.push({ useMtxTable, indexOffset, indexCount, loadedVertexData });
-            mtxGroupIdx += 0x08;
         }
 
-        const boundingSphereRadius = view.getFloat32(shapeIdx + 0x0C);
-        const bboxMinX = view.getFloat32(shapeIdx + 0x10);
-        const bboxMinY = view.getFloat32(shapeIdx + 0x14);
-        const bboxMinZ = view.getFloat32(shapeIdx + 0x18);
-        const bboxMaxX = view.getFloat32(shapeIdx + 0x1C);
-        const bboxMaxY = view.getFloat32(shapeIdx + 0x20);
-        const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
+        const boundingSphereRadius = view.getFloat32(shapeInitDataIdx + 0x0C);
+        const bboxMinX = view.getFloat32(shapeInitDataIdx + 0x10);
+        const bboxMinY = view.getFloat32(shapeInitDataIdx + 0x14);
+        const bboxMinZ = view.getFloat32(shapeInitDataIdx + 0x18);
+        const bboxMaxX = view.getFloat32(shapeInitDataIdx + 0x1C);
+        const bboxMaxY = view.getFloat32(shapeInitDataIdx + 0x20);
+        const bboxMaxZ = view.getFloat32(shapeInitDataIdx + 0x24);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
         const materialIndex = -1;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex });
+        shapes.push({ shapeMtxType, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex });
 
-        shapeIdx += 0x28;
+        shapeInitDataIdx += 0x28;
     }
 
     return { shapes };
@@ -660,9 +658,9 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const ambientColorTableOffs = view.getUint32(0x2C);
     const texGenTableOffs = view.getUint32(0x38);
     const postTexGenTableOffs = view.getUint32(0x3C);
-    const textureTableOffs = view.getUint32(0x48);
     const texMtxTableOffs = view.getUint32(0x40);
     const postTexMtxTableOffs = view.getUint32(0x44);
+    const textureTableOffs = view.getUint32(0x48);
     const tevOrderTableOffs = view.getUint32(0x4C);
     const colorRegisterTableOffs = view.getUint32(0x50);
     const colorConstantTableOffs = view.getUint32(0x54);
@@ -1269,7 +1267,7 @@ export class BMD {
                 if (shp1.materialIndex !== i)
                     continue;
 
-                if (this.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
+                if (this.shp1.shapes[j].shapeMtxType === ShapeMtxType.Multi)
                     ++multiCount;
             }
 

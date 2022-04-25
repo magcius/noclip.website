@@ -1,7 +1,7 @@
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
@@ -107,9 +107,9 @@ export function prepareShapeMtxGroup(drawParams: DrawParams, shapeInstanceState:
         const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
         const dst = drawParams.u_PosMtx[i];
 
-        if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
+        if (shape.shapeMtxType === ShapeMtxType.BBoard)
             calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
-        else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+        else if (shape.shapeMtxType === ShapeMtxType.YBBoard)
             calcBillboardMatrix(dst, drw, CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
         else
             mat4.copy(dst, drw);
@@ -147,7 +147,7 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        const multi = shape.displayFlags === ShapeDisplayFlags.MULTI;
+        const multi = shape.shapeMtxType === ShapeMtxType.Multi;
         if (!multi)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, drawParams);
 
@@ -800,7 +800,7 @@ export class J3DModelData {
             this.bbox.union(this.bbox, shp1.bbox);
 
             // Look for billboards.
-            if (shp1.displayFlags === ShapeDisplayFlags.BILLBOARD || shp1.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+            if (shp1.shapeMtxType === ShapeMtxType.BBoard || shp1.shapeMtxType === ShapeMtxType.YBBoard)
                 this.hasBillboard = true;
 
             this.shapeData.push(new ShapeData(device, cache, shp1, this.bufferCoalescer.coalescedBuffers));

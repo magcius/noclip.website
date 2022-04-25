@@ -23,7 +23,7 @@ import { ShadowControllerList } from "./Shadow";
 import { Spine } from "./Spine";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
 import * as GX from '../gx/gx_enum';
-import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeDisplayFlags, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeMtxType, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { MaterialParams, DrawParams } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
@@ -175,7 +175,7 @@ function mtxModeIsUsingProjMap(mode: TexMtxMapMode): boolean {
 function patchBMD(bmd: BMD): void {
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
-        if (shape.displayFlags !== ShapeDisplayFlags.MULTI)
+        if (shape.shapeMtxType !== ShapeMtxType.Multi)
             continue;
 
         const material = bmd.mat3.materialEntries[shape.materialIndex];
