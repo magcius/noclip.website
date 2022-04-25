@@ -1910,35 +1910,37 @@ export class trigger_multiple extends BaseEntity {
         super.movement(entitySystem, renderContext);
 
         const aabb = this.getAABB();
-        if (aabb !== null) {
+        if (aabb === null)
+            return;
+
+        let isPlayerTouching = false;
+        if (entitySystem.triggersEnabled && this.enabled) {
             mat4.invert(scratchMat4a, this.modelMatrix);
             entitySystem.getLocalPlayer().getAbsOrigin(scratchVec3a);
             transformVec3Mat4w1(scratchVec3a, scratchMat4a, scratchVec3a);
-
+    
             const playerSize = 24;
-            const isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
+            isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
 
-            if (this.enabled) {
-                if (this.isPlayerTouching !== isPlayerTouching) {
-                    this.isPlayerTouching = isPlayerTouching;
-
-                    if (this.isPlayerTouching)
-                        this.onStartTouch(entitySystem);
-                    else
-                        this.onEndTouch(entitySystem);
-                }
+            if (this.isPlayerTouching !== isPlayerTouching) {
+                this.isPlayerTouching = isPlayerTouching;
 
                 if (this.isPlayerTouching)
-                    this.onTouch(entitySystem);
+                    this.onStartTouch(entitySystem);
+                else
+                    this.onEndTouch(entitySystem);
             }
 
-            if (renderContext.showTriggerDebug) {
-                const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
-                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix, color);
+            if (this.isPlayerTouching)
+                this.onTouch(entitySystem);
+        }
 
-                getMatrixTranslation(scratchVec3a, this.modelMatrix);
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
-            }
+        if (renderContext.showTriggerDebug) {
+            const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
+            drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix, color);
+
+            getMatrixTranslation(scratchVec3a, this.modelMatrix);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
         }
     }
 }
@@ -2009,9 +2011,8 @@ class trigger_look extends trigger_once {
         }
 
         const delta = entitySystem.currentTime - this.startLookTime;
-        if (delta >= this.lookTimeAmount) {
+        if (delta >= this.lookTimeAmount)
             this.activateTrigger(entitySystem);
-        }
     }
 
     protected override onEndTouch(entitySystem: EntitySystem): void {
@@ -3289,6 +3290,7 @@ export class EntitySystem {
     public currentTime = 0;
     public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
+    public triggersEnabled = true;
     private outputQueue: QueuedOutputEvent[] = [];
     private currentActivator: BaseEntity | null = null;
 
