@@ -1943,13 +1943,16 @@ void mainPS() {
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
     t_ProjectedLightCoord.xy = t_ProjectedLightCoord.xy * 0.5 + 0.5;
-    t_ProjectedLightCoord.y = 1.0 - t_ProjectedLightCoord.y;
 #ifndef GFX_CLIPSPACE_NEAR_ZERO
     t_ProjectedLightCoord.z = t_ProjectedLightCoord.z * 0.5 + 0.5;
 #endif
 
     if (all(greaterThan(t_ProjectedLightCoord.xyz, vec3(0.0))) && all(lessThan(t_ProjectedLightCoord.xyz, vec3(1.0)))) {
-        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedLightCoord.xy);
+        vec2 t_ProjectedGoboTexCoord = t_ProjectedLightCoord.xy;
+#ifndef GFX_VIEWPORT_ORIGIN_TL
+        t_ProjectedGoboTexCoord.y = 1.0 - t_ProjectedGoboTexCoord.y;
+#endif
+        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedGoboTexCoord.xy);
         vec3 t_ProjectedLightColor = (t_ProjectedLightSample.rgb * u_ProjectedLightColor.rgb);
 
         vec3 t_WorldToProjectedLight = u_ProjectedLightOrigin.xyz - v_PositionWorld.xyz;
