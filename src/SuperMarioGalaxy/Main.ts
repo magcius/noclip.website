@@ -654,7 +654,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
-                this.execute(passRenderer, DrawType.GravityExplainer);
 
                 // GameScene::draw2D()
 
@@ -1423,9 +1422,6 @@ class SMGSpawner {
         this.placeZones(stageDataHolder);
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
-
-        // const grav = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
-        // console.log(grav);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects

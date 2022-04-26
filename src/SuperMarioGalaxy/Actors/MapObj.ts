@@ -2,9 +2,10 @@
 // Misc MapObj actors.
 
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from '../../Color';
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from '../../Color';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
@@ -14,6 +15,7 @@ import { calcMapGround, CollisionParts, CollisionScaleType, createCollisionParts
 import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
+import { addBaseMatrixFollowTarget } from '../Follow';
 import { initMultiFur } from '../Fur';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorCallbackMapObj, addHitSensorEnemy, addHitSensorEnemyAttack, addHitSensorMapObj, HitSensor, HitSensorType, invalidateHitSensors, isSensorEnemy, isSensorEnemyAttack, isSensorMapObj, isSensorPlayer, sendMsgEnemyAttackExplosion, sendMsgPush, validateHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg7, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
@@ -89,6 +91,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public railPosture: boolean = false;
     public initNerve: TNerve | null = null;
     public initHitSensor: boolean = false;
+    public initBaseMtxFollowTarget: boolean = false;
     public affectedScale: boolean = false;
     public sensorPairwiseCapacity: number = 0;
     public sensorSize: number = 0;
@@ -143,6 +146,10 @@ class MapObjActorInitInfo<TNerve extends number = number> {
         this.initHitSensor = true;
     }
 
+    public setupBaseMtxFollowTarget(): void {
+        this.initBaseMtxFollowTarget = true;
+    }
+
     public setupHitSensorParam(sensorPairwiseCapacity: number, sensorSize: number, sensorOffset: ReadonlyVec3): void {
         this.sensorPairwiseCapacity = sensorPairwiseCapacity;
         this.sensorSize = sensorSize;
@@ -182,13 +189,15 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.initBinder(initInfo.binderRadius, initInfo.binderCenterY, 0);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
-        if (initInfo.calcGravity)
-            this.calcGravityFlag = true;
         if (initInfo.initShadow !== null) {
             initShadowFromCSV(sceneObjHolder, this, initInfo.initShadow);
             if (initInfo.shadowDropLength >= 0.0)
                 setShadowDropLength(this, null, initInfo.shadowDropLength);
         }
+        if (initInfo.calcGravity)
+            this.calcGravityFlag = true;
+        if(initInfo.initBaseMtxFollowTarget)
+            addBaseMatrixFollowTarget(sceneObjHolder, this, infoIter, null, null);
         if (initInfo.initNerve !== null)
             this.initNerve(initInfo.initNerve as TNerve);
 
@@ -271,7 +280,8 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
         }
 
         // tryCreateBreakModel
-        // makeSubModels
+
+        this.makeSubModels(sceneObjHolder, infoIter, initInfo);
 
         if (initInfo.initFur)
             initMultiFur(sceneObjHolder, this, initInfo.lightType);
@@ -279,6 +289,9 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
         // Normally, makeActorAppeared / makeActorDead would be in here. However, due to TypeScript
         // constraints, the parent constructor has to be called first. So we split this into two stages.
         // Call initFinish.
+    }
+
+    protected makeSubModels(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo): void {
     }
 
     protected initFinish(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -4475,5 +4488,97 @@ export class SeaBottomTriplePropeller extends LiveActor<SeaBottomTriplePropeller
 
         for (let i = 0; i < this.propellerParts.length; i++)
             this.propellerParts[i].setMtxFromHost();
+    }
+}
+
+function getGlaringLightModelName(parentName: string): string {
+    if (parentName === 'GravityLightA')
+        return 'GravityLightA';
+    else if (parentName === 'SandRiverLightA')
+        return 'SandRiverGlaringLightA';
+    else if (parentName === 'TeresaMansionLightA')
+        return 'TeresaMansionGlaringLightA';
+    else if (parentName === 'TeresaMansionLightB')
+        return 'TeresaMansionGlaringLightB';
+    else
+        throw "whoops";
+}
+
+class LightCylinder extends MapObjActor {
+    private baseMtxPtr: ReadonlyMat4;
+    private color: Color;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, baseMtxPtr: ReadonlyMat4, color: Color) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupModelName(getGlaringLightModelName(getObjectName(infoIter)));
+        setupInitInfoSimpleMapObj(initInfo);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.baseMtxPtr = baseMtxPtr;
+        this.color = color;
+        this.initFinish(sceneObjHolder, infoIter);
+        this.initLightVolume(sceneObjHolder, infoIter);
+    }
+
+    protected override connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObj, DrawType.VolumeModel);
+    }
+
+    public override calcAndSetBaseMtx(): void {
+        mat4.copy(this.modelInstance!.modelMatrix, this.baseMtxPtr);
+    }
+
+    public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        // TODO(jstpierre): VolumeDrawer
+    }
+
+    private initLightVolume(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        // TODO(jstpierre): VolumeDrawer
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(getGlaringLightModelName(getObjectName(infoIter)));
+    }
+}
+
+export class SwingLight extends MapObjActor {
+    private lightCylinder: LightCylinder;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        setupInitInfoSimpleMapObj(initInfo);
+        initInfo.setupHitSensor();
+        initInfo.setupBaseMtxFollowTarget();
+        initInfo.setupRotator();
+        initInfo.setupRailMover();
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
+    }
+
+    private appearLight(sceneObjHolder: SceneObjHolder): void {
+        this.lightCylinder.makeActorAppeared(sceneObjHolder);
+        tryStartAllAnim(this, this.lightCylinder.name);
+    }
+
+    private disappearLight(sceneObjHolder: SceneObjHolder): void {
+        this.lightCylinder.makeActorDead(sceneObjHolder);
+    }
+
+    protected override initCaseNoUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.initCaseNoUseSwitchA(sceneObjHolder, infoIter);
+        this.appearLight(sceneObjHolder);
+    }
+
+    protected override initCaseUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.initCaseUseSwitchA(sceneObjHolder, infoIter);
+        listenStageSwitchOnOffA(sceneObjHolder, this, this.appearLight.bind(this), this.disappearLight.bind(this));
+    }
+
+    protected override makeSubModels(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo): void {
+        this.lightCylinder = new LightCylinder(this.zoneAndLayer, sceneObjHolder, infoIter, this.getBaseMtx()!, TransparentBlack);
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        LightCylinder.requestArchives(sceneObjHolder, infoIter);
     }
 }
