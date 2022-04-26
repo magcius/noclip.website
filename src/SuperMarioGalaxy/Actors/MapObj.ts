@@ -2,16 +2,17 @@
 // Misc MapObj actors.
 
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, OpaqueBlack, TransparentBlack, White } from '../../Color';
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from '../../Color';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
-import { ColorKind } from '../../gx/gx_render';
+import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts, blendMtx, ProjmapEffectMtxSetter } from '../ActorUtil';
-import { calcMapGround, CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, connectToSceneEnemy, makeMtxTRFromQuatVec, isValidSwitchA, isOnSwitchA, turnDirectionToTargetRadians, quatGetAxisX, quatGetAxisY, connectToClippedMapParts, blendMtx, ProjmapEffectMtxSetter, drawSimpleModel } from '../ActorUtil';
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
 import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
@@ -19,7 +20,6 @@ import { addBaseMatrixFollowTarget } from '../Follow';
 import { initMultiFur } from '../Fur';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorCallbackMapObj, addHitSensorEnemy, addHitSensorEnemyAttack, addHitSensorMapObj, HitSensor, HitSensorType, invalidateHitSensors, isSensorEnemy, isSensorEnemyAttack, isSensorMapObj, isSensorPlayer, sendMsgEnemyAttackExplosion, sendMsgPush, validateHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg7, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
-import { LayoutActor } from '../Layout';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, makeMtxTRSFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
 import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
@@ -34,6 +34,8 @@ import { GalaxyMapController } from './GalaxyMap';
 import { createBloomModel, createIndirectPlanetModel, declareCoin } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObjStrongLight, ModelObj } from './ModelObj';
 import { PartsModel } from './PartsModel';
+import * as GX from "../../gx/gx_enum";
+import { Camera } from '../../Camera';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -2087,14 +2089,14 @@ class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
         turnVecToVecCosOnPlane(this.frontVec, this.frontVec, scratchVec3a, this.sideVec, Math.cos(45.0 * 2.5 * MathConstants.DEG_TO_RAD));
     }
 
-    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
-        if (isSensorMapObj(otherSensor))
-            this.makeActorDead(sceneObjHolder);
+    private kill(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Break');
+        this.makeActorDead(sceneObjHolder);
     }
 
-    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
-        emitEffect(sceneObjHolder, this, 'Break');
-        super.makeActorDead(sceneObjHolder);
+    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (isSensorMapObj(otherSensor))
+            this.kill(sceneObjHolder);
     }
 
     public override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
@@ -2118,7 +2120,7 @@ class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
 
             if (isBinded(this) || isInWater(sceneObjHolder, this.translation)) {
                 if (!this.liveInWater || true /* this.sufferer === null*/ /*|| !isBindedGroundSand(this)*/) {
-                    this.makeActorDead(sceneObjHolder);
+                    this.kill(sceneObjHolder);
                 } else {
                     vecKillElement(this.velocity, this.velocity, this.gravityVector);
                 }
@@ -2126,7 +2128,7 @@ class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
 
             const lifetimeStep = this.longLifetime ? 300 : 180;
             if (isGreaterEqualStep(this, lifetimeStep))
-                this.makeActorDead(sceneObjHolder);
+                this.kill(sceneObjHolder);
         }
     }
 
@@ -4491,6 +4493,87 @@ export class SeaBottomTriplePropeller extends LiveActor<SeaBottomTriplePropeller
     }
 }
 
+const materialParams = new MaterialParams();
+const drawParams = new DrawParams();
+
+class VolumeModelDrawer {
+    private modelData: J3DModelData | null = null;
+    private materialClear: GXMaterialHelperGfx;
+    private materialBack: GXMaterialHelperGfx;
+    private materialFront: GXMaterialHelperGfx;
+    private materialBlend: GXMaterialHelperGfx;
+
+    constructor(sceneObjHolder: SceneObjHolder, filename: string, private baseMtxPtr: ReadonlyMat4, private color: Color) {
+        const resourceHolder = sceneObjHolder.modelCache.getResourceHolder(filename);
+        this.modelData = resourceHolder.getModel(filename);
+
+        const mb = new GXMaterialBuilder();
+        mb.setColorUpdate(false);
+        mb.setAlphaUpdate(true);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        mb.setUsePnMtxIdx(false);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
+        mb.setZMode(false, GX.CompareType.GEQUAL, false);
+        mb.setCullMode(GX.CullMode.NONE);
+        this.materialClear = new GXMaterialHelperGfx(mb.finish('VolumeModelDraw Clear'));
+
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setZMode(true, GX.CompareType.GEQUAL, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ZERO);
+        mb.setCullMode(GX.CullMode.FRONT);
+        this.materialBack = new GXMaterialHelperGfx(mb.finish('VolumeModelDraw Clear'));
+
+        mb.setBlendMode(GX.BlendMode.SUBTRACT, GX.BlendFactor.ZERO, GX.BlendFactor.ZERO);
+        mb.setCullMode(GX.CullMode.BACK);
+        this.materialFront = new GXMaterialHelperGfx(mb.finish('VolumeModelDraw Clear'));
+
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.DSTALPHA, GX.BlendFactor.ONE);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setColorUpdate(true);
+        this.materialBlend = new GXMaterialHelperGfx(mb.finish('VolumeModelDraw Clear'));
+
+        assert(this.materialBack.materialParamsBufferSize === this.materialClear.materialParamsBufferSize);
+        assert(this.materialBack.drawParamsBufferSize === this.materialClear.drawParamsBufferSize);
+
+        assert(this.materialFront.materialParamsBufferSize === this.materialClear.materialParamsBufferSize);
+        assert(this.materialFront.drawParamsBufferSize === this.materialClear.drawParamsBufferSize);
+
+        assert(this.materialBlend.materialParamsBufferSize === this.materialClear.materialParamsBufferSize);
+        assert(this.materialBlend.drawParamsBufferSize === this.materialClear.drawParamsBufferSize);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        mat4.mul(drawParams.u_PosMtx[0], camera.viewMatrix, this.baseMtxPtr);
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
+        this.materialClear.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        this.materialClear.allocateDrawParamsDataOnInst(template, drawParams);
+        this.materialClear.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
+
+        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
+
+        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
+
+        this.materialBlend.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        drawSimpleModel(renderInstManager, this.modelData!);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
 function getGlaringLightModelName(parentName: string): string {
     if (parentName === 'GravityLightA')
         return 'GravityLightA';
@@ -4507,14 +4590,15 @@ function getGlaringLightModelName(parentName: string): string {
 class LightCylinder extends MapObjActor {
     private baseMtxPtr: ReadonlyMat4;
     private color: Color;
+    private drawer: VolumeModelDrawer;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, baseMtxPtr: ReadonlyMat4, color: Color) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, baseMtxPtr: ReadonlyMat4, color: Color | null = null) {
         const initInfo = new MapObjActorInitInfo();
         initInfo.setupModelName(getGlaringLightModelName(getObjectName(infoIter)));
         setupInitInfoSimpleMapObj(initInfo);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.baseMtxPtr = baseMtxPtr;
-        this.color = color;
+        this.color = color !== null ? color : colorNewFromRGBA8(0xFFDA64A0);
         this.initFinish(sceneObjHolder, infoIter);
         this.initLightVolume(sceneObjHolder, infoIter);
     }
@@ -4528,15 +4612,20 @@ class LightCylinder extends MapObjActor {
     }
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        // TODO(jstpierre): VolumeDrawer
+        this.drawer.draw(sceneObjHolder, renderInstManager, viewerInput.camera);
     }
 
     private initLightVolume(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        // TODO(jstpierre): VolumeDrawer
+        const objName = getObjectName(infoIter);
+        const lightVolumeName = `${objName}LightVolume`;
+        this.drawer = new VolumeModelDrawer(sceneObjHolder, lightVolumeName, this.getBaseMtx()!, this.color);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        sceneObjHolder.modelCache.requestObjectData(getGlaringLightModelName(getObjectName(infoIter)));
+        const objName = getObjectName(infoIter);
+        sceneObjHolder.modelCache.requestObjectData(getGlaringLightModelName(objName));
+        const lightVolumeName = `${objName}LightVolume`;
+        sceneObjHolder.modelCache.requestObjectData(lightVolumeName);
     }
 }
 
@@ -4574,7 +4663,7 @@ export class SwingLight extends MapObjActor {
     }
 
     protected override makeSubModels(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo): void {
-        this.lightCylinder = new LightCylinder(this.zoneAndLayer, sceneObjHolder, infoIter, this.getBaseMtx()!, TransparentBlack);
+        this.lightCylinder = new LightCylinder(this.zoneAndLayer, sceneObjHolder, infoIter, this.getBaseMtx()!);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

@@ -534,6 +534,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
                 this.drawXlu(passRenderer, DrawBufferType.PlayerDecoration);
                 // executeDrawListXlu()
+                this.execute(passRenderer, DrawType.VolumeModel);
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);
                 this.drawXlu(passRenderer, 0x18);
