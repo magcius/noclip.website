@@ -80,23 +80,23 @@ export const enum SpecialTextureType {
 }
 
 class SpecialTextureBinder {
-    private mirrorSampler: GfxSampler;
+    private clampSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
     private needsFlipY = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.mirrorSampler = cache.createSampler({
+        this.clampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
             maxLOD: 100,
             minLOD: 0,
-            wrapS: GfxWrapMode.Mirror,
-            wrapT: GfxWrapMode.Mirror,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
 
-        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
-        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
+        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.clampSampler);
+        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.clampSampler);
 
         this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }

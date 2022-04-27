@@ -1,10 +1,9 @@
 
-import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { connectToScene, getGroupFromArray, getJointMtxByName } from "./ActorUtil";
 import { NameObj, MovementType } from "./NameObj";
-import { ViewerRenderInput } from "../viewer";
 import { arrayRemove, assertExists } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers";
 
