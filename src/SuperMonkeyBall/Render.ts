@@ -1,4 +1,4 @@
-import { CameraController } from "../Camera";
+import { Camera, CameraController } from "../Camera";
 import {
     makeAttachmentClearDescriptor,
     makeBackbufferDescSimple,
@@ -14,6 +14,9 @@ import { ModelCache } from "./ModelCache";
 import { StageData, World } from "./World";
 import * as UI from "../ui";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { S16_TO_RADIANS, Sphere } from "./Utils";
+import { mat4, vec3 } from "gl-matrix";
+import { MathConstants } from "../MathHelpers";
 
 // TODO(complexplane): Put somewhere else
 export type RenderContext = {
@@ -31,6 +34,7 @@ export class Renderer implements Viewer.SceneGfx {
     public textureHolder: UI.TextureListHolder;
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
+    private firstRender = true;
 
     constructor(device: GfxDevice, private stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -65,6 +69,23 @@ export class Renderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
+    private setInitialCameraPose(stageBoundSphere: Sphere, cam: Camera): void {
+        const worldFromView = cam.worldMatrix;
+        const translate = vec3.fromValues(
+            stageBoundSphere.center[0],
+            stageBoundSphere.center[1],
+            stageBoundSphere.center[2] + stageBoundSphere.radius * 1.2
+        );
+        mat4.fromYRotation(
+            worldFromView,
+            this.stageData.stagedef.initBallPose.rot[1] * S16_TO_RADIANS + 20 * MathConstants.DEG_TO_RAD
+        );
+        mat4.rotateX(worldFromView, worldFromView, -30 * MathConstants.DEG_TO_RAD);
+        mat4.translate(worldFromView, worldFromView, translate);
+        mat4.invert(cam.viewMatrix, worldFromView);
+        cam.worldMatrixUpdated();
+    }
+
     private prepareToRender(
         device: GfxDevice,
         viewerInput: Viewer.ViewerRenderInput,
@@ -72,6 +93,11 @@ export class Renderer implements Viewer.SceneGfx {
         translucentInstList: GfxRenderInstList
     ): void {
         this.world.update(viewerInput);
+
+        if (this.firstRender) {
+            this.firstRender = false;
+            this.setInitialCameraPose(this.world.computeBoundSphere(), viewerInput.camera);
+        }
 
         viewerInput.camera.setClipPlanes(0.1);
         // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for

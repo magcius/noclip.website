@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import { clamp } from "../MathHelpers";
 
 export const S16_TO_RADIANS = Math.PI / 0x8000;
@@ -56,4 +57,9 @@ export class MkbTime {
     public freezeStageTime(): void {
         this.stageTimeFrozen = true;
     }
+}
+
+export type Sphere = {
+    center: vec3;
+    radius: number;
 }

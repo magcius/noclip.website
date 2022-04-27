@@ -1,7 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
+import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import * as Viewer from "../viewer";
 import { interpolateKeyframes, loopWrap } from "./Anim";
 import { Background } from "./Background";
@@ -12,7 +13,7 @@ import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { StageInfo } from "./StageInfo";
-import { MkbTime, S16_TO_RADIANS } from "./Utils";
+import { MkbTime, S16_TO_RADIANS, Sphere } from "./Utils";
 
 const scratchRenderParams = new RenderParams();
 
@@ -102,7 +103,7 @@ class Itemgroup {
         if (anim.rotZKeyframes.length !== 0) {
             rotRadians[2] = interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
         }
-        
+
         mat4.fromTranslation(this.worldFromIg, translation);
         mat4.rotateZ(this.worldFromIg, this.worldFromIg, rotRadians[2]);
         mat4.rotateY(this.worldFromIg, this.worldFromIg, rotRadians[1]);
@@ -122,10 +123,30 @@ class Itemgroup {
             this.models[i].prepareToRender(ctx, rp);
         }
     }
+
+    public computeAABB(outAABB: AABB): void {
+        const pt = scratchVec3a;
+        for (let i = 0; i < this.models.length; i++) {
+            const center = this.models[i].modelData.boundSphereCenter;
+            const radius = this.models[i].modelData.boundSphereRadius;
+
+            vec3.scaleAndAdd(pt, center, Vec3UnitX, -radius);
+            outAABB.unionPoint(pt);
+            vec3.scaleAndAdd(pt, center, Vec3UnitX, radius);
+            outAABB.unionPoint(pt);
+            vec3.scaleAndAdd(pt, center, Vec3UnitY, -radius);
+            outAABB.unionPoint(pt);
+            vec3.scaleAndAdd(pt, center, Vec3UnitY, radius);
+            outAABB.unionPoint(pt);
+            vec3.scaleAndAdd(pt, center, Vec3UnitZ, -radius);
+            outAABB.unionPoint(pt);
+            vec3.scaleAndAdd(pt, center, Vec3UnitZ, radius);
+            outAABB.unionPoint(pt);
+        }
+    }
 }
 
 export class World {
-    private animTime: number;
     private mkbTime: MkbTime;
     private itemgroups: Itemgroup[];
     private background: Background;
@@ -135,7 +156,6 @@ export class World {
         this.itemgroups = stageData.stagedef.itemgroups.map(
             (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
-        this.animTime = 0;
 
         const bgModels: BgModelInst[] = [];
         for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
@@ -160,6 +180,17 @@ export class World {
             this.itemgroups[i].prepareToRender(ctx);
         }
         this.background.prepareToRender(ctx);
+    }
+
+    // Should only be called once so OK to make new object
+    public computeBoundSphere(): Sphere {
+        const aabb = new AABB();
+        for (let i = 0; i < this.itemgroups.length; i++) {
+            this.itemgroups[i].computeAABB(aabb);
+        }
+        const center = vec3.create();
+        aabb.centerPoint(center);
+        return { center, radius: aabb.boundingSphereRadius() };
     }
 
     public destroy(device: GfxDevice): void {
