@@ -26,6 +26,13 @@ vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOv
 vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 `;
 
+export const GXIntensity = `
+float GXIntensity(vec3 t_Color) {
+    // https://github.com/dolphin-emu/dolphin/blob/4cd48e609c507e65b95bca5afb416b59eaf7f683/Source/Core/VideoCommon/TextureConverterShaderGen.cpp#L237-L241
+    return dot(t_Color, vec3(0.257, 0.504, 0.098)) + 16.0/255.0;
+}
+`;
+
 }
 
 // #region Material definition.

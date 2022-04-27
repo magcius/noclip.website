@@ -26,7 +26,7 @@ const scratchVec3 = vec3.create();
 
 const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.MonochromeNTSC}
+${GXShaderLibrary.GXIntensity}
 ${GXShaderLibrary.TevOverflow}
 
 vec2 BlurAspect(PD_SAMPLER_2D(t_Texture)) {
@@ -153,7 +153,7 @@ in vec2 v_TexCoord;
 
 void main() {
     vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = (MonochromeNTSC(c.rgb) > u_Threshold) ? c : vec4(0.0);
+    gl_FragColor = (GXIntensity(c.rgb) > u_Threshold) ? c : vec4(0.0);
 }
 `;
 }
@@ -432,7 +432,7 @@ float ApplyMaskFilter(vec3 t_TexSample) {
     else if (u_MaskFilter == 3.0)
         return t_TexSample.b;
     else
-        return MonochromeNTSC(t_TexSample.rgb);
+        return GXIntensity(t_TexSample.rgb);
 }
 
 float ApplyThreshold(float t_Value) {

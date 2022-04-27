@@ -80,23 +80,23 @@ export const enum SpecialTextureType {
 }
 
 class SpecialTextureBinder {
-    private mirrorSampler: GfxSampler;
+    private clampSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
     private needsFlipY = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.mirrorSampler = cache.createSampler({
+        this.clampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
             maxLOD: 100,
             minLOD: 0,
-            wrapS: GfxWrapMode.Mirror,
-            wrapT: GfxWrapMode.Mirror,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
 
-        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
-        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
+        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.clampSampler);
+        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.clampSampler);
 
         this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }
@@ -534,6 +534,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
                 this.drawXlu(passRenderer, DrawBufferType.PlayerDecoration);
                 // executeDrawListXlu()
+                this.execute(passRenderer, DrawType.VolumeModel);
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);
                 this.drawXlu(passRenderer, 0x18);
@@ -654,7 +655,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
-                this.execute(passRenderer, DrawType.GravityExplainer);
 
                 // GameScene::draw2D()
 
@@ -1423,9 +1423,6 @@ class SMGSpawner {
         this.placeZones(stageDataHolder);
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
-
-        // const grav = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
-        // console.log(grav);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects

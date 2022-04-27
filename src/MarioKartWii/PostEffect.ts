@@ -91,14 +91,14 @@ class EggBloomThresholdProgram extends EggBloomBaseProgram {
     public override frag: string = `
 ${EggBloomBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.MonochromeNTSC}
+${GXShaderLibrary.GXIntensity}
 ${GXShaderLibrary.TevOverflow}
 
 in vec2 v_TexCoord;
 
 void main() {
     vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor.rgb = c.rgb * (2.0 * (saturate(vec3(MonochromeNTSC(c.rgb)) - u_ThresholdColor.rgb)));
+    gl_FragColor.rgb = c.rgb * (2.0 * (saturate(vec3(GXIntensity(c.rgb)) - u_ThresholdColor.rgb)));
     gl_FragColor.a = 1.0;
 }
 `;

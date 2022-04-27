@@ -16,7 +16,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
 import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags } from '../../../MathHelpers';
+import { texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { translateSampler } from '../JUTTexture';
@@ -372,7 +372,7 @@ export class MaterialInstance {
         case TexMtxMapMode.EnvmapBasic:
         case TexMtxMapMode.EnvmapOld:
         case TexMtxMapMode.Envmap:
-            computeNormalMatrix(dst, modelViewMatrix, true);
+            computeMatrixWithoutTranslation(dst, modelViewMatrix);
             break;
 
         case TexMtxMapMode.ProjmapBasic:
@@ -388,7 +388,7 @@ export class MaterialInstance {
         case 0x05:
         case TexMtxMapMode.EnvmapOldEffectMtx:
         case TexMtxMapMode.EnvmapEffectMtx:
-            computeNormalMatrix(dst, modelMatrix, true);
+            computeMatrixWithoutTranslation(dst, modelMatrix);
             break;
 
         default:
@@ -423,7 +423,7 @@ export class MaterialInstance {
         case TexMtxMapMode.EnvmapOldEffectMtx:
         case TexMtxMapMode.EnvmapEffectMtx:
             mat4.invert(dst, viewMatrix);
-            computeNormalMatrix(dst, dst, true);
+            computeMatrixWithoutTranslation(dst, dst);
             break;
 
         default:
