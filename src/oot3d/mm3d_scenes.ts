@@ -1064,8 +1064,8 @@ const sceneDescs = [
     new SceneDesc("z2_last_bs", "Majora's Mask (Boss)"),
 
     "Test Maps",
-    new SceneDesc("test01", "N64 Test Map port"),
-    new SceneDesc("test02", "N64 Test Map port duplicate"),
+    new SceneDesc("test01", "Test Map 1"),
+    new SceneDesc("test02", "Test Map 2"),
     new SceneDesc("spot00"),
     new SceneDesc("z2_32kamejimamae"),
     new SceneDesc("z2_inisie_bs"),
