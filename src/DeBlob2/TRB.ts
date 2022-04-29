@@ -23,7 +23,7 @@ export interface TRBPartition {
 export interface TRBAssetInfo {
     type: number;
     offset: number; 
-    flags: number;
+    partitionId: number;
     nameOffset: number;
     name: string;     
 }
@@ -84,10 +84,10 @@ function parseAssetInfo(buffer: ArrayBufferSlice, dataOffs: number) : TRBAssetIn
     const name = "NO NAME";
     const type = view.getUint32(dataOffs + 0x00, true);
     const offset =  view.getUint32(dataOffs + 0x04, true);
-    const flags = view.getUint32(dataOffs + 0x00, true);
+    const partitionId = view.getUint32(dataOffs + 0x00, true);
     const nameOffset = view.getUint32(dataOffs + 0x0C, true);
 
-    return {type, offset, flags, nameOffset, name}
+    return {type, offset, partitionId, nameOffset, name}
 }
 
 
@@ -100,7 +100,7 @@ export function parse(buffer: ArrayBufferSlice): TRB {
     assert(readString(buffer, 0x00, 0x04, false) === 'TRB\0');
 
     const version = view.getUint32(0x04, true);
-    const flags = view.getUint32(0x08, true);
+    const partitionId = view.getUint32(0x08, true);
     const numPartitions = view.getUint32(0x0C, true);
     const sizePartitions = view.getUint32(0x10, true);
     const numAssets = view.getUint32(0x14, true);
@@ -136,7 +136,6 @@ export function parse(buffer: ArrayBufferSlice): TRB {
         let asset = assets[i];
         asset.name = readString(namebuffer,asset.nameOffset, 0x80,true);
     }
-
 
     return { namebuffer, partitions,assets };
 }
