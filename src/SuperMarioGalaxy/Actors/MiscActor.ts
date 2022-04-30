@@ -9221,17 +9221,17 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
 
     private static getModelName(type: MorphItemObjNeoType): string {
         if (type === MorphItemObjNeoType.Hopper)
-            return 'PowerupHopper';
+            return 'PowerUpHopper';
         else if (type === MorphItemObjNeoType.Bee)
             return 'PowerUpBee';
         else if (type === MorphItemObjNeoType.Teresa)
-            return 'PowerupTeresa';
+            return 'PowerUpTeresa';
         else if (type === MorphItemObjNeoType.Ice)
-            return 'PowerupIce';
+            return 'PowerUpIce';
         else if (type === MorphItemObjNeoType.Fire)
-            return 'PowerupFire';
+            return 'PowerUpFire';
         else if (type === MorphItemObjNeoType.Foo)
-            return 'PowerupFoo';
+            return 'PowerUpFoo';
         else
             throw "whoops";
     }
