@@ -11,11 +11,11 @@ import { EmptyScene } from "../Scenes_Test";
 import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
 import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
+import { BSPEntity } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
 import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { BaseMaterial } from "./Materials";
 import { createScene } from "./Scenes";
-import { BSPEntity } from "./VMT";
 
 class trigger_portal_button extends trigger_multiple {
     public static override classname = `trigger_portal_button`;

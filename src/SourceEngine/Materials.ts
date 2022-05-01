@@ -23,6 +23,7 @@ import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
+import { ParticleSystemCache } from "./ParticleSystem";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -4194,6 +4195,7 @@ export class MaterialCache {
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
     private usingHDR: boolean = false;
+    public readonly particleSystemCache: ParticleSystemCache;
     public ssbumpNormalize = false;
     public staticResources: StaticResources;
     public materialDefines: string[] = [];
@@ -4212,7 +4214,16 @@ export class MaterialCache {
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.staticResources = new StaticResources(device, cache);
 
+        this.particleSystemCache = new ParticleSystemCache(this.filesystem);
+
         this.deviceNeedsFlipY = gfxDeviceNeedsFlipY(device);
+    }
+
+    public isInitialized(): boolean {
+        if (!this.particleSystemCache.isLoaded)
+            return false;
+
+        return true;
     }
 
     public setRenderConfig(hdr: boolean, bspVersion: number): void {

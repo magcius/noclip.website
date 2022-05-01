@@ -13,12 +13,14 @@ import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderIn
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil';
 import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { BSPEntity } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { ParticleSystemController, ParticleSystemInstance } from './ParticleSystem';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
-import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
+import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
 type EntityMessageValue = string;
 
@@ -3202,6 +3204,44 @@ export class info_player_start extends BaseEntity {
     public static classname = `info_player_start`;
 }
 
+class info_particle_system extends BaseEntity {
+    public static classname = `info_particle_system`;
+    private systemInstance: ParticleSystemInstance;
+    private controller: ParticleSystemController;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        const systemName = entity.effect_name;
+        this.systemInstance = new ParticleSystemInstance(renderContext, systemName);
+        this.controller = new ParticleSystemController(this.systemInstance, this);
+    }
+
+    public override spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        for (let i = 1; i < 64; i++) {
+            const controlPointEntityName = this.entity[`cpoint${i}`];
+            if (controlPointEntityName === undefined)
+                continue;
+            const controlPointEntity = entitySystem.findEntityByTargetName(controlPointEntityName);
+            if (controlPointEntity === null)
+                continue;
+            this.controller.addControlPoint(i, controlPointEntity);
+        }
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+        this.controller.movement(renderContext);
+    }
+    
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        super.prepareToRender(renderContext, renderInstManager);
+        this.controller.prepareToRender(renderContext, renderInstManager);
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -3266,6 +3306,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);
         this.registerFactory(info_player_start);
+        this.registerFactory(info_particle_system);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -3401,6 +3442,9 @@ export class EntitySystem {
     }
 
     private getSpawnStateAction(): SpawnState {
+        if (!this.renderContext.materialCache.isInitialized())
+            return SpawnState.FetchingResources;
+
         let spawnState = SpawnState.Spawned;
         for (let i = 0; i < this.entities.length; i++) {
             if (this.entities[i].spawnState === SpawnState.FetchingResources)

@@ -6,7 +6,6 @@ import { readString, assertExists, assert, nArray, decodeString } from "../util"
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
-import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
@@ -14,6 +13,7 @@ import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
 import { lerp, saturate } from "../MathHelpers";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT";
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -1906,4 +1906,20 @@ export class BSPFile {
     public destroy(): void {
         // Nothing to do...
     }
+}
+
+// This is in the same file because it also parses keyfiles, even though it's not material-related.
+export interface BSPEntity {
+    classname: string;
+    [k: string]: string;
+}
+
+function parseEntitiesLump(str: string): BSPEntity[] {
+    const p = new ValveKeyValueParser(str);
+    const entities: BSPEntity[] = [];
+    while (p.hastok()) {
+        entities.push(pairs2obj(p.unit() as VKFPair[]) as BSPEntity);
+        p.skipwhite();
+    }
+    return entities;
 }
