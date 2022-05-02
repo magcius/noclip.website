@@ -221,7 +221,7 @@ class ShadowController {
         if (this.calcDropGravityMode === CalcDropGravityMode.Off || this.calcDropGravityMode === CalcDropGravityMode.PrivateOff)
             return false;
 
-        // XXX(jstpierre): It doesn't seem to check OneTime? Bug in the original game?
+        // NOTE(jstpierre): It doesn't seem to check OneTime? Bug in the original game?
         // if (this.calcDropGravityMode === CalcDropGravityMode.On || this.calcDropGravityMode === CalcDropGravityMode.PrivateOn)
         //     return true;
 

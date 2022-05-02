@@ -4,7 +4,7 @@ import { InputStream } from '../stream';
 import { GetRealElement, RealElement } from './real_element';
 import { GetIntElement, IntElement } from './int_element';
 import { ColorElement, GetColorElement } from './color_element';
-import { MathConstants, Vec3UnitZ } from '../../MathHelpers';
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../../MathHelpers';
 import { colorNewFromRGBA } from '../../Color';
 import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes';
 
@@ -58,9 +58,9 @@ export class VECone implements VectorElement {
         this.direction.GetValue(0, defaultParticleGlobals, n);
         const normal = vec3.normalize(vec3.create(), n);
         if (normal[0] > 0.8)
-            this.xVec = vec3.cross(n, n, vec3.fromValues(0.0, 1.0, 0.0));
+            this.xVec = vec3.cross(n, n, Vec3UnitY);
         else
-            this.xVec = vec3.cross(n, n, vec3.fromValues(1.0, 0.0, 0.0));
+            this.xVec = vec3.cross(n, n, Vec3UnitX);
         this.yVec = vec3.cross(normal, normal, this.xVec);
     }
 

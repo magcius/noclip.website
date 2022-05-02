@@ -10,7 +10,7 @@ import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderIn
 import { computeModelMatrixR, getMatrixAxisZ, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, smoothstep, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitX, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import * as DMX from "./DMX";
-import { SourceFileSystem, SourceRenderContext } from "./Main";
+import { SourceEngineViewType, SourceFileSystem, SourceRenderContext } from "./Main";
 import { BaseMaterial } from "./Materials";
 import { computeMatrixForForwardDir } from "./StaticDetailObject";
 import { ValveKeyValueParser, VKFPair } from "./VMT";
@@ -43,17 +43,25 @@ type DMXType<T> =
     T extends DMX.DMXAttributeType.Float ? number :
     T extends DMX.DMXAttributeType.Bool ? boolean :
     T extends DMX.DMXAttributeType.String ? string :
+    T extends DMX.DMXAttributeType.Color ? Color :
     T extends DMX.DMXAttributeType.Vector3 ? ReadonlyVec3 :
     T extends DMX.DMXAttributeType.ElementArray ? DMX.DMXElement[] :
     T extends DMX.DMXAttributeType.IntArray ? number[] :
     T extends DMX.DMXAttributeType.FloatArray ? number[] :
     T extends DMX.DMXAttributeType.BoolArray ? boolean[] :
     T extends DMX.DMXAttributeType.StringArray ? string[] :
+    T extends DMX.DMXAttributeType.ColorArray ? Color[] :
     T extends DMX.DMXAttributeType.Vector3Array ? ReadonlyVec3[] :
-    never;
+    unknown;
 
-function getAttribValue<T extends DMX.DMXAttributeType>(elem: DMX.DMXElement, name: string, type: T): DMXType<T> {
-    const attrib = assertExists(elem.attributes.find((attrib) => attrib.name === name));
+function getAttribValue<T extends DMX.DMXAttributeType>(elem: DMX.DMXElement, name: string, type: T, defaultValue: DMXType<T> | null): DMXType<T> {
+    const attrib = elem.attributes.find((attrib) => attrib.name === name);
+    if (attrib === undefined) {
+        if (defaultValue !== null)
+            return defaultValue;
+        else
+            throw "whoops";
+    }
     assert(attrib.type === type);
     return attrib.value as DMXType<T>;
 }
@@ -64,7 +72,6 @@ const scratchVec4a = vec4.create();
 const scratchVec4b = vec4.create();
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
-const scratchAABB = new AABB();
 
 // These need to match, because some operator data relies on field indices
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/public/particles/particles.h#L62-L115
@@ -116,32 +123,14 @@ function getStreamStride(bit: StreamMask): number {
         return 1;
     else if (bit === StreamMask.RotYaw)
         return 1;
+    else if (bit === StreamMask.SequenceNum2)
+        return 1;
     else
         throw "whoops";
 }
 
 abstract class ModuleBase {
-    private startFadeIn: number;
-    private startFadeOut: number;
-    private endFadeIn: number;
-    private endFadeOut: number;
-    private fadeOscillate: number;
-
     constructor(elem: DMX.DMXElement) {
-        this.startFadeIn = getAttribValue(elem, `operator start fadein`, DMX.DMXAttributeType.Float);
-        this.endFadeIn = getAttribValue(elem, `operator end fadein`, DMX.DMXAttributeType.Float);
-        this.startFadeOut = getAttribValue(elem, `operator start fadeout`, DMX.DMXAttributeType.Float);
-        this.endFadeOut = getAttribValue(elem, `operator end fadeout`, DMX.DMXAttributeType.Float);
-        this.fadeOscillate = getAttribValue(elem, `operator fade oscillate`, DMX.DMXAttributeType.Float);
-    }
-
-    public calcWeight(curTime: number): number {
-        if (curTime >= this.startFadeIn && curTime <= this.endFadeIn)
-            return invlerp(this.startFadeIn, this.startFadeOut, curTime);
-        else if (curTime >= this.startFadeOut && curTime <= this.endFadeOut)
-            return invlerp(this.startFadeOut, this.endFadeOut, curTime);
-        else
-            return 1.0;
     }
 
     public streamRead(): StreamMask {
@@ -158,6 +147,32 @@ abstract class ModuleBase {
 
     public streamWrite(): StreamMask {
         return StreamMask.None;
+    }
+}
+
+abstract class OperatorBase extends ModuleBase {
+    private startFadeIn: number;
+    private startFadeOut: number;
+    private endFadeIn: number;
+    private endFadeOut: number;
+    private fadeOscillate: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.startFadeIn = getAttribValue(elem, `operator start fadein`, DMX.DMXAttributeType.Float, 0);
+        this.endFadeIn = getAttribValue(elem, `operator end fadein`, DMX.DMXAttributeType.Float, 0);
+        this.startFadeOut = getAttribValue(elem, `operator start fadeout`, DMX.DMXAttributeType.Float, 0);
+        this.endFadeOut = getAttribValue(elem, `operator end fadeout`, DMX.DMXAttributeType.Float, 0);
+        this.fadeOscillate = getAttribValue(elem, `operator fade oscillate`, DMX.DMXAttributeType.Float, 0);
+    }
+
+    public calcWeight(curTime: number): number {
+        if (curTime >= this.startFadeIn && curTime <= this.endFadeIn)
+            return invlerp(this.startFadeIn, this.startFadeOut, curTime);
+        else if (curTime >= this.startFadeOut && curTime <= this.endFadeOut)
+            return invlerp(this.startFadeOut, this.endFadeOut, curTime);
+        else
+            return 1.0;
     }
 }
 
@@ -210,16 +225,16 @@ class Initializer_PositionWithinSphereRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.distMin = getAttribValue(elem, `distance_min`, DMX.DMXAttributeType.Float);
-        this.distMax = getAttribValue(elem, `distance_max`, DMX.DMXAttributeType.Float);
-        this.distBias = getAttribValue(elem, `distance_bias`, DMX.DMXAttributeType.Vector3);
-        this.distBiasInLocalCoords = getAttribValue(elem, `bias in local system`, DMX.DMXAttributeType.Bool);
-        this.controlPointNo = getAttribValue(elem, `control_point_number`, DMX.DMXAttributeType.Int);
-        this.speedMin = getAttribValue(elem, `speed_min`, DMX.DMXAttributeType.Float);
-        this.speedMax = getAttribValue(elem, `speed_max`, DMX.DMXAttributeType.Float);
-        this.speedRandomExponent = getAttribValue(elem, `speed_random_exponent`, DMX.DMXAttributeType.Float);
-        this.speedInLocalCoordinateSystemMin = getAttribValue(elem, `speed_in_local_coordinate_system_min`, DMX.DMXAttributeType.Vector3);
-        this.speedInLocalCoordinateSystemMax = getAttribValue(elem, `speed_in_local_coordinate_system_max`, DMX.DMXAttributeType.Vector3);
+        this.distMin = getAttribValue(elem, `distance_min`, DMX.DMXAttributeType.Float, 0);
+        this.distMax = getAttribValue(elem, `distance_max`, DMX.DMXAttributeType.Float, 0);
+        this.distBias = getAttribValue(elem, `distance_bias`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        this.distBiasInLocalCoords = getAttribValue(elem, `bias in local system`, DMX.DMXAttributeType.Bool, false);
+        this.controlPointNo = getAttribValue(elem, `control_point_number`, DMX.DMXAttributeType.Int, 0);
+        this.speedMin = getAttribValue(elem, `speed_min`, DMX.DMXAttributeType.Float, 0);
+        this.speedMax = getAttribValue(elem, `speed_max`, DMX.DMXAttributeType.Float, 0);
+        this.speedRandomExponent = getAttribValue(elem, `speed_random_exponent`, DMX.DMXAttributeType.Float, 1);
+        this.speedInLocalCoordinateSystemMin = getAttribValue(elem, `speed_in_local_coordinate_system_min`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        this.speedInLocalCoordinateSystemMax = getAttribValue(elem, `speed_in_local_coordinate_system_max`, DMX.DMXAttributeType.Vector3, Vec3Zero);
     }
 
     public override streamWrite(): StreamMask {
@@ -284,9 +299,9 @@ class Initializer_LifetimeRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `lifetime_min`, DMX.DMXAttributeType.Float);
-        this.max = getAttribValue(elem, `lifetime_max`, DMX.DMXAttributeType.Float);
-        this.randomExponent = getAttribValue(elem, `lifetime_random_exponent`, DMX.DMXAttributeType.Float);
+        this.min = getAttribValue(elem, `lifetime_min`, DMX.DMXAttributeType.Float, 0);
+        this.max = getAttribValue(elem, `lifetime_max`, DMX.DMXAttributeType.Float, 0);
+        this.randomExponent = getAttribValue(elem, `lifetime_random_exponent`, DMX.DMXAttributeType.Float, 1);
     }
 
     public override streamWrite(): StreamMask {
@@ -311,9 +326,9 @@ class Initializer_AlphaRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `alpha_min`, DMX.DMXAttributeType.Int) / 0xFF;
-        this.max = getAttribValue(elem, `alpha_max`, DMX.DMXAttributeType.Int) / 0xFF;
-        this.randomExponent = getAttribValue(elem, `alpha_random_exponent`, DMX.DMXAttributeType.Float);
+        this.min = getAttribValue(elem, `alpha_min`, DMX.DMXAttributeType.Int, 0xFF) / 0xFF;
+        this.max = getAttribValue(elem, `alpha_max`, DMX.DMXAttributeType.Int, 0xFF) / 0xFF;
+        this.randomExponent = getAttribValue(elem, `alpha_random_exponent`, DMX.DMXAttributeType.Float, 1);
     }
 
     public override streamWrite(): StreamMask {
@@ -337,8 +352,8 @@ class Initializer_ColorRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.color1 = getAttribValue(elem, `color1`, DMX.DMXAttributeType.Color);
-        this.color2 = getAttribValue(elem, `color2`, DMX.DMXAttributeType.Color);
+        this.color1 = getAttribValue(elem, `color1`, DMX.DMXAttributeType.Color, White);
+        this.color2 = getAttribValue(elem, `color2`, DMX.DMXAttributeType.Color, White);
         // TODO(jstpierre): Tint?
     }
 
@@ -371,9 +386,9 @@ class Initializer_RadiusRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `radius_min`, DMX.DMXAttributeType.Float);
-        this.max = getAttribValue(elem, `radius_max`, DMX.DMXAttributeType.Float);
-        this.randomExponent = getAttribValue(elem, `radius_random_exponent`, DMX.DMXAttributeType.Float);
+        this.min = getAttribValue(elem, `radius_min`, DMX.DMXAttributeType.Float, 1);
+        this.max = getAttribValue(elem, `radius_max`, DMX.DMXAttributeType.Float, 1);
+        this.randomExponent = getAttribValue(elem, `radius_random_exponent`, DMX.DMXAttributeType.Float, 1);
     }
 
     public override streamWrite(): StreamMask {
@@ -398,9 +413,9 @@ class Initializer_TrailLengthRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `length_min`, DMX.DMXAttributeType.Float);
-        this.max = getAttribValue(elem, `length_max`, DMX.DMXAttributeType.Float);
-        this.randomExponent = getAttribValue(elem, `length_random_exponent`, DMX.DMXAttributeType.Float);
+        this.min = getAttribValue(elem, `length_min`, DMX.DMXAttributeType.Float, 0.1);
+        this.max = getAttribValue(elem, `length_max`, DMX.DMXAttributeType.Float, 0.1);
+        this.randomExponent = getAttribValue(elem, `length_random_exponent`, DMX.DMXAttributeType.Float, 1.0);
     }
 
     public override streamWrite(): StreamMask {
@@ -427,11 +442,11 @@ class Initializer_PositionModifyOffsetRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `offset min`, DMX.DMXAttributeType.Vector3);
-        this.max = getAttribValue(elem, `offset max`, DMX.DMXAttributeType.Vector3);
-        this.inLocalSpace = getAttribValue(elem, `offset in local space 0/1`, DMX.DMXAttributeType.Bool);
-        this.proportionalToRadius = getAttribValue(elem, `offset proportional to radius 0/1`, DMX.DMXAttributeType.Bool);
-        this.controlPointNo = getAttribValue(elem, `control_point_number`, DMX.DMXAttributeType.Int);
+        this.min = getAttribValue(elem, `offset min`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        this.max = getAttribValue(elem, `offset max`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        this.inLocalSpace = getAttribValue(elem, `offset in local space 0/1`, DMX.DMXAttributeType.Bool, false);
+        this.proportionalToRadius = getAttribValue(elem, `offset proportional to radius 0/1`, DMX.DMXAttributeType.Bool, false);
+        this.controlPointNo = getAttribValue(elem, `control_point_number`, DMX.DMXAttributeType.Int, 0);
     }
 
     public override streamRead(): StreamMask {
@@ -485,10 +500,10 @@ class Initializer_RotationRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.initial = getAttribValue(elem, `rotation_initial`, DMX.DMXAttributeType.Float) * MathConstants.DEG_TO_RAD;
-        this.min = getAttribValue(elem, `rotation_offset_min`, DMX.DMXAttributeType.Float) * MathConstants.DEG_TO_RAD;
-        this.max = getAttribValue(elem, `rotation_offset_max`, DMX.DMXAttributeType.Float) * MathConstants.DEG_TO_RAD;
-        this.randomExponent = getAttribValue(elem, `rotation_random_exponent`, DMX.DMXAttributeType.Float);
+        this.initial = getAttribValue(elem, `rotation_initial`, DMX.DMXAttributeType.Float, 0) * MathConstants.DEG_TO_RAD;
+        this.min = getAttribValue(elem, `rotation_offset_min`, DMX.DMXAttributeType.Float, 0) * MathConstants.DEG_TO_RAD;
+        this.max = getAttribValue(elem, `rotation_offset_max`, DMX.DMXAttributeType.Float, 360) * MathConstants.DEG_TO_RAD;
+        this.randomExponent = getAttribValue(elem, `rotation_random_exponent`, DMX.DMXAttributeType.Float, 1);
     }
 
     public override streamWrite(): StreamMask {
@@ -512,8 +527,8 @@ class Initializer_SequenceRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.min = getAttribValue(elem, `sequence_min`, DMX.DMXAttributeType.Int);
-        this.max = getAttribValue(elem, `sequence_max`, DMX.DMXAttributeType.Int);
+        this.min = getAttribValue(elem, `sequence_min`, DMX.DMXAttributeType.Int, 0);
+        this.max = getAttribValue(elem, `sequence_max`, DMX.DMXAttributeType.Int, 0);
     }
 
     public override streamWrite(): StreamMask {
@@ -531,12 +546,37 @@ class Initializer_SequenceRandom extends ModuleBase {
     }
 }
 
+class Initializer_SequenceTwoRandom extends ModuleBase {
+    private readonly min: number;
+    private readonly max: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.min = getAttribValue(elem, `sequence_min`, DMX.DMXAttributeType.Int, 0);
+        this.max = getAttribValue(elem, `sequence_max`, DMX.DMXAttributeType.Int, 0);
+    }
+
+    public override streamWrite(): StreamMask {
+        return StreamMask.SequenceNum2;
+    }
+
+    public init(system: ParticleSystemInstance, p: number): void {
+        if (!system.hasStream(StreamMask.SequenceNum2))
+            return;
+
+        const sequenceNum = lerp(this.min, this.max + 1, system.randF32()) | 0;
+
+        const data = system.particleDataF32;
+        data[system.getStreamOffs(StreamMask.SequenceNum2, p)] = sequenceNum;
+    }
+}
+
 class Initializer_LifetimeFromSequence extends ModuleBase {
     private readonly framesPerSecond: number;
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.framesPerSecond = getAttribValue(elem, `Frames Per Second`, DMX.DMXAttributeType.Float);
+        this.framesPerSecond = getAttribValue(elem, `Frames Per Second`, DMX.DMXAttributeType.Float, 30);
     }
 
     public override streamRead(): StreamMask {
@@ -564,7 +604,7 @@ class Initializer_LifetimeFromSequence extends ModuleBase {
 }
 
 function createInitializer(elem: DMX.DMXElement): Initializer | null {
-    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String);
+    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String, null);
     if (functionName === 'Position Within Sphere Random')
         return new Initializer_PositionWithinSphereRandom(elem);
     else if (functionName === 'Lifetime Random')
@@ -583,6 +623,8 @@ function createInitializer(elem: DMX.DMXElement): Initializer | null {
         return new Initializer_RotationRandom(elem);
     else if (functionName === 'Sequence Random')
         return new Initializer_SequenceRandom(elem);
+    else if (functionName === 'Sequence Two Random')
+        return new Initializer_SequenceTwoRandom(elem);
     else if (functionName === `lifetime from sequence`)
         return new Initializer_LifetimeFromSequence(elem);
 
@@ -604,9 +646,9 @@ class Emitter_Continuously extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.rate = getAttribValue(elem, `emission_rate`, DMX.DMXAttributeType.Float);
-        this.duration = getAttribValue(elem, `emission_duration`, DMX.DMXAttributeType.Float);
-        this.startTime = getAttribValue(elem, `emission_start_time`, DMX.DMXAttributeType.Float);
+        this.rate = getAttribValue(elem, `emission_rate`, DMX.DMXAttributeType.Float, 100);
+        this.duration = getAttribValue(elem, `emission_duration`, DMX.DMXAttributeType.Float, 0);
+        this.startTime = getAttribValue(elem, `emission_start_time`, DMX.DMXAttributeType.Float, 0);
     }
 
     public override streamWrite(): StreamMask {
@@ -675,7 +717,7 @@ class Emitter_Continuously extends ModuleBase {
 }
 
 function createEmitter(elem: DMX.DMXElement): Emitter | null {
-    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String);
+    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String, null);
     if (functionName === 'emit_continuously')
         return new Emitter_Continuously(elem);
 
@@ -687,7 +729,7 @@ interface Operator extends ModuleBase {
     run(system: ParticleSystemInstance): void;
 }
 
-class Operator_LifespanDecay extends ModuleBase {
+class Operator_LifespanDecay extends OperatorBase {
     public override streamRead(): StreamMask {
         return StreamMask.SpawnTime | StreamMask.Lifetime;
     }
@@ -706,14 +748,14 @@ class Operator_LifespanDecay extends ModuleBase {
     }
 }
 
-class Operator_MovementBasic extends ModuleBase {
+class Operator_MovementBasic extends OperatorBase {
     private readonly gravity: ReadonlyVec3;
     private readonly drag: number;
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.gravity = getAttribValue(elem, `gravity`, DMX.DMXAttributeType.Vector3);
-        this.drag = 1.0 - getAttribValue(elem, `drag`, DMX.DMXAttributeType.Float);
+        this.gravity = getAttribValue(elem, `gravity`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        this.drag = 1.0 - getAttribValue(elem, `drag`, DMX.DMXAttributeType.Float, 0.0);
     }
 
     public override streamRead(): StreamMask {
@@ -747,7 +789,7 @@ class Operator_MovementBasic extends ModuleBase {
     }
 }
 
-class Operator_AlphaFadeInRandom extends ModuleBase {
+class Operator_AlphaFadeInRandom extends OperatorBase {
     private readonly fadeInTimeMin: number;
     private readonly fadeInTimeMax: number;
     private readonly fadeInTimeExponent: number;
@@ -755,10 +797,10 @@ class Operator_AlphaFadeInRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.fadeInTimeMin = getAttribValue(elem, `fade in time min`, DMX.DMXAttributeType.Float);
-        this.fadeInTimeMax = getAttribValue(elem, `fade in time max`, DMX.DMXAttributeType.Float);
-        this.fadeInTimeExponent = getAttribValue(elem, `fade in time exponent`, DMX.DMXAttributeType.Float);
-        this.proportional = getAttribValue(elem, `proportional 0/1`, DMX.DMXAttributeType.Bool);
+        this.fadeInTimeMin = getAttribValue(elem, `fade in time min`, DMX.DMXAttributeType.Float, 0.25);
+        this.fadeInTimeMax = getAttribValue(elem, `fade in time max`, DMX.DMXAttributeType.Float, 0.25);
+        this.fadeInTimeExponent = getAttribValue(elem, `fade in time exponent`, DMX.DMXAttributeType.Float, 1.0);
+        this.proportional = getAttribValue(elem, `proportional 0/1`, DMX.DMXAttributeType.Bool, true);
     }
 
     public override streamRead(): StreamMask {
@@ -800,7 +842,7 @@ class Operator_AlphaFadeInRandom extends ModuleBase {
     }
 }
 
-class Operator_AlphaFadeOutRandom extends ModuleBase {
+class Operator_AlphaFadeOutRandom extends OperatorBase {
     private readonly fadeOutTimeMin: number;
     private readonly fadeOutTimeMax: number;
     private readonly fadeOutTimeExponent: number;
@@ -808,10 +850,10 @@ class Operator_AlphaFadeOutRandom extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.fadeOutTimeMin = getAttribValue(elem, `fade out time min`, DMX.DMXAttributeType.Float);
-        this.fadeOutTimeMax = getAttribValue(elem, `fade out time max`, DMX.DMXAttributeType.Float);
-        this.fadeOutTimeExponent = getAttribValue(elem, `fade out time exponent`, DMX.DMXAttributeType.Float);
-        this.proportional = getAttribValue(elem, `proportional 0/1`, DMX.DMXAttributeType.Bool);
+        this.fadeOutTimeMin = getAttribValue(elem, `fade out time min`, DMX.DMXAttributeType.Float, 0.25);
+        this.fadeOutTimeMax = getAttribValue(elem, `fade out time max`, DMX.DMXAttributeType.Float, 0.25);
+        this.fadeOutTimeExponent = getAttribValue(elem, `fade out time exponent`, DMX.DMXAttributeType.Float, 1.0);
+        this.proportional = getAttribValue(elem, `proportional 0/1`, DMX.DMXAttributeType.Bool, true);
     }
 
     public override streamRead(): StreamMask {
@@ -855,7 +897,90 @@ class Operator_AlphaFadeOutRandom extends ModuleBase {
     }
 }
 
-class Operator_AlphaFadeAndDecay extends ModuleBase {
+class Operator_AlphaFadeInSimple extends OperatorBase {
+    private readonly proportionalFadeInTime: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.proportionalFadeInTime = getAttribValue(elem, `proportional fade in time`, DMX.DMXAttributeType.Float, 0.25);
+    }
+
+    public override streamRead(): StreamMask {
+        return StreamMask.SpawnTime | StreamMask.Lifetime;
+    }
+
+    public override streamWrite(): StreamMask {
+        return StreamMask.Alpha;
+    }
+
+    public override streamReadInit(): StreamMask {
+        return StreamMask.Alpha;
+    }
+
+    public run(system: ParticleSystemInstance): void {
+        const data = system.particleDataF32, dataInit = system.particleDataInitF32, stride = system.dataStride, strideInit = system.dataInitStride;
+        let spawnTimeOffs = system.getStreamOffs(StreamMask.SpawnTime);
+        let lifetimeOffs = system.getStreamOffs(StreamMask.Lifetime);
+        let alphaOffs = system.getStreamOffs(StreamMask.Alpha);
+        let alphaInitOffs = system.getStreamInitOffs(StreamMask.Alpha);
+
+        // const fadeInTimeStart = 0.0;
+        const fadeInTimeEnd = this.proportionalFadeInTime;
+
+        for (let p = 0; p < system.getNum(); p++, lifetimeOffs += stride, spawnTimeOffs += stride, alphaOffs += stride, alphaInitOffs += strideInit) {
+            let t = (system.curTime - data[spawnTimeOffs]) / data[lifetimeOffs];
+            if (t >= fadeInTimeEnd)
+                continue;
+
+            t /= fadeInTimeEnd; // t = invlerp(fadeInTimeStart, fadeInTimeEnd, t);
+            data[alphaOffs] = dataInit[alphaInitOffs] * saturate(smoothstep(t));
+        }
+    }
+}
+
+class Operator_AlphaFadeOutSimple extends OperatorBase {
+    private readonly proportionalFadeOutTime: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.proportionalFadeOutTime = 1.0 - getAttribValue(elem, `proportional fade out time`, DMX.DMXAttributeType.Float, 0.25);
+    }
+
+    public override streamRead(): StreamMask {
+        return StreamMask.SpawnTime | StreamMask.Lifetime;
+    }
+
+    public override streamWrite(): StreamMask {
+        return StreamMask.Alpha;
+    }
+
+    public override streamReadInit(): StreamMask {
+        return StreamMask.Alpha;
+    }
+
+    public run(system: ParticleSystemInstance): void {
+        const data = system.particleDataF32, dataInit = system.particleDataInitF32, stride = system.dataStride, strideInit = system.dataInitStride;
+        let spawnTimeOffs = system.getStreamOffs(StreamMask.SpawnTime);
+        let lifetimeOffs = system.getStreamOffs(StreamMask.Lifetime);
+        let alphaOffs = system.getStreamOffs(StreamMask.Alpha);
+        let alphaInitOffs = system.getStreamInitOffs(StreamMask.Alpha);
+
+        const fadeInTimeStart = 1.0 - this.proportionalFadeOutTime;
+        // const fadeInTimeEnd = 1.0;
+        const fadeInTimeDuration = this.proportionalFadeOutTime;
+
+        for (let p = 0; p < system.getNum(); p++, lifetimeOffs += stride, spawnTimeOffs += stride, alphaOffs += stride, alphaInitOffs += strideInit) {
+            let t = (system.curTime - data[spawnTimeOffs]) / data[lifetimeOffs];
+            if (t <= fadeInTimeStart)
+                continue;
+
+            t = (t - fadeInTimeStart) / fadeInTimeDuration;  // t = invlerp(fadeInTimeStart, fadeInTimeEnd, t);
+            data[alphaOffs] = dataInit[alphaInitOffs] * saturate(smoothstep(1.0 - t));
+        }
+    }
+}
+
+class Operator_AlphaFadeAndDecay extends OperatorBase {
     private readonly startAlpha: number;
     private readonly endAlpha: number;
     private readonly startFadeInTime: number;
@@ -865,12 +990,12 @@ class Operator_AlphaFadeAndDecay extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.startAlpha = getAttribValue(elem, `start_alpha`, DMX.DMXAttributeType.Float);
-        this.endAlpha = getAttribValue(elem, `end_alpha`, DMX.DMXAttributeType.Float);
-        this.startFadeInTime = getAttribValue(elem, `start_fade_in_time`, DMX.DMXAttributeType.Float);
-        this.endFadeInTime = getAttribValue(elem, `end_fade_in_time`, DMX.DMXAttributeType.Float);
-        this.startFadeOutTime = getAttribValue(elem, `start_fade_out_time`, DMX.DMXAttributeType.Float);
-        this.endFadeOutTime = getAttribValue(elem, `end_fade_out_time`, DMX.DMXAttributeType.Float);
+        this.startAlpha = getAttribValue(elem, `start_alpha`, DMX.DMXAttributeType.Float, 1.0);
+        this.endAlpha = getAttribValue(elem, `end_alpha`, DMX.DMXAttributeType.Float, 0.0);
+        this.startFadeInTime = getAttribValue(elem, `start_fade_in_time`, DMX.DMXAttributeType.Float, 0.0);
+        this.endFadeInTime = getAttribValue(elem, `end_fade_in_time`, DMX.DMXAttributeType.Float, 0.5);
+        this.startFadeOutTime = getAttribValue(elem, `start_fade_out_time`, DMX.DMXAttributeType.Float, 0.5);
+        this.endFadeOutTime = getAttribValue(elem, `end_fade_out_time`, DMX.DMXAttributeType.Float, 1.0);
     }
 
     public override streamReadInit(): StreamMask {
@@ -917,7 +1042,7 @@ function schlickBias(t: number, bias: number): number {
     return t / ((((1.0 / bias) - 2.0) * (1.0 - t)) + 1.0);
 }
 
-class Operator_RadiusScale extends ModuleBase {
+class Operator_RadiusScale extends OperatorBase {
     private readonly startTime: number;
     private readonly endTime: number;
     private readonly radiusStartScale: number;
@@ -927,12 +1052,12 @@ class Operator_RadiusScale extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.startTime = getAttribValue(elem, `start_time`, DMX.DMXAttributeType.Float);
-        this.endTime = getAttribValue(elem, `end_time`, DMX.DMXAttributeType.Float);
-        this.radiusStartScale = getAttribValue(elem, `radius_start_scale`, DMX.DMXAttributeType.Float);
-        this.radiusEndScale = getAttribValue(elem, `radius_end_scale`, DMX.DMXAttributeType.Float);
-        this.easeInAndOut = getAttribValue(elem, `ease_in_and_out`, DMX.DMXAttributeType.Bool);
-        this.scaleBias = getAttribValue(elem, `scale_bias`, DMX.DMXAttributeType.Float);
+        this.startTime = getAttribValue(elem, `start_time`, DMX.DMXAttributeType.Float, 0);
+        this.endTime = getAttribValue(elem, `end_time`, DMX.DMXAttributeType.Float, 1);
+        this.radiusStartScale = getAttribValue(elem, `radius_start_scale`, DMX.DMXAttributeType.Float, 1);
+        this.radiusEndScale = getAttribValue(elem, `radius_end_scale`, DMX.DMXAttributeType.Float, 1);
+        this.easeInAndOut = getAttribValue(elem, `ease_in_and_out`, DMX.DMXAttributeType.Bool, false);
+        this.scaleBias = getAttribValue(elem, `scale_bias`, DMX.DMXAttributeType.Float, 0.5);
     }
 
     public override streamRead(): StreamMask {
@@ -973,7 +1098,7 @@ class Operator_RadiusScale extends ModuleBase {
     }
 }
 
-class Operator_ColorFade extends ModuleBase {
+class Operator_ColorFade extends OperatorBase {
     private readonly colorFade: Color;
     private readonly startTime: number;
     private readonly endTime: number;
@@ -981,10 +1106,10 @@ class Operator_ColorFade extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.colorFade = getAttribValue(elem, `color_fade`, DMX.DMXAttributeType.Color);
-        this.startTime = getAttribValue(elem, `fade_start_time`, DMX.DMXAttributeType.Float);
-        this.endTime = getAttribValue(elem, `fade_end_time`, DMX.DMXAttributeType.Float);
-        this.easeInAndOut = getAttribValue(elem, `ease_in_and_out`, DMX.DMXAttributeType.Bool);
+        this.colorFade = getAttribValue(elem, `color_fade`, DMX.DMXAttributeType.Color, White);
+        this.startTime = getAttribValue(elem, `fade_start_time`, DMX.DMXAttributeType.Float, 0.0);
+        this.endTime = getAttribValue(elem, `fade_end_time`, DMX.DMXAttributeType.Float, 1.0);
+        this.easeInAndOut = getAttribValue(elem, `ease_in_and_out`, DMX.DMXAttributeType.Bool, true);
     }
 
     public override streamRead(): StreamMask {
@@ -1026,7 +1151,7 @@ class Operator_ColorFade extends ModuleBase {
 }
 
 function createOperator(elem: DMX.DMXElement): Operator | null {
-    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String);
+    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String, null);
     if (functionName === `Lifespan Decay`)
         return new Operator_LifespanDecay(elem);
     else if (functionName === `Movement Basic`)
@@ -1035,6 +1160,10 @@ function createOperator(elem: DMX.DMXElement): Operator | null {
         return new Operator_AlphaFadeInRandom(elem);
     else if (functionName === `Alpha Fade Out Random`)
         return new Operator_AlphaFadeOutRandom(elem);
+    else if (functionName === `Alpha Fade In Simple`)
+        return new Operator_AlphaFadeInSimple(elem);
+    else if (functionName === `Alpha Fade Out Simple`)
+        return new Operator_AlphaFadeOutSimple(elem);
     else if (functionName === `Alpha Fade and Decay`)
         return new Operator_AlphaFadeAndDecay(elem);
     else if (functionName === `Radius Scale`)
@@ -1148,8 +1277,8 @@ class Renderer_AnimatedSprites extends ModuleBase {
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.animationRate = getAttribValue(elem, `animation rate`, DMX.DMXAttributeType.Float);
-        this.orientationType = getAttribValue(elem, `orientation_type`, DMX.DMXAttributeType.Int);
+        this.animationRate = getAttribValue(elem, `animation rate`, DMX.DMXAttributeType.Float, 1.0);
+        this.orientationType = getAttribValue(elem, `orientation_type`, DMX.DMXAttributeType.Int, 0);
     }
 
     public override streamRead(): StreamMask {
@@ -1157,7 +1286,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
     }
 
     public override streamReadOptional(): StreamMask {
-        return StreamMask.Rotation | StreamMask.Radius | StreamMask.Color | StreamMask.Alpha | StreamMask.SequenceNum;
+        return StreamMask.Rotation | StreamMask.Radius | StreamMask.Color | StreamMask.Alpha | StreamMask.SequenceNum | StreamMask.SequenceNum2;
     }
 
     public prepareToRender(system: ParticleSystemInstance, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
@@ -1190,6 +1319,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
         let colorOffs = system.hasStream(StreamMask.Color) ? system.getStreamOffs(StreamMask.Color) : null;
         let alphaOffs = system.hasStream(StreamMask.Alpha) ? system.getStreamOffs(StreamMask.Alpha) : null;
         let sequenceNumOffs = system.hasStream(StreamMask.SequenceNum) ? system.getStreamOffs(StreamMask.SequenceNum) : null;
+        let sequenceNum2Offs = system.hasStream(StreamMask.SequenceNum2) ? system.getStreamOffs(StreamMask.SequenceNum2) : null;
 
         for (let p = 0; p < system.getNum(); p++) {
             let rotation: number;
@@ -1245,10 +1375,20 @@ class Renderer_AnimatedSprites extends ModuleBase {
                 sequenceNum = system.constSequenceNum;
             }
 
+            let sequenceNum2: number;
+            if (sequenceNum2Offs !== null) {
+                sequenceNum2 = data[sequenceNum2Offs];
+                sequenceNum2Offs += stride;
+            } else {
+                sequenceNum2 = system.constSequenceNum2;
+            }
+
             if (isSpriteCard) {
+                const time = this.animationRate * (curTime - data[spawnTimeOffs]);
                 let blend: number;
+
+                // Sequence Num 1
                 if (sheet !== null) {
-                    const time = this.animationRate * (curTime - data[spawnTimeOffs]);
                     blend = sheet.calcScaleBias(scratchVec4a, scratchVec4b, sequenceNum, 0, time);
                 } else {
                     vec4.set(scratchVec4a, 1.0, 1.0, 0.0, 0.0);
@@ -1256,9 +1396,22 @@ class Renderer_AnimatedSprites extends ModuleBase {
                     blend = 0.0;
                 }
 
-                materialInstance.paramSetNumber('_blend', blend);
+                materialInstance.paramSetNumber('_blend0', blend);
                 (materialInstance.param['_b00'] as any).setArray(scratchVec4a);
                 (materialInstance.param['_b01'] as any).setArray(scratchVec4b);
+
+                // Sequence Num 2
+                if (sheet !== null) {
+                    blend = sheet.calcScaleBias(scratchVec4a, scratchVec4b, sequenceNum2, 0, time);
+                } else {
+                    vec4.set(scratchVec4a, 1.0, 1.0, 0.0, 0.0);
+                    vec4.set(scratchVec4b, 1.0, 1.0, 0.0, 0.0);
+                    blend = 0.0;
+                }
+
+                materialInstance.paramSetNumber('_blend1', blend);
+                (materialInstance.param['_b10'] as any).setArray(scratchVec4a);
+                (materialInstance.param['_b11'] as any).setArray(scratchVec4b);
             }
 
             vec3.set(scratchVec3a, data[posOffs + 0], data[posOffs + 1], data[posOffs + 2]);
@@ -1286,7 +1439,7 @@ class Renderer_AnimatedSprites extends ModuleBase {
 }
 
 function createRenderer(elem: DMX.DMXElement): Renderer | null {
-    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String);
+    const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String, null);
     if (functionName === 'render_animated_sprites')
         return new Renderer_AnimatedSprites(elem);
 
@@ -1294,9 +1447,13 @@ function createRenderer(elem: DMX.DMXElement): Renderer | null {
     return null;
 }
 
-class ParticleControlPoint {
+export class ParticleControlPoint {
     public transform = mat4.create();
     public prevTransform = mat4.create();
+}
+
+interface Controller {
+    controlPoints: ParticleControlPoint[];
 }
 
 export class ParticleSystemInstance {
@@ -1316,13 +1473,13 @@ export class ParticleSystemInstance {
     private readonly bbox: AABB;
 
     // Constant values.
-    public readonly constRadius: number = 1.0;
-    public readonly constColor: Color = White;
-    public readonly constRotation: number = 0.0;
-    public readonly constSequenceNum: number = 0;
+    public readonly constRadius: number;
+    public readonly constColor: Color;
+    public readonly constRotation: number;
+    public readonly constSequenceNum: number;
+    public readonly constSequenceNum2: number;
 
     // Instance stuff
-    public controlPoints: ParticleControlPoint[] = [];
     public curTime: number = 0;
     public deltaTime: number = 0;
 
@@ -1341,11 +1498,11 @@ export class ParticleSystemInstance {
     private visible = true;
     public emitActive = true;
 
-    constructor(private renderContext: SourceRenderContext, private def: DMX.DMXElement) {
-        this.particleMax = getAttribValue(def, `max_particles`, DMX.DMXAttributeType.Int);
+    constructor(private renderContext: SourceRenderContext, def: DMX.DMXElement, private controller: Controller) {
+        this.particleMax = getAttribValue(def, `max_particles`, DMX.DMXAttributeType.Int, 1000);
 
-        const bboxMin = getAttribValue(def, `bounding_box_min`, DMX.DMXAttributeType.Vector3);
-        const bboxMax = getAttribValue(def, `bounding_box_max`, DMX.DMXAttributeType.Vector3);
+        const bboxMin = getAttribValue(def, `bounding_box_min`, DMX.DMXAttributeType.Vector3, Vec3Zero);
+        const bboxMax = getAttribValue(def, `bounding_box_max`, DMX.DMXAttributeType.Vector3, Vec3Zero);
         this.bbox = new AABB(bboxMin[0], bboxMin[1], bboxMin[2], bboxMax[0], bboxMax[1], bboxMax[2]);
 
         let streamWrite = StreamMask.None;
@@ -1354,7 +1511,7 @@ export class ParticleSystemInstance {
         let streamReadInit = StreamMask.None;
         let streamReadOptional = StreamMask.None;
 
-        const renderers = getAttribValue(def, `renderers`, DMX.DMXAttributeType.ElementArray);
+        const renderers = getAttribValue(def, `renderers`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < renderers.length; i++) {
             const mod = createRenderer(renderers[i]);
             if (mod === null)
@@ -1366,7 +1523,7 @@ export class ParticleSystemInstance {
             this.renderers.push(mod);
         }
 
-        const operators = getAttribValue(def, `operators`, DMX.DMXAttributeType.ElementArray);
+        const operators = getAttribValue(def, `operators`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < operators.length; i++) {
             const mod = createOperator(operators[i]);
             if (mod === null)
@@ -1378,7 +1535,7 @@ export class ParticleSystemInstance {
             this.operators.push(mod);
         }
 
-        const initializers = getAttribValue(def, `initializers`, DMX.DMXAttributeType.ElementArray);
+        const initializers = getAttribValue(def, `initializers`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < initializers.length; i++) {
             const mod = createInitializer(initializers[i]);
             if (mod === null)
@@ -1391,7 +1548,7 @@ export class ParticleSystemInstance {
             this.initializers.push(mod);
         }
 
-        const emitters = getAttribValue(def, `emitters`, DMX.DMXAttributeType.ElementArray);
+        const emitters = getAttribValue(def, `emitters`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < emitters.length; i++) {
             const mod = createEmitter(emitters[i]);
             if (mod === null)
@@ -1404,12 +1561,12 @@ export class ParticleSystemInstance {
             this.emitters.push(mod);
         }
 
-        const children = getAttribValue(def, `children`, DMX.DMXAttributeType.ElementArray);
+        const children = getAttribValue(def, `children`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < children.length; i++) {
-            const delay = getAttribValue(children[i], `delay`, DMX.DMXAttributeType.Float);
-            const child = getAttribValue(children[i], `child`, DMX.DMXAttributeType.Element);
+            const delay = getAttribValue(children[i], `delay`, DMX.DMXAttributeType.Float, 0);
+            const child = getAttribValue(children[i], `child`, DMX.DMXAttributeType.Element, null);
 
-            const childSystem = new ParticleSystemInstance(renderContext, child);
+            const childSystem = new ParticleSystemInstance(renderContext, child, this.controller);
             childSystem.initChild(this, delay);
             this.children.push(childSystem);
         }
@@ -1453,12 +1610,13 @@ export class ParticleSystemInstance {
         this.particleDataInitF32 = new Float32Array(this.dataInitStride * this.particleMax);
 
         // Initialize constant data
-        this.constRadius = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float);
-        this.constColor = getAttribValue(def, `color`, DMX.DMXAttributeType.Color);
-        this.constRotation = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float) * MathConstants.DEG_TO_RAD;
-        this.constSequenceNum = getAttribValue(def, `sequence_number`, DMX.DMXAttributeType.Int);
+        this.constRadius = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float, 5);
+        this.constColor = getAttribValue(def, `color`, DMX.DMXAttributeType.Color, White);
+        this.constRotation = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float, 0) * MathConstants.DEG_TO_RAD;
+        this.constSequenceNum = getAttribValue(def, `sequence_number`, DMX.DMXAttributeType.Int, 0);
+        this.constSequenceNum2 = getAttribValue(def, `sequence_number 1`, DMX.DMXAttributeType.Int, 0);
 
-        const materialName = getAttribValue(def, 'material', DMX.DMXAttributeType.String);
+        const materialName = getAttribValue(def, 'material', DMX.DMXAttributeType.String, null);
         this.initMaterial(materialName);
 
         // Set up randoms.
@@ -1470,8 +1628,6 @@ export class ParticleSystemInstance {
     }
 
     public initChild(parent: ParticleSystemInstance, delay: number): void {
-        // Inherit control points exactly.
-        this.controlPoints = parent.controlPoints;
         this.curTime = -delay;
     }
 
@@ -1501,15 +1657,9 @@ export class ParticleSystemInstance {
     }
 
     public getControlPointTransform(dst: mat4, i: number, time: number): void {
-        const point = this.controlPoints[i]!;
+        const point = this.controller.controlPoints[i];
         // TODO(jstpierre): time lerp
         mat4.copy(dst, point.transform);
-    }
-
-    public ensureControlPoint(i: number): ParticleControlPoint {
-        if (this.controlPoints[i] === undefined)
-            this.controlPoints[i] = new ParticleControlPoint();
-        return this.controlPoints[i];
     }
 
     public randF32(): number {
@@ -1656,7 +1806,7 @@ export class ParticleSystemInstance {
 
     public movement(renderContext: SourceRenderContext): void {
         this.deltaTime = renderContext.globalDeltaTime;
-        if (this.deltaTime <= 0.01)
+        if (this.deltaTime <= 0.001)
             return;
 
         // Clamp to a somewhat reasonable value...
@@ -1675,6 +1825,9 @@ export class ParticleSystemInstance {
     }
 
     private debugDraw(renderContext: SourceRenderContext): void {
+        if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView)
+            return;
+
         const ctx = getDebugOverlayCanvas2D();
 
         const data = this.particleDataF32;
@@ -1738,8 +1891,10 @@ export class ParticleSystemCache {
 
     private async fetchManifest(filesystem: SourceFileSystem) {
         const manifestData = await filesystem.fetchFileData(`particles/particles_manifest.txt`);
-        if (manifestData === null)
+        if (manifestData === null) {
+            this.isLoaded = true;
             return;
+        }
 
         const manifestStr = new TextDecoder('utf8').decode(manifestData.createTypedArray(Uint8Array));
         const root = new ValveKeyValueParser(manifestStr).pair();
@@ -1770,7 +1925,7 @@ export class ParticleSystemCache {
 
         const dmxData = DMX.parse(dmx);
 
-        const systemDefs = getAttribValue(dmxData.rootElement, `particleSystemDefinitions`, DMX.DMXAttributeType.ElementArray);
+        const systemDefs = getAttribValue(dmxData.rootElement, `particleSystemDefinitions`, DMX.DMXAttributeType.ElementArray, null);
         for (let i = 0; i < systemDefs.length; i++)
             this.systemDefinitions.push(systemDefs[i]);
     }

@@ -16,7 +16,7 @@ import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } fro
 import { BSPEntity } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
-import { ParticleSystemInstance } from './ParticleSystem';
+import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
@@ -3205,15 +3205,17 @@ export class info_player_start extends BaseEntity {
 }
 
 class ParticleSystemController {
+    public controlPoints: ParticleControlPoint[] = [];
     private controlPointEntity: BaseEntity[] = [];
     public instances: ParticleSystemInstance[] = [];
 
     constructor(public entity: BaseEntity) {
-        this.controlPointEntity[0] = this.entity;
+        this.addControlPoint(0, this.entity);
     }
 
     public addControlPoint(i: number, entity: BaseEntity): void {
         this.controlPointEntity[i] = entity;
+        this.controlPoints[i] = new ParticleControlPoint();
     }
 
     public stop(): void {
@@ -3237,7 +3239,7 @@ class ParticleSystemController {
                 if (entity === undefined)
                     continue;
 
-                const point = instance.ensureControlPoint(i);
+                const point = this.controlPoints[i];
                 mat4.copy(point.prevTransform, point.transform);
                 mat4.copy(point.transform, entity.updateModelMatrix());
             }
@@ -3293,8 +3295,11 @@ class info_particle_system extends BaseEntity {
 
     private start(entitySystem: EntitySystem): void {
         const systemName = this.entity.effect_name;
-        const def = assertExists(entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName));
-        const systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def);
+        const def = entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName);
+        if (def === null)
+            return;
+
+        const systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def, this.controller);
         this.controller.instances.push(systemInstance);
     }
 

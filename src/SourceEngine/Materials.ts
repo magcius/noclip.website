@@ -4124,6 +4124,7 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_Misc[1];
 };
 #define u_BlendFactor0 (u_Misc[0].x)
+#define u_BlendFactor1 (u_Misc[0].y)
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
@@ -4143,31 +4144,71 @@ void mainVS() {
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[3]);
     v_Color = u_Color;
     v_Misc.x = u_BlendFactor0;
+    v_Misc.y = u_BlendFactor1;
 }
 #endif
 
 #ifdef FRAG
+float Lum(in vec3 t_Sample) {
+    return dot(vec3(0.3, 0.59, 0.11), t_Sample.rgb);
+}
+
+vec4 MaxLumFrameBlend(in vec4 t_Sample0, in vec4 t_Sample1, in float t_BlendFactor) {
+    float t_Lum0 = Lum(t_Sample0.rgb * t_BlendFactor);
+    float t_Lum1 = Lum(t_Sample1.rgb * (1.0 - t_BlendFactor));
+    return t_Lum0 > t_Lum1 ? t_Sample0 : t_Sample1;
+}
+
 void mainPS() {
     vec4 t_Base00 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.xy);
     vec4 t_Base01 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.zw);
-    vec4 t_Base10 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.xy);
-    vec4 t_Base11 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.zw);
     float t_BlendFactor0 = v_Misc.x;
 
-    vec4 t_FinalColor = u_Color;
-
     bool t_BlendFrames = ${getDefineBool(m, `BLEND_FRAMES`)};
-    if (t_BlendFrames) {
-        t_FinalColor *= mix(t_Base00, t_Base01, t_BlendFactor0);
+    bool t_MaxLumFrameBlend1 = ${getDefineBool(m, `MAX_LUM_FRAMEBLEND_1`)};
+    vec4 t_Base0, t_Base;
+
+    if (t_MaxLumFrameBlend1) {
+        t_Base0 = MaxLumFrameBlend(t_Base00, t_Base01, t_BlendFactor0);
+    } else if (t_BlendFrames) {
+        t_Base0 = mix(t_Base00, t_Base01, t_BlendFactor0);
     } else {
-        t_FinalColor *= t_Base00;
+        t_Base0 = t_Base00;
+    }
+    t_Base = t_Base0;
+
+    bool t_DualSequence = ${getDefineBool(m, `DUAL_SEQUENCE`)};
+    if (t_DualSequence) {
+        vec4 t_Base10 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.xy);
+        vec4 t_Base11 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.zw);
+        bool t_MaxLumFrameBlend2 = ${getDefineBool(m, `MAX_LUM_FRAMEBLEND_2`)};
+        float t_BlendFactor1 = v_Misc.y;
+
+        vec4 t_Base1;
+        if (t_MaxLumFrameBlend2) {
+            t_Base1 = MaxLumFrameBlend(t_Base10, t_Base11, t_BlendFactor1);
+        } else {
+            t_Base1 = mix(t_Base10, t_Base11, t_BlendFactor1);
+        }
+
+        int t_CombineMode = ${getDefineString(m, `DUAL_COMBINE_MODE`)};
+        if (t_CombineMode == 0) { // COMBINE_MODE_AVERAGE
+            t_Base = (t_Base0 + t_Base1) * 0.5;
+        } else if (t_CombineMode == 1) { // COMBINE_MODE_USE_FIRST_AS_ALPHA_MASK_ON_SECOND
+            t_Base.rgb = t_Base1.rgb;
+        } else if (t_CombineMode == 2) { // COMBINE_MODE_USE_FIRST_OVER_SECOND
+            t_Base.rgb = mix(t_Base0.rgb, t_Base1.rgb, t_Base1.a);
+        }
     }
 
-    // TODO(jstpierre): Dual
+    vec4 t_FinalColor = t_Base;
+    // TODO(jstpierre): MOD2X, ADDSELF, ADDBASETEXTURE2
+
+    t_FinalColor.rgba *= v_Color.rgba;
 
     bool t_UseAlphaTest = true;
     if (t_UseAlphaTest) {
-        if (t_FinalColor.a < 0.01)
+        if (t_FinalColor.a < (1.0/255.0))
             discard;
     }
 
@@ -4190,23 +4231,30 @@ class Material_SpriteCard extends BaseMaterial {
 
         const p = this.param;
 
-        p['$blendframes'] = new ParameterBoolean(true);
+        p['$blendframes']           = new ParameterBoolean(true);
+        p['$maxlumframeblend1']     = new ParameterBoolean(false);
+        p['$maxlumframeblend2']     = new ParameterBoolean(false);
+        p['$dualsequence']          = new ParameterBoolean(false);
+        p['$sequence_blend_mode']   = new ParameterNumber(0);
 
-        // UV frame matrices.
+        // Stuff hacked in by the particle system.
         p['_b00'] = new ParameterVector(4);
         p['_b01'] = new ParameterVector(4);
+        p['_blend0'] = new ParameterNumber(0);
         p['_b10'] = new ParameterVector(4);
         p['_b11'] = new ParameterVector(4);
-        p['_blend'] = new ParameterNumber(4);
+        p['_blend1'] = new ParameterNumber(0);
     }
 
     protected override initStatic(materialCache: MaterialCache) {
         super.initStatic(materialCache);
 
         this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.SpriteCard);
-        this.shaderInstance.setDefineBool('BLEND_FRAMES', this.paramGetBoolean(`$blendframes`));
-
-        this.isIndirect = this.textureIsIndirect('$basetexture');
+        this.shaderInstance.setDefineBool(`BLEND_FRAMES`, this.paramGetBoolean(`$blendframes`));
+        this.shaderInstance.setDefineBool(`MAX_LUM_FRAMEBLEND_1`, this.paramGetBoolean(`$maxlumframeblend1`));
+        this.shaderInstance.setDefineBool(`MAX_LUM_FRAMEBLEND_2`, this.paramGetBoolean(`$maxlumframeblend2`));
+        this.shaderInstance.setDefineBool(`DUAL_SEQUENCE`, this.paramGetBoolean(`$dualsequence`));
+        this.shaderInstance.setDefineString(`DUAL_COMBINE_MODE`, '' + this.paramGetInt(`$sequence_blend_mode`));
 
         // TODO(jstpierre): Additive modes
         let isAdditive = this.paramGetBoolean('$additive');
@@ -4243,7 +4291,7 @@ class Material_SpriteCard extends BaseMaterial {
         offs += this.paramFillVector4(d, offs, '_b10');
         offs += this.paramFillVector4(d, offs, '_b11');
         offs += this.paramFillGammaColor(d, offs, '$color', this.paramGetNumber('$alpha'));
-        offs += fillVec4(d, offs, this.paramGetNumber('_blend'));
+        offs += fillVec4(d, offs, this.paramGetNumber('_blend0'), this.paramGetNumber('_blend1'));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);

@@ -24,7 +24,7 @@ export function parse(buffer: ArrayBufferSlice): BHD5 {
 
     const fileRecords: FileRecord[] = [];
 
-    // XXX(jstpierre): Seems the file is divided up into a number of groups?
+    // Seems the file is divided up into a number of groups?
     // This is probably for some DVD balancing nonsense.
     let groupTableIdx = groupTableOffset;
     for (let i = 0; i < groupTableCount; i++) {

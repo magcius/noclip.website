@@ -1357,13 +1357,10 @@ export function useStageSwitchReadAppear(sceneObjHolder: SceneObjHolder, actor: 
 }
 
 export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    // XXX(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
-
-    // NOTE(jstpierre): ActorAppearSwitchListener is calls appear/kill vfunc instead, but
-    // I can't see the motivation behind these two different vfuncs tbqh.
+    // NOTE(jstpierre): ActorAppearSwitchListener calls appear/kill vfunc instead.
 
     // Also, ActorAppearSwitchListener can turn off one or both of these vfuncs, but syncStageSwitchAppear
-    // does never do that, so we emulate it with a functor listener.
+    // never does that, so we emulate it with a functor listener.
     const switchOn = (sceneObjHolder: SceneObjHolder) => actor.makeActorAppeared(sceneObjHolder);
     const switchOff = (sceneObjHolder: SceneObjHolder) => actor.makeActorDead(sceneObjHolder);
     const eventListener = new SwitchFunctorEventListener(switchOn, switchOff);

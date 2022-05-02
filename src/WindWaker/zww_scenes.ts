@@ -1072,19 +1072,6 @@ class SceneDesc {
         dStage_dt_c_stageInitLoader(globals, globals.dStage_dt, dzs);
         dStage_dt_c_stageLoader(globals, globals.dStage_dt, dzs);
 
-        /*dStage_actorCreate(globals, 'Link', {
-            roomNo: 44,
-            enemyNo: 0,
-            gbaName: 0,
-            parentPcId: -1,
-            subtype: 0,
-            layer: 0,
-            parameters: 0,
-            pos: vec3.fromValues(-202620, 400, 316000),
-            rot: vec3.fromValues(0, 0.4 * 0xFFFF, 0),
-            scale: vec3.fromValues(1, 1, 1),
-        });*/
-
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
             globals.mStayNo = Math.abs(this.rooms[0]);

@@ -5,7 +5,7 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { getMatrixTranslation, MathConstants, scaleMatrix, Vec3NegX } from "../MathHelpers";
+import { getMatrixTranslation, scaleMatrix, Vec3NegX } from "../MathHelpers";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { EmptyScene } from "../Scenes_Test";
 import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
@@ -13,7 +13,7 @@ import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
 import { BSPEntity } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
+import { BSPRenderer, LooseMount, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { BaseMaterial } from "./Materials";
 import { createScene } from "./Scenes";
 
@@ -259,6 +259,11 @@ async function createPortal2SourceLoadContext(context: SceneContext): Promise<So
             filesystem.createVPKMount(`${pathBase}/portal2_dlc1/pak01`),
             filesystem.createVPKMount(`${pathBase}/portal2_dlc2/pak01`),
         ]);
+
+        filesystem.loose.push(new LooseMount(`${pathBase}/portal2`, [
+            'particles/particles_manifest.txt',
+        ]));
+
         return filesystem;
     });
 

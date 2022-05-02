@@ -35,7 +35,7 @@ import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { dfRange, dfShow } from "../DebugFloaters";
 
-export class CustomMount {
+export class LooseMount {
     constructor(public path: string, public files: string[] = []) {
     }
 
@@ -57,7 +57,7 @@ export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public zip: ZipFile[] = [];
     public vpk: VPKMount[] = [];
-    public custom: CustomMount[] = [];
+    public loose: LooseMount[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -126,9 +126,9 @@ export class SourceFileSystem {
     }
 
     public hasEntry(resolvedPath: string): boolean {
-        for (let i = 0; i < this.custom.length; i++) {
-            const custom = this.custom[i];
-            if (custom.hasEntry(resolvedPath))
+        for (let i = 0; i < this.loose.length; i++) {
+            const loose = this.loose[i];
+            if (loose.hasEntry(resolvedPath))
                 return true;
         }
 
@@ -156,8 +156,8 @@ export class SourceFileSystem {
     }
 
     public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
-        for (let i = 0; i < this.custom.length; i++) {
-            const custom = this.custom[i];
+        for (let i = 0; i < this.loose.length; i++) {
+            const custom = this.loose[i];
             if (custom.hasEntry(resolvedPath))
                 return custom.fetchEntryData(this.dataFetcher, resolvedPath);
         }
