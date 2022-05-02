@@ -12,11 +12,11 @@ import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/Gfx
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil';
-import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
 import { BSPEntity } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
-import { ParticleSystemController, ParticleSystemInstance } from './ParticleSystem';
+import { ParticleSystemInstance } from './ParticleSystem';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
@@ -3204,22 +3204,78 @@ export class info_player_start extends BaseEntity {
     public static classname = `info_player_start`;
 }
 
+class ParticleSystemController {
+    private controlPointEntity: BaseEntity[] = [];
+    public instances: ParticleSystemInstance[] = [];
+
+    constructor(public entity: BaseEntity) {
+        this.controlPointEntity[0] = this.entity;
+    }
+
+    public addControlPoint(i: number, entity: BaseEntity): void {
+        this.controlPointEntity[i] = entity;
+    }
+
+    public stop(): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].emitActive = false;
+    }
+
+    public stopImmediate(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].destroy(renderContext.device);
+
+        this.instances.length = 0;
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.instances.length; i++) {
+            const instance = this.instances[i];
+
+            for (let i = 0; i < this.controlPointEntity.length; i++) {
+                const entity = this.controlPointEntity[i];
+                if (entity === undefined)
+                    continue;
+
+                const point = instance.ensureControlPoint(i);
+                mat4.copy(point.prevTransform, point.transform);
+                mat4.copy(point.transform, entity.updateModelMatrix());
+            }
+
+            instance.movement(renderContext);
+
+            if (instance.isFinished()) {
+                instance.destroy(renderContext.device);
+                this.instances.splice(i--, 1);
+            }
+        }
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].prepareToRender(renderContext, renderInstManager);
+    }
+}
+
 class info_particle_system extends BaseEntity {
     public static classname = `info_particle_system`;
-    private systemInstance: ParticleSystemInstance | null = null;
-    private controller: ParticleSystemController | null = null;
+    private controller: ParticleSystemController;
+    private active = false;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
+        this.controller = new ParticleSystemController(this);
+
+        this.registerInput('start', this.input_start.bind(this));
+        this.registerInput('stop', this.input_stop.bind(this));
+        this.registerInput('destroyimmediately', this.input_destroyimmediately.bind(this));
+
+        if (entity.start_active)
+            this.active = !!Number(entity.start_active);
     }
 
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
-
-        const systemName = this.entity.effect_name;
-        const def = assertExists(entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName));
-        this.systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def);
-        this.controller = new ParticleSystemController(this.systemInstance, this);
 
         for (let i = 1; i < 64; i++) {
             const controlPointEntityName = this.entity[`cpoint${i}`];
@@ -3230,6 +3286,40 @@ class info_particle_system extends BaseEntity {
                 continue;
             this.controller.addControlPoint(i, controlPointEntity);
         }
+
+        if (this.active)
+            this.start(entitySystem);
+    }
+
+    private start(entitySystem: EntitySystem): void {
+        const systemName = this.entity.effect_name;
+        const def = assertExists(entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName));
+        const systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def);
+        this.controller.instances.push(systemInstance);
+    }
+
+    private input_start(entitySystem: EntitySystem): void {
+        if (this.active)
+            return;
+
+        this.active = true;
+        this.start(entitySystem);
+    }
+
+    private input_stop(entitySystem: EntitySystem): void {
+        if (!this.active)
+            return;
+
+        this.active = false;
+        this.controller.stop();
+    }
+
+    private input_destroyimmediately(entitySystem: EntitySystem): void {
+        if (!this.active)
+            return;
+
+        this.active = true;
+        this.controller.stopImmediate(entitySystem.renderContext);
     }
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {

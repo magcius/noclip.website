@@ -5,11 +5,11 @@ import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { Color, colorNewCopy, Magenta, White } from "../Color";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { computeModelMatrixR, getMatrixAxisZ, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, smoothstep, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitX, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import * as DMX from "./DMX";
-import { BaseEntity } from "./EntitySystem";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { BaseMaterial } from "./Materials";
 import { computeMatrixForForwardDir } from "./StaticDetailObject";
@@ -557,6 +557,7 @@ function createInitializer(elem: DMX.DMXElement): Initializer | null {
 }
 
 interface Emitter extends ModuleBase {
+    isEmitActive(system: ParticleSystemInstance): boolean;
     emit(system: ParticleSystemInstance): void;
 }
 
@@ -582,24 +583,31 @@ class Emitter_Continuously extends ModuleBase {
         return this.duration > 0.0;
     }
 
+    public isEmitActive(system: ParticleSystemInstance): boolean {
+        if (this.hasDuration()) {
+            const endTime = this.startTime + this.duration;
+            if (system.curTime >= endTime)
+                return false;
+        }
+
+        return true;
+    }
+
     public emit(system: ParticleSystemInstance): void {
         const rate = this.rate;
         if (rate <= 0.0)
             return;
 
-        let curTime = system.curTime;
+        const curTime = system.curTime;
         if (curTime <= this.startTime)
+            return;
+
+        if (!this.isEmitActive(system))
             return;
 
         let prevTime = curTime - system.deltaTime;
         if (prevTime < this.startTime)
             prevTime = this.startTime;
-
-        if (this.hasDuration()) {
-            const endTime = this.startTime + this.duration;
-            if (curTime >= endTime)
-                return;
-        }
 
         this.emitCounter += (rate * (curTime - prevTime));
         const newEmitNum = (this.emitCounter | 0);
@@ -1191,10 +1199,10 @@ class Renderer_AnimatedSprites extends ModuleBase {
             const renderInst = renderInstManager.newRenderInst();
             materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
 
+            materialInstance.setOnRenderInst(renderContext, renderInst);
+
             const depth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, scratchVec3a);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
-
-            materialInstance.setOnRenderInst(renderContext, renderInst);
 
             materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
         }
@@ -1256,6 +1264,7 @@ export class ParticleSystemInstance {
     private randF32OpPool = new Float32Array(0x800);
     private randF32OpCounter = 0;
     private visible = true;
+    public emitActive = true;
 
     constructor(private renderContext: SourceRenderContext, private def: DMX.DMXElement) {
         this.particleMax = getAttribValue(def, `max_particles`, DMX.DMXAttributeType.Int);
@@ -1391,6 +1400,31 @@ export class ParticleSystemInstance {
         this.curTime = -delay;
     }
 
+    public isEmitActive(): boolean {
+        if (!this.emitActive)
+            return false;
+
+        for (let i = 0; i < this.emitters.length; i++)
+            if (this.emitters[i].isEmitActive(this))
+                return true;
+
+        return false;
+    }
+
+    public isFinished(): boolean {
+        if (this.isEmitActive())
+            return false;
+
+        if (this.particleNum > 0)
+            return false;
+
+        for (let i = 0; i < this.children.length; i++)
+            if (!this.children[i].isFinished())
+                return false;
+
+        return true;
+    }
+
     public getControlPointTransform(dst: mat4, i: number, time: number): void {
         const point = this.controlPoints[i]!;
         // TODO(jstpierre): time lerp
@@ -1444,6 +1478,9 @@ export class ParticleSystemInstance {
     }
 
     private emit(): void {
+        if (!this.emitActive)
+            return;
+
         const oldParticleNum = this.particleNum;
         let srcOffs = oldParticleNum * this.dataStride, dstOffs = oldParticleNum * this.dataInitStride;
 
@@ -1581,37 +1618,9 @@ export class ParticleSystemInstance {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].prepareToRender(renderContext, renderInstManager);
     }
-}
 
-export class ParticleSystemController {
-    private controlPointEntity: BaseEntity[] = [];
-
-    constructor(public instance: ParticleSystemInstance, public entity: BaseEntity) {
-        this.controlPointEntity[0] = this.entity;
-        this.instance.ensureControlPoint(0);
-    }
-
-    public addControlPoint(i: number, entity: BaseEntity): void {
-        this.controlPointEntity[i] = entity;
-        this.instance.ensureControlPoint(i);
-    }
-
-    public movement(renderContext: SourceRenderContext): void {
-        for (let i = 0; i < this.controlPointEntity.length; i++) {
-            const entity = this.controlPointEntity[i];
-            if (entity === undefined)
-                continue;
-
-            const point = this.instance.controlPoints[i];
-            mat4.copy(point.prevTransform, point.transform);
-            mat4.copy(point.transform, entity.updateModelMatrix());
-        }
-
-        this.instance.movement(renderContext);
-    }
-
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        this.instance.prepareToRender(renderContext, renderInstManager);
+    public destroy(device: GfxDevice): void {
+        // Nothing yet.
     }
 }
 

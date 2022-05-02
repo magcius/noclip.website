@@ -4217,6 +4217,9 @@ class Material_SpriteCard extends BaseMaterial {
         this.setFogMode(this.shaderInstance);
         this.setCullMode(this.megaStateFlags);
 
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
         this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
