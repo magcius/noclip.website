@@ -217,6 +217,11 @@ export const enum VTFFlags {
     ENVMAP        = 0x00004000,
 }
 
+interface VTFResourceEntry {
+    rsrcID: number;
+    data: ArrayBufferSlice;
+}
+
 export class VTF {
     public gfxTextures: GfxTexture[] = [];
     public gfxSampler: GfxSampler | null = null;
@@ -228,6 +233,8 @@ export class VTF {
     public depth: number = 1;
     public numFrames: number = 1;
     public numLevels: number = 1;
+
+    public resources: VTFResourceEntry[] = [];
 
     private versionMajor: number;
     private versionMinor: number;
@@ -246,6 +253,7 @@ export class VTF {
         const headerSize = view.getUint32(0x0C, true);
 
         let dataIdx: number;
+        let imageDataIdx: number = 0;
 
         if (this.versionMajor === 0x07) {
             assert(this.versionMinor >= 0x00);
@@ -274,21 +282,42 @@ export class VTF {
                 this.depth = 1;
             }
 
-            if (this.versionMinor >= 0x03) {
-                const numResources = view.getUint32(0x44, true);
-                let resourcesIdx = 0x50;
+            const numResources = this.versionMinor >= 0x03 ? view.getUint32(0x44, true) : 0;
+            if (numResources > 0) {
+                for (let i = 0; i < numResources; i++, dataIdx += 0x08) {
+                    const rsrcHeader = view.getUint32(dataIdx + 0x00, false);
+                    const rsrcID = (rsrcHeader & 0xFFFFFF00);
+                    const rsrcFlag = (rsrcHeader & 0x000000FF);
+                    const dataOffs = view.getUint32(dataIdx + 0x04, true);
 
-                for (let i = 0; i < numResources; i++) {
-                    resourcesIdx += 0x08;
+                    // RSRCFHAS_NO_DATA_CHUNK
+                    if (rsrcFlag === 0x02)
+                        continue;
+
+                    // Legacy resources don't have a size tag.
+
+                    if (rsrcID === 0x01000000) { // VTF_LEGACY_RSRC_LOW_RES_IMAGE
+                        // Skip.
+                        continue;
+                    }
+
+                    if (rsrcID === 0x30000000) { // VTF_LEGACY_RSRC_IMAGE
+                        imageDataIdx = dataOffs;
+                        continue;
+                    }
+
+                    const dataSize = view.getUint32(dataOffs + 0x00, true);
+                    const data = buffer.subarray(dataOffs + 0x04, dataSize);
+                    this.resources.push({ rsrcID, data });
+                }
+            } else {
+                if (lowresImageFormat !== 0xFFFFFFFF) {
+                    const lowresDataSize = imageFormatCalcLevelSize(lowresImageFormat, lowresImageWidth, lowresImageHeight, 1);
+                    const lowresData = buffer.subarray(dataIdx, lowresDataSize);
+                    dataIdx += lowresDataSize;
                 }
 
-                dataIdx = resourcesIdx;
-            }
-
-            if (lowresImageFormat !== 0xFFFFFFFF) {
-                const lowresDataSize = imageFormatCalcLevelSize(lowresImageFormat, lowresImageWidth, lowresImageHeight, 1);
-                const lowresData = buffer.subarray(dataIdx, lowresDataSize);
-                dataIdx += lowresDataSize;
+                imageDataIdx = dataIdx;
             }
         } else {
             throw "whoops";
@@ -326,8 +355,8 @@ export class VTF {
             const faceSize = this.calcMipSize(i);
             const size = faceSize * faceCount;
             for (let j = 0; j < this.gfxTextures.length; j++) {
-                const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight, this.depth * faceCount);
-                dataIdx += faceSize * faceDataCount;
+                const levelData = imageFormatConvertData(device, this.format, buffer.subarray(imageDataIdx, size), mipWidth, mipHeight, this.depth * faceCount);
+                imageDataIdx += faceSize * faceDataCount;
                 levelDatas[j].unshift(levelData);
             }
         }

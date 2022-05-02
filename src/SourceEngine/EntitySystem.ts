@@ -3206,19 +3206,20 @@ export class info_player_start extends BaseEntity {
 
 class info_particle_system extends BaseEntity {
     public static classname = `info_particle_system`;
-    private systemInstance: ParticleSystemInstance;
-    private controller: ParticleSystemController;
+    private systemInstance: ParticleSystemInstance | null = null;
+    private controller: ParticleSystemController | null = null;
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-
-        const systemName = entity.effect_name;
-        this.systemInstance = new ParticleSystemInstance(renderContext, systemName);
-        this.controller = new ParticleSystemController(this.systemInstance, this);
     }
 
     public override spawn(entitySystem: EntitySystem): void {
         super.spawn(entitySystem);
+
+        const systemName = this.entity.effect_name;
+        const def = assertExists(entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName));
+        this.systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def);
+        this.controller = new ParticleSystemController(this.systemInstance, this);
 
         for (let i = 1; i < 64; i++) {
             const controlPointEntityName = this.entity[`cpoint${i}`];
@@ -3233,11 +3234,18 @@ class info_particle_system extends BaseEntity {
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
+        if (this.controller === null)
+            return;
         this.controller.movement(renderContext);
     }
     
     public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
-        super.prepareToRender(renderContext, renderInstManager);
+        if (!this.shouldDraw())
+            return;
+
+        if (this.controller === null)
+            return;
+
         this.controller.prepareToRender(renderContext, renderInstManager);
     }
 }

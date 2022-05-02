@@ -5,7 +5,7 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists, nullify } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4, ReadonlyVec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
@@ -467,10 +467,16 @@ class ParameterMatrix {
 }
 
 class ParameterVector {
-    protected internal: ParameterNumber[];
+    public internal: ParameterNumber[];
 
     constructor(length: number, values: number[] | null = null) {
         this.internal = nArray(length, (i) => new ParameterNumber(values !== null ? values[i] : 0));
+    }
+
+    public setArray(v: readonly number[] | Float32Array): void {
+        assert(this.internal.length === v.length);
+        for (let i = 0; i < this.internal.length; i++)
+            this.internal[i].value = v[i];
     }
 
     public parse(S: string): void {
@@ -782,6 +788,12 @@ export abstract class BaseMaterial {
             return false;
 
         return vtf.lateBinding !== null;
+    }
+
+    protected paramFillVector4(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterVector).internal;
+        assert(m.length === 4);
+        return fillVec4(d, offs, m[0].value, m[1].value, m[2].value, m[3].value);
     }
 
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
@@ -3298,6 +3310,11 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
+#ifdef USE_VERTEX_MODULATE
+    // XXX(jstpierre): ParticleSystem uses a uniform buffer until
+    // we can switch it to using custom vertex data.
+    vec4 u_FakeVertexModulate;
+#endif
 };
 
 #define u_RefractAmount (u_RefractTint.a)
@@ -3308,6 +3325,10 @@ varying vec3 v_TexCoord0;
 // Normal Map Coordinates
 varying vec2 v_TexCoord1;
 varying vec3 v_PositionWorld;
+
+#ifdef USE_VERTEX_MODULATE
+varying vec4 v_Modulate;
+#endif
 
 // 3x3 matrix for our tangent space basis.
 varying vec3 v_TangentSpaceBasis0;
@@ -3343,6 +3364,10 @@ void mainVS() {
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
+    
+#ifdef USE_VERTEX_MODULATE
+    v_Modulate.rgba = a_Color.rgba * u_FakeVertexModulate.rgba;
+#endif
 }
 #endif
 
@@ -3359,6 +3384,10 @@ void mainPS() {
 #ifdef USE_REFRACT_TINT_TEXTURE
     vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_TextureRefractTint), t_BumpmapCoord0);
     t_RefractTint *= 2.0 * t_RefractTintTextureSample.rgb;
+#endif
+
+#ifdef USE_VERTEX_MODULATE
+    t_RefractTint.rgb *= v_Modulate.rgb;
 #endif
 
 #ifdef USE_LOCAL_REFRACT
@@ -3393,7 +3422,13 @@ void mainPS() {
 #else
     // "Classic" refract
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
-    vec2 t_RefractTexCoord = t_ProjTexCoord + (u_RefractAmount * t_BumpmapSample.a) * t_BumpmapNormal.xy;
+
+    float t_RefractAmount = u_RefractAmount;
+#ifdef USE_VERTEX_MODULATE
+    t_RefractAmount *= v_Modulate.a;
+#endif
+
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_RefractAmount * t_BumpmapSample.a) * t_BumpmapNormal.xy;
 
     vec4 t_BlurAccum = vec4(0);
     int g_BlurAmount = BLUR_AMOUNT;
@@ -3443,6 +3478,7 @@ void mainPS() {
 class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
+    private wantsVertexModulate: boolean = false;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
@@ -3470,6 +3506,7 @@ class Material_Refract extends BaseMaterial {
         p['$bluramount']                   = new ParameterNumber(1, false);
         p['$localrefract']                 = new ParameterBoolean(false, false);
         p['$localrefractdepth']            = new ParameterNumber(0.05);
+        p['$vertexcolormodulate']          = new ParameterBoolean(false, false);
 
         this.paramGetTexture('$basetexture').ref = '_rt_RefractTexture';
     }
@@ -3495,6 +3532,15 @@ class Material_Refract extends BaseMaterial {
 
         const blurAmount = this.paramGetNumber('$bluramount') | 0;
         this.shaderInstance.setDefineString('BLUR_AMOUNT', '' + blurAmount);
+
+        if (this.hasVertexColorInput && (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha'))) {
+            this.shaderInstance.setDefineBool('USE_VERTEX_COLOR', true);
+
+            if (this.paramGetBoolean('$vertexcolormodulate')) {
+                this.shaderInstance.setDefineBool('USE_VERTEX_MODULATE', true);
+                this.wantsVertexModulate = true;
+            }
+        }
 
         const isTranslucent = this.textureIsTranslucent('$basetexture');
         this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
@@ -3524,7 +3570,7 @@ class Material_Refract extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 24);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
@@ -3538,6 +3584,9 @@ class Material_Refract extends BaseMaterial {
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
         }
+
+        if (this.wantsVertexModulate)
+            offs += this.paramFillGammaColor(d, offs, `$color`, this.paramGetNumber(`$alpha`));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -4058,6 +4107,149 @@ class Material_Sky extends BaseMaterial {
 }
 //#endregion
 
+//#region SpriteCard
+class ShaderTemplate_SpriteCard extends MaterialShaderTemplateBase {
+    public static ub_ObjectParams = 2;
+
+    public override generateProgramString(m: Map<string, string>): string {
+        return `
+precision mediump float;
+
+${MaterialShaderTemplateBase.Common}
+
+// In the future, we should use vertex data for some of this...
+layout(std140) uniform ub_ObjectParams {
+    vec4 u_BaseTextureScaleBias[4]; // Two animation frames, dual
+    vec4 u_Color;
+    vec4 u_Misc[1];
+};
+#define u_BlendFactor0 (u_Misc[0].x)
+
+varying vec4 v_TexCoord0;
+varying vec4 v_TexCoord1;
+varying vec4 v_Color;
+varying vec4 v_Misc;
+
+layout(binding = 0) uniform sampler2D u_Texture;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[0]);
+    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[1]);
+    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[2]);
+    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[3]);
+    v_Color = u_Color;
+    v_Misc.x = u_BlendFactor0;
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_Base00 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.xy);
+    vec4 t_Base01 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.zw);
+    vec4 t_Base10 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.xy);
+    vec4 t_Base11 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.zw);
+    float t_BlendFactor0 = v_Misc.x;
+
+    vec4 t_FinalColor = u_Color;
+
+    bool t_BlendFrames = ${getDefineBool(m, `BLEND_FRAMES`)};
+    if (t_BlendFrames) {
+        t_FinalColor *= mix(t_Base00, t_Base01, t_BlendFactor0);
+    } else {
+        t_FinalColor *= t_Base00;
+    }
+
+    // TODO(jstpierre): Dual
+
+    bool t_UseAlphaTest = true;
+    if (t_UseAlphaTest) {
+        if (t_FinalColor.a < 0.01)
+            discard;
+    }
+
+    OutputLinearColor(t_FinalColor.rgba);
+}
+#endif
+`;
+    }
+}
+
+class Material_SpriteCard extends BaseMaterial {
+    private shaderInstance: UberShaderInstanceBasic;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    public isSpriteCard = true;
+
+    protected override initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$blendframes'] = new ParameterBoolean(true);
+
+        // UV frame matrices.
+        p['_b00'] = new ParameterVector(4);
+        p['_b01'] = new ParameterVector(4);
+        p['_b10'] = new ParameterVector(4);
+        p['_b11'] = new ParameterVector(4);
+        p['_blend'] = new ParameterNumber(4);
+    }
+
+    protected override initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
+
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.SpriteCard);
+        this.shaderInstance.setDefineBool('BLEND_FRAMES', this.paramGetBoolean(`$blendframes`));
+
+        this.isIndirect = this.textureIsIndirect('$basetexture');
+
+        // TODO(jstpierre): Additive modes
+        let isAdditive = this.paramGetBoolean('$additive');
+        this.setAlphaBlendMode(this.megaStateFlags, isAdditive ? AlphaBlendMode.Add : AlphaBlendMode.Blend);
+        this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
+        this.setCullMode(this.megaStateFlags);
+
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(dst: TextureMapping[]): void {
+        resetTextureMappings(dst);
+        this.paramGetTexture('$basetexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings(textureMappings);
+
+        this.setupOverrideSceneParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SolidEnergy.ub_ObjectParams, 24);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_SolidEnergy.ub_ObjectParams);
+
+        offs += this.paramFillVector4(d, offs, '_b00');
+        offs += this.paramFillVector4(d, offs, '_b01');
+        offs += this.paramFillVector4(d, offs, '_b10');
+        offs += this.paramFillVector4(d, offs, '_b11');
+        offs += this.paramFillGammaColor(d, offs, '$color', this.paramGetNumber('$alpha'));
+        offs += fillVec4(d, offs, this.paramGetNumber('_blend'));
+
+        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+//#endregion
+
 //#region Material Cache
 class StaticQuad {
     private vertexBufferQuad: GfxBuffer;
@@ -4177,6 +4369,7 @@ class ShaderTemplates {
     public SolidEnergy = new ShaderTemplate_SolidEnergy();
     public Sky = new ShaderTemplate_Sky();
     public SkyHDRCompressed = new ShaderTemplate_SkyHDRCompressed();
+    public SpriteCard = new ShaderTemplate_SpriteCard();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -4187,6 +4380,7 @@ class ShaderTemplates {
         this.SolidEnergy.destroy(device);
         this.Sky.destroy(device);
         this.SkyHDRCompressed.destroy(device);
+        this.SpriteCard.destroy(device);
     }
 }
 
@@ -4280,6 +4474,8 @@ export class MaterialCache {
             return new Material_SolidEnergy(vmt);
         else if (shaderType === 'sky')
             return new Material_Sky(vmt);
+        else if (shaderType === 'spritecard')
+            return new Material_SpriteCard(vmt);
         else
             return new Material_Generic(vmt);
     }
