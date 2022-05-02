@@ -531,6 +531,38 @@ class Initializer_SequenceRandom extends ModuleBase {
     }
 }
 
+class Initializer_LifetimeFromSequence extends ModuleBase {
+    private readonly framesPerSecond: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.framesPerSecond = getAttribValue(elem, `Frames Per Second`, DMX.DMXAttributeType.Float);
+    }
+
+    public override streamRead(): StreamMask {
+        return StreamMask.SequenceNum;
+    }
+
+    public override streamWrite(): StreamMask {
+        return StreamMask.Lifetime;
+    }
+
+    public init(system: ParticleSystemInstance, p: number): void {
+        if (!system.hasStream(StreamMask.Lifetime))
+            return;
+
+        const sheet = system.getSheet();
+        if (sheet === null)
+            return;
+
+        const data = system.particleDataF32;
+        const sequenceNum = data[system.getStreamOffs(StreamMask.SequenceNum, p)];
+
+        const lifetime = sheet.sequence[sequenceNum].frames.length / this.framesPerSecond;
+        data[system.getStreamOffs(StreamMask.Lifetime, p)] = lifetime;
+    }
+}
+
 function createInitializer(elem: DMX.DMXElement): Initializer | null {
     const functionName = getAttribValue(elem, `functionName`, DMX.DMXAttributeType.String);
     if (functionName === 'Position Within Sphere Random')
@@ -551,6 +583,8 @@ function createInitializer(elem: DMX.DMXElement): Initializer | null {
         return new Initializer_RotationRandom(elem);
     else if (functionName === 'Sequence Random')
         return new Initializer_SequenceRandom(elem);
+    else if (functionName === `lifetime from sequence`)
+        return new Initializer_LifetimeFromSequence(elem);
 
     console.log(`Unknown Initializer`, functionName)
     return null;
@@ -669,6 +703,47 @@ class Operator_LifespanDecay extends ModuleBase {
             lifetimeOffs += stride;
             spawnTimeOffs += stride;
         }
+    }
+}
+
+class Operator_MovementBasic extends ModuleBase {
+    private readonly gravity: ReadonlyVec3;
+    private readonly drag: number;
+
+    constructor(elem: DMX.DMXElement) {
+        super(elem);
+        this.gravity = getAttribValue(elem, `gravity`, DMX.DMXAttributeType.Vector3);
+        this.drag = 1.0 - getAttribValue(elem, `drag`, DMX.DMXAttributeType.Float);
+    }
+
+    public override streamRead(): StreamMask {
+        return StreamMask.Position | StreamMask.PrevPosition;
+    }
+
+    public override streamWrite(): StreamMask {
+        return StreamMask.Position | StreamMask.PrevPosition;
+    }
+
+    public run(system: ParticleSystemInstance): void {
+        const data = system.particleDataF32, stride = system.dataStride;
+        let posOffs = system.getStreamOffs(StreamMask.Position);
+        let prevPosOffs = system.getStreamOffs(StreamMask.PrevPosition);
+        const dt = system.deltaTime;
+
+        // TODO: forces
+        vec3.scale(scratchVec3a, this.gravity, dt ** 2.0);
+
+        for (let p = 0; p < system.getNum(); p++) {
+            for (let i = 0; i < 3; i++) {
+                const speed = data[posOffs + i] - data[prevPosOffs + i];
+                data[prevPosOffs + i] = data[posOffs + i];
+                data[posOffs + i] += (speed + scratchVec3a[i]) * this.drag;
+            }
+            posOffs += stride;
+            prevPosOffs += stride;
+        }
+
+        // TODO: constraints
     }
 }
 
@@ -883,11 +958,10 @@ class Operator_RadiusScale extends ModuleBase {
             let t = (system.curTime - data[spawnTimeOffs]) / data[lifetimeOffs];
 
             t = saturate(invlerp(this.startTime, this.endTime, t));
-            if (this.easeInAndOut) {
+            if (this.easeInAndOut)
                 t = smoothstep(t);
-            } else if (this.scaleBias !== 0.5) {
+            else if (this.scaleBias !== 0.5)
                 t = schlickBias(t, this.scaleBias);
-            }
 
             data[radiusOffs] = lerp(this.radiusStartScale, this.radiusEndScale, t) * dataInit[radiusInitOffs];
 
@@ -899,44 +973,55 @@ class Operator_RadiusScale extends ModuleBase {
     }
 }
 
-class Operator_MovementBasic extends ModuleBase {
-    private readonly gravity: ReadonlyVec3;
-    private readonly drag: number;
+class Operator_ColorFade extends ModuleBase {
+    private readonly colorFade: Color;
+    private readonly startTime: number;
+    private readonly endTime: number;
+    private readonly easeInAndOut: boolean;
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
-        this.gravity = getAttribValue(elem, `gravity`, DMX.DMXAttributeType.Vector3);
-        this.drag = 1.0 - getAttribValue(elem, `drag`, DMX.DMXAttributeType.Float);
+        this.colorFade = getAttribValue(elem, `color_fade`, DMX.DMXAttributeType.Color);
+        this.startTime = getAttribValue(elem, `fade_start_time`, DMX.DMXAttributeType.Float);
+        this.endTime = getAttribValue(elem, `fade_end_time`, DMX.DMXAttributeType.Float);
+        this.easeInAndOut = getAttribValue(elem, `ease_in_and_out`, DMX.DMXAttributeType.Bool);
     }
 
     public override streamRead(): StreamMask {
-        return StreamMask.Position | StreamMask.PrevPosition;
+        return StreamMask.SpawnTime | StreamMask.Lifetime;
     }
 
     public override streamWrite(): StreamMask {
-        return StreamMask.Position | StreamMask.PrevPosition;
+        return StreamMask.Color;
+    }
+
+    public override streamReadInit(): StreamMask {
+        return StreamMask.Color;
     }
 
     public run(system: ParticleSystemInstance): void {
-        const data = system.particleDataF32, stride = system.dataStride;
-        let posOffs = system.getStreamOffs(StreamMask.Position);
-        let prevPosOffs = system.getStreamOffs(StreamMask.PrevPosition);
-        const dt = system.deltaTime;
-
-        // TODO: forces
-        vec3.scale(scratchVec3a, this.gravity, dt ** 2.0);
+        const data = system.particleDataF32, dataInit = system.particleDataInitF32, stride = system.dataStride, strideInit = system.dataInitStride;
+        let spawnTimeOffs = system.getStreamOffs(StreamMask.SpawnTime);
+        let lifetimeOffs = system.getStreamOffs(StreamMask.Lifetime);
+        let colorOffs = system.getStreamOffs(StreamMask.Color);
+        let colorInitOffs = system.getStreamInitOffs(StreamMask.Color);
 
         for (let p = 0; p < system.getNum(); p++) {
-            for (let i = 0; i < 3; i++) {
-                const speed = data[posOffs + i] - data[prevPosOffs + i];
-                data[prevPosOffs + i] = data[posOffs + i];
-                data[posOffs + i] += (speed + scratchVec3a[i]) * this.drag;
-            }
-            posOffs += stride;
-            prevPosOffs += stride;
-        }
+            let t = (system.curTime - data[spawnTimeOffs]) / data[lifetimeOffs];
 
-        // TODO: constraints
+            t = saturate(invlerp(this.startTime, this.endTime, t));
+            if (this.easeInAndOut)
+                t = smoothstep(t);
+
+            data[colorOffs + 0] = lerp(dataInit[colorInitOffs + 0], this.colorFade.r, t);
+            data[colorOffs + 1] = lerp(dataInit[colorInitOffs + 1], this.colorFade.g, t);
+            data[colorOffs + 2] = lerp(dataInit[colorInitOffs + 2], this.colorFade.b, t);
+
+            lifetimeOffs += stride;
+            spawnTimeOffs += stride;
+            colorOffs += stride;
+            colorInitOffs += strideInit;
+        }
     }
 }
 
@@ -954,6 +1039,8 @@ function createOperator(elem: DMX.DMXElement): Operator | null {
         return new Operator_AlphaFadeAndDecay(elem);
     else if (functionName === `Radius Scale`)
         return new Operator_RadiusScale(elem);
+    else if (functionName === `Color Fade`)
+        return new Operator_ColorFade(elem);
 
     console.log(`Unknown Operator`, functionName);
     return null;
@@ -1058,7 +1145,6 @@ class Sheet {
 class Renderer_AnimatedSprites extends ModuleBase {
     private readonly animationRate: number;
     private readonly orientationType: number;
-    private sheet: Sheet | null | undefined = undefined;
 
     constructor(elem: DMX.DMXElement) {
         super(elem);
@@ -1074,23 +1160,11 @@ class Renderer_AnimatedSprites extends ModuleBase {
         return StreamMask.Rotation | StreamMask.Radius | StreamMask.Color | StreamMask.Alpha | StreamMask.SequenceNum;
     }
 
-    private createSheet(materialInstance: BaseMaterial): Sheet | null {
-        const texture = materialInstance.representativeTexture;
-        if (texture === null)
-            return null;
-
-        for (let i = 0; i < texture.resources.length; i++)
-            if (texture.resources[i].rsrcID === 0x10000000) // VTF_RSRC_SHEET
-                return new Sheet(texture.resources[i].data);
-        return null;
-    }
-
     public prepareToRender(system: ParticleSystemInstance, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
         // TODO(jstpierre): Do this all in one draw call
 
-        const materialInstance = assertExists(system.materialInstance);
-        if (this.sheet === undefined)
-            this.sheet = this.createSheet(materialInstance);
+        const materialInstance = system.materialInstance!;
+        const sheet = system.getSheet();
 
         const view = renderContext.currentView;
         const staticQuad = renderContext.materialCache.staticResources.staticQuad;
@@ -1173,9 +1247,9 @@ class Renderer_AnimatedSprites extends ModuleBase {
 
             if (isSpriteCard) {
                 let blend: number;
-                if (this.sheet !== null) {
+                if (sheet !== null) {
                     const time = this.animationRate * (curTime - data[spawnTimeOffs]);
-                    blend = this.sheet.calcScaleBias(scratchVec4a, scratchVec4b, sequenceNum, 0, time);
+                    blend = sheet.calcScaleBias(scratchVec4a, scratchVec4b, sequenceNum, 0, time);
                 } else {
                     vec4.set(scratchVec4a, 1.0, 1.0, 0.0, 0.0);
                     vec4.set(scratchVec4b, 1.0, 1.0, 0.0, 0.0);
@@ -1228,6 +1302,7 @@ class ParticleControlPoint {
 export class ParticleSystemInstance {
     // System definition stuff (can be cached if desired)
     public materialInstance: BaseMaterial | null = null;
+    private sheet: Sheet | null | undefined = undefined;
     private readonly operators: Operator[] = [];
     private readonly initializers: Initializer[] = [];
 
@@ -1462,6 +1537,28 @@ export class ParticleSystemInstance {
 
     public getNum(): number {
         return this.particleNum;
+    }
+
+    private createSheet(materialInstance: BaseMaterial): Sheet | null {
+        const texture = materialInstance.representativeTexture;
+        if (texture === null)
+            return null;
+
+        for (let i = 0; i < texture.resources.length; i++)
+            if (texture.resources[i].rsrcID === 0x10000000) // VTF_RSRC_SHEET
+                return new Sheet(texture.resources[i].data);
+        return null;
+    }
+
+    public getSheet(): Sheet | null {
+        if (this.sheet === undefined) {
+            if (this.materialInstance === null)
+                return null;
+
+            this.sheet = this.createSheet(this.materialInstance);
+        }
+
+        return this.sheet;
     }
 
     public async initMaterial(materialName: string) {
