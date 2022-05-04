@@ -449,7 +449,11 @@ export class GX_Program extends DeviceProgram {
     private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
         const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
 
-        switch (chan.diffuseFunction) {
+        let diffFn = chan.diffuseFunction;
+        if (chan.attenuationFunction === GX.AttenuationFunction.NONE)
+            diffFn = GX.DiffuseFunction.NONE;
+
+        switch (diffFn) {
         case GX.DiffuseFunction.NONE: return `1.0`;
         case GX.DiffuseFunction.SIGN: return `${NdotL}`;
         case GX.DiffuseFunction.CLAMP: return `max(${NdotL}, 0.0)`;
