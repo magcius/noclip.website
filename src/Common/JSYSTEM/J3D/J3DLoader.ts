@@ -886,21 +886,25 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
             // SetTevSwapMode
             const tevSwapModeIndex = view.getUint16(materialEntryIdx + 0x104 + j * 0x02);
-            const tevSwapModeRasSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x00);
-            const tevSwapModeTexSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x01);
-            const tevSwapModeTableRasIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeRasSel * 0x02);
-            const tevSwapModeTableTexIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeTexSel * 0x02);
-            const rasSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x00);
-            const rasSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x01);
-            const rasSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x02);
-            const rasSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x03);
-            const texSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x00);
-            const texSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x01);
-            const texSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x02);
-            const texSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x03);
+            let rasSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
+            let texSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
+            if (tevSwapModeIndex !== 0xFFFF) {
+                const tevSwapModeRasSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x00);
+                const tevSwapModeTexSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x01);
+                const tevSwapModeTableRasIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeRasSel * 0x02);
+                const tevSwapModeTableTexIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeTexSel * 0x02);
+                const rasSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x00);
+                const rasSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x01);
+                const rasSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x02);
+                const rasSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x03);
+                const texSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x00);
+                const texSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x01);
+                const texSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x02);
+                const texSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x03);
 
-            const rasSwapTable = [rasSwapA, rasSwapB, rasSwapC, rasSwapD] as const;
-            const texSwapTable = [texSwapA, texSwapB, texSwapC, texSwapD] as const;
+                rasSwapTable = [rasSwapA, rasSwapB, rasSwapC, rasSwapD] as const;
+                texSwapTable = [texSwapA, texSwapB, texSwapC, texSwapD] as const;
+            }
 
             // SetTevIndirect
             const indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
@@ -972,22 +976,26 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthWrite: boolean = !!view.getUint8(zModeOffs + 0x02);
 
         const fogInfoIndex = view.getUint16(materialEntryIdx + 0x144);
-        const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;
-        const fogType: GX.FogType = view.getUint8(fogInfoOffs + 0x00);
-        const fogAdjEnabled = !!view.getUint8(fogInfoOffs + 0x01);
-        const fogAdjCenter = view.getUint16(fogInfoOffs + 0x02);
-        const fogStartZ = view.getFloat32(fogInfoOffs + 0x04);
-        const fogEndZ = view.getFloat32(fogInfoOffs + 0x08);
-        const fogNearZ = view.getFloat32(fogInfoOffs + 0x0C);
-        const fogFarZ = view.getFloat32(fogInfoOffs + 0x10);
-        const fogColor = readColorU8(view, fogInfoOffs + 0x14);
-        const fogAdjTable = buffer.createTypedArray(Uint16Array, fogInfoOffs + 0x18, 10, Endianness.BIG_ENDIAN);
-
+        let fogType = GX.FogType.NONE;
+        let fogAdjEnabled = false;
         const fogBlock = new GX_Material.FogBlock();
-        GX_Material.fogBlockSet(fogBlock, fogType, fogStartZ, fogEndZ, fogNearZ, fogFarZ);
-        colorCopy(fogBlock.Color, fogColor);
-        fogBlock.AdjTable.set(fogAdjTable);
-        fogBlock.AdjCenter = fogAdjCenter;
+        if (fogInfoIndex !== 0xFFFF) {
+            const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;
+            fogType = view.getUint8(fogInfoOffs + 0x00);
+            fogAdjEnabled = !!view.getUint8(fogInfoOffs + 0x01);
+            const fogAdjCenter = view.getUint16(fogInfoOffs + 0x02);
+            const fogStartZ = view.getFloat32(fogInfoOffs + 0x04);
+            const fogEndZ = view.getFloat32(fogInfoOffs + 0x08);
+            const fogNearZ = view.getFloat32(fogInfoOffs + 0x0C);
+            const fogFarZ = view.getFloat32(fogInfoOffs + 0x10);
+            const fogColor = readColorU8(view, fogInfoOffs + 0x14);
+            const fogAdjTable = buffer.createTypedArray(Uint16Array, fogInfoOffs + 0x18, 10, Endianness.BIG_ENDIAN);
+
+            GX_Material.fogBlockSet(fogBlock, fogType, fogStartZ, fogEndZ, fogNearZ, fogFarZ);
+            colorCopy(fogBlock.Color, fogColor);
+            fogBlock.AdjTable.set(fogAdjTable);
+            fogBlock.AdjCenter = fogAdjCenter;
+        }
 
         const translucent = materialMode === 0x04;
         const colorUpdate = true, alphaUpdate = false;
