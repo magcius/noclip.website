@@ -164,6 +164,7 @@ export class NoclipLegacyActorSpawner {
         const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
 
         const objinfo = this.legacyCreateObjinfo(infoIter);
+        console.log(`LegacyActor: ${objinfo.objName}`);
 
         const applyAnimations = (actor: LiveActor, animOptions: AnimOptions | null | undefined) => {
             if (animOptions !== null) {
