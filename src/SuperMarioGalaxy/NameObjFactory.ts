@@ -918,6 +918,11 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("ExtraWallCheckArea"),
     N("ExtraWallCheckCylinder"),
     N("DodoryuClosedCylinder"),
+    N("TowerModeCylinder"),
+    N("TicoSeedGuidanceCube"),
+    N("BlueStarGuidanceCube"),
+    N("SmokeEffectColorAreaCube"),
+    N("StoryDemoSimpleBloomArea"),
 
     // Points
     N("IronCannonLauncherPoint"),
