@@ -653,9 +653,11 @@ class RingBeam extends LiveActor<RingBeamNrv> {
         }
     }
 
-    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, useStaticShadow: boolean = false): void {
         sceneObjHolder.modelCache.requestObjectData('JumpBeamerBeam');
         sceneObjHolder.modelCache.requestObjectData('JumpBeamerBeamBloom');
+        if (useStaticShadow)
+            sceneObjHolder.modelCache.requestObjectData(`JumpBeamerBeamShadow`);
     }
 }
 
@@ -776,7 +778,8 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        RingBeam.requestArchives(sceneObjHolder);
+        const useStaticShadow = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+        RingBeam.requestArchives(sceneObjHolder, null, useStaticShadow);
     }
 }
 
@@ -898,7 +901,7 @@ export class RingBeamer extends LiveActor<RingBeamerNrv> {
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        RingBeam.requestArchives(sceneObjHolder);
+        RingBeam.requestArchives(sceneObjHolder, null, false);
     }
 }
 
@@ -1077,7 +1080,7 @@ export class JumpBeamer extends LiveActor<JumpBeamerNrv> {
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData(`JumpBeamerBody`);
         sceneObjHolder.modelCache.requestObjectData(`JumpBeamerHead`);
-        RingBeam.requestArchives(sceneObjHolder);
+        RingBeam.requestArchives(sceneObjHolder, null, false);
     }
 }
 
@@ -7402,15 +7405,15 @@ function moveCoordAndTransToNextPoint(actor: LiveActor): void {
     moveCoordAndTransToRailPoint(actor, getNextRailPointNo(actor));
 }
 
-const enum PukupukuLandingNrv { MoveLand, JumpFromLand, JumpFromWater, }
-class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuLandingNrv> {
+const enum PukupukuStateLandingNrv { MoveLand, JumpFromLand, JumpFromWater, }
+class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuStateLandingNrv> {
     private valueControl = new ValueControl(30);
     private parabolicPath = new ParabolicPath();
     private hasWaterColumn = false;
 
     constructor(private host: Pukupuku) {
         super();
-        this.initNerve(PukupukuLandingNrv.MoveLand);
+        this.initNerve(PukupukuStateLandingNrv.MoveLand);
         this.kill();
     }
 
@@ -7441,13 +7444,13 @@ class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuLandingNrv> {
 
     private setNerveAfterJumpAccordingToNextPoint(): void {
         if (this.host.isReadyToJumpFromLand())
-            this.setNerve(PukupukuLandingNrv.JumpFromLand);
+            this.setNerve(PukupukuStateLandingNrv.JumpFromLand);
         else
-            this.setNerve(PukupukuLandingNrv.MoveLand);
+            this.setNerve(PukupukuStateLandingNrv.MoveLand);
     }
 
-    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PukupukuLandingNrv, deltaTimeFrames: number): void {
-        if (currentNerve === PukupukuLandingNrv.MoveLand) {
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PukupukuStateLandingNrv, deltaTimeFrames: number): void {
+        if (currentNerve === PukupukuStateLandingNrv.MoveLand) {
             if (isFirstStep(this)) {
                 this.setupJumping(300.0, 15.0);
                 startBck(this.host, 'Bound');
@@ -7459,13 +7462,13 @@ class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuLandingNrv> {
             this.updateJumping();
             this.host.updatePoseByRailIgnoreUpScale();
 
-            if (this.valueControl.getValue() > 0.5 || isBinded(this.host)) {
+            if (this.valueControl.isMaxFrame() || (this.valueControl.getValue() > 0.5 && isBinded(this.host))) {
                 moveCoordToRailPoint(this.host, getNextRailPointNo(this.host));
                 if (isBinded(this.host))
                     vec3.zero(this.host.velocity);
                 this.setNerveAfterJumpAccordingToNextPoint();
             }
-        } else if (currentNerve === PukupukuLandingNrv.JumpFromLand) {
+        } else if (currentNerve === PukupukuStateLandingNrv.JumpFromLand) {
             if (isFirstStep(this)) {
                 this.hasWaterColumn = false;
                 this.setupJumping(500.0, 15.0);
@@ -7484,7 +7487,7 @@ class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuLandingNrv> {
                 this.emitWaterColumnIfNeeded(sceneObjHolder, false, true);
                 this.kill();
             }
-        } else if (currentNerve === PukupukuLandingNrv.JumpFromWater) {
+        } else if (currentNerve === PukupukuStateLandingNrv.JumpFromWater) {
             if (isFirstStep(this)) {
                 this.hasWaterColumn = false;
                 this.setupJumping(500.0, 15.0);
@@ -7498,7 +7501,7 @@ class PukupukuStateLanding extends ActorStateBaseInterface<PukupukuLandingNrv> {
             this.emitWaterColumnIfNeeded(sceneObjHolder, true, false);
             this.updatePoseByJumpPath(0.15);
 
-            if (this.valueControl.getValue() > 0.5 || isBinded(this.host)) {
+            if (this.valueControl.isMaxFrame() || (this.valueControl.getValue() > 0.5 && isBinded(this.host))) {
                 moveCoordToRailPoint(this.host, getNextRailPointNo(this.host));
                 if (isBinded(this.host))
                     vec3.zero(this.host.velocity);
@@ -7594,7 +7597,7 @@ export class Pukupuku extends LiveActor<PukupukuNrv> {
                 this.setNerve(PukupukuNrv.MoveWater);
             } else {
                 this.landingState.appear();
-                this.landingState.setNerve(PukupukuLandingNrv.MoveLand);
+                this.landingState.setNerve(PukupukuStateLandingNrv.MoveLand);
                 this.setNerve(PukupukuNrv.Landing);
             }
         } else if (currentNerve === PukupukuNrv.MoveWater) {
@@ -7629,7 +7632,7 @@ export class Pukupuku extends LiveActor<PukupukuNrv> {
 
         if (this.isReadyToJumpFromLand()) {
             this.landingState.appear();
-            this.landingState.setNerve(PukupukuLandingNrv.JumpFromWater);
+            this.landingState.setNerve(PukupukuStateLandingNrv.JumpFromWater);
             this.setNerve(PukupukuNrv.Landing);
         }
     }

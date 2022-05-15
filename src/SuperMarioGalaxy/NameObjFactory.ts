@@ -925,6 +925,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("BlueStarGuidanceCube"),
     N("SmokeEffectColorAreaCube"),
     N("StoryDemoSimpleBloomArea"),
+    N("EnvColorCube"),
 
     // Points
     N("IronCannonLauncherPoint"),
