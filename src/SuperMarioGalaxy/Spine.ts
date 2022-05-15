@@ -23,6 +23,22 @@ export function isLessStep(host: SpineHost, v: number): boolean {
     return host.spine!.getNerveStep() < v;
 }
 
+function crossedTime(oldTime: number, newTime: number, thresh: number): boolean {
+    return oldTime <= thresh && newTime > thresh;
+}
+
+export function isCrossedStep(host: SpineHost, thresh: number): boolean {
+    return crossedTime(host.spine!.getLastNerveStep(), host.spine!.getNerveStep(), thresh);
+}
+
+export function isCrossedRepeatStep(host: SpineHost, interval: number, startTime: number = 0): boolean {
+    if (host.spine!.getNerveStep() < startTime)
+        return false;
+
+    const base = startTime + (((host.spine!.getNerveStep() - startTime) / interval) | 0) * interval;
+    return isCrossedStep(host, base);
+}
+
 export function calcNerveRate(host: SpineHost, v: number): number {
     return saturate(host.spine!.getNerveStep() / v);
 }
@@ -40,6 +56,7 @@ export class Spine<Nerve extends number = number> {
     private currentNerve: Nerve;
     private nextNerve: Nerve | null = null;
     private tick: number = 0;
+    private lastDeltaTime: number = 0;
 
     public initNerve(nerve: Nerve): void {
         assert(this.currentNerve === undefined);
@@ -50,6 +67,10 @@ export class Spine<Nerve extends number = number> {
     public setNerve(nerve: Nerve): void {
         this.nextNerve = nerve;
         this.tick = -1;
+    }
+
+    public getLastNerveStep(): number {
+        return this.tick - this.lastDeltaTime;
     }
 
     public getNerveStep(): number {
@@ -65,6 +86,7 @@ export class Spine<Nerve extends number = number> {
     }
 
     public updateTick(deltaTimeFrames: number): void {
+        this.lastDeltaTime = deltaTimeFrames;
         if (this.tick === 0.0 && deltaTimeFrames < 0.01) {
             // If we have paused on a isFirstStep, increment the counter just
             // a bit so we don't get stuck in a loop.

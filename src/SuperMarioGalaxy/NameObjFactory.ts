@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, JumpBeamer, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 import { createMessageAreaCube, createMessageAreaCylinder } from './Talk';
 
@@ -106,6 +106,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Birikyu",                        BirikyuWithFace),
     _("BallBeamer",                     BallBeamer),
     _("RingBeamer",                     RingBeamer),
+    _("JumpBeamer",                     JumpBeamer),
     _("Dossun",                         Dossun),
     _("Kuribo",                         Kuribo),
     _("KuriboMini",                     KuriboMini),

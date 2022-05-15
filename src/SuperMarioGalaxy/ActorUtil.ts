@@ -1563,13 +1563,13 @@ export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, r
     return isNearPlayerAnyTime(sceneObjHolder, actor, radius);
 }
 
-export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, threshold: number): boolean {
+export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, thresholdY: number): boolean {
     getPlayerPos(scratchVec3a, sceneObjHolder);
     vec3.sub(scratchVec3a, scratchVec3a, actor.translation);
 
     getMatrixAxisY(scratchVec3b, actor.getBaseMtx()!);
     const dot = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
-    if (Math.abs(dot) <= threshold)
+    if (Math.abs(dot) <= thresholdY)
         return vec3.squaredLength(scratchVec3a) <= radius ** 2.0;
     else
         return false;

@@ -588,6 +588,10 @@ export function addHitSensorAtJointEnemyAttack(sceneObjHolder: SceneObjHolder, a
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, jointMtx, offset);
 }
 
+export function addHitSensorMtx(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, type: HitSensorType, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, type, pairwiseCapacity, radius, actor, mtx, offset);
+}
+
 export function addHitSensorMtxEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.Enemy, pairwiseCapacity, radius, actor, mtx, offset);
 }
