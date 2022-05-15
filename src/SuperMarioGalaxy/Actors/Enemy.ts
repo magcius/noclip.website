@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixT, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, lerpAngle, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision, isExistMoveLimitCollision, getFirstPolyOnLineToMap, setBinderOffsetVec } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitMtx, emitEffectHitPos, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
@@ -4593,9 +4593,9 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
         else
             startBck(this, bckName);
 
-        if (isExistBtk(this, bckName)) {
+        if (isBtkExist(this, bckName)) {
             startBtk(this, bckName);
-        } else if (isExistBtk(this, 'Wait')) {
+        } else if (isBtkExist(this, 'Wait')) {
             startBtk(this, 'Wait');
             setBtkFrameAndStop(this, 0);
         }
@@ -8135,5 +8135,57 @@ export class Meramera extends LiveActor<MerameraNrv> {
         }
 
         return false;
+    }
+}
+
+const enum KillerGunnerSingleNrv { Wait, Charge, Shoot }
+export class KillerGunnerSingle extends LiveActor<KillerGunnerSingleNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, `KillerGunnerSingle`);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'KillerGunnerSingle');
+        connectToSceneEnvironment(sceneObjHolder, this);
+
+        this.initHitSensor();
+        const bodySensor = addHitSensorMapObj(sceneObjHolder, this, `body`, 16, 0.0, Vec3Zero);
+        addHitSensorEnemy(sceneObjHolder, this, `shell`, 16, 250.0, vec3.set(scratchVec3a, 0.0, 0.0, 700.0));
+        initCollisionParts(sceneObjHolder, this, `KillerGunnerSingle`, bodySensor);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.initNerve(KillerGunnerSingleNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KillerGunnerSingleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KillerGunnerSingleNrv.Wait) {
+            if (isFirstStep(this))
+                this.getSensor('shell')!.invalidate();
+
+            if (isGreaterEqualStep(this, 120))
+                this.setNerve(KillerGunnerSingleNrv.Charge);
+        } else if (currentNerve === KillerGunnerSingleNrv.Charge) {
+            if (isFirstStep(this))
+                startBtk(this, 'KillerGunnerSingleCharge');
+
+            if (isBtkStopped(this)) {
+                startBck(this, 'KillerGunnerSingleShoot');
+                emitEffect(sceneObjHolder, this, 'KillerGunnerSingleSmoke');
+                this.setNerve(KillerGunnerSingleNrv.Shoot);
+            }
+        } else if (currentNerve === KillerGunnerSingleNrv.Shoot) {
+            if (isFirstStep(this)) {
+                // startRumbleWithShakeCameraWeak
+                this.getSensor('shell')!.validate();
+            }
+
+            if (isGreaterEqualStep(this, 40))
+                this.getSensor('shell')!.invalidate();
+
+            if (isBckStopped(this))
+                this.setNerve(KillerGunnerSingleNrv.Wait);
+        }
     }
 }

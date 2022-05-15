@@ -208,10 +208,6 @@ export function getJointMtxByName(actor: LiveActor, n: string): mat4 | null {
     return null;
 }
 
-export function isBckStopped(actor: LiveActor): boolean {
-    return actor.modelManager!.isBckStopped();
-}
-
 export function isBckLooped(actor: LiveActor): boolean {
     const bckCtrl = actor.modelManager!.getBckCtrl();
     return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasLooped);
@@ -230,10 +226,6 @@ export function getBckFrameMax(actor: LiveActor): number {
 export function getBckFrameMaxNamed(actor: LiveActor, name: string): number {
     const bck = actor.modelManager!.resourceHolder.getRes(actor.modelManager!.resourceHolder.motionTable, name)!;
     return bck.duration;
-}
-
-export function isBrkStopped(actor: LiveActor): boolean {
-    return actor.modelManager!.isBckStopped();
 }
 
 export function getBrkFrameMax(actor: LiveActor): number {
@@ -311,10 +303,6 @@ export function tryStartBck(actor: LiveActor, name: string): boolean {
     }
 }
 
-export function isExistBck(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.isExistRes(actor.resourceHolder.motionTable, name);
-}
-
 export function startBck(actor: LiveActor, name: string): void {
     actor.modelManager!.startBck(name);
     if (actor.effectKeeper !== null)
@@ -339,10 +327,6 @@ export function stopBck(actor: LiveActor): void {
 
 export function startBtk(actor: LiveActor, name: string): void {
     actor.modelManager!.startBtk(name);
-}
-
-export function isExistBtk(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.isExistRes(actor.resourceHolder.btkTable, name);
 }
 
 export function startBrk(actor: LiveActor, name: string): void {
@@ -404,6 +388,18 @@ export function startBvaIfExist(actor: LiveActor, name: string): boolean {
     if (bva !== null)
         actor.modelManager!.startBva(name);
     return bva !== null;
+}
+
+export function isBckStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBckStopped();
+}
+
+export function isBtkStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBtkStopped();
+}
+
+export function isBrkStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBrkStopped();
 }
 
 export function setBckFrameAndStop(actor: LiveActor, frame: number): void {
