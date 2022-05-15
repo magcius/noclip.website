@@ -57,6 +57,7 @@ import { NPCDirector } from './Actors/NPC';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 import { TakoHeiInkHolder } from './Actors/Enemy';
 import { dfLabel, dfShow } from '../DebugFloaters';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -77,12 +78,14 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 export const enum SpecialTextureType {
     OpaqueSceneTexture = 'opaque-scene-texture',
     AstroMapBoard = 'astro-map-board',
+    MarioShadowTexture = `mario-shadow-texture`,
 }
 
 class SpecialTextureBinder {
     private clampSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
     private needsFlipY = false;
+    private transparentTexture: GfxTexture;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.clampSampler = cache.createSampler({
@@ -97,6 +100,10 @@ class SpecialTextureBinder {
 
         this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.clampSampler);
         this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.clampSampler);
+        this.registerSpecialTextureType(SpecialTextureType.MarioShadowTexture, this.clampSampler);
+
+        this.transparentTexture = makeSolidColorTexture2D(device, TransparentBlack);
+        this.lateBindTexture(SpecialTextureType.MarioShadowTexture, this.transparentTexture);
 
         this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }
@@ -121,6 +128,10 @@ class SpecialTextureBinder {
     public resolveLateBindTexture(list: GfxRenderInstList): void {
         for (const [textureType, textureMapping] of this.textureMapping.entries())
             list.resolveLateSamplerBinding(textureType, textureMapping);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.transparentTexture);
     }
 }
 
@@ -1326,6 +1337,7 @@ export class SceneObjHolder {
     public destroy(device: GfxDevice): void {
         this.nameObjHolder.destroy(device);
         this.drawSyncManager.destroy(device);
+        this.specialTextureBinder.destroy(device);
     }
 }
 

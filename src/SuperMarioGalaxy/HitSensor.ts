@@ -538,6 +538,10 @@ export function addBodyMessageSensorMapObjPress(sceneObjHolder: SceneObjHolder, 
     return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObjPress, 0, 0.0, actor, Vec3Zero);
 }
 
+export function addBodyMessageSensorEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.Enemy, 0, 0.0, actor, Vec3Zero);
+}
+
 export function addBodyMessageSensorReceiver(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
     return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.Receiver, 0, 0.0, actor, Vec3Zero);
 }

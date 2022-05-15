@@ -1043,19 +1043,19 @@ export function makeAxisFrontUp(axisRight: vec3, axisUp: vec3, front: ReadonlyVe
     vec3.cross(axisUp, front, axisRight);
 }
 
-function clampVecAngleRad(dst: vec3, axis: ReadonlyVec3, clampRad: number): void {
-    vec3.cross(scratchVec3a, dst, axis);
-    const theta = Math.atan2(vec3.length(scratchVec3a), vec3.dot(dst, axis));
+export function clampVecAngleRad(dst: vec3, target: ReadonlyVec3, clampRad: number): void {
+    vec3.cross(scratchVec3a, dst, target);
+    const sin = vec3.length(scratchVec3a);
+    const theta = Math.atan2(sin, vec3.dot(dst, target));
     if (theta > clampRad) {
-        vec3.negate(scratchVec3a, scratchVec3a);
-        vec3.normalize(scratchVec3a, scratchVec3a);
+        vec3.scale(scratchVec3a, scratchVec3a, -1.0 / sin);
         mat4.fromRotation(scratchMatrix, clampRad, scratchVec3a);
-        transformVec3Mat4w0(dst, scratchMatrix, axis);
+        transformVec3Mat4w0(dst, scratchMatrix, target);
     }
 }
 
-export function clampVecAngleDeg(dst: vec3, axis: ReadonlyVec3, clampDeg: number): void {
-    clampVecAngleRad(dst, axis, clampDeg * MathConstants.DEG_TO_RAD);
+export function clampVecAngleDeg(dst: vec3, target: ReadonlyVec3, clampDeg: number): void {
+    clampVecAngleRad(dst, target, clampDeg * MathConstants.DEG_TO_RAD);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
