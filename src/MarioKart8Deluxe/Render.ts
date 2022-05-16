@@ -370,7 +370,7 @@ void CalcDirectionalLight(out LightResult t_Result, in SurfaceLightParams t_Surf
         vec3 F = F0 + (1.0 - F0) * LoH5;
 
         vec3 t_SpecularResponse = D * F * vis;
-        t_Result.SpecularColor += NoL * t_SpecularResponse.rgb * t_LightColor.rgb * t_SurfaceLightParams.SpecularColor.rgb;
+        t_Result.SpecularColor += saturate(NoL) * t_SpecularResponse.rgb * t_LightColor.rgb * t_SurfaceLightParams.SpecularColor.rgb;
     }
 }
 
@@ -561,7 +561,7 @@ vec3 CalcNormalWorld() {
 
     vec3 t_Basis2 = v_NormalWorld.xyz;
     vec3 t_Basis0 = v_TangentWorld.xyz;
-    vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz) * v_TangentWorld.z;
+    vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz) * v_TangentWorld.w;
 
     // We now have our basis. Now sample the normal maps.
     vec3 t_TangentNormal0 = SampleNormalMap0();
