@@ -15,7 +15,7 @@ import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "..
 import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMatrixAxisZ, MathConstants, transformVec3Mat4w1 } from "../MathHelpers";
 import { DataFetcher } from "../DataFetcher";
 import { TextureMapping } from "../TextureHolder";
-import { Blue, Cyan, Green, Magenta, Red, Yellow } from "../Color";
+import { Blue, Cyan, Green, Magenta, OpaqueBlack, Red, Yellow } from "../Color";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
@@ -26,6 +26,8 @@ class PatchProgram extends DeviceProgram {
     public static ub_ObjectParams = 1;
 
     public override both = `
+${GfxShaderLibrary.saturate}
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
@@ -49,24 +51,26 @@ vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
     return t_NormalMapSample;
 }
 
-float CalcWaveHeight(uint t_Index, in vec2 t_TexCoord) {
+float CalcWaveHeight(uint t_Index, in vec2 t_TexCoord0) {
     vec4 t_WaveParam0 = u_Wave[t_Index].Param[0];
+    vec2 t_TexCoord = t_TexCoord0;
     t_TexCoord.xy *= t_WaveParam0.z;
     t_TexCoord.xy += t_WaveParam0.xy;
     vec4 t_HeightmapSample = texture(SAMPLER_2D(u_TextureHeightmap), t_TexCoord.xy);
-    return UnpackUnsignedNormalMap(t_HeightmapSample)[t_Index] * t_WaveParam0.w;
-}
 
-${GfxShaderLibrary.saturate}
+    float t_FadeOut = saturate(4.0 * (1.0 - 2.0 * abs(t_TexCoord0.y - 0.5)));
+    return UnpackUnsignedNormalMap(t_HeightmapSample)[t_Index] * t_WaveParam0.w * t_FadeOut;
+}
 `;
 
     public override vert = `
 layout(location = 0) in vec2 a_TexCoord;
 
-out vec2 v_TexCoordMesh;
+out vec3 v_NormalMesh;
 out vec3 v_PositionWorld;
 out vec3 v_NormalWorld;
 out vec3 v_TangentWorld;
+out vec2 v_TexCoordMesh;
 
 vec3 SphereFromCube(vec3 t_Pos) {
     // http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
@@ -86,37 +90,42 @@ void main() {
     vec3 t_MeshPos = Mul(_Mat4x4(u_PatchToMeshMatrix), vec4(t_PatchPos, 1.0)).xyz;
     vec3 t_MeshNrm = Mul(_Mat4x4(u_PatchToMeshMatrix), vec4(t_PatchNrm, 0.0)).xyz;
     vec3 t_MeshTng = vec3(1.0, 0.0, 0.0);
-    v_TexCoordMesh.xy = a_TexCoord.xy;
+    vec2 t_TexCoordMesh;
+    t_TexCoordMesh.xy = a_TexCoord.xy;
 
 #ifdef MODE_SPHERE
     t_MeshPos = SphereFromCube(t_MeshPos);
     t_MeshNrm = normalize(t_MeshPos);
     t_MeshTng = normalize(cross(t_MeshNrm, vec3(0.0, 1.0, 0.0)));
 
-    v_TexCoordMesh.x = (atan(t_MeshNrm.z, t_MeshNrm.x) / (2.0 * 3.1415)) + 0.5;
-    v_TexCoordMesh.y = t_MeshNrm.y * 0.5 + 0.5;
+    t_TexCoordMesh.x = (atan(t_MeshNrm.z, t_MeshNrm.x) / (2.0 * 3.1415)) + 0.5;
+    t_TexCoordMesh.y = t_MeshNrm.y * 0.5 + 0.5;
 #endif
 
     vec3 t_PosWorld = Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshPos, 1.0)).xyz;
     v_NormalWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshNrm, 0.0)).xyz);
     v_TangentWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshTng, 0.0)).xyz);
 
-    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(0u, v_TexCoordMesh.xy);
-    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(1u, v_TexCoordMesh.xy);
+    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(0u, t_TexCoordMesh.xy);
+    t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(1u, t_TexCoordMesh.xy);
 
     v_PositionWorld.xyz = t_PosWorld.xyz;
     gl_Position = Mul(u_ProjectionView, vec4(t_PosWorld, 1.0));
+
+    v_NormalMesh.xyz = t_MeshNrm.xyz;
+    v_TexCoordMesh.xy = t_TexCoordMesh.xy;
 }
 `;
 
     public override frag = `
-in vec2 v_TexCoordMesh;
+in vec3 v_NormalMesh;
 in vec3 v_PositionWorld;
 in vec3 v_NormalWorld;
 in vec3 v_TangentWorld;
+in vec2 v_TexCoordMesh;
 
 float G1V(float NoV, float k) {
-    return 1.0 / (NoV * (1.0 - k) + k);
+    return NoV / (NoV * (1.0 - k) + k);
 }
 
 vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
@@ -130,9 +139,9 @@ vec3 ReconstructNormal(in vec4 t_NormalXY) {
 
 void main() {
     // gl_FragColor = vec4(v_NormalWorld.xyz * 0.5 + 0.5, 1.0);
-    // gl_FragColor.rgba += u_ColorAdd;
 
-    vec3 t_Albedo = vec3(0.17188, 0.32227, 0.14746);
+    vec3 t_Albedo = vec3(0.14746, 0.27188, 0.62227);
+    t_Albedo.rgb += u_ColorAdd.rgb;
 
     vec4 t_FinalColor = vec4(0.0, 0.0, 0.0, 1.0);
 
@@ -143,9 +152,17 @@ void main() {
     vec3 t_Basis0 = v_TangentWorld.xyz;
     vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz);
 
+    vec2 t_TexCoordMesh;
+    t_TexCoordMesh.x = (atan(v_NormalMesh.z, v_NormalMesh.x) / (2.0 * 3.1415)) + 0.5;
+    t_TexCoordMesh.y = v_NormalMesh.y * 0.5 + 0.5;
+
+    float t_Scroll0 = u_Wave[0].Param[0].x;
+
     // We now have our basis. Now sample the normal maps.
-    vec3 t_TangentNormal0 = ReconstructNormal(UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureHeightmap), v_TexCoordMesh.xy * 32.0 + u_Wave[0].Param[0].xy))) * 0.1;
-    vec3 t_TangentNormal1 = ReconstructNormal(UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureHeightmap), v_TexCoordMesh.xy * 64.0 + u_Wave[0].Param[0].xy * 6.0))) * 0.1;
+    vec2 t_NrmCoord0 = t_TexCoordMesh.xy * 16.0 + vec2(t_Scroll0 * 1.0, t_Scroll0 * 0.8);
+    vec3 t_TangentNormal0 = ReconstructNormal(0.2 * UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureHeightmap), t_NrmCoord0.xy)));
+    vec2 t_NrmCoord1 = t_TexCoordMesh.yx * 32.0 + vec2(t_Scroll0 * 4.0, t_Scroll0 * 4.0);
+    vec3 t_TangentNormal1 = ReconstructNormal(0.3 * UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_TextureHeightmap), t_NrmCoord1.xy)));
     vec3 t_NormalWorld = CalcTangentToWorld(normalize(t_TangentNormal0 + t_TangentNormal1), t_Basis0, t_Basis1, t_Basis2);
 
     vec3 N = t_NormalWorld.xyz;
@@ -160,37 +177,45 @@ void main() {
     if (true) {
         // Wrapped lighting
         float t_LightVis = dot(N, L) * 0.5 + 0.5;
-        t_IncomingLight.rgb += mix(vec3(0.0), vec3(1.0), t_LightVis);
+        t_IncomingLight.rgb += mix(vec3(0.1), vec3(0.6), t_LightVis);
     }
 
     if (true) {
         // Specular
-        float NoL = saturate(dot(N, L));
-
         // Stolen from: http://filmicworlds.com/blog/optimizing-ggx-update/
 
         vec3 H = normalize(L + V);
+        float NoL = saturate(dot(N, L));
         float NoV = saturate(dot(N, V));
         float NoH = saturate(dot(N, H));
         float LoH = saturate(dot(L, H));
 
-        float r = 0.2;
+        float r = 0.25;
         float r2 = r * r;
+        float a2 = r2 * r2;
 
         // D
-        float D = r2 / (pow(NoH * NoH * (r2 - 1.0) + 1.0, 2.0));
+        float D = a2 / (3.14159 * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
 
-        // V
+        // F
+        // Stolen from: https://seblagarde.wordpress.com/2012/06/03/spherical-gaussien-approximation-for-blinn-phong-phong-and-fresnel/
+        // float LoH5 = exp2((-5.55473 * LoH - 6.98316) * LoH);
+        vec3 F0 = vec3(0.05);
+        float LoH5 = pow(1.0 - LoH, 5.0);
+        vec3 F = F0 + (1.0 - F0) * LoH5;
+
+        // vis / G
         float k = r2 / 2.0;
         float vis = G1V(NoL, k) * G1V(NoV, k);
 
-        vec3 F0 = vec3(0.05);
-
-        float LoH5 = pow(1.0 - saturate(dot(H, V)), 5.0);
-        vec3 F = F0 + (1.0 - F0) * LoH5;
-
         vec3 t_SpecularResponse = D * F * vis;
-        t_IncomingLight.rgb += NoL * t_SpecularResponse.rgb * vec3(0.4, 0.4, 0.4);
+        t_IncomingLight.rgb += NoL * t_SpecularResponse.rgb * vec3(4.0);
+    }
+
+    if (true) {
+        // Super fake fresnel
+        float NoV5 = pow(1.0 - saturate(dot(N, V)), 5.0);
+        t_IncomingLight.rgb += NoV5 * 4.0;
     }
 
     t_FinalColor.rgb += t_IncomingLight.rgb * t_Albedo.rgb;
@@ -198,7 +223,7 @@ void main() {
     t_FinalColor.rgb = pow(t_FinalColor.rgb, vec3(1.0 / 2.2));
     gl_FragColor.rgba = t_FinalColor;
 
-    // gl_FragColor.rgb = t_NormalWorld0.rgb * 0.5 + 0.5;
+    // gl_FragColor.rgba = vec4(v_TexCoordMesh.xy, 1.0, 1.0);
 }
 `;
 }
@@ -579,6 +604,15 @@ const enum PatchTransformMode {
 interface PatchShaderParam {
     worldFromMeshMatrix: ReadonlyMat4;
     waveParam: WaveParam[];
+    showTess: boolean;
+}
+
+const enum PatchState {
+    Undecided,
+    Branch,
+    Leaf,
+    BelowLeaf,
+    ForceLeaf,
 }
 
 class PatchInstance {
@@ -592,8 +626,8 @@ class PatchInstance {
     public meshCenterPos = vec3.create();
     public scale = 1.0;
 
-    public isLeaf = false;
-    public forceLeaf = false;
+    public state = PatchState.Undecided;
+    private visible = true;
 
     constructor(matrix: ReadonlyMat4, private transformMode: PatchTransformMode, levelsLeft: number, childMask = 0b1111) {
         mat4.copy(this.patchToMeshMatrix, matrix);
@@ -605,8 +639,7 @@ class PatchInstance {
         this.scale = Math.max(scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
 
         if (levelsLeft === 0) {
-            this.isLeaf = true;
-            this.forceLeaf = true;
+            this.state = PatchState.ForceLeaf;
         } else {
             for (let i = 0; i < 4; i++) {
                 if (!(childMask & (1 << i)))
@@ -647,45 +680,66 @@ class PatchInstance {
         }
     }
 
-    public setNeighborEdge(edge: PatchNeighborEdge, patch: PatchInstance | null): void {
+    private getChildOrSelf(patch: PatchInstance | null, child: PatchChild): PatchInstance | null {
+        if (patch === null)
+            return null;
+
+        const c = patch.child[child];
+        if (c !== null)
+            return c;
+
+        return patch;
+    }
+
+    public setNeighborEdge(edge: PatchNeighborEdge, patch: PatchInstance | null, scramble: number[] = [0, 1, 2, 3]): void {
         this.neighbor[edge] = patch;
 
         if (edge === PatchNeighborEdge.Top) {
             if (this.child[PatchChild.TopLeft] !== null)
-                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomLeft]), scramble);
             if (this.child[PatchChild.TopRight] !== null)
-                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomRight]), scramble);
         } else if (edge === PatchNeighborEdge.Left) {
             if (this.child[PatchChild.TopLeft] !== null)
-                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopRight]), scramble);
             if (this.child[PatchChild.BottomLeft] !== null)
-                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomRight]), scramble);
         } else if (edge === PatchNeighborEdge.Right) {
             if (this.child[PatchChild.TopRight] !== null)
-                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopLeft]), scramble);
             if (this.child[PatchChild.BottomRight] !== null)
-                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomLeft]), scramble);
         } else if (edge === PatchNeighborEdge.Bottom) {
             if (this.child[PatchChild.BottomLeft] !== null)
-                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopLeft]), scramble);
             if (this.child[PatchChild.BottomRight] !== null)
-                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, patch);
+                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopRight]), scramble);
         }
     }
 
+    private recurseState(state: PatchState): void {
+        if (this.state === PatchState.ForceLeaf)
+            return;
+
+        this.state = state;
+        for (let i = 0; i < this.child.length; i++)
+            if (this.child[i] !== null)
+                this.child[i]!.recurseState(state);
+    }
+
     public tessellate(cameraPosInMeshSpace: ReadonlyVec3, meshSpaceDistThreshold: number): void {
-        if (this.forceLeaf)
+        if (this.state === PatchState.ForceLeaf)
             return;
 
         const dist = vec3.distance(cameraPosInMeshSpace, this.meshCenterPos);
-        this.isLeaf = dist >= (meshSpaceDistThreshold * this.scale);
+        const isLeaf = dist >= (meshSpaceDistThreshold * this.scale);
 
-        if (this.isLeaf) {
+        if (isLeaf) {
             // Mark children as leaves for the neighbor split checks.
-            for (let i = 0; i < this.child.length; i++)
-                if (this.child[i] !== null)
-                    this.child[i]!.isLeaf = true;
+            this.recurseState(PatchState.BelowLeaf);
+            this.state = PatchState.Leaf;
         } else {
+            this.state = PatchState.Branch;
             for (let i = 0; i < this.child.length; i++)
                 if (this.child[i] !== null)
                     this.child[i]!.tessellate(cameraPosInMeshSpace, meshSpaceDistThreshold);
@@ -707,7 +761,7 @@ class PatchInstance {
         const neighbor = this.neighbor[edge];
         if (neighbor === null)
             return false;
-        return !neighbor.isLeaf;
+        return neighbor.state === PatchState.Branch;
     }
 
     private chooseVariation(patchLibrary: PatchLibrary): number {
@@ -719,7 +773,10 @@ class PatchInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, patchLibrary: PatchLibrary, shaderParam: PatchShaderParam): void {
-        if (this.isLeaf) {
+        if (!this.visible)
+            return;
+
+        if (this.state >= PatchState.Leaf) {
             const renderInst = renderInstManager.newRenderInst();
             const variation = this.chooseVariation(patchLibrary);
             patchLibrary.setOnRenderInst(renderInst, variation);
@@ -734,9 +791,13 @@ class PatchInstance {
             for (let i = 0; i < 2; i++)
                 offs += shaderParam.waveParam[i].fill(d, offs);
 
-            const level = Math.log2(1.0 / this.scale) | 0;
-            const colors = [ Red, Green, Blue, Cyan, Magenta, Yellow, Red, Green, Blue ];
-            offs += fillColor(d, offs, colors[level])
+            if (shaderParam.showTess) {
+                const level = Math.log2(1.0 / this.scale) | 0;
+                const colors = [ Red, Green, Blue, Cyan, Yellow, Red, Green, Blue, Cyan, Yellow ];
+                offs += fillColor(d, offs, colors[level]);
+            } else {
+                offs += fillColor(d, offs, OpaqueBlack);
+            }
 
             renderInstManager.submitRenderInst(renderInst);
         } else {
@@ -765,7 +826,7 @@ class WaveParam {
     @dfRange(1000, 10000, 1)
     public texCoordScrollSpeed = 1000.0;
     @dfShow()
-    @dfRange(1, 20, 0.01)
+    @dfRange(1, 20, 1)
     public texCoordScale = 4;
     @dfShow()
     @dfRange(0, 1000, 1)
@@ -786,8 +847,11 @@ class TessSphere {
     public worldFromMeshMatrix = mat4.create();
     @dfShow()
     public waveParam = nArray(2, () => new WaveParam());
-    public distThreshold = 5;
+    public distThreshold = 4;
     private textureMapping = nArray(1, () => new TextureMapping());
+
+    @dfShow()
+    public showTess = false;
 
     constructor(cache: GfxRenderCache, sceneData: SceneData) {
         const transformMode = PatchTransformMode.Sphere as PatchTransformMode;
@@ -819,21 +883,21 @@ class TessSphere {
 
         // Bottom
         {
-            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, 0, 0, MathConstants.TAU / 2, 0, -1, 0);
+            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, 0, -MathConstants.TAU / 2, MathConstants.TAU / 2, 0, -1, 0);
             const patch = new PatchInstance(scratchMat4a, transformMode, numLevels);
             this.face.push(patch);
         }
 
         // Left
         {
-            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, -MathConstants.TAU / 4, MathConstants.TAU / 4, 0, -1, 0, 0);
+            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, MathConstants.TAU / 4, -MathConstants.TAU / 4, 0, -1, 0, 0);
             const patch = new PatchInstance(scratchMat4a, transformMode, numLevels);
             this.face.push(patch);
         }
 
         // Right
         {
-            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, -MathConstants.TAU / 4, -MathConstants.TAU / 4, 0, 1, 0, 0);
+            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, MathConstants.TAU / 4, MathConstants.TAU / 4, 0, 1, 0, 0);
             const patch = new PatchInstance(scratchMat4a, transformMode, numLevels);
             this.face.push(patch);
         }
@@ -847,7 +911,7 @@ class TessSphere {
 
         // Back
         {
-            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, -MathConstants.TAU / 4, 0, 0, 0, 0, -1);
+            computeModelMatrixSRT(scratchMat4a, 1, 1, 1, -MathConstants.TAU / 4, 0, MathConstants.TAU / 2, 0, 0, -1);
             const patch = new PatchInstance(scratchMat4a, transformMode, numLevels);
             this.face.push(patch);
         }
@@ -858,30 +922,30 @@ class TessSphere {
         this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
         this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Front]);
 
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Front]);
+        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Front]);
+        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
+        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
+        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Back]);
 
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Bottom]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Front]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Back]);
+        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Front]);
+        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [2, 0]);
 
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Bottom]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Front]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Front]);
+        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Back]);
+        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [1, 3]);
 
         this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
         this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
         this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
         this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom]);
 
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Bottom]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
+        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Right]);
+        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Left]);
+        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [2, 3]);
 
         this.textureMapping[0].gfxTexture = sceneData.heightmap;
         this.textureMapping[0].gfxSampler = cache.createSampler({

@@ -462,11 +462,18 @@ export class DebugFloaterHolder {
         this.debugFloater = null;
     }
 
-    private _bindPanelRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
-        // Children are by default invisible, unless we're in a color, or some sort of number array.
-        const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
+    public bindPanel(obj: { [k: string]: any }, panel_: FloatingPanel | null = null): void {
+        let panel = panel_!;
+        if (panel === null)
+            panel = this.getDebugFloater();
+
+        while (panel.contents.firstChild)
+            panel.contents.removeChild(panel.contents.firstChild);
 
         recurseBindProperties((obj, keyName, labelName, parentMetadata) => {
+            // Children are by default invisible, unless we're in a color, or some sort of number array.
+            const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
+
             if (!(childDefaultVisible || dfShouldShowOwn(obj, keyName)))
                 return false;
 
@@ -488,16 +495,6 @@ export class DebugFloaterHolder {
 
             panel.bindButton(keyName, obj, keyName);
         }, obj);
-    }
-
-    public bindPanel(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
-        if (panel === null)
-            panel = this.getDebugFloater();
-
-        while (panel.contents.firstChild)
-            panel.contents.removeChild(panel.contents.firstChild);
-
-        this._bindPanelRecurse(obj, panel, '');
     }
 }
 
