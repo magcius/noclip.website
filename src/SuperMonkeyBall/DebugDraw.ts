@@ -2,6 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
 import { Color, colorFromHSL, White } from "../Color";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { transformVec3Mat4w1 } from "../MathHelpers";
 import * as SD from "./Stagedef";
 
 const SHORT_TO_RAD = Math.PI / 0x8000;
@@ -30,8 +31,8 @@ export function debugDrawColi(stagedef: SD.Stage, camera: Camera) {
 
             vec3.set(vert2, coliTri.vert2[0], coliTri.vert2[1], 0);
             vec3.set(vert3, coliTri.vert3[0], coliTri.vert3[1], 0);
-            vec3.transformMat4(vert2, vert2, tf);
-            vec3.transformMat4(vert3, vert3, tf);
+            transformVec3Mat4w1(vert2, tf, vert2);
+            transformVec3Mat4w1(vert3, tf, vert3);
 
             drawWorldSpaceLine(
                 getDebugOverlayCanvas2D(),

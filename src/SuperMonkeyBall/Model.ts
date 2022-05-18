@@ -11,6 +11,7 @@ import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
 import { Color, colorNewFromRGBA } from "../Color";
 import { Lighting } from "./World";
+import { transformVec3Mat4w1 } from "../MathHelpers";
 
 export const enum RenderSort {
     Translucent, // Depth sort "translucent" shapes only
@@ -59,7 +60,7 @@ export class ModelInst {
         const maxScale = Math.max(...scale);
 
         const center_rt_world = scratchVec3a;
-        vec3.transformMat4(center_rt_world, this.modelData.boundSphereCenter, renderParams.worldFromModel);
+        transformVec3Mat4w1(center_rt_world, renderParams.worldFromModel, this.modelData.boundSphereCenter);
         const inFrustum = ctx.viewerInput.camera.frustum.containsSphere(
             center_rt_world,
             this.modelData.boundSphereRadius * maxScale

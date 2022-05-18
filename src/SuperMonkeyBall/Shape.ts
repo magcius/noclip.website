@@ -18,6 +18,7 @@ import {
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { transformVec3Mat4w1 } from "../MathHelpers";
 import { fallbackUndefined } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
@@ -184,7 +185,7 @@ export class ShapeInst {
                 renderParams.sort === RenderSort.All
             ) {
                 const origin_rt_view = scratchVec3a;
-                vec3.transformMat4(origin_rt_view, this.shapeData.origin, renderParams.viewFromModel);
+                transformVec3Mat4w1(origin_rt_view, renderParams.viewFromModel, this.shapeData.origin);
                 inst.sortKey = -vec3.sqrLen(origin_rt_view);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {
