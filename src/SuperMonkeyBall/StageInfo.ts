@@ -249,7 +249,11 @@ namespace BgInfos {
         fileName: "bg_nig",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgNight,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.4, 0.4, 0.7),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Sunset: BgInfo = {
         fileName: "bg_sun",
         clearColor: colorNewFromRGBA8(0x000000ff),
@@ -263,52 +267,92 @@ namespace BgInfos {
         fileName: "bg_spa",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgSpace,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.5, 0.45, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 29184,
+        infLightRotY: 17664,
+    };
     export const Sand: BgInfo = {
         fileName: "bg_snd",
         clearColor: colorNewFromRGBA8(0xd8bc77ff),
         bgConstructor: BgSand,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.45, 0.4, 0.25),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 24576,
+        infLightRotY: 24576,
+    };
     export const Ice: BgInfo = {
         fileName: "bg_ice",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgIce,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.55, 0.6, 0.85),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Storm: BgInfo = {
         fileName: "bg_stm",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgStorm,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.3, 0.3, 0.45),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Bonus: BgInfo = {
         fileName: "bg_bns",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgBonus,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.7, 0.8),
+        infLightColor: colorNewFromRGBA(0.8, 0.8, 0.8),
+        infLightRotX: -11776,
+        infLightRotY: 21888,
+    };
     export const Target: BgInfo = {
         fileName: "bg_pil",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Golf: BgInfo = {
         fileName: "bg_gol",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Bowling: BgInfo = {
         fileName: "bg_bow",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Master: BgInfo = {
         fileName: "bg_mst",
         clearColor: colorNewFromRGBA8(0xffffcdff),
         bgConstructor: BgMaster,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Ending: BgInfo = {
         fileName: "bg_ending",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
 }
 
 export const STAGE_INFO_MAP: Map<StageId, StageInfo> = new Map([
