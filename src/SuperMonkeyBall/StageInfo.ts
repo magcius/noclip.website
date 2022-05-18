@@ -240,7 +240,11 @@ namespace BgInfos {
         fileName: "bg_wat",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgWater,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.28, 0.48, 0.63),
+        infLightColor: colorNewFromRGBA(0.6, 0.85, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Night: BgInfo = {
         fileName: "bg_nig",
         clearColor: colorNewFromRGBA8(0x000000ff),
