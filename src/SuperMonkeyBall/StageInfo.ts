@@ -231,8 +231,8 @@ namespace BgInfos {
         fileName: "bg_jun",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: BgJungle,
-        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6, 1),
-        infLightColor: colorNewFromRGBA(1, 1, 1, 1),
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
         infLightRotX: 8192,
         infLightRotY: 24576,
     };
@@ -250,7 +250,11 @@ namespace BgInfos {
         fileName: "bg_sun",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgSunset,
-    } as any;
+        ambientColor: colorNewFromRGBA(0.4, 0.4, 0.7),
+        infLightColor: colorNewFromRGBA(1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
+    };
     export const Space: BgInfo = {
         fileName: "bg_spa",
         clearColor: colorNewFromRGBA8(0x000000ff),

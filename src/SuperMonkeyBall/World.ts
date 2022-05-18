@@ -3,7 +3,8 @@ import { Color, colorCopy, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { GX_Program } from "../gx/gx_material";
+import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import * as Viewer from "../viewer";
 import { interpolateKeyframes, loopWrap } from "./Anim";
 import { Background } from "./Background";
@@ -14,7 +15,9 @@ import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { BgInfo, StageInfo } from "./StageInfo";
-import { MkbTime, S16_TO_RADIANS, Sphere, transformVec } from "./Utils";
+import { MkbTime, S16_TO_RADIANS, Sphere } from "./Utils";
+import * as GX_Material from "../gx/gx_material";
+import { SpotFunction } from "../gx/gx_enum";
 
 const scratchRenderParams = new RenderParams();
 
@@ -150,35 +153,44 @@ class Itemgroup {
 
 export class Lighting {
     public ambientColor: Color;
-    public infLightColor: Color;
-    public infLightDir_rt_view: vec3;
+    public infLight_rt_view: GX_Material.Light;
 
-    private infLightDir_rt_world: vec3;
+    private infLight_rt_world: GX_Material.Light;
 
     constructor(bgInfo: BgInfo) {
         this.ambientColor = colorNewCopy(bgInfo.ambientColor);
-        this.infLightColor = colorNewCopy(bgInfo.infLightColor);
-        this.infLightDir_rt_view = vec3.create();
-        this.infLightDir_rt_world = vec3.create();
 
-        vec3.set(this.infLightDir_rt_world, 0, 0, -1);
+        this.infLight_rt_world = new GX_Material.Light();
+        this.infLight_rt_view = new GX_Material.Light();
+
+        colorCopy(this.infLight_rt_world.Color, bgInfo.infLightColor);
+
+        vec3.set(this.infLight_rt_world.Position, 0, 0, -1);
         vec3.rotateX(
-            this.infLightDir_rt_world,
-            this.infLightDir_rt_world,
+            this.infLight_rt_world.Position,
+            this.infLight_rt_world.Position,
             Vec3Zero,
             S16_TO_RADIANS * bgInfo.infLightRotX
         );
         vec3.rotateY(
-            this.infLightDir_rt_world,
-            this.infLightDir_rt_world,
+            this.infLight_rt_world.Position,
+            this.infLight_rt_world.Position,
             Vec3Zero,
             S16_TO_RADIANS * bgInfo.infLightRotY
         );
-        vec3.scale(this.infLightDir_rt_world, this.infLightDir_rt_world, 10000); // Game does this, not sure why it changes anything
+        vec3.scale(this.infLight_rt_world.Position, this.infLight_rt_world.Position, 10000); // Game does this, not sure why it changes anything
+
+        GX_Material.lightSetSpot(this.infLight_rt_world, 0, SpotFunction.OFF);
+
+        this.infLight_rt_view.copy(this.infLight_rt_world);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput) {
-        transformVec(this.infLightDir_rt_view, this.infLightDir_rt_world, viewerInput.camera.viewMatrix);
+        transformVec3Mat4w0(
+            this.infLight_rt_view.Position,
+            viewerInput.camera.viewMatrix,
+            this.infLight_rt_world.Position
+        );
     }
 }
 
@@ -187,7 +199,6 @@ export class World {
     private itemgroups: Itemgroup[];
     private background: Background;
     private lighting: Lighting;
-    private infLightDir_rt_world = vec3.create();
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
@@ -213,6 +224,7 @@ export class World {
             this.itemgroups[i].update(this.mkbTime);
         }
         this.background.update(this.mkbTime);
+        this.lighting.update(viewerInput);
     }
 
     public prepareToRender(ctx: RenderContext): void {

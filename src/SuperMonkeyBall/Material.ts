@@ -254,9 +254,10 @@ export class MaterialInst {
 
         colorCopy(materialParams.u_Color[ColorKind.MAT0], materialColor);
         colorCopy(materialParams.u_Color[ColorKind.AMB0], ambientColor);
-        // Game uses TEVREG0 instead of RASC when lighting and vertex colors are disabled. Not sure
-        // why it didn't just use the MAT0 register...
+        // Game uses TEVREG0 instead of RASC when lighting and vertex colors are disabled
         colorCopy(materialParams.u_Color[ColorKind.C0], materialColor);
+
+        materialParams.u_Lights[0].copy(lighting.infLight_rt_view);
 
         this.materialHelper.allocateMaterialParamsDataOnInst(inst, materialParams);
         inst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
