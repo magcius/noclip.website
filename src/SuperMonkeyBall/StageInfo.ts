@@ -1,4 +1,5 @@
-import { Color, colorNewFromRGBA8 } from "../Color";
+import { vec3 } from "gl-matrix";
+import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
 import {
     BackgroundConstructor,
     BgBonus,
@@ -212,6 +213,12 @@ export type BgInfo = {
     fileName: string;
     clearColor: Color;
     bgConstructor: BackgroundConstructor;
+
+    ambientColor: Color;
+    // Global directional light ("infinite" light)
+    infLightColor: Color;
+    infLightRotX: number;
+    infLightRotY: number;
 };
 
 export type StageInfo = {
@@ -224,72 +231,76 @@ namespace BgInfos {
         fileName: "bg_jun",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: BgJungle,
+        ambientColor: colorNewFromRGBA(0.6, 0.6, 0.6, 1),
+        infLightColor: colorNewFromRGBA(1, 1, 1, 1),
+        infLightRotX: 8192,
+        infLightRotY: 24576,
     };
     export const Water: BgInfo = {
         fileName: "bg_wat",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgWater,
-    };
+    } as any;
     export const Night: BgInfo = {
         fileName: "bg_nig",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgNight,
-    };
+    } as any;
     export const Sunset: BgInfo = {
         fileName: "bg_sun",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgSunset,
-    };
+    } as any;
     export const Space: BgInfo = {
         fileName: "bg_spa",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgSpace,
-    };
+    } as any;
     export const Sand: BgInfo = {
         fileName: "bg_snd",
         clearColor: colorNewFromRGBA8(0xd8bc77ff),
         bgConstructor: BgSand,
-    };
+    } as any;
     export const Ice: BgInfo = {
         fileName: "bg_ice",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgIce,
-    };
+    } as any;
     export const Storm: BgInfo = {
         fileName: "bg_stm",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgStorm,
-    };
+    } as any;
     export const Bonus: BgInfo = {
         fileName: "bg_bns",
         clearColor: colorNewFromRGBA8(0x000000ff),
         bgConstructor: BgBonus,
-    };
+    } as any;
     export const Target: BgInfo = {
         fileName: "bg_pil",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    };
+    } as any;
     export const Golf: BgInfo = {
         fileName: "bg_gol",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    };
+    } as any;
     export const Bowling: BgInfo = {
         fileName: "bg_bow",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    };
+    } as any;
     export const Master: BgInfo = {
         fileName: "bg_mst",
         clearColor: colorNewFromRGBA8(0xffffcdff),
         bgConstructor: BgMaster,
-    };
+    } as any;
     export const Ending: BgInfo = {
         fileName: "bg_ending",
         clearColor: colorNewFromRGBA8(0xffffffff),
         bgConstructor: {} as any,
-    };
+    } as any;
 }
 
 export const STAGE_INFO_MAP: Map<StageId, StageInfo> = new Map([

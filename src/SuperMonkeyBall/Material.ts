@@ -9,9 +9,10 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { Color, colorCopy, colorNewCopy, White } from "../Color";
+import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color";
 import { RenderParams } from "./Model";
 import { mat4 } from "gl-matrix";
+import { assertExists } from "../util";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
@@ -103,23 +104,66 @@ export class MaterialInst {
         mb.setCullMode(this.cullMode);
 
         // Set up lighting channel
-        // Treat all shapes as unlit for now
         let colorIn: GX.CC = GX.CC.RASC;
         let alphaIn: GX.CA = GX.CA.RASA;
-        if (this.materialData.flags & Gma.MaterialFlags.VertColors) {
-            mb.setChanCtrl(
-                GX.ColorChannelID.COLOR0A0,
-                false,
-                GX.ColorSrc.VTX, // Ambient src, no-op. With light channel disabled there is no ambient light
-                GX.ColorSrc.VTX, // Material source
-                0,
-                GX.DiffuseFunction.NONE,
-                GX.AttenuationFunction.NONE
-            );
+        if (this.materialData.flags & Gma.MaterialFlags.Unlit) {
+            if (this.materialData.flags & Gma.MaterialFlags.VertColors) {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0A0,
+                    false,
+                    GX.ColorSrc.VTX, // Ambient src, no-op. With light channel disabled there is no ambient light
+                    GX.ColorSrc.VTX, // Material source
+                    0,
+                    GX.DiffuseFunction.NONE,
+                    GX.AttenuationFunction.NONE
+                );
+            } else {
+                // TODO(complexplane): "ambient" color from material
+                colorIn = GX.CC.C0;
+                alphaIn = GX.CA.A0;
+            }
         } else {
-            // TODO(complexplane): "ambient" color from material
-            colorIn = GX.CC.C0;
-            alphaIn = GX.CA.A0;
+            if (this.materialData.flags & Gma.MaterialFlags.VertColors) {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.ALPHA0, // chan
+                    false, // enable
+                    GX.ColorSrc.REG, // amb_src
+                    GX.ColorSrc.VTX, // mat_src
+                    0, // light_mask
+                    GX.DiffuseFunction.NONE, // diff_fn
+                    GX.AttenuationFunction.NONE // attn_fn
+                ); // attn_fn
+                // Enable alpha channel
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0, // chan
+                    true, // enable
+                    GX.ColorSrc.REG, // amb_src
+                    GX.ColorSrc.VTX, // mat_src
+                    1, // light_mask, assuming we only have on directional light for now
+                    GX.DiffuseFunction.CLAMP, // diff_fn
+                    GX.AttenuationFunction.SPOT // attn_fn
+                );
+            } else {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.ALPHA0, // chan
+                    false, // enable
+                    GX.ColorSrc.REG, // amb_src
+                    GX.ColorSrc.REG, // mat_src
+                    0, // light_mask
+                    GX.DiffuseFunction.NONE, // diff_fn
+                    GX.AttenuationFunction.NONE // attn_fn
+                ); // attn_fn
+                // Enable alpha channel
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0, // chan
+                    true, // enable
+                    GX.ColorSrc.REG, // amb_src
+                    GX.ColorSrc.REG, // mat_src
+                    1, // light_mask, assuming we only have on directional light for now
+                    GX.DiffuseFunction.CLAMP, // diff_fn
+                    GX.AttenuationFunction.SPOT // attn_fn
+                );
+            }
         }
 
         const buildState: BuildState = {
@@ -186,21 +230,25 @@ export class MaterialInst {
             this.tevLayers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
         }
 
-        // Material color
-        const materialColor = scratchColor1;
-        colorCopy(materialColor, White);
-        if (this.materialData.flags & (Gma.MaterialFlags.CustomMatAmbColors | Gma.MaterialFlags.SimpleMaterial)) {
-            colorCopy(materialColor, this.materialData.materialColor, this.materialData.alpha);
-        }
-        materialColor.a *= renderParams.alpha;
+        const lighting = assertExists(renderParams.lighting);
 
-        // Ambient color
+        // Ambient lighting color. Alpha should be irrelevant since alpha light channel is
+        // always disabled
         const ambientColor = scratchColor2;
         if (this.materialData.flags & Gma.MaterialFlags.CustomMatAmbColors) {
-            colorCopy(ambientColor, this.materialData.ambientColor); // Alpha should be irrelevant
+            colorMult(ambientColor, this.materialData.ambientColor, lighting.ambientColor);
         } else {
-            colorCopy(ambientColor, White);
+            colorCopy(ambientColor, lighting.ambientColor);
         }
+
+        // Material color
+        const materialColor = scratchColor1;
+        if (this.materialData.flags & (Gma.MaterialFlags.CustomMatAmbColors | Gma.MaterialFlags.SimpleMaterial)) {
+            colorCopy(materialColor, this.materialData.materialColor);
+        } else {
+            colorCopy(materialColor, White);
+        }
+        materialColor.a = this.materialData.alpha * renderParams.alpha;
 
         mat4.copy(materialParams.u_TexMtx[1], renderParams.texMtx);
 

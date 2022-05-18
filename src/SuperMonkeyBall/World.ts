@@ -1,8 +1,9 @@
 import { mat4, vec3 } from "gl-matrix";
+import { Color, colorCopy, colorNewCopy } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import * as Viewer from "../viewer";
 import { interpolateKeyframes, loopWrap } from "./Anim";
 import { Background } from "./Background";
@@ -12,8 +13,8 @@ import { ModelInst, RenderParams, RenderSort } from "./Model";
 import { ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
-import { StageInfo } from "./StageInfo";
-import { MkbTime, S16_TO_RADIANS, Sphere } from "./Utils";
+import { BgInfo, StageInfo } from "./StageInfo";
+import { MkbTime, S16_TO_RADIANS, Sphere, transformVec } from "./Utils";
 
 const scratchRenderParams = new RenderParams();
 
@@ -111,11 +112,12 @@ class Itemgroup {
         mat4.mul(this.worldFromIg, this.worldFromIg, this.originFromIg);
     }
 
-    public prepareToRender(ctx: RenderContext) {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting) {
         const rp = scratchRenderParams;
         rp.alpha = 1.0;
         rp.sort = RenderSort.Translucent;
         rp.worldFromModel = this.worldFromIg;
+        rp.lighting = lighting;
 
         mat4.mul(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromIg);
 
@@ -146,10 +148,46 @@ class Itemgroup {
     }
 }
 
+export class Lighting {
+    public ambientColor: Color;
+    public infLightColor: Color;
+    public infLightDir_rt_view: vec3;
+
+    private infLightDir_rt_world: vec3;
+
+    constructor(bgInfo: BgInfo) {
+        this.ambientColor = colorNewCopy(bgInfo.ambientColor);
+        this.infLightColor = colorNewCopy(bgInfo.infLightColor);
+        this.infLightDir_rt_view = vec3.create();
+        this.infLightDir_rt_world = vec3.create();
+
+        vec3.set(this.infLightDir_rt_world, 0, 0, -1);
+        vec3.rotateX(
+            this.infLightDir_rt_world,
+            this.infLightDir_rt_world,
+            Vec3Zero,
+            S16_TO_RADIANS * bgInfo.infLightRotX
+        );
+        vec3.rotateY(
+            this.infLightDir_rt_world,
+            this.infLightDir_rt_world,
+            Vec3Zero,
+            S16_TO_RADIANS * bgInfo.infLightRotY
+        );
+        vec3.scale(this.infLightDir_rt_world, this.infLightDir_rt_world, 10000); // Game does this, not sure why it changes anything
+    }
+
+    public update(viewerInput: Viewer.ViewerRenderInput) {
+        transformVec(this.infLightDir_rt_view, this.infLightDir_rt_world, viewerInput.camera.viewMatrix);
+    }
+}
+
 export class World {
     private mkbTime: MkbTime;
     private itemgroups: Itemgroup[];
     private background: Background;
+    private lighting: Lighting;
+    private infLightDir_rt_world = vec3.create();
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
@@ -165,6 +203,8 @@ export class World {
             bgModels.push(new BgModelInst(model, bgModel));
         }
         this.background = new stageData.stageInfo.bgInfo.bgConstructor(bgModels);
+
+        this.lighting = new Lighting(stageData.stageInfo.bgInfo);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
@@ -177,9 +217,9 @@ export class World {
 
     public prepareToRender(ctx: RenderContext): void {
         for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].prepareToRender(ctx);
+            this.itemgroups[i].prepareToRender(ctx, this.lighting);
         }
-        this.background.prepareToRender(ctx);
+        this.background.prepareToRender(ctx, this.lighting);
     }
 
     // Should only be called once so OK to make new object

@@ -2,13 +2,15 @@ import { mat4, vec3 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialHacks } from "../gx/gx_material";
+import { GXMaterialHacks, LightingFudgeParams } from "../gx/gx_material";
 import { ViewerRenderInput } from "../viewer";
 import * as Gma from "./Gma";
 import { TextureHolder } from "./ModelCache";
 import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
+import { Color, colorNewFromRGBA } from "../Color";
+import { Lighting } from "./World";
 
 export const enum RenderSort {
     Translucent, // Depth sort "translucent" shapes only
@@ -22,6 +24,7 @@ export class RenderParams {
     public alpha = 1;
     public sort = RenderSort.Translucent;
     public texMtx = mat4.create();
+    public lighting: Lighting | null = null;
 }
 
 const scratchVec3a = vec3.create();
@@ -55,7 +58,7 @@ export class ModelInst {
         mat4.getScaling(scale, renderParams.worldFromModel);
         const maxScale = Math.max(...scale);
 
-         const center_rt_world = scratchVec3a;
+        const center_rt_world = scratchVec3a;
         vec3.transformMat4(center_rt_world, this.modelData.boundSphereCenter, renderParams.worldFromModel);
         const inFrustum = ctx.viewerInput.camera.frustum.containsSphere(
             center_rt_world,

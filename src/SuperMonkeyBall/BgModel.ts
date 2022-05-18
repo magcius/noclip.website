@@ -5,6 +5,8 @@ import { loopWrap, interpolateKeyframes } from "./Anim";
 import { MathConstants } from "../MathHelpers";
 import { RenderContext } from "./Render";
 import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils";
+import { colorCopy } from "../Color";
+import { Lighting } from "./World";
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
@@ -95,7 +97,7 @@ export class BgModelInst {
         this.buildWorldFromModelMtx(pos, rotRadians, scale);
     }
 
-    public prepareToRender(ctx: RenderContext, texMtx?: mat4) {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting, texMtx?: mat4) {
         if (!this.visible) return;
 
         const renderParams = scratchRenderParams;
@@ -106,10 +108,12 @@ export class BgModelInst {
         } else {
             mat4.identity(renderParams.texMtx);
         }
-        Object.assign(renderParams, renderParams);
 
         mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
         renderParams.worldFromModel = this.worldFromModel;
+
+        renderParams.lighting = lighting;
+
         this.model.prepareToRender(ctx, renderParams);
     }
 }

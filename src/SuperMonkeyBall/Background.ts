@@ -4,10 +4,11 @@ import { RenderParams } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
 import { MkbTime, MKB_FPS } from "./Utils";
+import { Lighting } from "./World";
 
 export interface Background {
     update(t: MkbTime): void;
-    prepareToRender(ctx: RenderContext): void;
+    prepareToRender(ctx: RenderContext, lighting: Lighting): void;
 }
 
 export interface BackgroundConstructor {
@@ -29,9 +30,9 @@ export class BgJungle implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -49,9 +50,9 @@ export class BgWater implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -69,9 +70,9 @@ export class BgNight implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -147,16 +148,16 @@ export class BgSunset implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
 
         for (let i = 0; i < this.cloudModels.length; i++) {
             const cloudModel = this.cloudModels[i];
             const texMtx = scratchMat4a;
             mat4.fromTranslation(texMtx, cloudModel.currTexTranslate);
-            cloudModel.bgModel.prepareToRender(ctx, texMtx);
+            cloudModel.bgModel.prepareToRender(ctx, lighting, texMtx);
         }
     }
 }
@@ -174,9 +175,9 @@ export class BgSpace implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -194,9 +195,9 @@ export class BgSand implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -214,9 +215,9 @@ export class BgIce implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -234,9 +235,9 @@ export class BgStorm implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -254,9 +255,9 @@ export class BgBonus implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }
@@ -274,9 +275,9 @@ export class BgMaster implements Background {
         }
     }
 
-    public prepareToRender(ctx: RenderContext): void {
+    public prepareToRender(ctx: RenderContext, lighting: Lighting): void {
         for (let i = 0; i < this.bgModels.length; i++) {
-            this.bgModels[i].prepareToRender(ctx);
+            this.bgModels[i].prepareToRender(ctx, lighting);
         }
     }
 }

@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import { clamp } from "../MathHelpers";
 
 export const S16_TO_RADIANS = Math.PI / 0x8000;
@@ -62,4 +62,13 @@ export class MkbTime {
 export type Sphere = {
     center: vec3;
     radius: number;
+}
+
+// Transform a vec3 by a mat4 without translation
+const scratchVec4a = vec4.create();
+export function transformVec(dest: vec3, src: vec3, mtx: mat4): void {
+    const v = scratchVec4a;
+    vec4.set(v, src[0], src[1], src[2], 0);
+    vec4.transformMat4(v, v, mtx);
+    vec3.set(dest, v[0], v[1], v[2]);
 }
