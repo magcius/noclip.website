@@ -16,7 +16,7 @@ import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMa
 import { DataFetcher } from "../DataFetcher";
 import { TextureMapping } from "../TextureHolder";
 import { Blue, Cyan, Green, Magenta, OpaqueBlack, Red, Yellow } from "../Color";
-import { dfRange, dfShow } from "../DebugFloaters";
+import { dfLabel, dfRange, dfShow } from "../DebugFloaters";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
 class PatchProgram extends DeviceProgram {
@@ -70,7 +70,7 @@ out vec3 v_NormalMesh;
 out vec3 v_PositionWorld;
 out vec3 v_NormalWorld;
 out vec3 v_TangentWorld;
-out vec2 v_TexCoordMesh;
+out vec2 v_TexCoordLocal;
 
 vec3 SphereFromCube(vec3 t_Pos) {
     // http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
@@ -106,14 +106,16 @@ void main() {
     v_NormalWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshNrm, 0.0)).xyz);
     v_TangentWorld = normalize(Mul(_Mat4x4(u_MeshToWorldMatrix), vec4(t_MeshTng, 0.0)).xyz);
 
+#ifdef MODE_SPHERE
     t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(0u, t_TexCoordMesh.xy);
     t_PosWorld.xyz += v_NormalWorld.xyz * CalcWaveHeight(1u, t_TexCoordMesh.xy);
+#endif
 
     v_PositionWorld.xyz = t_PosWorld.xyz;
     gl_Position = Mul(u_ProjectionView, vec4(t_PosWorld, 1.0));
 
     v_NormalMesh.xyz = t_MeshNrm.xyz;
-    v_TexCoordMesh.xy = t_TexCoordMesh.xy;
+    v_TexCoordLocal.xy = a_TexCoord.xy;
 }
 `;
 
@@ -122,7 +124,7 @@ in vec3 v_NormalMesh;
 in vec3 v_PositionWorld;
 in vec3 v_NormalWorld;
 in vec3 v_TangentWorld;
-in vec2 v_TexCoordMesh;
+in vec2 v_TexCoordLocal;
 
 float G1V(float NoV, float k) {
     return NoV / (NoV * (1.0 - k) + k);
@@ -223,7 +225,7 @@ void main() {
     t_FinalColor.rgb = pow(t_FinalColor.rgb, vec3(1.0 / 2.2));
     gl_FragColor.rgba = t_FinalColor;
 
-    // gl_FragColor.rgba = vec4(v_TexCoordMesh.xy, 1.0, 1.0);
+    // gl_FragColor.rgba = vec4(v_TexCoordLocal.xy, 1.0, 1.0);
 }
 `;
 }
@@ -658,7 +660,7 @@ class PatchInstance {
             }
         }
 
-        // Set up child topology.
+        // Set up internal topology.
         if (this.child[PatchChild.TopLeft] !== null) {
             this.child[PatchChild.TopLeft]!.setNeighborEdge(PatchNeighborEdge.Right, this.child[PatchChild.TopRight]);
             this.child[PatchChild.TopLeft]!.setNeighborEdge(PatchNeighborEdge.Bottom, this.child[PatchChild.BottomLeft]);
@@ -680,40 +682,29 @@ class PatchInstance {
         }
     }
 
-    private getChildOrSelf(patch: PatchInstance | null, child: PatchChild): PatchInstance | null {
-        if (patch === null)
-            return null;
-
-        const c = patch.child[child];
-        if (c !== null)
-            return c;
-
-        return patch;
-    }
-
-    public setNeighborEdge(edge: PatchNeighborEdge, patch: PatchInstance | null, scramble: number[] = [0, 1, 2, 3]): void {
+    private setNeighborEdge(edge: PatchNeighborEdge, patch: PatchInstance | null): void {
         this.neighbor[edge] = patch;
 
         if (edge === PatchNeighborEdge.Top) {
             if (this.child[PatchChild.TopLeft] !== null)
-                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomLeft]), scramble);
+                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, patch);
             if (this.child[PatchChild.TopRight] !== null)
-                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomRight]), scramble);
+                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, patch);
         } else if (edge === PatchNeighborEdge.Left) {
             if (this.child[PatchChild.TopLeft] !== null)
-                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopRight]), scramble);
+                this.child[PatchChild.TopLeft]!.setNeighborEdge(edge, patch);
             if (this.child[PatchChild.BottomLeft] !== null)
-                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomRight]), scramble);
+                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, patch);
         } else if (edge === PatchNeighborEdge.Right) {
             if (this.child[PatchChild.TopRight] !== null)
-                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopLeft]), scramble);
+                this.child[PatchChild.TopRight]!.setNeighborEdge(edge, patch);
             if (this.child[PatchChild.BottomRight] !== null)
-                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.BottomLeft]), scramble);
+                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, patch);
         } else if (edge === PatchNeighborEdge.Bottom) {
             if (this.child[PatchChild.BottomLeft] !== null)
-                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopLeft]), scramble);
+                this.child[PatchChild.BottomLeft]!.setNeighborEdge(edge, patch);
             if (this.child[PatchChild.BottomRight] !== null)
-                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, this.getChildOrSelf(patch, scramble[PatchChild.TopRight]), scramble);
+                this.child[PatchChild.BottomRight]!.setNeighborEdge(edge, patch);
         }
     }
 
@@ -793,7 +784,7 @@ class PatchInstance {
 
             if (shaderParam.showTess) {
                 const level = Math.log2(1.0 / this.scale) | 0;
-                const colors = [ Red, Green, Blue, Cyan, Yellow, Red, Green, Blue, Cyan, Yellow ];
+                const colors = [ Red, Green, Blue, Yellow, Cyan, Red, Green, Blue, Yellow, Cyan ];
                 offs += fillColor(d, offs, colors[level]);
             } else {
                 offs += fillColor(d, offs, OpaqueBlack);
@@ -829,7 +820,7 @@ class WaveParam {
     @dfRange(1, 20, 1)
     public texCoordScale = 4;
     @dfShow()
-    @dfRange(0, 1000, 1)
+    @dfRange(0, 5000, 1)
     public heightmapScale = 500;
 
     public update(viewerInput: ViewerRenderInput): void {
@@ -841,11 +832,40 @@ class WaveParam {
     }
 }
 
+function pairEdge(f0: PatchInstance | null, e0: PatchNeighborEdge, c0: [PatchChild, PatchChild], f1: PatchInstance | null, e1: PatchNeighborEdge, c1: [PatchChild, PatchChild]): void {
+    if (f0 === null && f1 === null)
+        return;
+
+    if (f0 !== null) {
+        assert(f0.neighbor[e0] === null);
+        f0.neighbor[e0] = f1;
+    }
+    if (f1 !== null) {
+        assert(f1.neighbor[e1] === null);
+        f1.neighbor[e1] = f0;
+    }
+
+    for (let i = 0; i < 2; i++) {
+        const ch0 = f0 !== null ? f0.child[c0[i]] : null;
+        const ch1 = f1 !== null ? f1.child[c1[i]] : null;
+        pairEdge(ch0, e0, c0, ch1, e1, c1);
+    }
+}
+
+function assertAllPaired(f: PatchInstance): void {
+    for (let i = 0; i < f.neighbor.length; i++)
+        assert(f.neighbor[i] !== null);
+    for (let i = 0; i < f.child.length; i++)
+        if (f.child[i] !== null)
+            assertAllPaired(f.child[i]!);
+}
+
 class TessSphere {
     private face: PatchInstance[] = [];
     private gfxProgram: GfxProgram;
     public worldFromMeshMatrix = mat4.create();
     @dfShow()
+    @dfLabel("W")
     public waveParam = nArray(2, () => new WaveParam());
     public distThreshold = 4;
     private textureMapping = nArray(1, () => new TextureMapping());
@@ -917,35 +937,29 @@ class TessSphere {
         }
 
         // Hook up cube topology.
-        this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Top].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Front]);
 
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Front]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Bottom].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Back]);
+        // Pair both loops around the middle ring
+        const middleRing = [TessCubeFace.Front, TessCubeFace.Right, TessCubeFace.Back, TessCubeFace.Left, TessCubeFace.Front];
+        for (let i = 0; i < 4; i++) {
+            const f0 = middleRing[i], f1 = middleRing[i + 1];
+            pairEdge(this.face[f0], PatchNeighborEdge.Right, [PatchChild.TopRight, PatchChild.BottomRight], this.face[f1], PatchNeighborEdge.Left, [PatchChild.TopLeft, PatchChild.BottomLeft]);
+        }
 
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Front]);
-        this.face[TessCubeFace.Left].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [2, 0]);
+        // Pair top face
+        pairEdge(this.face[TessCubeFace.Top], PatchNeighborEdge.Top, [PatchChild.TopLeft, PatchChild.TopRight], this.face[TessCubeFace.Back], PatchNeighborEdge.Top, [PatchChild.TopRight, PatchChild.TopLeft]);
+        pairEdge(this.face[TessCubeFace.Top], PatchNeighborEdge.Left, [PatchChild.TopLeft, PatchChild.BottomLeft], this.face[TessCubeFace.Left], PatchNeighborEdge.Top, [PatchChild.TopLeft, PatchChild.TopRight]);
+        pairEdge(this.face[TessCubeFace.Top], PatchNeighborEdge.Right, [PatchChild.TopRight, PatchChild.BottomRight], this.face[TessCubeFace.Right], PatchNeighborEdge.Top, [PatchChild.TopRight, PatchChild.TopLeft]);
+        pairEdge(this.face[TessCubeFace.Top], PatchNeighborEdge.Bottom, [PatchChild.BottomLeft, PatchChild.BottomRight], this.face[TessCubeFace.Front], PatchNeighborEdge.Top, [PatchChild.TopLeft, PatchChild.TopRight]);
 
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Front]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Back]);
-        this.face[TessCubeFace.Right].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [1, 3]);
+        // Pair bottom face
+        pairEdge(this.face[TessCubeFace.Bottom], PatchNeighborEdge.Top, [PatchChild.TopLeft, PatchChild.TopRight], this.face[TessCubeFace.Front], PatchNeighborEdge.Bottom, [PatchChild.BottomLeft, PatchChild.BottomRight]);
+        pairEdge(this.face[TessCubeFace.Bottom], PatchNeighborEdge.Left, [PatchChild.TopLeft, PatchChild.BottomLeft], this.face[TessCubeFace.Left], PatchNeighborEdge.Bottom, [PatchChild.BottomRight, PatchChild.BottomLeft]);
+        pairEdge(this.face[TessCubeFace.Bottom], PatchNeighborEdge.Right, [PatchChild.TopRight, PatchChild.BottomRight], this.face[TessCubeFace.Right], PatchNeighborEdge.Bottom, [PatchChild.BottomLeft, PatchChild.BottomRight]);
+        pairEdge(this.face[TessCubeFace.Bottom], PatchNeighborEdge.Bottom, [PatchChild.BottomLeft, PatchChild.BottomRight], this.face[TessCubeFace.Back], PatchNeighborEdge.Bottom, [PatchChild.BottomRight, PatchChild.BottomLeft]);
 
-        this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
-        this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Front].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom]);
-
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Top, this.face[TessCubeFace.Top]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Left, this.face[TessCubeFace.Right]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Right, this.face[TessCubeFace.Left]);
-        this.face[TessCubeFace.Back].setNeighborEdge(PatchNeighborEdge.Bottom, this.face[TessCubeFace.Bottom], [2, 3]);
+        // Double-check that everything is paired
+        for (let i = 0; i < this.face.length; i++)
+            assertAllPaired(this.face[i]);
 
         this.textureMapping[0].gfxTexture = sceneData.heightmap;
         this.textureMapping[0].gfxSampler = cache.createSampler({

@@ -32,7 +32,10 @@ function getParentMetadata(target: any, key: string): ParentMetadata {
 type RecursePropertiesCallback = (obj: { [k: string]: any }, paramName: string, labelName: string, parentMetadata: ParentMetadata | null) => boolean;
 function recurseBindProperties(cb: RecursePropertiesCallback, obj: { [k: string]: any }, parentName: string = '', parentMetadata: ParentMetadata | null = null): void {
     for (const keyName in obj) {
-        const labelName = `${parentName}.${keyName}`;
+        let labelName = Reflect.getMetadata(`df:label`, obj, keyName);
+        if (labelName === undefined)
+            labelName = `${parentName}.${keyName}`;
+
         if (!cb(obj, keyName, labelName, parentMetadata))
             continue;
         if (typeof obj[keyName] === 'object' && !!obj[keyName])
