@@ -13,7 +13,7 @@ const scratchColora: Color = White;
 const scratchMat4a: mat4 = mat4.create();
 
 export function debugDrawColi(stagedef: SD.Stage, camera: Camera) {
-    for (let coliHeader of stagedef.itemgroups) {
+    for (let coliHeader of stagedef.animGroups) {
         for (let i = 0; i < coliHeader.coliTris.length; i++) {
             const coliTri = coliHeader.coliTris[i];
             const color = scratchColora;

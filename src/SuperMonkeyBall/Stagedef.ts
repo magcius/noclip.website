@@ -48,7 +48,7 @@ export type Keyframe = {
     tangentOut: number; // Right handle
 };
 
-export type ItemgroupAnim = {
+export type AnimGroupAnim = {
     rotXKeyframes: Keyframe[];
     rotYKeyframes: Keyframe[];
     rotZKeyframes: Keyframe[];
@@ -131,7 +131,7 @@ export type BgModel = {
 //     // effectHeader: EffectHeader;
 // }
 
-// Visual model for the stage itself, parented to itemgroups
+// Visual model for the stage itself, parented to anim groups
 export type LevelModel = {
     flags: number;
     modelName: string;
@@ -182,11 +182,11 @@ export type StageModel = {
     modelName: string;
 };
 
-export type Itemgroup = {
+export type AnimGroup = {
     originPos: vec3;
     originRot: vec3;
     animType: AnimType;
-    anim: ItemgroupAnim;
+    anim: AnimGroupAnim;
     // conveyorVel: vec3;
 
     coliTris: ColiTri[];
@@ -235,7 +235,7 @@ export type ColiSphere = {
 export type Stage = {
     loopStartSeconds: number;
     loopEndSeconds: number;
-    itemgroups: Itemgroup[];
+    animGroups: AnimGroup[];
     initBallPose: InitBallPose;
     falloutPlane: FalloutPlane;
     goals: Goal[];
@@ -261,9 +261,9 @@ export type FalloutVolume = {
 };
 
 export type ColiTri = {
-    // Transform from triangle space to itemgroup space
+    // Transform from triangle space to anim group space
     pos: vec3; // Position of vertex 1
-    normal: vec3; // Normal in itemgroup space
+    normal: vec3; // Normal in anim group space
     rot: vec3; // Rotation from XY plane
 
     // Triangle space (tri in XY plane, vertex 1 on origin, vertex 2 on (+)X axis)
@@ -294,7 +294,7 @@ export type InitBallPose = {
     rot: vec3;
 };
 
-const ITEMGROUP_SIZE = 0xc4;
+const ANIM_GROUP_SIZE = 0xc4;
 const GOAL_SIZE = 0x14;
 const BUMPER_SIZE = 0x20;
 const JAMABAR_SIZE = 0x20;
@@ -345,7 +345,7 @@ function parseKeyframeList(view: DataView, offset: number): Keyframe[] {
     return keyframes;
 }
 
-function parseItemgroupAnim(view: DataView, offset: number): ItemgroupAnim {
+function parseAnimGroupAnim(view: DataView, offset: number): AnimGroupAnim {
     const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
     const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
     const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
@@ -599,16 +599,16 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     //     unkKeyframes: fogUnkKeyframes,
     // };
 
-    const itemgroupCount = view.getUint32(0x8);
-    const itemgroupListOffs = view.getUint32(0xc);
-    const itemgroups: Itemgroup[] = [];
-    for (let i = 0; i < itemgroupCount; i++) {
-        const coliHeaderOffs = itemgroupListOffs + i * ITEMGROUP_SIZE;
+    const animGroupCount = view.getUint32(0x8);
+    const animGroupListOffs = view.getUint32(0xc);
+    const animGroups: AnimGroup[] = [];
+    for (let i = 0; i < animGroupCount; i++) {
+        const coliHeaderOffs = animGroupListOffs + i * ANIM_GROUP_SIZE;
         const initPos = parseVec3f(view, coliHeaderOffs + 0x0);
         const initRot = parseVec3s(view, coliHeaderOffs + 0xc);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
-        const animHeader = parseItemgroupAnim(view, animHeaderOffs);
+        const animHeader = parseAnimGroupAnim(view, animHeaderOffs);
         // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,
@@ -709,7 +709,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         // const textureScrollOffs = view.getUint32(coliHeaderOffs + 0xD8);
         // const textureScroll: TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
 
-        itemgroups.push({
+        animGroups.push({
             originPos: initPos,
             originRot: initRot,
             animType: animType,
@@ -744,7 +744,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     return {
         loopStartSeconds,
         loopEndSeconds,
-        itemgroups,
+        animGroups: animGroups,
         initBallPose,
         falloutPlane,
         goals,

@@ -143,6 +143,7 @@ export class Renderer implements Viewer.SceneGfx {
 
     public adjustCameraController(c: CameraController) {
         // TODO(complexplane): Add ability to adjust camera speed range
-        c.setKeyMoveSpeed(1);
+        c.setKeyMoveSpeed(4);
+        c.setSceneMoveSpeedMult(0.25);
     }
 }

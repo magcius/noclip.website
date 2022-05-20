@@ -31,20 +31,20 @@ export type StageData = {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-class Itemgroup {
+class AnimGroup {
     private models: ModelInst[];
     private worldFromIg: mat4;
     private originFromIg: mat4;
-    private igData: SD.Itemgroup;
+    private igData: SD.AnimGroup;
 
     constructor(
         device: GfxDevice,
         renderCache: GfxRenderCache,
         modelCache: ModelCache,
         private stagedef: SD.Stage,
-        private itemgroupIdx: number
+        private animGroupIdx: number
     ) {
-        this.igData = stagedef.itemgroups[itemgroupIdx];
+        this.igData = stagedef.animGroups[animGroupIdx];
         this.models = [];
         for (let i = 0; i < this.igData.levelModels.length; i++) {
             const name = this.igData.levelModels[i].modelName;
@@ -57,7 +57,7 @@ class Itemgroup {
         this.worldFromIg = mat4.create();
         this.originFromIg = mat4.create();
 
-        if (itemgroupIdx > 0) {
+        if (animGroupIdx > 0) {
             // Not in world space, animate
             mat4.fromXRotation(this.originFromIg, -this.igData.originRot[0] * S16_TO_RADIANS);
             mat4.rotateY(this.originFromIg, this.originFromIg, -this.igData.originRot[1] * S16_TO_RADIANS);
@@ -73,8 +73,8 @@ class Itemgroup {
     }
 
     public update(t: MkbTime): void {
-        // Check if this is the world space itemgroup
-        if (this.itemgroupIdx === 0) return;
+        // Check if this is the world space anim group
+        if (this.animGroupIdx === 0) return;
 
         const loopedTimeSeconds = loopWrap(
             t.getAnimTimeSeconds(),
@@ -175,14 +175,14 @@ export class Lighting {
 
 export class World {
     private mkbTime: MkbTime;
-    private itemgroups: Itemgroup[];
+    private animGroups: AnimGroup[];
     private background: Background;
     private lighting: Lighting;
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
-        this.itemgroups = stageData.stagedef.itemgroups.map(
-            (_, i) => new Itemgroup(device, renderCache, modelCache, stageData.stagedef, i)
+        this.animGroups = stageData.stagedef.animGroups.map(
+            (_, i) => new AnimGroup(device, renderCache, modelCache, stageData.stagedef, i)
         );
 
         const bgModels: BgModelInst[] = [];
@@ -199,16 +199,16 @@ export class World {
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
         this.mkbTime.updateDeltaTimeSeconds(viewerInput.deltaTime / 1000);
-        for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].update(this.mkbTime);
+        for (let i = 0; i < this.animGroups.length; i++) {
+            this.animGroups[i].update(this.mkbTime);
         }
         this.background.update(this.mkbTime);
         this.lighting.update(viewerInput);
     }
 
     public prepareToRender(ctx: RenderContext): void {
-        for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].prepareToRender(ctx, this.lighting);
+        for (let i = 0; i < this.animGroups.length; i++) {
+            this.animGroups[i].prepareToRender(ctx, this.lighting);
         }
         this.background.prepareToRender(ctx, this.lighting);
     }
