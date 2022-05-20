@@ -12,13 +12,15 @@ import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/Gfx
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
 import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil';
-import { assert, assertExists, fallback, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
+import { BSPEntity } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
 import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
+import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem';
 import { SpriteInstance } from './Sprite';
 import { computeMatrixForForwardDir } from './StaticDetailObject';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
-import { BSPEntity, vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
+import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
 
 type EntityMessageValue = string;
 
@@ -1910,35 +1912,37 @@ export class trigger_multiple extends BaseEntity {
         super.movement(entitySystem, renderContext);
 
         const aabb = this.getAABB();
-        if (aabb !== null) {
+        if (aabb === null)
+            return;
+
+        let isPlayerTouching = false;
+        if (entitySystem.triggersEnabled && this.enabled) {
             mat4.invert(scratchMat4a, this.modelMatrix);
             entitySystem.getLocalPlayer().getAbsOrigin(scratchVec3a);
             transformVec3Mat4w1(scratchVec3a, scratchMat4a, scratchVec3a);
-
+    
             const playerSize = 24;
-            const isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
+            isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
 
-            if (this.enabled) {
-                if (this.isPlayerTouching !== isPlayerTouching) {
-                    this.isPlayerTouching = isPlayerTouching;
-
-                    if (this.isPlayerTouching)
-                        this.onStartTouch(entitySystem);
-                    else
-                        this.onEndTouch(entitySystem);
-                }
+            if (this.isPlayerTouching !== isPlayerTouching) {
+                this.isPlayerTouching = isPlayerTouching;
 
                 if (this.isPlayerTouching)
-                    this.onTouch(entitySystem);
+                    this.onStartTouch(entitySystem);
+                else
+                    this.onEndTouch(entitySystem);
             }
 
-            if (renderContext.showTriggerDebug) {
-                const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
-                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix, color);
+            if (this.isPlayerTouching)
+                this.onTouch(entitySystem);
+        }
 
-                getMatrixTranslation(scratchVec3a, this.modelMatrix);
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
-            }
+        if (renderContext.showTriggerDebug) {
+            const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
+            drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, this.modelMatrix, color);
+
+            getMatrixTranslation(scratchVec3a, this.modelMatrix);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
         }
     }
 }
@@ -2009,9 +2013,8 @@ class trigger_look extends trigger_once {
         }
 
         const delta = entitySystem.currentTime - this.startLookTime;
-        if (delta >= this.lookTimeAmount) {
+        if (delta >= this.lookTimeAmount)
             this.activateTrigger(entitySystem);
-        }
     }
 
     protected override onEndTouch(entitySystem: EntitySystem): void {
@@ -3201,6 +3204,147 @@ export class info_player_start extends BaseEntity {
     public static classname = `info_player_start`;
 }
 
+class ParticleSystemController {
+    public controlPoints: ParticleControlPoint[] = [];
+    private controlPointEntity: BaseEntity[] = [];
+    public instances: ParticleSystemInstance[] = [];
+
+    constructor(public entity: BaseEntity) {
+        this.addControlPoint(0, this.entity);
+    }
+
+    public addControlPoint(i: number, entity: BaseEntity): void {
+        this.controlPointEntity[i] = entity;
+        this.controlPoints[i] = new ParticleControlPoint();
+    }
+
+    public stop(): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].emitActive = false;
+    }
+
+    public stopImmediate(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].destroy(renderContext.device);
+
+        this.instances.length = 0;
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.instances.length; i++) {
+            const instance = this.instances[i];
+
+            for (let i = 0; i < this.controlPointEntity.length; i++) {
+                const entity = this.controlPointEntity[i];
+                if (entity === undefined)
+                    continue;
+
+                const point = this.controlPoints[i];
+                mat4.copy(point.prevTransform, point.transform);
+                mat4.copy(point.transform, entity.updateModelMatrix());
+            }
+
+            instance.movement(renderContext);
+
+            if (instance.isFinished()) {
+                instance.destroy(renderContext.device);
+                this.instances.splice(i--, 1);
+            }
+        }
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        for (let i = 0; i < this.instances.length; i++)
+            this.instances[i].prepareToRender(renderContext, renderInstManager);
+    }
+}
+
+class info_particle_system extends BaseEntity {
+    public static classname = `info_particle_system`;
+    private controller: ParticleSystemController;
+    private active = false;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.controller = new ParticleSystemController(this);
+
+        this.registerInput('start', this.input_start.bind(this));
+        this.registerInput('stop', this.input_stop.bind(this));
+        this.registerInput('destroyimmediately', this.input_destroyimmediately.bind(this));
+
+        if (entity.start_active)
+            this.active = !!Number(entity.start_active);
+    }
+
+    public override spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        for (let i = 1; i < 64; i++) {
+            const controlPointEntityName = this.entity[`cpoint${i}`];
+            if (controlPointEntityName === undefined)
+                continue;
+            const controlPointEntity = entitySystem.findEntityByTargetName(controlPointEntityName);
+            if (controlPointEntity === null)
+                continue;
+            this.controller.addControlPoint(i, controlPointEntity);
+        }
+
+        if (this.active)
+            this.start(entitySystem);
+    }
+
+    private start(entitySystem: EntitySystem): void {
+        const systemName = this.entity.effect_name;
+        const def = entitySystem.renderContext.materialCache.particleSystemCache.getParticleSystemDefinition(systemName);
+        if (def === null)
+            return;
+
+        const systemInstance = new ParticleSystemInstance(entitySystem.renderContext, def, this.controller);
+        this.controller.instances.push(systemInstance);
+    }
+
+    private input_start(entitySystem: EntitySystem): void {
+        if (this.active)
+            return;
+
+        this.active = true;
+        this.start(entitySystem);
+    }
+
+    private input_stop(entitySystem: EntitySystem): void {
+        if (!this.active)
+            return;
+
+        this.active = false;
+        this.controller.stop();
+    }
+
+    private input_destroyimmediately(entitySystem: EntitySystem): void {
+        if (!this.active)
+            return;
+
+        this.active = true;
+        this.controller.stopImmediate(entitySystem.renderContext);
+    }
+
+    public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+        if (this.controller === null)
+            return;
+        this.controller.movement(renderContext);
+    }
+    
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (!this.shouldDraw())
+            return;
+
+        if (this.controller === null)
+            return;
+
+        this.controller.prepareToRender(renderContext, renderInstManager);
+    }
+}
+
 interface EntityFactory<T extends BaseEntity = BaseEntity> {
     new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): T;
     classname: string;
@@ -3265,6 +3409,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);
         this.registerFactory(info_player_start);
+        this.registerFactory(info_particle_system);
     }
 
     public registerFactory(factory: EntityFactory): void {
@@ -3289,6 +3434,7 @@ export class EntitySystem {
     public currentTime = 0;
     public nextDynamicTemplateSpawnIndex = 0;
     public debugger = new EntityMessageDebugger();
+    public triggersEnabled = true;
     private outputQueue: QueuedOutputEvent[] = [];
     private currentActivator: BaseEntity | null = null;
 
@@ -3399,6 +3545,9 @@ export class EntitySystem {
     }
 
     private getSpawnStateAction(): SpawnState {
+        if (!this.renderContext.materialCache.isInitialized())
+            return SpawnState.FetchingResources;
+
         let spawnState = SpawnState.Spawned;
         for (let i = 0; i < this.entities.length; i++) {
             if (this.entities[i].spawnState === SpawnState.FetchingResources)

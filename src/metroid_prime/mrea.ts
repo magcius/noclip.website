@@ -251,11 +251,8 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             }
         }
 
-        for (let j = colorConstants.length; j < 4; j++) {
-            // Push default colors.
-            // XXX(jstpierre): Should this stuff be moved outside GXMaterial?
+        for (let j = colorConstants.length; j < 4; j++)
             colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
-        }
 
         const blendDstFactor: GX.BlendFactor = stream.readUint16();
         const blendSrcFactor: GX.BlendFactor = stream.readUint16();
@@ -278,7 +275,6 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const attenuationFunction: GX.AttenuationFunction = (colorChannelFlags >>> 13) & 0x03;
 
             const colorChannel = { lightingEnabled, ambColorSource, matColorSource, litMask: 0xFF, diffuseFunction, attenuationFunction };
-            // XXX(jstpierre): What's with COLOR0A0?
             const alphaChannel = { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE };
             lightChannels.push({ colorChannel, alphaChannel });
         }

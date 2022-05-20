@@ -59,7 +59,7 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Dzs ? DZS :
     T extends ResType.Bva ? VAF1 :
     T extends ResType.Raw ? NamedArrayBufferSlice :
-    never;
+    unknown;
 
 export class dRes_control_c {
     public resObj: dRes_info_c[] = [];
@@ -204,8 +204,7 @@ export class dRes_info_c {
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI`) {
             // J3D models.
 
-            // XXX(jstpierre): Sometimes there are J3D2bmd2 files we can't parse, like
-            // Ff.arc / ff.bmd. Skip over these.
+            // Sometimes there are J3D2bmd2 files we can't parse, like Ff.arc / ff.bmd. Skip over these.
             const j3d = new JSystemFileReaderHelper(file.buffer);
             if (j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4') {
                 const res = new J3DModelData(device, cache, BMD.parseReader(j3d));

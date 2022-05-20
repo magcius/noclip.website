@@ -32,7 +32,10 @@ function getParentMetadata(target: any, key: string): ParentMetadata {
 type RecursePropertiesCallback = (obj: { [k: string]: any }, paramName: string, labelName: string, parentMetadata: ParentMetadata | null) => boolean;
 function recurseBindProperties(cb: RecursePropertiesCallback, obj: { [k: string]: any }, parentName: string = '', parentMetadata: ParentMetadata | null = null): void {
     for (const keyName in obj) {
-        const labelName = `${parentName}.${keyName}`;
+        let labelName = Reflect.getMetadata(`df:label`, obj, keyName);
+        if (labelName === undefined)
+            labelName = `${parentName}.${keyName}`;
+
         if (!cb(obj, keyName, labelName, parentMetadata))
             continue;
         if (typeof obj[keyName] === 'object' && !!obj[keyName])
@@ -87,7 +90,7 @@ class FloaterControlHandlerValue {
         this.updateInterval = setInterval(() => {
             if (this.obj[this.paramName] !== this.lastValue)
                 this.update();
-        }, 100);
+        }, 10);
     }
 
     public setValue(value: number): void {
@@ -295,7 +298,28 @@ export class FloatingPanel implements Widget {
         this.contents.appendChild(cb.elem);
     }
 
-    public bindSingleSlider(labelName: string, obj: any, paramName: string, parentMetadata: ParentMetadata | null = null, midiControls: GlobalMIDIControls | null = null): void {
+    public bindButton(labelName: string, obj: any, paramName: string): void {
+        let value = obj[paramName];
+        assert(typeof value === "function");
+
+        let labelNameMetadata = Reflect.getMetadata('df:label', obj, paramName);
+        if (labelNameMetadata !== undefined)
+            labelName = labelNameMetadata;
+
+        const button = document.createElement('div');
+        button.style.fontWeight = `bold`;
+        button.style.textAlign = `center`;
+        button.style.lineHeight = `24px`;
+        button.style.cursor = `pointer`;
+        button.textContent = labelName;
+        button.onclick = () => {
+            value.call(obj);
+        };
+
+        this.contents.appendChild(button);
+    }
+
+    public bindSlider(labelName: string, obj: any, paramName: string, parentMetadata: ParentMetadata | null = null, midiControls: GlobalMIDIControls | null = null): void {
         let value = obj[paramName];
         assert(typeof value === "number");
 
@@ -313,6 +337,10 @@ export class FloatingPanel implements Widget {
             }
     
             slider.setLabel(`${labelName} = ${valueStr}`);
+
+            let changedCallback = Reflect.getMetadata('df:changedcallback', obj, paramName);
+            if (changedCallback)
+                changedCallback.call(obj);
         };
 
         let usePercent = Reflect.getMetadata('df:usepercent', obj, paramName);
@@ -394,7 +422,7 @@ export class FloatingPanel implements Widget {
             target = target[args[i]];
         }
 
-        this.bindSingleSlider(labelName, target, args[args.length - 1], parentMetadata);
+        this.bindSlider(labelName, target, args[args.length - 1], parentMetadata);
     }
 }
 
@@ -437,35 +465,39 @@ export class DebugFloaterHolder {
         this.debugFloater = null;
     }
 
-    private _bindPanelRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
-        // Children are by default invisible, unless we're in a color, or some sort of number array.
-        const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
-
-        const keys = Object.keys(obj);
-
-        for (let i = 0; i < keys.length; i++) {
-            const keyName = keys[i];
-            if (!(childDefaultVisible || dfShouldShowOwn(obj, keyName)))
-                continue;
-            const v = obj[keyName];
-
-            if (typeof v === "number")
-                panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata, this.midiControls);
-            else if (typeof v === "boolean")
-                panel.bindCheckbox(`${parentName}.${keyName}`, obj, keyName);;
-
-            this._bindPanelRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
-        }
-    }
-
-    public bindPanel(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
+    public bindPanel(obj: { [k: string]: any }, panel_: FloatingPanel | null = null): void {
+        let panel = panel_!;
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this._bindPanelRecurse(obj, panel, '');
+        recurseBindProperties((obj, keyName, labelName, parentMetadata) => {
+            // Children are by default invisible, unless we're in a color, or some sort of number array.
+            const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
+
+            if (!(childDefaultVisible || dfShouldShowOwn(obj, keyName)))
+                return false;
+
+            const v = obj[keyName];
+
+            if (typeof v === "number")
+                panel.bindSlider(labelName, obj, keyName, parentMetadata, this.midiControls);
+            else if (typeof v === "boolean")
+                panel.bindCheckbox(labelName, obj, keyName);
+            else if (typeof v === "function")
+                panel.bindButton(labelName, obj, keyName);
+
+            return true;
+        }, obj);
+
+        recurseAllPrototypeFunctions((proto, keyName) => {
+            if (!dfShouldShowOwn(obj, keyName) && !dfShouldShowOwn(proto, keyName))
+                return;
+
+            panel.bindButton(keyName, obj, keyName);
+        }, obj);
     }
 }
 
@@ -536,12 +568,15 @@ interface MidiMetadata {
     callback?: boolean;
 }
 
-function recurseAllPrototypeFunctions(cb: (obj: any, keyName: string) => void, obj: any): void {
+function recurseAllPrototypeFunctions(cb: (proto: any, keyName: string) => void, obj: any): void {
     if (obj === null)
         return;
     const props = Object.getOwnPropertyNames(obj);
     for (const keyName of props) {
-        if (!(obj[keyName] instanceof Function))
+        const desc = Object.getOwnPropertyDescriptor(obj, keyName);
+        if (desc === undefined)
+            continue;
+        if (desc.value === undefined || typeof desc.value !== 'function')
             continue;
         cb(obj, keyName);
     }
@@ -743,6 +778,10 @@ export function dfUsePercent(v: boolean = true) {
 
 export function dfLabel(v: string) {
     return Reflect.metadata('df:label', v);
+}
+
+export function dfChangedCallback(v: () => void) {
+    return Reflect.metadata('df:changedcallback', v);
 }
 
 export function dfBindMidiValue(kind: 'knob' | 'slider', index: number, channel: number = 0) {

@@ -26,6 +26,13 @@ vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOv
 vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 `;
 
+export const GXIntensity = `
+float GXIntensity(vec3 t_Color) {
+    // https://github.com/dolphin-emu/dolphin/blob/4cd48e609c507e65b95bca5afb416b59eaf7f683/Source/Core/VideoCommon/TextureConverterShaderGen.cpp#L237-L241
+    return dot(t_Color, vec3(0.257, 0.504, 0.098)) + 16.0/255.0;
+}
+`;
+
 }
 
 // #region Material definition.
@@ -442,7 +449,11 @@ export class GX_Program extends DeviceProgram {
     private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
         const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
 
-        switch (chan.diffuseFunction) {
+        let diffFn = chan.diffuseFunction;
+        if (chan.attenuationFunction === GX.AttenuationFunction.NONE)
+            diffFn = GX.DiffuseFunction.NONE;
+
+        switch (diffFn) {
         case GX.DiffuseFunction.NONE: return `1.0`;
         case GX.DiffuseFunction.SIGN: return `${NdotL}`;
         case GX.DiffuseFunction.CLAMP: return `max(${NdotL}, 0.0)`;
@@ -456,16 +467,17 @@ export class GX_Program extends DeviceProgram {
         } else if (chan.attenuationFunction === GX.AttenuationFunction.SPOT) {
             const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
             const cosAttn = `max(0.0, ApplyAttenuation(${lightName}.CosAtten.xyz, ${attn}))`;
-            const distAttn = `dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
+            const normalize = (chan.diffuseFunction !== GX.DiffuseFunction.NONE) ? `normalize` : ``;
+            const distAttn = `dot(${normalize}(${lightName}.DistAtten.xyz), vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
             return `
-    t_Attenuation = ${cosAttn} / ${distAttn};`;
+    t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
         } else if (chan.attenuationFunction === GX.AttenuationFunction.SPEC) {
             const attn = `(dot(t_Normal, t_LightDeltaDir) >= 0.0) ? max(0.0, dot(t_Normal, ${lightName}.Direction.xyz)) : 0.0`;
             const cosAttn = `ApplyAttenuation(${lightName}.CosAtten.xyz, t_Attenuation)`;
-            const distAttn = `ApplyAttenuation(${lightName}.DistAtten.xyz, t_Attenuation)`;
+            const distAttn = `max(0.0, ApplyAttenuation(${lightName}.DistAtten.xyz, t_Attenuation))`;
             return `
     t_Attenuation = ${attn};
-    t_Attenuation = ${cosAttn} / ${distAttn};`;
+    t_Attenuation = max(0.0, ${cosAttn} / ${distAttn});`;
         } else {
             throw "whoops";
         }

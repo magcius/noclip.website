@@ -57,6 +57,7 @@ import { NPCDirector } from './Actors/NPC';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 import { TakoHeiInkHolder } from './Actors/Enemy';
 import { dfLabel, dfShow } from '../DebugFloaters';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -77,26 +78,32 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 export const enum SpecialTextureType {
     OpaqueSceneTexture = 'opaque-scene-texture',
     AstroMapBoard = 'astro-map-board',
+    MarioShadowTexture = `mario-shadow-texture`,
 }
 
 class SpecialTextureBinder {
-    private mirrorSampler: GfxSampler;
+    private clampSampler: GfxSampler;
     private textureMapping = new Map<SpecialTextureType, TextureMapping>();
     private needsFlipY = false;
+    private transparentTexture: GfxTexture;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.mirrorSampler = cache.createSampler({
+        this.clampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
             maxLOD: 100,
             minLOD: 0,
-            wrapS: GfxWrapMode.Mirror,
-            wrapT: GfxWrapMode.Mirror,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
         });
 
-        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
-        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
+        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.clampSampler);
+        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.clampSampler);
+        this.registerSpecialTextureType(SpecialTextureType.MarioShadowTexture, this.clampSampler);
+
+        this.transparentTexture = makeSolidColorTexture2D(device, TransparentBlack);
+        this.lateBindTexture(SpecialTextureType.MarioShadowTexture, this.transparentTexture);
 
         this.needsFlipY = gfxDeviceNeedsFlipY(device);
     }
@@ -121,6 +128,10 @@ class SpecialTextureBinder {
     public resolveLateBindTexture(list: GfxRenderInstList): void {
         for (const [textureType, textureMapping] of this.textureMapping.entries())
             list.resolveLateSamplerBinding(textureType, textureMapping);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.transparentTexture);
     }
 }
 
@@ -534,6 +545,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
                 this.drawXlu(passRenderer, DrawBufferType.PlayerDecoration);
                 // executeDrawListXlu()
+                this.execute(passRenderer, DrawType.VolumeModel);
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);
                 this.drawXlu(passRenderer, 0x18);
@@ -654,7 +666,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
-                this.execute(passRenderer, DrawType.GravityExplainer);
 
                 // GameScene::draw2D()
 
@@ -1326,6 +1337,7 @@ export class SceneObjHolder {
     public destroy(device: GfxDevice): void {
         this.nameObjHolder.destroy(device);
         this.drawSyncManager.destroy(device);
+        this.specialTextureBinder.destroy(device);
     }
 }
 
@@ -1423,9 +1435,6 @@ class SMGSpawner {
         this.placeZones(stageDataHolder);
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
-
-        // const grav = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
-        // console.log(grav);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects

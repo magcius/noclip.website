@@ -18,7 +18,7 @@ import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx
 import * as GX_Material from '../gx/gx_material';
 import { GX_Program, GXMaterialHacks, lightSetWorldDirectionNormalMatrix, lightSetWorldPositionViewMatrix } from '../gx/gx_material';
 import { AreaAttributes, Effect, Entity, LightParameters, MP1EntityType, WorldLightingOptions } from './script';
-import { Color, colorCopy, colorMult, colorNewCopy, OpaqueBlack, TransparentBlack, White } from '../Color';
+import { Color, colorAdd, colorCopy, colorMult, colorNewCopy, OpaqueBlack, TransparentBlack, White } from '../Color';
 import { computeNormalMatrix, getMatrixTranslation, setMatrixTranslation, texEnvMtx, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { areaCollisionLineCheck } from './collision';
@@ -182,7 +182,7 @@ class SurfaceInstance {
         this.materialTextureKey = materialInstance.textureKey;
     }
 
-    public prepareToRender(renderer: RetroSceneRenderer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, actorLights: ActorLights | null, envelopeMats: mat4[]|null, overrideBbox: AABB|null): void {
+    public prepareToRender(renderer: RetroSceneRenderer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, envelopeMats: mat4[]|null, overrideBbox: AABB|null): void {
         if (!this.visible || !this.materialInstance.visible)
             return;
 
@@ -206,41 +206,35 @@ class SurfaceInstance {
 
         mat4.mul(modelViewMatrixScratch, viewMatrix, modelMatrixScratch);
 
-        const template = renderer.renderHelper.renderInstManager.pushTemplateRenderInst();
-        template.sortKey = setSortKeyDepthKey(template.sortKey, this.materialTextureKey);
-        template.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);
+        const renderInst = renderer.renderHelper.renderInstManager.newRenderInst();
+        this.surfaceData.shapeHelper.setOnRenderInst(renderInst);
+        this.materialGroupInstance.setOnRenderInst(renderer.device, renderer.renderCache, renderInst);
 
         const loadedVertexData = assertExists(this.surfaceData.shapeHelper.loadedVertexData);
         assert(loadedVertexData.draws.length === 1);
-        for (let p = 0; p < loadedVertexData.draws.length; p++) {
-            const packet = loadedVertexData.draws[p];
+        const packet = loadedVertexData.draws[0];
 
-            if (envelopeMats !== null) {
-                assert(this.drawParams.u_PosMtx.length >= packet.posMatrixTable.length);
-                for (let j = 0; j < packet.posMatrixTable.length; j++) {
-                    const posNrmMatrixIdx = packet.posMatrixTable[j];
+        if (envelopeMats !== null) {
+            assert(this.drawParams.u_PosMtx.length >= packet.posMatrixTable.length);
+            for (let j = 0; j < packet.posMatrixTable.length; j++) {
+                const posNrmMatrixIdx = packet.posMatrixTable[j];
 
-                    // Leave existing matrix.
-                    if (posNrmMatrixIdx === 0xFFFF)
-                        continue;
+                // Leave existing matrix.
+                if (posNrmMatrixIdx === 0xFFFF)
+                    continue;
 
-                    mat4.mul(this.drawParams.u_PosMtx[j], modelViewMatrixScratch, envelopeMats[posNrmMatrixIdx]);
-                }
-            } else {
-                for (let j = 0; j < this.drawParams.u_PosMtx.length; j++)
-                    mat4.copy(this.drawParams.u_PosMtx[j], modelViewMatrixScratch);
+                mat4.mul(this.drawParams.u_PosMtx[j], modelViewMatrixScratch, envelopeMats[posNrmMatrixIdx]);
             }
-
-            const renderInst = renderer.renderHelper.renderInstManager.newRenderInst();
-            this.materialGroupInstance.prepareToRender(renderer, viewerInput, this.modelMatrix, isSkybox, actorLights, OpaqueBlack);
-            this.materialGroupInstance.setOnRenderInst(renderer.device, renderer.renderCache, renderInst);
-            this.surfaceData.shapeHelper.setOnRenderInst(renderInst, packet);
-            this.materialGroupInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, this.drawParams);
-
-            renderer.renderHelper.renderInstManager.submitRenderInst(renderInst);
+        } else {
+            for (let j = 0; j < this.drawParams.u_PosMtx.length; j++)
+                mat4.copy(this.drawParams.u_PosMtx[j], modelViewMatrixScratch);
         }
 
-        renderer.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.materialGroupInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, this.drawParams);
+        renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, this.materialTextureKey);
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);
+        renderer.renderHelper.renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -286,8 +280,8 @@ class MaterialGroupInstance {
         if (isSkybox) {
             colorCopy(materialParams.u_Color[ColorKind.AMB0], White);
         } else {
-            if (actorLights !== null)
-                colorCopy(materialParams.u_Color[ColorKind.AMB0], actorLights.ambient);
+            if (actorLights !== null) // actorLights.ambient always black for MREA, worldAmbientColor always black for CMDL
+                colorAdd(materialParams.u_Color[ColorKind.AMB0], actorLights.ambient, worldAmbientColor);
             else if (this.material.isWhiteAmb)
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], White);
             else
@@ -735,7 +729,7 @@ export class MREARenderer {
         for (let i = 0; i < this.materialGroupInstances.length; i++)
             this.materialGroupInstances[i].prepareToRender(renderer, viewerInput, this.modelMatrix, false, scratchAreaLights);
         for (let i = 0; i < this.surfaceInstances.length; i++)
-            this.surfaceInstances[i].prepareToRender(renderer, viewerInput, false, scratchAreaLights, null, null);
+            this.surfaceInstances[i].prepareToRender(renderer, viewerInput, false, null, null);
 
         for (let i = 0; i < this.actors.length; i++)
             this.actors[i].prepareToRender(renderer, viewerInput);
@@ -1398,7 +1392,7 @@ export class CMDLRenderer {
             if (this.materialGroupInstances[i] !== undefined)
                 this.materialGroupInstances[i].prepareToRender(renderer, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights, OpaqueBlack);
         for (let i = 0; i < this.surfaceInstances.length; i++)
-            this.surfaceInstances[i].prepareToRender(renderer, viewerInput, this.isSkybox, this.actorLights, this.cmdlData.hasSkinIndexData ? null : this.envelopeMats, this.bbox);
+            this.surfaceInstances[i].prepareToRender(renderer, viewerInput, this.isSkybox, this.cmdlData.hasSkinIndexData ? null : this.envelopeMats, this.bbox);
 
         renderer.renderHelper.renderInstManager.popTemplateRenderInst();
 

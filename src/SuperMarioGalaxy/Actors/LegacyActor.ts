@@ -164,6 +164,7 @@ export class NoclipLegacyActorSpawner {
         const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
 
         const objinfo = this.legacyCreateObjinfo(infoIter);
+        console.log(`LegacyActor: ${objinfo.objName}`);
 
         const applyAnimations = (actor: LiveActor, animOptions: AnimOptions | null | undefined) => {
             if (animOptions !== null) {
@@ -180,25 +181,11 @@ export class NoclipLegacyActorSpawner {
                     hasAnim = startBckIfExist(actor, 'Wait') || hasAnim;
                     hasAnim = startBrkIfExist(actor, 'Wait') || hasAnim;
                     hasAnim = startBtkIfExist(actor, 'Wait') || hasAnim;
+
                     if (!hasAnim) {
-                        // If there's no "Wait" animation, then play the first animations that we can...
-                        const bckFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.bck')) || null;
-                        if (bckFile !== null) {
-                            const bckFilename = bckFile.name.slice(0, -4);
-                            startBck(actor, bckFilename);
-                        }
-
-                        const brkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
-                        if (brkFile !== null) {
-                            const brkFilename = brkFile.name.slice(0, -4);
-                            startBrkIfExist(actor, brkFilename);
-                        }
-
-                        const btkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
-                        if (btkFile !== null) {
-                            const btkFilename = btkFile.name.slice(0, -4);
-                            startBtkIfExist(actor, btkFilename);
-                        }
+                        hasAnim = startBckIfExist(actor, actor.name) || hasAnim;
+                        hasAnim = startBrkIfExist(actor, actor.name) || hasAnim;
+                        hasAnim = startBtkIfExist(actor, actor.name) || hasAnim;
                     }
                 }
             }

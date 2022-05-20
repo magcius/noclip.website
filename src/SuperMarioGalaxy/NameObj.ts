@@ -201,9 +201,7 @@ export const enum DrawType {
     MessageBoardCapture            = 0x4E,
     MiiFaceIcon                    = 0x4F,
     MiiFaceNew                     = 0x50,
-    CameraCovrer                   = 0x51,
-
-    GravityExplainer               = 0x200,
+    CameraCover                    = 0x51,
 };
 
 export class NameObj {

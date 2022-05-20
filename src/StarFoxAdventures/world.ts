@@ -357,6 +357,7 @@ class WorldRenderer extends SFARenderer {
             }
         }
 
+        modelCtx.setupLights = () => {};
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 

@@ -143,15 +143,6 @@ export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number
     const depthKey = makeDepthKey(depth, isTranslucent, maxDepth);
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }
-
-export function getSortKeyDepth(sortKey: number): number {
-    const isTranslucent = !!((sortKey >>> 31) & 1);
-    if (isTranslucent)
-        return (sortKey >>> 8) & 0xFFFF;
-    else {
-        return ((sortKey >>> 8) & 0xFFFC | (sortKey & 0x03));
-    }
-}
 //#endregion
 
 //#region GfxRenderInst

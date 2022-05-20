@@ -201,9 +201,9 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
             let reachedTarget = false;
             if (this.rotateSpeed <= 0.0) {
-                reachedTarget = this.angle <= (this.targetAngle + velocityStep * 0.5);
+                reachedTarget = this.angle <= (this.targetAngle + this.rotateAngle * 0.5);
             } else {
-                reachedTarget = this.angle >= (this.targetAngle - velocityStep * 0.5);
+                reachedTarget = this.angle >= (this.targetAngle - this.rotateAngle * 0.5);
             }
 
             if (reachedTarget)

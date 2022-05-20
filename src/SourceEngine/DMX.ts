@@ -1,7 +1,7 @@
 
 import { mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { colorNewFromRGBA8 } from "../Color";
+import { colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
 import { assert, assertExists, readString } from "../util";
 
 export interface DMXAttribute {
@@ -16,7 +16,7 @@ export interface DMXElement {
     attributes: DMXAttribute[];
 }
 
-const enum DMXAttributeType {
+export const enum DMXAttributeType {
     Element = 1,
     Int,
     Float,
@@ -136,7 +136,12 @@ export function parse(buffer: ArrayBufferSlice): DMXFile {
         } else if (type === DMXAttributeType.Time) {
             return readUint32() / 10000;
         } else if (type === DMXAttributeType.Color) {
-            return colorNewFromRGBA8(readUint32());
+            const r = view.getUint8(offs + 0x00) / 0xFF;
+            const g = view.getUint8(offs + 0x01) / 0xFF;
+            const b = view.getUint8(offs + 0x02) / 0xFF;
+            const a = view.getUint8(offs + 0x03) / 0xFF;
+            offs += 0x04;
+            return colorNewFromRGBA(r, g, b, a);
         } else if (type === DMXAttributeType.Vector2) {
             const x = readFloat32();
             const y = readFloat32();

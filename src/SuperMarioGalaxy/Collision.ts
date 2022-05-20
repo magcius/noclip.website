@@ -1333,6 +1333,10 @@ export function setBinderOffsetVec(actor: LiveActor, offsetVec: ReadonlyVec3): v
     actor.binder!.hostOffsetVec = offsetVec;
 }
 
+export function setBinderIgnoreMovingCollision(actor: LiveActor): void {
+    actor.binder!.moveWithCollision = false;
+}
+
 export function getBindedFixReactionVector(actor: LiveActor): ReadonlyVec3 {
     return actor.binder!.fixReactionVector;
 }

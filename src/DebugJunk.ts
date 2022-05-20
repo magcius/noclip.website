@@ -494,6 +494,14 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
     });
 }
 
+export function bindSliderSelect(items: any[], fieldName: string = 'visible', callback: ((obj: any, itemIndex: number) => void) | null = null): void {
+    interactiveVizSliderSelect(items, fieldName, (obj, itemIndex) => {
+        window.main.ui.debugFloaterHolder.bindPanel(obj);
+        if (callback !== null)
+            callback(obj, itemIndex);
+    });
+}
+
 function downloadBufferAny(name: any, buffer: any) {
     if (name.name && name.arrayBuffer)
         downloadBufferSlice(name.name, name);
@@ -555,6 +563,7 @@ export function magicstr(v: number): string {
 // This goes on window.main and is meant as a global "helper utils" thing.
 export const debugJunk: any = {
     interactiveVizSliderSelect,
+    bindSliderSelect,
     hexdump,
     magicstr,
     ghidraDecode,

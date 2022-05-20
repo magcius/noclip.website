@@ -21,6 +21,7 @@ import { loadModel, ModelVersion } from './modelloader';
 import { transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 import { LightType } from './WorldLights';
 import { ObjectInstance } from './objects';
+import { AABB } from '../Geometry';
 
 interface Joint {
     parent: number;
@@ -51,6 +52,7 @@ export interface ModelRenderContext {
     object?: ObjectInstance;
     setupLights: (lights: GX_Material.Light[], typeMask: LightType) => void;
     mapLights?: MapLight[];
+    cullByAabb?: boolean;
 }
 
 const BLOCK_FUR_RENDER_LAYER = 23;
@@ -60,6 +62,7 @@ const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
+const scratchBox0 = new AABB();
 
 export class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
@@ -111,7 +114,15 @@ export class ModelShapes {
 
                     mat4.copy(scratchMtx0, matrix);
                     mat4PostTranslate(scratchMtx0, this.model.modelTranslate);
-                    shape.addRenderInsts(device, renderInstManager, scratchMtx0, shapeCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
+
+                    let draw = true;
+                    if (modelCtx.cullByAabb && shape.geom.aabb !== undefined) {
+                        scratchBox0.transform(shape.geom.aabb, scratchMtx0);
+                        draw = modelCtx.sceneCtx.viewerInput.camera.frustum.contains(scratchBox0);
+                    }
+
+                    if (draw)
+                        shape.addRenderInsts(device, renderInstManager, scratchMtx0, shapeCtx, {}, matrixPalette, overrideSortDepth, overrideSortLayer);
                 }
             }
         }

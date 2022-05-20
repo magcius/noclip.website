@@ -139,7 +139,7 @@ class ZSSTextureHolder extends RRESTextureHolder {
         i = this.searchTextureEntryIndex(name);
         if (i >= 0) return i;
 
-        // XXX(jstpierre): Thrill Digger (F211) seems to have a missing texture. Where is it???
+        // HACK(jstpierre): Thrill Digger (F211) seems to have a missing texture. Where is it???
         if (name === 'F211_Wood01')
             return this.searchTextureEntryIndex('F211_Wood02');
 

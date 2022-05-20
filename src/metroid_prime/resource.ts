@@ -86,8 +86,8 @@ function combineBuffers(totalSize: number, buffers: Uint8Array[]): Uint8Array {
 }
 
 export interface LoadContext {
-    cachePriority: number,
-    loadDetails: any
+    cachePriority: number;
+    loadDetails: any;
 }
 
 export class ResourceSystem {

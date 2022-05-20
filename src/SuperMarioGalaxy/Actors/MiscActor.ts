@@ -8,7 +8,7 @@ import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
 import { dfRange, dfShow } from '../../DebugFloaters';
-import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -17,12 +17,12 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams, fillIndTexMtx } from '../../gx/gx_render';
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render';
 import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneIndirectMapObjStrongLight, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
@@ -43,6 +43,7 @@ import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessSt
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
+import { ItemBubble } from './MapObj';
 import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStrongLight, ModelObj } from './ModelObj';
 import { createPartsModelMapObj, PartsModel } from './PartsModel';
 
@@ -9120,5 +9121,140 @@ export class FallingSmallRock extends LiveActor<FallingSmallRockNrv> {
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Nothing.
+    }
+}
+
+const enum MorphItemObjNeoNrv { Wait, Appear, Fly, SwitchAppear }
+const enum MorphItemObjNeoType { Hopper, Bee, Teresa, Ice, Fire, Foo }
+const enum MorphItemObjNeoContainerType { None, CrystalBox, ItemBubble }
+export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
+    private type: MorphItemObjNeoType;
+    private containerType: MorphItemObjNeoContainerType;
+    private container: ModelObj | null = null;
+    private containerBreak: ModelObj | null = null;
+    private baseMtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        this.type = MorphItemObjNeo.getType(this.name);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, MorphItemObjNeo.getModelName(this.type));
+        this.initHitSensor();
+
+        vec3.set(scratchVec3, 0, 60.0, 0);
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.MorphItem, 4, 80.0, scratchVec3);
+        this.initBinder(70.0, 60.0, 0);
+        this.calcBinderFlag = false;
+
+        mat4.copy(this.baseMtx, this.getBaseMtx()!);
+
+        if (this.type === MorphItemObjNeoType.Hopper)
+            connectToSceneIndirectMapObjStrongLight(sceneObjHolder, this);
+        else
+            connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+
+        const containerTypeArg = fallback(getJMapInfoArg3(infoIter), -1);
+        if (containerTypeArg === -1) {
+            this.container = new ModelObj(zoneAndLayer, sceneObjHolder, `${this.name} CrystalBox`, `CrystalBox`, this.baseMtx, DrawBufferType.CrystalBox, -2, -2);
+            this.container.makeActorAppeared(sceneObjHolder);
+            startBck(this.container, 'CrystalBox');
+
+            this.containerBreak = new ModelObj(zoneAndLayer, sceneObjHolder, `${this.name} CrystalBoxBreak`, `CrystalBoxBreak`, this.baseMtx, DrawBufferType.CrystalBox, -2, -2);
+            this.containerBreak.makeActorDead(sceneObjHolder);
+
+            this.containerType = MorphItemObjNeoContainerType.CrystalBox;
+        } else if (containerTypeArg === 0) {
+            this.containerType = MorphItemObjNeoContainerType.ItemBubble;
+        } else {
+            this.containerType = MorphItemObjNeoContainerType.None;
+        }
+
+        // TODO(jstpierre): Shadow
+
+        this.initEffectKeeper(sceneObjHolder, 'MorphItemObj');
+
+        this.initNerve(MorphItemObjNeoNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            this.makeActorDead(sceneObjHolder);
+            syncStageSwitchAppear(sceneObjHolder, this);
+        }
+    }
+
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        const dst = this.modelInstance!.modelMatrix;
+        if (this.isNerve(MorphItemObjNeoNrv.Wait)) {
+            if (this.containerType === MorphItemObjNeoContainerType.CrystalBox) {
+                mat4.copy(dst, getJointMtxByName(this.container!, 'CrystalBox')!);
+                getMatrixAxisY(scratchVec3a, dst);
+                getMatrixTranslation(scratchVec3b, dst);
+                vec3.scaleAndAdd(scratchVec3b, scratchVec3b, scratchVec3a, -60.0);
+                setMatrixTranslation(dst, scratchVec3b);
+                computeModelMatrixS(scratchMatrix, 0.8);
+                mat4.mul(dst, dst, scratchMatrix);
+            }
+        } else {
+            super.calcAndSetBaseMtx(sceneObjHolder);
+        }
+    }
+
+    private static getType(objName: string): MorphItemObjNeoType {
+        if (objName === 'MorphItemNeoHopper')
+            return MorphItemObjNeoType.Hopper;
+        else if (objName === 'MorphItemNeoBee')
+            return MorphItemObjNeoType.Bee;
+        else if (objName === 'MorphItemNeoTeresa')
+            return MorphItemObjNeoType.Teresa;
+        else if (objName === 'MorphItemNeoIce')
+            return MorphItemObjNeoType.Ice;
+        else if (objName === 'MorphItemNeoFire')
+            return MorphItemObjNeoType.Fire;
+        else if (objName === 'MorphItemNeoFoo')
+            return MorphItemObjNeoType.Foo;
+        else
+            throw "whoops";
+    }
+
+    private static getModelName(type: MorphItemObjNeoType): string {
+        if (type === MorphItemObjNeoType.Hopper)
+            return 'PowerUpHopper';
+        else if (type === MorphItemObjNeoType.Bee)
+            return 'PowerUpBee';
+        else if (type === MorphItemObjNeoType.Teresa)
+            return 'PowerUpTeresa';
+        else if (type === MorphItemObjNeoType.Ice)
+            return 'PowerUpIce';
+        else if (type === MorphItemObjNeoType.Fire)
+            return 'PowerUpFire';
+        else if (type === MorphItemObjNeoType.Foo)
+            return 'PowerUpFoo';
+        else
+            throw "whoops";
+    }
+
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+
+        if (this.container !== null)
+            this.container.makeActorDead(sceneObjHolder);
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const objName = getObjectName(infoIter);
+        const type = MorphItemObjNeo.getType(objName);
+        const modelName = MorphItemObjNeo.getModelName(type);
+        sceneObjHolder.modelCache.requestObjectData(modelName);
+
+        const container = fallback(getJMapInfoArg3(infoIter), -1);
+        if (container === 0) {
+            ItemBubble.requestArchives(sceneObjHolder, infoIter);
+        } else if (container === -1) {
+            sceneObjHolder.modelCache.requestObjectData('CrystalBox');
+            sceneObjHolder.modelCache.requestObjectData('CrystalBoxBreak');
+        }
     }
 }

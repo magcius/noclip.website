@@ -353,24 +353,25 @@ void CalcDirectionalLight(out LightResult t_Result, in SurfaceLightParams t_Surf
         float LoH = saturate(dot(L, H));
 
         float r = t_SurfaceLightParams.SpecularRoughness;
-        float r2 = r * r;
+        float a = r * r;
+        float a2 = a * a;
 
         // D
-        float D = r2 / (pow(NoH * NoH * (r2 - 1.0) + 1.0, 2.0));
+        float D = a2 / (3.14159 * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
 
-        // V
-        float k = r2 / 2.0;
-        float vis = G1V(NoL, k) * G1V(NoV, k);
-
-        vec3 F0 = vec3(0.05);
-
+        // F
         // Stolen from: https://seblagarde.wordpress.com/2012/06/03/spherical-gaussien-approximation-for-blinn-phong-phong-and-fresnel/
         // float LoH5 = exp2((-5.55473 * LoH - 6.98316) * LoH);
-        float LoH5 = pow(1.0 - saturate(dot(H, V)), 5.0);
+        vec3 F0 = vec3(0.05);
+        float LoH5 = pow(1.0 - LoH, 5.0);
         vec3 F = F0 + (1.0 - F0) * LoH5;
 
+        // vis / G
+        float k = a / 2.0;
+        float vis = G1V(NoL, k) * G1V(NoV, k);
+
         vec3 t_SpecularResponse = D * F * vis;
-        t_Result.SpecularColor += NoL * t_SpecularResponse.rgb * t_LightColor.rgb * t_SurfaceLightParams.SpecularColor.rgb;
+        t_Result.SpecularColor += saturate(NoL) * t_SpecularResponse.rgb * t_LightColor.rgb * t_SurfaceLightParams.SpecularColor.rgb;
     }
 }
 
@@ -561,7 +562,7 @@ vec3 CalcNormalWorld() {
 
     vec3 t_Basis2 = v_NormalWorld.xyz;
     vec3 t_Basis0 = v_TangentWorld.xyz;
-    vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz) * v_TangentWorld.z;
+    vec3 t_Basis1 = cross(v_NormalWorld.xyz, v_TangentWorld.xyz) * v_TangentWorld.w;
 
     // We now have our basis. Now sample the normal maps.
     vec3 t_TangentNormal0 = SampleNormalMap0();
