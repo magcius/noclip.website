@@ -220,8 +220,14 @@ class Banana {
         rp.sort = RenderSort.Translucent;
         rp.lighting = lighting;
 
-        mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bananaData.pos);
-        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, this.yRotRadians);
+        // Bananas' positions are parented to their anim group, but they have a global rotation in
+        // world space
+        mat4.rotateY(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix,this.yRotRadians);
+        const pos_rt_view = scratchVec3c;
+        transformVec3Mat4w1(pos_rt_view, viewFromAnimGroup, this.bananaData.pos);
+        rp.viewFromModel[12] = pos_rt_view[0];
+        rp.viewFromModel[13] = pos_rt_view[1];
+        rp.viewFromModel[14] = pos_rt_view[2];
 
         this.model.prepareToRender(ctx, rp);
     }
