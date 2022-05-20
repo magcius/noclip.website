@@ -155,7 +155,10 @@ export type Model = {
     shapes: Shape[];
 };
 
-export type Gma = Map<string, Model>;
+export type Gma = {
+    nameMap: Map<string, Model>;
+    idMap: Map<number, Model>; // Not every ID will be filled
+};
 
 function parseTevLayer(buffer: ArrayBufferSlice, tpl: AVTpl): TevLayer {
     const view = buffer.createDataView();
@@ -411,7 +414,8 @@ export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
         offs += 0x08;
     }
 
-    const models = new Map<string, Model>();
+    const modelNameMap = new Map<string, Model>();
+    const modelIdMap = new Map<number, Model>();
     const nameBuf = entry.slice(0x08 * count, gcmfBaseOffs);
     const modelBuf = gmaBuffer.slice(gcmfBaseOffs);
     for (let i = 0; i < gcmfEntryOffs.length; i++) {
@@ -436,8 +440,9 @@ export function parseGma(gmaBuffer: ArrayBufferSlice, tpl: AVTpl): Gma {
             continue;
         }
 
-        models.set(name, model);
+        modelNameMap.set(name, model);
+        modelIdMap.set(i, model);
     }
 
-    return models;
+    return { nameMap: modelNameMap, idMap: modelIdMap };
 }

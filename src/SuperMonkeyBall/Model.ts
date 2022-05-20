@@ -21,7 +21,6 @@ export const enum RenderSort {
 
 export class RenderParams {
     public viewFromModel = mat4.create();
-    public worldFromModel = mat4.create();
     public alpha = 1;
     public sort = RenderSort.Translucent;
     public texMtx = mat4.create();
@@ -56,11 +55,12 @@ export class ModelInst {
 
     public prepareToRender(ctx: RenderContext, renderParams: RenderParams) {
         const scale = scratchVec3a;
-        mat4.getScaling(scale, renderParams.worldFromModel);
+        mat4.getScaling(scale, renderParams.viewFromModel);
         const maxScale = Math.max(...scale);
 
         const center_rt_world = scratchVec3a;
-        transformVec3Mat4w1(center_rt_world, renderParams.worldFromModel, this.modelData.boundSphereCenter);
+        transformVec3Mat4w1(center_rt_world, renderParams.viewFromModel, this.modelData.boundSphereCenter);
+        transformVec3Mat4w1(center_rt_world, ctx.viewerInput.camera.worldMatrix, center_rt_world);
         const inFrustum = ctx.viewerInput.camera.frustum.containsSphere(
             center_rt_world,
             this.modelData.boundSphereRadius * maxScale

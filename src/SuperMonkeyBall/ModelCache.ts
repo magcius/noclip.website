@@ -33,9 +33,7 @@ export class TextureHolder implements UI.TextureListHolder {
 
     public updateViewerTextures(): void {
         const nameList = Array.from(this.cache.keys()).sort();
-        this.viewerTextures = nameList.map(
-            (name) => assertExists(this.cache.get(name)).viewerTexture
-        );
+        this.viewerTextures = nameList.map((name) => assertExists(this.cache.get(name)).viewerTexture);
         if (this.onnewtextures !== null) {
             this.onnewtextures();
         }
@@ -56,40 +54,65 @@ class CacheEntry {
     }
 }
 
+export const enum GmaSrc {
+    Stage,
+    Bg,
+    Common,
+}
+
 export class ModelCache {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];
     private textureHolder: TextureHolder;
 
     constructor(stageData: StageData) {
-        this.entries = [new CacheEntry(stageData.stageGma), new CacheEntry(stageData.bgGma)];
+        this.entries = [
+            new CacheEntry(stageData.stageGma),
+            new CacheEntry(stageData.bgGma),
+            new CacheEntry(stageData.commonGma),
+        ];
         this.textureHolder = new TextureHolder();
     }
 
+    private getModelFromSrc(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        model: string | number,
+        src: GmaSrc
+    ): ModelInst | null {
+        const entry = this.entries[src];
+        let modelData: Gma.Model | undefined;
+        if (typeof model === "number") {
+            modelData = entry.gma.idMap.get(model);
+        } else {
+            modelData = entry.gma.nameMap.get(model);
+        }
+        if (modelData !== undefined) {
+            const modelInst = entry.modelCache.get(modelData.name);
+            if (modelInst !== undefined) {
+                return modelInst;
+            }
+            const freshModelInst = new ModelInst(device, renderCache, modelData, this.textureHolder);
+            entry.modelCache.set(modelData.name, freshModelInst);
+            return freshModelInst;
+        }
+        return null;
+    }
+
+    // TODO(complexplane): Just store device and render cache as members
     public getModel(
         device: GfxDevice,
         renderCache: GfxRenderCache,
-        modelName: string
+        model: string | number,
+        src?: GmaSrc
     ): ModelInst | null {
-        for (let i = 0; i < this.entries.length; i++) {
-            const entry = this.entries[i];
-            const modelData = entry.gma.get(modelName);
-            if (modelData !== undefined) {
-                const modelInst = entry.modelCache.get(modelName);
-                if (modelInst !== undefined) {
-                    return modelInst;
-                }
-                const freshModelInst = new ModelInst(
-                    device,
-                    renderCache,
-                    modelData,
-                    this.textureHolder
-                );
-                entry.modelCache.set(modelName, freshModelInst);
-                return freshModelInst;
-            }
+        if (src !== undefined) {
+            return this.getModelFromSrc(device, renderCache, model, src);
         }
-
+        for (let i = 0; i < this.entries.length; i++) {
+            const modelInst = this.getModelFromSrc(device, renderCache, model, i as GmaSrc);
+            if (modelInst !== null) return modelInst;
+        }
         return null;
     }
 

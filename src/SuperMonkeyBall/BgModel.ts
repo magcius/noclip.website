@@ -110,7 +110,6 @@ export class BgModelInst {
         }
 
         mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
-        renderParams.worldFromModel = this.worldFromModel;
 
         renderParams.lighting = lighting;
 

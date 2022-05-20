@@ -9,6 +9,7 @@ import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
 import { StageData } from "./World";
+import { decompressLZ } from "./AVLZ";
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -33,25 +34,34 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
         const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
         const stageInfo = assertExists(STAGE_INFO_MAP.get(stageId));
+
         const bgFilename = stageInfo.bgInfo.fileName;
         const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
         const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
 
-        const [stagedefBuf, stageGmaBuf, stageTplBuf, bgGmaBuf, bgTplBuf] = await Promise.all([
-            dataFetcher.fetchData(stagedefPath),
-            dataFetcher.fetchData(stageGmaPath),
-            dataFetcher.fetchData(stageTplPath),
-            dataFetcher.fetchData(bgGmaPath),
-            dataFetcher.fetchData(bgTplPath),
-        ]);
+        const commonGmaPath = `${gameFilesPath}/init/common.gma.lz`;
+        const commonTplPath = `${gameFilesPath}/init/common.tpl.lz`;
+
+        const [stagedefBuf, stageGmaBuf, stageTplBuf, bgGmaBuf, bgTplBuf, commonGmaBuf, commonTplBuf] =
+            await Promise.all([
+                dataFetcher.fetchData(stagedefPath),
+                dataFetcher.fetchData(stageGmaPath),
+                dataFetcher.fetchData(stageTplPath),
+                dataFetcher.fetchData(bgGmaPath),
+                dataFetcher.fetchData(bgTplPath),
+                dataFetcher.fetchData(commonGmaPath),
+                dataFetcher.fetchData(commonTplPath),
+            ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
         const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
         const bgGma = Gma.parseGma(bgGmaBuf, bgTpl);
+        const commonTpl = parseAVTpl(decompressLZ(commonTplBuf), "common");
+        const commonGma = Gma.parseGma(decompressLZ(commonGmaBuf), commonTpl);
 
-        return { stageInfo, stagedef, stageGma, bgGma };
+        return { stageInfo, stagedef, stageGma, bgGma, commonGma };
     }
 }
 

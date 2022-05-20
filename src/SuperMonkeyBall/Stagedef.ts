@@ -7,8 +7,8 @@
 
 import { vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as LZSS from "../Common/Compression/LZSS";
 import { readString } from "../util";
+import { decompressLZ } from "./AVLZ";
 
 export const enum BananaType {
     Single,
@@ -375,12 +375,9 @@ function parseSlicedList<T>(
     return origList.slice(idx, idx + count);
 }
 
+// TODO(complexplane): Parse from uncompressed stagedef to be consistent with GMA/TPLs
 export function parseStagedefLz(buffer: ArrayBufferSlice): Stage {
-    const view = buffer.createDataView();
-    const compressedView = buffer.subarray(0x8).createDataView();
-    const uncompressedSize = view.getUint32(0x4, true);
-    const uncompressedBuffer = LZSS.decompress(compressedView, uncompressedSize);
-    return parseStagedefUncompressed(uncompressedBuffer);
+    return parseStagedefUncompressed(decompressLZ(buffer));
 }
 
 function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgModel[] {
