@@ -65,7 +65,7 @@ export class ModelCache {
     private entries: CacheEntry[];
     private textureHolder: TextureHolder;
 
-    constructor(stageData: StageData) {
+    constructor(private device: GfxDevice, private renderCache: GfxRenderCache, stageData: StageData) {
         this.entries = [
             new CacheEntry(stageData.stageGma),
             new CacheEntry(stageData.bgGma),
@@ -75,8 +75,6 @@ export class ModelCache {
     }
 
     private getModelFromSrc(
-        device: GfxDevice,
-        renderCache: GfxRenderCache,
         model: string | number,
         src: GmaSrc
     ): ModelInst | null {
@@ -92,25 +90,22 @@ export class ModelCache {
             if (modelInst !== undefined) {
                 return modelInst;
             }
-            const freshModelInst = new ModelInst(device, renderCache, modelData, this.textureHolder);
+            const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureHolder);
             entry.modelCache.set(modelData.name, freshModelInst);
             return freshModelInst;
         }
         return null;
     }
 
-    // TODO(complexplane): Just store device and render cache as members
     public getModel(
-        device: GfxDevice,
-        renderCache: GfxRenderCache,
         model: string | number,
         src?: GmaSrc
     ): ModelInst | null {
         if (src !== undefined) {
-            return this.getModelFromSrc(device, renderCache, model, src);
+            return this.getModelFromSrc(model, src);
         }
         for (let i = 0; i < this.entries.length; i++) {
-            const modelInst = this.getModelFromSrc(device, renderCache, model, i as GmaSrc);
+            const modelInst = this.getModelFromSrc(model, i as GmaSrc);
             if (modelInst !== null) return modelInst;
         }
         return null;

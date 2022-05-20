@@ -49,18 +49,12 @@ class AnimGroup {
     private igData: SD.AnimGroup;
     private bananas: Banana[];
 
-    constructor(
-        device: GfxDevice,
-        renderCache: GfxRenderCache,
-        modelCache: ModelCache,
-        private stagedef: SD.Stage,
-        private animGroupIdx: number
-    ) {
+    constructor(modelCache: ModelCache, private stagedef: SD.Stage, private animGroupIdx: number) {
         this.igData = stagedef.animGroups[animGroupIdx];
         this.models = [];
         for (let i = 0; i < this.igData.levelModels.length; i++) {
             const name = this.igData.levelModels[i].modelName;
-            const modelInst = modelCache.getModel(device, renderCache, name);
+            const modelInst = modelCache.getModel(name);
             if (modelInst !== null) {
                 this.models.push(modelInst);
             }
@@ -83,7 +77,7 @@ class AnimGroup {
             mat4.identity(this.worldFromAg);
         }
 
-        this.bananas = this.igData.bananas.map((ban) => new Banana(device, renderCache, modelCache, ban));
+        this.bananas = this.igData.bananas.map((ban) => new Banana(modelCache, ban));
     }
 
     public update(t: MkbTime): void {
@@ -200,12 +194,12 @@ class Banana {
     private model: ModelInst;
     private yRotRadians: number = 0;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, modelCache: ModelCache, private bananaData: SD.Banana) {
+    constructor(modelCache: ModelCache, private bananaData: SD.Banana) {
         const modelId =
             bananaData.type === SD.BananaType.Single
                 ? CommonGmaModelIDs.OBJ_BANANA_01_LOD150
                 : CommonGmaModelIDs.OBJ_BANANA_02_LOD100;
-        this.model = assertExists(modelCache.getModel(device, renderCache, modelId, GmaSrc.Common));
+        this.model = assertExists(modelCache.getModel(modelId, GmaSrc.Common));
     }
 
     public update(t: MkbTime): void {
@@ -222,7 +216,7 @@ class Banana {
 
         // Bananas' positions are parented to their anim group, but they have a global rotation in
         // world space
-        mat4.rotateY(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix,this.yRotRadians);
+        mat4.rotateY(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.yRotRadians);
         const pos_rt_view = scratchVec3c;
         transformVec3Mat4w1(pos_rt_view, viewFromAnimGroup, this.bananaData.pos);
         rp.viewFromModel[12] = pos_rt_view[0];
@@ -241,14 +235,12 @@ export class World {
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
-        this.animGroups = stageData.stagedef.animGroups.map(
-            (_, i) => new AnimGroup(device, renderCache, modelCache, stageData.stagedef, i)
-        );
+        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(modelCache, stageData.stagedef, i));
 
         const bgModels: BgModelInst[] = [];
         for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
             if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
-            const model = modelCache.getModel(device, renderCache, bgModel.modelName);
+            const model = modelCache.getModel(bgModel.modelName);
             if (model === null) continue;
             bgModels.push(new BgModelInst(model, bgModel));
         }

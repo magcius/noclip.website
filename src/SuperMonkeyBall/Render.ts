@@ -38,7 +38,7 @@ export class Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private stageData: StageData) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.modelCache = new ModelCache(stageData);
+        this.modelCache = new ModelCache(device, this.renderHelper.getCache(), stageData);
         this.world = new World(device, this.renderHelper.getCache(), this.modelCache, stageData);
         this.textureHolder = this.modelCache.getTextureHolder();
         this.modelCache.getTextureHolder().updateViewerTextures();

@@ -118,7 +118,6 @@ export class MaterialInst {
                     GX.AttenuationFunction.NONE
                 );
             } else {
-                // TODO(complexplane): "ambient" color from material
                 colorIn = GX.CC.C0;
                 alphaIn = GX.CA.A0;
             }
