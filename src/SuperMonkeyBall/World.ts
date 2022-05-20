@@ -128,27 +128,6 @@ class Itemgroup {
             this.models[i].prepareToRender(ctx, rp);
         }
     }
-
-    public computeAABB(outAABB: AABB): void {
-        const pt = scratchVec3a;
-        for (let i = 0; i < this.models.length; i++) {
-            const center = this.models[i].modelData.boundSphereCenter;
-            const radius = this.models[i].modelData.boundSphereRadius;
-
-            vec3.scaleAndAdd(pt, center, Vec3UnitX, -radius);
-            outAABB.unionPoint(pt);
-            vec3.scaleAndAdd(pt, center, Vec3UnitX, radius);
-            outAABB.unionPoint(pt);
-            vec3.scaleAndAdd(pt, center, Vec3UnitY, -radius);
-            outAABB.unionPoint(pt);
-            vec3.scaleAndAdd(pt, center, Vec3UnitY, radius);
-            outAABB.unionPoint(pt);
-            vec3.scaleAndAdd(pt, center, Vec3UnitZ, -radius);
-            outAABB.unionPoint(pt);
-            vec3.scaleAndAdd(pt, center, Vec3UnitZ, radius);
-            outAABB.unionPoint(pt);
-        }
-    }
 }
 
 export class Lighting {
@@ -232,17 +211,6 @@ export class World {
             this.itemgroups[i].prepareToRender(ctx, this.lighting);
         }
         this.background.prepareToRender(ctx, this.lighting);
-    }
-
-    // Should only be called once so OK to make new object
-    public computeBoundSphere(): Sphere {
-        const aabb = new AABB();
-        for (let i = 0; i < this.itemgroups.length; i++) {
-            this.itemgroups[i].computeAABB(aabb);
-        }
-        const center = vec3.create();
-        aabb.centerPoint(center);
-        return { center, radius: aabb.boundingSphereRadius() };
     }
 
     public destroy(device: GfxDevice): void {

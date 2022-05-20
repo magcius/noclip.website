@@ -69,23 +69,6 @@ export class Renderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    private setInitialCameraPose(stageBoundSphere: Sphere, cam: Camera): void {
-        const worldFromView = cam.worldMatrix;
-        const translate = vec3.fromValues(
-            stageBoundSphere.center[0],
-            stageBoundSphere.center[1],
-            stageBoundSphere.center[2] + stageBoundSphere.radius * 1.2
-        );
-        mat4.fromYRotation(
-            worldFromView,
-            this.stageData.stagedef.initBallPose.rot[1] * S16_TO_RADIANS + 20 * MathConstants.DEG_TO_RAD
-        );
-        mat4.rotateX(worldFromView, worldFromView, -30 * MathConstants.DEG_TO_RAD);
-        mat4.translate(worldFromView, worldFromView, translate);
-        mat4.invert(cam.viewMatrix, worldFromView);
-        cam.worldMatrixUpdated();
-    }
-
     private prepareToRender(
         device: GfxDevice,
         viewerInput: Viewer.ViewerRenderInput,
@@ -96,7 +79,6 @@ export class Renderer implements Viewer.SceneGfx {
 
         if (this.firstRender) {
             this.firstRender = false;
-            this.setInitialCameraPose(this.world.computeBoundSphere(), viewerInput.camera);
         }
 
         viewerInput.camera.setClipPlanes(0.1);
