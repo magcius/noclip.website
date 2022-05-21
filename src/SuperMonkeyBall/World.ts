@@ -191,7 +191,8 @@ export class Lighting {
             Vec3Zero,
             S16_TO_RADIANS * bgInfo.infLightRotY
         );
-        vec3.scale(this.infLight_rt_world.Position, this.infLight_rt_world.Position, 10000); // Game does this, not sure why it changes anything
+        // Move point light far away to emulate directional light
+        vec3.scale(this.infLight_rt_world.Position, this.infLight_rt_world.Position, 10000);
 
         GX_Material.lightSetSpot(this.infLight_rt_world, 0, SpotFunction.OFF);
 
