@@ -225,6 +225,7 @@ export class MaterialInst {
 
         // Sampler bindings
         const materialParams = scratchMaterialParams;
+        materialParams.clear();
         for (let i = 0; i < this.tevLayers.length; i++) {
             this.tevLayers[i].fillTextureMapping(materialParams.m_TextureMapping[i]);
         }

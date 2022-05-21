@@ -28,7 +28,7 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
-        const gameFilesPath = "SuperMonkeyBall/test";
+        const gameFilesPath = "SuperMonkeyBall1/test";
         const stageIdStr = `${leftPad(stageId.toString(), 3, "0")}`;
         const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
         const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
