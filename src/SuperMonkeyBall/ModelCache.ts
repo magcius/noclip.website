@@ -79,7 +79,7 @@ export class ModelCache {
         ];
         this.textureHolder = new TextureHolder();
 
-        // TODO(complexplane): Don't do these in modelcache? 
+        // TODO(complexplane): Don't do these in modelcache?
         // TODO(complexplane): The game seems to search blue goal using "GOAL" prefix instead of 2
         // different names here, but when I do that it picks green goal for blue on Labyrinth
         // because GOAL_G comes before GOAL in the GMA. How does the game actually do it?!?
@@ -109,16 +109,16 @@ export class ModelCache {
         } else {
             modelData = entry.gma.nameMap.get(model);
         }
-        if (modelData !== undefined) {
-            const modelInst = entry.modelCache.get(modelData.name);
-            if (modelInst !== undefined) {
-                return modelInst;
-            }
-            const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureHolder);
-            entry.modelCache.set(modelData.name, freshModelInst);
-            return freshModelInst;
+        if (modelData === undefined) {
+            return null;
         }
-        return null;
+        const modelInst = entry.modelCache.get(modelData.name);
+        if (modelInst !== undefined) {
+            return modelInst;
+        }
+        const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureHolder);
+        entry.modelCache.set(modelData.name, freshModelInst);
+        return freshModelInst;
     }
 
     public getModel(model: string | number, src?: GmaSrc): ModelInst | null {
