@@ -79,18 +79,21 @@ export class ModelCache {
         ];
         this.textureHolder = new TextureHolder();
 
-        // TODO(complexplane): Don't do these in modelcache?
-        this.blueGoalModel = this.findBgSpecificModel("GOAL");
+        // TODO(complexplane): Don't do these in modelcache? 
+        // TODO(complexplane): The game seems to search blue goal using "GOAL" prefix instead of 2
+        // different names here, but when I do that it picks green goal for blue on Labyrinth
+        // because GOAL_G comes before GOAL in the GMA. How does the game actually do it?!?
+        this.blueGoalModel = this.findBgSpecificModel("GOAL") || this.findBgSpecificModel("GOAL_B");
         this.greenGoalModel = this.findBgSpecificModel("GOAL_G");
         this.redGoalModel = this.findBgSpecificModel("GOAL_R");
         this.bumperModel = this.findBgSpecificModel("BUMPER_L1");
     }
 
-    private findBgSpecificModel(prefix: string): ModelInst | null {
+    private findBgSpecificModel(postfix: string): ModelInst | null {
         for (let src = GmaSrc.Stage; src <= GmaSrc.Common; src++) {
             const entry = this.entries[src];
             for (const gma of entry.gma.idMap.values()) {
-                if (gma.name.slice(4).startsWith(prefix)) {
+                if (gma.name.slice(4) === postfix) {
                     return this.getModelFromSrc(gma.name, src);
                 }
             }
