@@ -7,12 +7,18 @@ import * as Gma from "./Gma";
 import * as GX from "../gx/gx_enum";
 import { TextureHolder } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export class TevLayerInst {
     private loadedTex: LoadedTexture;
     private gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public tevLayerData: Gma.TevLayer, textureHolder: TextureHolder) {
+    constructor(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        public tevLayerData: Gma.TevLayer,
+        textureHolder: TextureHolder
+    ) {
         this.loadedTex = textureHolder.getTexture(device, tevLayerData.gxTexture);
 
         const wrapS = ((tevLayerData.flags >> 2) & 0x03) as GX.WrapMode;
@@ -29,7 +35,7 @@ export class TevLayerInst {
             maxLod = Math.max(0, Math.log2(minDim) - 4);
         }
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = renderCache.createSampler({
             wrapS: translateWrapModeGfx(wrapS),
             wrapT: translateWrapModeGfx(wrapT),
             minFilter: GfxTexFilterMode.Bilinear,
@@ -43,10 +49,5 @@ export class TevLayerInst {
     public fillTextureMapping(mapping: TextureMapping): void {
         mapping.gfxTexture = this.loadedTex.gfxTexture;
         mapping.gfxSampler = this.gfxSampler;
-    }
-
-    public destroy(device: GfxDevice): void {
-        // GfxTexture is destroyed in TextureHolder
-        device.destroySampler(this.gfxSampler);
     }
 }
