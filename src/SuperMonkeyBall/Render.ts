@@ -142,7 +142,7 @@ export class Renderer implements Viewer.SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setKeyMoveSpeed(60);
-        c.setSceneMoveSpeedMult(1 / 60);
+        c.setSceneMoveSpeedMult(1 / 32);
+        c.setKeyMoveSpeed(20);
     }
 }

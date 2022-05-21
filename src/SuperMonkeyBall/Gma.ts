@@ -2,9 +2,9 @@
 // (or is it "Gamecube Model Archive"?)
 //
 // References (some may be largely incomplete/outdated):
+// https://github.com/camthesaxman/smb-decomp/
 // https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
 // https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=gmaFormat
-// https://github.com/camthesaxman/smb-decomp/
 //
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
