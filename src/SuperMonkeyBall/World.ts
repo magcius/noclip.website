@@ -46,16 +46,16 @@ class AnimGroup {
     private models: ModelInst[];
     private worldFromAg: mat4;
     private originFromAg: mat4;
-    private igData: SD.AnimGroup;
+    private agData: SD.AnimGroup;
     private bananas: Banana[];
     private goals: Goal[];
     private bumpers: Bumper[];
 
     constructor(modelCache: ModelCache, private stageData: StageData, private animGroupIdx: number) {
-        this.igData = stageData.stagedef.animGroups[animGroupIdx];
+        this.agData = stageData.stagedef.animGroups[animGroupIdx];
         this.models = [];
-        for (let i = 0; i < this.igData.levelModels.length; i++) {
-            const name = this.igData.levelModels[i].modelName;
+        for (let i = 0; i < this.agData.levelModels.length; i++) {
+            const name = this.agData.levelModels[i].modelName;
             const modelInst = modelCache.getModel(name);
             if (modelInst !== null) {
                 this.models.push(modelInst);
@@ -67,11 +67,11 @@ class AnimGroup {
 
         if (animGroupIdx > 0) {
             // Not in world space, animate
-            mat4.fromXRotation(this.originFromAg, -this.igData.originRot[0] * S16_TO_RADIANS);
-            mat4.rotateY(this.originFromAg, this.originFromAg, -this.igData.originRot[1] * S16_TO_RADIANS);
-            mat4.rotateZ(this.originFromAg, this.originFromAg, -this.igData.originRot[2] * S16_TO_RADIANS);
+            mat4.fromXRotation(this.originFromAg, -this.agData.originRot[0] * S16_TO_RADIANS);
+            mat4.rotateY(this.originFromAg, this.originFromAg, -this.agData.originRot[1] * S16_TO_RADIANS);
+            mat4.rotateZ(this.originFromAg, this.originFromAg, -this.agData.originRot[2] * S16_TO_RADIANS);
             const negOrigin = scratchVec3a;
-            vec3.negate(negOrigin, this.igData.originPos);
+            vec3.negate(negOrigin, this.agData.originPos);
             mat4.translate(this.originFromAg, this.originFromAg, negOrigin);
         } else {
             // In world space
@@ -79,9 +79,9 @@ class AnimGroup {
             mat4.identity(this.worldFromAg);
         }
 
-        this.bananas = this.igData.bananas.map((ban) => new Banana(modelCache, ban));
-        this.goals = this.igData.goals.map((goal) => new Goal(modelCache, goal));
-        this.bumpers = this.igData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
+        this.bananas = this.agData.bananas.map((ban) => new Banana(modelCache, ban));
+        this.goals = this.agData.goals.map((goal) => new Goal(modelCache, goal));
+        this.bumpers = this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
     }
 
     public update(t: MkbTime): void {
@@ -95,10 +95,10 @@ class AnimGroup {
 
             // Use initial values if there are no corresponding keyframes
             const translation = scratchVec3a;
-            vec3.copy(translation, this.igData.originPos);
+            vec3.copy(translation, this.agData.originPos);
             const rotRadians = scratchVec3b;
-            vec3.scale(rotRadians, this.igData.originRot, S16_TO_RADIANS);
-            const anim = this.igData.anim;
+            vec3.scale(rotRadians, this.agData.originRot, S16_TO_RADIANS);
+            const anim = this.agData.anim;
 
             if (anim !== null) {
                 if (anim.posXKeyframes.length !== 0) {
