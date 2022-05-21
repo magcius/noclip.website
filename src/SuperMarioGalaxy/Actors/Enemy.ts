@@ -9,7 +9,7 @@ import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision, isExistMoveLimitCollision, getFirstPolyOnLineToMap, setBinderOffsetVec, setBinderExceptActor, setBinderIgnoreMovingCollision } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitMtx, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy, calcSensorDirectionNormalize } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, resetPosition, ZoneAndLayer } from '../LiveActor';
@@ -6195,6 +6195,43 @@ export class TakoHei extends LiveActor<TakoHeiNrv> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
+    public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (isSensorEnemyAttack(thisSensor)) {
+            // Attack player
+        } else {
+            if (isSensorEnemy(otherSensor)) {
+                const pushed = sendMsgPush(sceneObjHolder, otherSensor, thisSensor);
+                if (pushed && this.isPushMovable()) {
+                    calcSensorDirectionNormalize(scratchVec3a, otherSensor, thisSensor);
+                    const dot = vec3.dot(scratchVec3a, this.velocity);
+                    if (dot < 0.0)
+                        vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3a, -dot);
+                }
+            }
+        }
+    }
+
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.Push) {
+            if (otherSensor === null || !isSensorEnemy(otherSensor))
+                return false;
+
+            if (!this.isPushMovable())
+                return false;
+
+            startBtp(this, 'BlinkTwice');
+            calcSensorDirectionNormalize(scratchVec3a, otherSensor, thisSensor!);
+            const speed = isSensorPlayer(otherSensor) ? 12.0 : 5.0;
+            vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3a, speed);
+            this.pushTimer = isSensorPlayer(otherSensor) ? 60 : 20;
+            return true;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+
     protected override control(sceneObjHolder: SceneObjHolder): void {
         super.control(sceneObjHolder);
 
@@ -6205,6 +6242,13 @@ export class TakoHei extends LiveActor<TakoHeiNrv> {
             this.updatePose();
             // this.tryPressed();
         }
+    }
+
+    private isPushMovable(): boolean {
+        // if (this.pushTimer > 0)
+        //     return false;
+
+        return true;
     }
 
     protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TakoHeiNrv, deltaTimeFrames: number): void {

@@ -521,6 +521,11 @@ export function isSensorNear(a: HitSensor, b: HitSensor, radius: number): boolea
     return vec3.squaredDistance(a.center, b.center) < (radius ** 2.0);
 }
 
+export function calcSensorDirectionNormalize(dst: vec3, a: HitSensor, b: HitSensor): void {
+    vec3.sub(dst, b.center, a.center);
+    vec3.normalize(dst, dst);
+}
+
 export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
 }
