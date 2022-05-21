@@ -66,7 +66,10 @@ export class ModelCache {
     private entries: CacheEntry[];
     private textureHolder: TextureHolder;
 
-    private goalModels: (ModelInst | null)[] = [null, null, null];
+    private blueGoalModel: ModelInst | null = null;
+    private greenGoalModel: ModelInst | null = null;
+    private redGoalModel: ModelInst | null = null;
+    private bumperModel: ModelInst | null = null;
 
     constructor(private device: GfxDevice, private renderCache: GfxRenderCache, stageData: StageData) {
         this.entries = [
@@ -76,22 +79,23 @@ export class ModelCache {
         ];
         this.textureHolder = new TextureHolder();
 
-        const goalNamePrefixes = ["GOAL", "GOAL_G", "GOAL_R"];
+        // TODO(complexplane): Don't do these in modelcache?
+        this.blueGoalModel = this.findBgSpecificModel("GOAL");
+        this.greenGoalModel = this.findBgSpecificModel("GOAL_G");
+        this.redGoalModel = this.findBgSpecificModel("GOAL_R");
+        this.bumperModel = this.findBgSpecificModel("BUMPER_L1");
+    }
 
-        // Instantiate goal models if they exist
-        for (let i = SD.GoalType.Blue; i <= SD.GoalType.Red; i++) {
-            for (const entry of this.entries) {
-                for (const gma of entry.gma.idMap.values()) {
-                    const postfix = gma.name.slice(4);
-                    if (postfix.startsWith(goalNamePrefixes[i])) {
-                        this.goalModels[i] = new ModelInst(device, renderCache, gma, this.textureHolder);
-                        break;
-                    }
+    private findBgSpecificModel(prefix: string): ModelInst | null {
+        for (const entry of this.entries) {
+            for (const gma of entry.gma.idMap.values()) {
+                const postfix = gma.name.slice(4);
+                if (postfix.startsWith(prefix)) {
+                    return new ModelInst(this.device, this.renderCache, gma, this.textureHolder);
                 }
-                // If model already found, break
-                if (this.goalModels[i] !== null) break;
             }
         }
+        return null;
     }
 
     private getModelFromSrc(model: string | number, src: GmaSrc): ModelInst | null {
@@ -128,15 +132,19 @@ export class ModelCache {
     // Screw it, don't make fancy generic prefix whatever lookup just for goals, just do it here
 
     public getBlueGoalModel(): ModelInst | null {
-        return this.goalModels[SD.GoalType.Blue];
+        return this.blueGoalModel;
     }
 
     public getGreenGoalModel(): ModelInst | null {
-        return this.goalModels[SD.GoalType.Green];
+        return this.greenGoalModel;
     }
 
     public getRedGoalModel(): ModelInst | null {
-        return this.goalModels[SD.GoalType.Red];
+        return this.redGoalModel;
+    }
+
+    public getBumperModel(): ModelInst | null {
+        return this.bumperModel;
     }
 
     public getTextureHolder(): TextureHolder {

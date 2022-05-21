@@ -49,6 +49,7 @@ class AnimGroup {
     private igData: SD.AnimGroup;
     private bananas: Banana[];
     private goals: Goal[];
+    private bumpers: Bumper[];
 
     constructor(modelCache: ModelCache, private stageData: StageData, private animGroupIdx: number) {
         this.igData = stageData.stagedef.animGroups[animGroupIdx];
@@ -79,7 +80,8 @@ class AnimGroup {
         }
 
         this.bananas = this.igData.bananas.map((ban) => new Banana(modelCache, ban));
-        this.goals = this.igData.goals.map((goal) => new Goal(modelCache, goal, stageData.stageInfo.bgInfo.fileName));
+        this.goals = this.igData.goals.map((goal) => new Goal(modelCache, goal));
+        this.bumpers = this.igData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
     }
 
     public update(t: MkbTime): void {
@@ -147,6 +149,9 @@ class AnimGroup {
         }
         for (let i = 0; i < this.goals.length; i++) {
             this.goals[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
+        }
+        for (let i = 0; i < this.bumpers.length; i++) {
+            this.bumpers[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
         }
     }
 }
@@ -235,7 +240,7 @@ class Banana {
 class Goal {
     private model: ModelInst;
 
-    constructor(modelCache: ModelCache, private goalData: SD.Goal, bgFileName: string) {
+    constructor(modelCache: ModelCache, private goalData: SD.Goal) {
         if (goalData.type === SD.GoalType.Blue) {
             this.model = assertExists(modelCache.getBlueGoalModel());
         } else if (goalData.type === SD.GoalType.Green) {
@@ -256,6 +261,29 @@ class Goal {
         mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[2]);
         mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[1]);
         mat4.rotateX(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[0]);
+
+        this.model.prepareToRender(ctx, rp);
+    }
+}
+
+class Bumper {
+    private model: ModelInst;
+
+    constructor(modelCache: ModelCache, private bumperData: SD.Bumper) {
+        this.model = assertExists(modelCache.getBumperModel());
+    }
+
+    public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
+        const rp = scratchRenderParams;
+        rp.alpha = 1.0;
+        rp.sort = RenderSort.Translucent;
+        rp.lighting = lighting;
+
+        mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);
+        mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[2]);
+        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[1]);
+        mat4.rotateX(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[0]);
+        mat4.scale(rp.viewFromModel, rp.viewFromModel, this.bumperData.scale);
 
         this.model.prepareToRender(ctx, rp);
     }
