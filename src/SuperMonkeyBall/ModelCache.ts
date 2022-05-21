@@ -87,11 +87,11 @@ export class ModelCache {
     }
 
     private findBgSpecificModel(prefix: string): ModelInst | null {
-        for (const entry of this.entries) {
+        for (let src = GmaSrc.Stage; src <= GmaSrc.Common; src++) {
+            const entry = this.entries[src];
             for (const gma of entry.gma.idMap.values()) {
-                const postfix = gma.name.slice(4);
-                if (postfix.startsWith(prefix)) {
-                    return new ModelInst(this.device, this.renderCache, gma, this.textureHolder);
+                if (gma.name.slice(4).startsWith(prefix)) {
+                    return this.getModelFromSrc(gma.name, src);
                 }
             }
         }
