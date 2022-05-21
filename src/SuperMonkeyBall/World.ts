@@ -48,9 +48,10 @@ class AnimGroup {
     private originFromAg: mat4;
     private igData: SD.AnimGroup;
     private bananas: Banana[];
+    private goals: Goal[];
 
-    constructor(modelCache: ModelCache, private stagedef: SD.Stage, private animGroupIdx: number) {
-        this.igData = stagedef.animGroups[animGroupIdx];
+    constructor(modelCache: ModelCache, private stageData: StageData, private animGroupIdx: number) {
+        this.igData = stageData.stagedef.animGroups[animGroupIdx];
         this.models = [];
         for (let i = 0; i < this.igData.levelModels.length; i++) {
             const name = this.igData.levelModels[i].modelName;
@@ -78,6 +79,7 @@ class AnimGroup {
         }
 
         this.bananas = this.igData.bananas.map((ban) => new Banana(modelCache, ban));
+        this.goals = this.igData.goals.map((goal) => new Goal(modelCache, goal, stageData.stageInfo.bgInfo.fileName));
     }
 
     public update(t: MkbTime): void {
@@ -85,8 +87,8 @@ class AnimGroup {
         if (this.animGroupIdx > 0) {
             const loopedTimeSeconds = loopWrap(
                 t.getAnimTimeSeconds(),
-                this.stagedef.loopStartSeconds,
-                this.stagedef.loopEndSeconds
+                this.stageData.stagedef.loopStartSeconds,
+                this.stageData.stagedef.loopEndSeconds
             );
 
             // Use initial values if there are no corresponding keyframes
@@ -142,6 +144,9 @@ class AnimGroup {
         }
         for (let i = 0; i < this.bananas.length; i++) {
             this.bananas[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
+        }
+        for (let i = 0; i < this.goals.length; i++) {
+            this.goals[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
         }
     }
 }
@@ -211,7 +216,7 @@ class Banana {
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
         rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.sort = RenderSort.None;
         rp.lighting = lighting;
 
         // Bananas' positions are parented to their anim group, but they have a global rotation in
@@ -227,6 +232,35 @@ class Banana {
     }
 }
 
+class Goal {
+    private model: ModelInst;
+
+    constructor(modelCache: ModelCache, private goalData: SD.Goal, bgFileName: string) {
+        if (goalData.type === SD.GoalType.Blue) {
+            this.model = assertExists(modelCache.getBlueGoalModel());
+        } else if (goalData.type === SD.GoalType.Green) {
+            this.model = assertExists(modelCache.getGreenGoalModel());
+        } else {
+            // Red goal
+            this.model = assertExists(modelCache.getRedGoalModel());
+        }
+    }
+
+    public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
+        const rp = scratchRenderParams;
+        rp.alpha = 1.0;
+        rp.sort = RenderSort.Translucent;
+        rp.lighting = lighting;
+
+        mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.goalData.pos);
+        mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[2]);
+        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[1]);
+        mat4.rotateX(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[0]);
+
+        this.model.prepareToRender(ctx, rp);
+    }
+}
+
 export class World {
     private mkbTime: MkbTime;
     private animGroups: AnimGroup[];
@@ -235,7 +269,7 @@ export class World {
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
-        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(modelCache, stageData.stagedef, i));
+        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(modelCache, stageData, i));
 
         const bgModels: BgModelInst[] = [];
         for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {

@@ -32,8 +32,8 @@ export class ModelInst {
     private shapes: ShapeInst[];
     private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Gma.Model, texCache: TextureHolder) {
-        this.tevLayers = modelData.tevLayers.map((tevLayerData) => new TevLayerInst(device, tevLayerData, texCache));
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Gma.Model, texHolder: TextureHolder) {
+        this.tevLayers = modelData.tevLayers.map((tevLayerData) => new TevLayerInst(device, tevLayerData, texHolder));
         this.shapes = modelData.shapes.map(
             (shapeData, i) =>
                 new ShapeInst(

@@ -11,6 +11,7 @@ import { AVTpl } from "./AVTpl";
 import * as UI from "../ui";
 import * as Viewer from "../viewer";
 import { GXMaterialHacks } from "../gx/gx_material";
+import * as SD from "./Stagedef";
 
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
@@ -65,6 +66,8 @@ export class ModelCache {
     private entries: CacheEntry[];
     private textureHolder: TextureHolder;
 
+    private goalModels: (ModelInst | null)[] = [null, null, null];
+
     constructor(private device: GfxDevice, private renderCache: GfxRenderCache, stageData: StageData) {
         this.entries = [
             new CacheEntry(stageData.stageGma),
@@ -72,12 +75,26 @@ export class ModelCache {
             new CacheEntry(stageData.commonGma),
         ];
         this.textureHolder = new TextureHolder();
+
+        const goalNamePrefixes = ["GOAL", "GOAL_G", "GOAL_R"];
+
+        // Instantiate goal models if they exist
+        for (let i = SD.GoalType.Blue; i <= SD.GoalType.Red; i++) {
+            for (const entry of this.entries) {
+                for (const gma of entry.gma.idMap.values()) {
+                    const postfix = gma.name.slice(4);
+                    if (postfix.startsWith(goalNamePrefixes[i])) {
+                        this.goalModels[i] = new ModelInst(device, renderCache, gma, this.textureHolder);
+                        break;
+                    }
+                }
+                // If model already found, break
+                if (this.goalModels[i] !== null) break;
+            }
+        }
     }
 
-    private getModelFromSrc(
-        model: string | number,
-        src: GmaSrc
-    ): ModelInst | null {
+    private getModelFromSrc(model: string | number, src: GmaSrc): ModelInst | null {
         const entry = this.entries[src];
         let modelData: Gma.Model | undefined;
         if (typeof model === "number") {
@@ -97,10 +114,7 @@ export class ModelCache {
         return null;
     }
 
-    public getModel(
-        model: string | number,
-        src?: GmaSrc
-    ): ModelInst | null {
+    public getModel(model: string | number, src?: GmaSrc): ModelInst | null {
         if (src !== undefined) {
             return this.getModelFromSrc(model, src);
         }
@@ -109,6 +123,20 @@ export class ModelCache {
             if (modelInst !== null) return modelInst;
         }
         return null;
+    }
+
+    // Screw it, don't make fancy generic prefix whatever lookup just for goals, just do it here
+
+    public getBlueGoalModel(): ModelInst | null {
+        return this.goalModels[SD.GoalType.Blue];
+    }
+
+    public getGreenGoalModel(): ModelInst | null {
+        return this.goalModels[SD.GoalType.Green];
+    }
+
+    public getRedGoalModel(): ModelInst | null {
+        return this.goalModels[SD.GoalType.Red];
     }
 
     public getTextureHolder(): TextureHolder {
