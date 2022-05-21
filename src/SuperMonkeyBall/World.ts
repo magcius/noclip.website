@@ -129,6 +129,9 @@ class AnimGroup {
         for (let i = 0; i < this.bananas.length; i++) {
             this.bananas[i].update(t);
         }
+        for (let i = 0; i < this.bumpers.length; i++) {
+            this.bumpers[i].update(t);
+        }
     }
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting) {
@@ -268,9 +271,16 @@ class Goal {
 
 class Bumper {
     private model: ModelInst;
+    private yRotRadians: number = 0;
 
     constructor(modelCache: ModelCache, private bumperData: SD.Bumper) {
         this.model = assertExists(modelCache.getBumperModel());
+    }
+
+    public update(t: MkbTime): void {
+        const incRadians = S16_TO_RADIANS * 0x100;
+        this.yRotRadians += incRadians * t.getDeltaTimeFrames();
+        this.yRotRadians %= 2 * Math.PI;
     }
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
@@ -281,7 +291,7 @@ class Bumper {
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);
         mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[2]);
-        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[1]);
+        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[1] + this.yRotRadians);
         mat4.rotateX(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[0]);
         mat4.scale(rp.viewFromModel, rp.viewFromModel, this.bumperData.scale);
 
