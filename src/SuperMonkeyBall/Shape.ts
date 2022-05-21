@@ -170,10 +170,10 @@ export class ShapeInst {
         mat4.copy(drawParams.u_PosMtx[0], renderParams.viewFromModel);
 
         for (let i = 0; i < this.subShapes.length; i++) {
-            const inst = ctx.instMan.newRenderInst();
+            const inst = ctx.renderInstManager.newRenderInst();
             this.subShapes[i].material.setOnRenderInst(
                 ctx.device,
-                ctx.instMan.gfxRenderCache,
+                ctx.renderInstManager.gfxRenderCache,
                 inst,
                 drawParams,
                 renderParams

@@ -21,7 +21,7 @@ import { MathConstants } from "../MathHelpers";
 // TODO(complexplane): Put somewhere else
 export type RenderContext = {
     device: GfxDevice;
-    instMan: GfxRenderInstManager;
+    renderInstManager: GfxRenderInstManager;
     viewerInput: Viewer.ViewerRenderInput;
     opaqueInstList: GfxRenderInstList;
     translucentInstList: GfxRenderInstList;
@@ -89,7 +89,7 @@ export class Renderer implements Viewer.SceneGfx {
 
         const renderCtx: RenderContext = {
             device,
-            instMan: this.renderHelper.renderInstManager,
+            renderInstManager: this.renderHelper.renderInstManager,
             viewerInput,
             opaqueInstList,
             translucentInstList,
@@ -100,8 +100,8 @@ export class Renderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const instMan = this.renderHelper.renderInstManager;
-        instMan.disableSimpleMode();
+        const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.disableSimpleMode();
 
         const mainColorDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.Color0,
@@ -133,7 +133,7 @@ export class Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput, this.opaqueInstList, this.translucentInstList);
 
         this.renderHelper.renderGraph.execute(builder);
-        instMan.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
