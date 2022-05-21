@@ -24,6 +24,7 @@ import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOv
 import { GloverObjbank, GloverTexbank } from './parsers';
 
 import { SRC_FRAME_TO_MS } from './timing';
+import { hashCodeNumberUpdate, HashMap } from '../HashMap';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -89,8 +90,21 @@ function keyframeSlerp(dst: vec4, cur: GloverObjbank.AffineFrame, next: GloverOb
     }
 }
 
+type CacheKey = [number, number];
+
+function cacheKeyEqualFunc(a: CacheKey, b: CacheKey): boolean {
+    return a[0] === b[0] && a[1] === b[1];
+}
+
+function cacheKeyHashFunc(a: CacheKey): number {
+    let hashCode = 0;
+    hashCode = hashCodeNumberUpdate(hashCode, a[0]);
+    hashCode = hashCodeNumberUpdate(hashCode, a[1]);
+    return hashCode;
+}
+
 export class ActorMeshNode {
-    private static rendererCache = new Map<[number, number], GloverMeshRenderer>();
+    private static rendererCache = new HashMap<CacheKey, GloverMeshRenderer>(cacheKeyEqualFunc, cacheKeyHashFunc);
 
     public renderer: GloverMeshRenderer;
 
@@ -115,11 +129,12 @@ export class ActorMeshNode {
         private actorId: number,
         public mesh: GloverObjbank.Mesh)
     {
-        if (ActorMeshNode.rendererCache.get([actorId, mesh.id]) === undefined) {
+        const existing = ActorMeshNode.rendererCache.get([actorId, mesh.id]);
+        if (existing === null) {
             this.renderer = new GloverMeshRenderer(device, cache, segments, textures, sceneLights, overlay, mesh);
-            ActorMeshNode.rendererCache.set([actorId, mesh.id], this.renderer);
+            ActorMeshNode.rendererCache.add([actorId, mesh.id], this.renderer);
         } else {
-            this.renderer = ActorMeshNode.rendererCache.get([actorId, mesh.id])!;
+            this.renderer = existing;
         }
 
         let current_child = mesh.child;
@@ -260,10 +275,12 @@ export class ActorMeshNode {
     }
 
     public destroy(device: GfxDevice): void {
-        if (ActorMeshNode.rendererCache.has([this.actorId, this.renderer.id])) {
+        const existing = ActorMeshNode.rendererCache.get([this.actorId, this.renderer.id]);
+        if (existing !== null) {
             ActorMeshNode.rendererCache.delete([this.actorId, this.renderer.id]);
-            this.renderer.destroy(device);
+            existing.destroy(device);
         }
+
         for (let child of this.children) {
             child.destroy(device);
         }
@@ -590,10 +607,6 @@ class GloverMeshRenderer {
     public conveyorScaleX: number = 1;
     public conveyorScaleZ: number = 1;
 
-    // TODO: remove:
-    private log: string[] = [];
-    private log_dumped = false;
-
     constructor(
         private device: GfxDevice,
         private cache: GfxRenderCache,
@@ -727,15 +740,6 @@ class GloverMeshRenderer {
                     Render.f3dexFromGeometry(geo, faceIdx, 1, alpha),
                     Render.f3dexFromGeometry(geo, faceIdx, 2, alpha)
                 );
-                // TODO: delete
-                // drawCall.originalUVs.push(
-                //     drawCall.vertices[drawCall.vertices.length-3].tx,
-                //     drawCall.vertices[drawCall.vertices.length-3].ty,
-                //     drawCall.vertices[drawCall.vertices.length-2].tx,
-                //     drawCall.vertices[drawCall.vertices.length-2].ty,
-                //     drawCall.vertices[drawCall.vertices.length-1].tx,
-                //     drawCall.vertices[drawCall.vertices.length-1].ty,
-                // )
                 drawCall.vertexCount += 3;
             }
             drawCalls.push(drawCall)

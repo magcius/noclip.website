@@ -7,7 +7,6 @@ import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimato
 import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
@@ -209,10 +208,6 @@ export function getJointMtxByName(actor: LiveActor, n: string): mat4 | null {
     return null;
 }
 
-export function isBckStopped(actor: LiveActor): boolean {
-    return actor.modelManager!.isBckStopped();
-}
-
 export function isBckLooped(actor: LiveActor): boolean {
     const bckCtrl = actor.modelManager!.getBckCtrl();
     return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasLooped);
@@ -231,10 +226,6 @@ export function getBckFrameMax(actor: LiveActor): number {
 export function getBckFrameMaxNamed(actor: LiveActor, name: string): number {
     const bck = actor.modelManager!.resourceHolder.getRes(actor.modelManager!.resourceHolder.motionTable, name)!;
     return bck.duration;
-}
-
-export function isBrkStopped(actor: LiveActor): boolean {
-    return actor.modelManager!.isBckStopped();
 }
 
 export function getBrkFrameMax(actor: LiveActor): number {
@@ -312,10 +303,6 @@ export function tryStartBck(actor: LiveActor, name: string): boolean {
     }
 }
 
-export function isExistBck(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.isExistRes(actor.resourceHolder.motionTable, name);
-}
-
 export function startBck(actor: LiveActor, name: string): void {
     actor.modelManager!.startBck(name);
     if (actor.effectKeeper !== null)
@@ -340,10 +327,6 @@ export function stopBck(actor: LiveActor): void {
 
 export function startBtk(actor: LiveActor, name: string): void {
     actor.modelManager!.startBtk(name);
-}
-
-export function isExistBtk(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.isExistRes(actor.resourceHolder.btkTable, name);
 }
 
 export function startBrk(actor: LiveActor, name: string): void {
@@ -405,6 +388,18 @@ export function startBvaIfExist(actor: LiveActor, name: string): boolean {
     if (bva !== null)
         actor.modelManager!.startBva(name);
     return bva !== null;
+}
+
+export function isBckStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBckStopped();
+}
+
+export function isBtkStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBtkStopped();
+}
+
+export function isBrkStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBrkStopped();
 }
 
 export function setBckFrameAndStop(actor: LiveActor, frame: number): void {
@@ -890,8 +885,8 @@ export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
-export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-    texProjCameraSceneTex(m, camera, viewport, -1);
+export function loadTexProjectionMtx(m: mat4, camera: Camera): void {
+    texProjCameraSceneTex(m, camera, -1);
     mat4.mul(m, m, camera.viewMatrix);
 }
 
@@ -1048,19 +1043,19 @@ export function makeAxisFrontUp(axisRight: vec3, axisUp: vec3, front: ReadonlyVe
     vec3.cross(axisUp, front, axisRight);
 }
 
-function clampVecAngleRad(dst: vec3, axis: ReadonlyVec3, clampRad: number): void {
-    vec3.cross(scratchVec3a, dst, axis);
-    const theta = Math.atan2(vec3.length(scratchVec3a), vec3.dot(dst, axis));
+export function clampVecAngleRad(dst: vec3, target: ReadonlyVec3, clampRad: number): void {
+    vec3.cross(scratchVec3a, dst, target);
+    const sin = vec3.length(scratchVec3a);
+    const theta = Math.atan2(sin, vec3.dot(dst, target));
     if (theta > clampRad) {
-        vec3.negate(scratchVec3a, scratchVec3a);
-        vec3.normalize(scratchVec3a, scratchVec3a);
+        vec3.scale(scratchVec3a, scratchVec3a, -1.0 / sin);
         mat4.fromRotation(scratchMatrix, clampRad, scratchVec3a);
-        transformVec3Mat4w0(dst, scratchMatrix, axis);
+        transformVec3Mat4w0(dst, scratchMatrix, target);
     }
 }
 
-export function clampVecAngleDeg(dst: vec3, axis: ReadonlyVec3, clampDeg: number): void {
-    clampVecAngleRad(dst, axis, clampDeg * MathConstants.DEG_TO_RAD);
+export function clampVecAngleDeg(dst: vec3, target: ReadonlyVec3, clampDeg: number): void {
+    clampVecAngleRad(dst, target, clampDeg * MathConstants.DEG_TO_RAD);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
@@ -1358,13 +1353,10 @@ export function useStageSwitchReadAppear(sceneObjHolder: SceneObjHolder, actor: 
 }
 
 export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    // XXX(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
-
-    // NOTE(jstpierre): ActorAppearSwitchListener is calls appear/kill vfunc instead, but
-    // I can't see the motivation behind these two different vfuncs tbqh.
+    // NOTE(jstpierre): ActorAppearSwitchListener calls appear/kill vfunc instead.
 
     // Also, ActorAppearSwitchListener can turn off one or both of these vfuncs, but syncStageSwitchAppear
-    // does never do that, so we emulate it with a functor listener.
+    // never does that, so we emulate it with a functor listener.
     const switchOn = (sceneObjHolder: SceneObjHolder) => actor.makeActorAppeared(sceneObjHolder);
     const switchOff = (sceneObjHolder: SceneObjHolder) => actor.makeActorDead(sceneObjHolder);
     const eventListener = new SwitchFunctorEventListener(switchOn, switchOff);
@@ -1567,13 +1559,13 @@ export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, r
     return isNearPlayerAnyTime(sceneObjHolder, actor, radius);
 }
 
-export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, threshold: number): boolean {
+export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, thresholdY: number): boolean {
     getPlayerPos(scratchVec3a, sceneObjHolder);
     vec3.sub(scratchVec3a, scratchVec3a, actor.translation);
 
     getMatrixAxisY(scratchVec3b, actor.getBaseMtx()!);
     const dot = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
-    if (Math.abs(dot) <= threshold)
+    if (Math.abs(dot) <= thresholdY)
         return vec3.squaredLength(scratchVec3a) <= radius ** 2.0;
     else
         return false;

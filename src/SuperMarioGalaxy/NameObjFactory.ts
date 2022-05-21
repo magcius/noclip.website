@@ -7,8 +7,8 @@ import { createLensFlareArea, requestArchivesLensFlareArea } from './Actors/Lens
 import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
-import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud, LavaProminenceTriple, FallingSmallRock } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller } from './Actors/MapObj';
+import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud, LavaProminenceTriple, FallingSmallRock, MorphItemObjNeo } from "./Actors/MiscActor";
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller, SwingLight, BigFan, Banekiti } from './Actors/MapObj';
 import { Butler, Caretaker, CollectTico, HoneyBee, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, RosettaChair, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
 import { createDeathCube, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, Takobo, TakoHei, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, JumpBeamer, Kanina, Karon, KillerGunnerSingle, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, StinkBugSmall, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 import { createMessageAreaCube, createMessageAreaCylinder } from './Talk';
 
@@ -85,6 +85,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("AsteroidD",                      SimpleEnvironmentObj),
     _("SpaceStickA",                    SimpleEnvironmentObj),
     _("SpaceStickB",                    SimpleEnvironmentObj),
+    _("KillerGunnerSingle",             KillerGunnerSingle),
     _("KillerGunnerDouble",             SimpleEnvironmentObj),
     _("KillerGunnerTriple",             SimpleEnvironmentObj),
     _("LavaSpaceStickA",                SimpleEnvironmentObj),
@@ -106,6 +107,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Birikyu",                        BirikyuWithFace),
     _("BallBeamer",                     BallBeamer),
     _("RingBeamer",                     RingBeamer),
+    _("JumpBeamer",                     JumpBeamer),
     _("Dossun",                         Dossun),
     _("Kuribo",                         Kuribo),
     _("KuriboMini",                     KuriboMini),
@@ -140,6 +142,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Jellyfish",                      Jellyfish),
     _("Meramera",                       Meramera),
     _("IceMeramera",                    Meramera),
+    _("StinkBugSmall",                  StinkBugSmall),
 
     // TODO(jstpierre): Figure out what to do with this
     N("Petari"),
@@ -174,9 +177,20 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("CirclePurpleCoinGroup",          createPurpleCircleCoinGroup, requestArchivesPurpleCoin),
     _("QuestionCoin",                   QuestionCoin),
 
+    // Items
+    _("MorphItemNeoHopper",             MorphItemObjNeo),
+    _("MorphItemNeoBee",                MorphItemObjNeo),
+    _("MorphItemNeoTeresa",             MorphItemObjNeo),
+    _("MorphItemNeoIce",                MorphItemObjNeo),
+    _("MorphItemNeoFire",               MorphItemObjNeo),
+    _("MorphItemNeoFoo",                MorphItemObjNeo),
+
     // Misc objects
     _("AirBubble",                      AirBubble),
     _("AirBubbleGenerator",             AirBubbleGenerator),
+    _("Banekiti",                       Banekiti),
+    _("BigFan",                         BigFan),
+    _("BigFanNoLeg",                    BigFan),
     _("BlackHole",                      BlackHole),
     _("BlackHoleCube",                  BlackHole),
     _("BlueChip",                       BlueChip),
@@ -241,6 +255,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("WanwanRolling",                  RockCreator),
     _("WanwanRollingMini",              RockCreator),
     _("WanwanRollingGold",              RockCreator),
+    _("SandRiverLightA",                SwingLight),
     _("ScrewSwitch",                    ScrewSwitch),
     _("ScrewSwitchReverse",             ScrewSwitchReverse),
     _("SeaBottomTriplePropeller",       SeaBottomTriplePropeller),
@@ -256,6 +271,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("SuperSpinDriverGreen",           createSuperSpinDriverGreen,  requestArchivesSuperSpinDriver),
     E("SuperSpinDriverPink",            createSuperSpinDriverPink,   requestArchivesSuperSpinDriver),
     _("SwingRope",                      SwingRope),
+    _("TeresaMansionLightA",            SwingLight),
+    _("TeresaMansionLightB",            SwingLight),
     _("Trapeze",                        Trapeze),
     _("TreasureBoxCrackedEmpty",        TreasureBoxCracked),
     _("TreasureBoxCrackedCoin",         TreasureBoxCracked),
@@ -491,6 +508,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("AstroRoomLibrary",               SimpleMapObj),
     _("UFOKinokoLandingAstro",          SimpleMapObj),
     _("WhiteRoom",                      SimpleMapObj),
+    _("DangerSignBoard",                SimpleMapObj),
     _("OceanFloaterTowerRotateStepA",   RotateMoveObj),
     _("OceanFloaterTowerRotateStepB",   RotateMoveObj),
     _("OceanFloaterTowerRotateStepC",   RotateMoveObj),
@@ -902,6 +920,12 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("ExtraWallCheckArea"),
     N("ExtraWallCheckCylinder"),
     N("DodoryuClosedCylinder"),
+    N("TowerModeCylinder"),
+    N("TicoSeedGuidanceCube"),
+    N("BlueStarGuidanceCube"),
+    N("SmokeEffectColorAreaCube"),
+    N("StoryDemoSimpleBloomArea"),
+    N("EnvColorCube"),
 
     // Points
     N("IronCannonLauncherPoint"),

@@ -14,8 +14,6 @@ import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from '.
 import { vecPitch } from './util';
 import { getCamPos } from './util';
 import { World } from './world';
-import { createDirectionalLight, Light, LightType } from './WorldLights';
-import { colorCopy, colorNewCopy, colorScale, White } from '../Color';
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -29,8 +27,6 @@ export class Sky {
     constructor(private world: World) {
         this.skyddraw.setVtxDesc(GX.Attr.POS, true);
         this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -108,7 +104,6 @@ export class Sky {
         
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
@@ -127,7 +122,7 @@ export class Sky {
             const objectCtx: ObjectRenderContext = {
                 sceneCtx,
                 showDevGeometry: false,
-                setupPointLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+                setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
             }
 
             const eyePos = scratchVec0;
@@ -147,7 +142,6 @@ export class Sky {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skyscape');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             const skyDepthTargetID = builder.createRenderTargetID(depthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);

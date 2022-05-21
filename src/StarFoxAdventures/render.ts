@@ -5,7 +5,7 @@ import * as GX_Material from '../gx/gx_material';
 import { fillSceneParams, fillSceneParamsData, GXMaterialHelperGfx, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { CameraController } from '../Camera';
+import { CameraController, computeViewMatrix } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8, White } from '../Color';
@@ -27,6 +27,8 @@ export interface SceneUpdateContext {
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
+    worldToViewMtx: mat4;
+    viewToWorldMtx: mat4;
     animController: SFAAnimationController;
     world?: World;
 }
@@ -89,9 +91,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
-        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
             skyscape: new GfxRenderInstList(),
@@ -189,8 +188,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         const matCtx: MaterialRenderContext = {
             sceneCtx,
-            worldToViewMtx: mat4.create(),
-            viewToWorldMtx: mat4.create(),
             modelToViewMtx: mat4.create(),
             viewToModelMtx: mat4.create(),
             ambienceIdx: 0,
@@ -210,7 +207,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Heat Shimmer');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
 
             const resampledDepthResolveTextureID = builder.resolveRenderTarget(resampledDepthTargetID);
@@ -254,7 +250,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaques');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
@@ -286,7 +281,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('World Translucents');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
@@ -315,9 +309,14 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         const sceneCtx: SceneRenderContext = {
             viewerInput,
+            worldToViewMtx: mat4.create(),
+            viewToWorldMtx: mat4.create(),
             animController: this.animController,
             world: this.world,
         };
+
+        computeViewMatrix(sceneCtx.worldToViewMtx, viewerInput.camera);
+        mat4.invert(sceneCtx.viewToWorldMtx, sceneCtx.worldToViewMtx);
 
         this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
         this.addWorldRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);

@@ -71,6 +71,7 @@ export function createPointLight(position: ReadonlyVec3, color: Color, refDistan
 export function createDirectionalLight(direction: ReadonlyVec3, color: Color): Light {    const light = new Light();
     light.type = LightType.DIRECTIONAL;
     vec3.copy(light.direction, direction);
+    vec3.normalize(light.direction, light.direction);
     light.refDistance = 1000000.0; // TODO
     light.radius = 1000000.0; // TODO
     colorCopy(light.color, color);
@@ -125,10 +126,15 @@ export class WorldLights {
             if (!(light.type & typeMask))
                 continue;
 
-            light.probedInfluence = calcLightInfluenceOnObject(light, obj);
-            light.probedInfluence = applyColorToInfluence(light.probedInfluence, light.color);
-            if (light.probedInfluence <= 0.0)
-                continue;
+            if (light.type == LightType.DIRECTIONAL)
+                // Sun and moon get massive influence
+                light.probedInfluence = 1000.0;
+            else {
+                light.probedInfluence = calcLightInfluenceOnObject(light, obj);
+                light.probedInfluence = applyColorToInfluence(light.probedInfluence, light.color);
+                if (light.probedInfluence <= 0.0)
+                    continue;
+            }
 
             spliceBisectRight(probedLights, light, (a, b) => b.probedInfluence - a.probedInfluence);
 

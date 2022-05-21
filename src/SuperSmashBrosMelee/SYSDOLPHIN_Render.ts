@@ -187,7 +187,7 @@ export class HSD_AObj_Instance {
     constructor(public aobj: HSD_AObj) {
         this.flags = this.aobj.flags;
 
-        // XXX(jstpierre): Mark all animations to loop.
+        // HACK(jstpierre): Mark all animations to loop.
         this.flags |= HSD_AObjFlags.ANIM_LOOP;
     }
 

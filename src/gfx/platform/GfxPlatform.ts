@@ -305,14 +305,6 @@ export interface GfxVendorInfo {
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
 
-// Viewport in normalized coordinate space, from 0 to 1.
-export interface GfxNormalizedViewportCoords {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}
-
 export const enum GfxQueryPoolType {
     OcclusionConservative,
 }
@@ -325,7 +317,7 @@ export interface GfxSwapChain {
     getCanvas(): HTMLCanvasElement | OffscreenCanvas;
     getOnscreenTexture(): GfxTexture;
     present(): void;
-    createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
+    createWebXRLayer(webXRSession: XRSession): PromiseLike<XRWebGLLayer>;
 }
 
 export interface GfxRenderPass {

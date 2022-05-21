@@ -47,6 +47,7 @@
     "build:ffx": "cd src/FinalFantasyX/tools && ts-node extractor.ts",
     "build:zelview": "cd src/zelview/tools && ts-node extractor.ts",
     "build:JetSetRadio": "cd src/JetSetRadio/tools && ts-node extractor.ts",
+    "test:DeBlob2": "cd src/DeBlob2/tools && ts-node systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "bin": {

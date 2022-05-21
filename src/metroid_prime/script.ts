@@ -1,6 +1,6 @@
 // Implements support for Retro Studios actor data
 
-import { ResourceSystem } from './resource';
+import { ResourceGame, ResourceSystem } from './resource';
 import { readString, assert, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
@@ -13,10 +13,13 @@ import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { AreaVersion } from './mrea';
 import { AnimationData } from './render';
 import { AnimSysContext } from './animation/meta_nodes';
+import { PART } from './part';
+import { ELSC } from './elsc';
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
     Door                    = 0x03,
+    Effect                  = 0x07,
     Platform                = 0x08,
     NewIntroBoss            = 0x0E,
     Pickup                  = 0x11,
@@ -105,7 +108,9 @@ export interface RenderModel {
 export class Entity {
     public name: string;
     public active: boolean = true;
+    public modelMatrixNoScale: mat4 = mat4.create();
     public modelMatrix: mat4 = mat4.create();
+    public scale: vec3 = vec3.fromValues(1.0, 1.0, 1.0);
     public animParams: AnimationParameters | null = null;
     public model: CMDL | null = null;
     public char: CHAR | null = null;
@@ -121,9 +126,13 @@ export class Entity {
 
     public getRenderModel(resourceSystem: ResourceSystem, overrideCharId?: number): RenderModel {
         if (this.animParams !== null) {
-            const charID = overrideCharId !== undefined ? overrideCharId : this.animParams.charID;
-            const animID = this.animParams.animID;
+            let charID = overrideCharId !== undefined ? overrideCharId : this.animParams.charID;
+            let animID = this.animParams.animID;
             const ancs = this.animParams.ancs;
+
+            if (this.name === 'Actor Mapstation') {
+                animID = 0;
+            }
 
             if (ancs !== null && ancs.characterSet.length > charID) {
                 const character = ancs.characterSet[charID];
@@ -133,13 +142,18 @@ export class Entity {
                         const animName = character.animNames[animID];
                         const anim = ancs.animationSet.animations.find(v => v.name == animName);
                         const metaAnim = anim?.animation;
+                        const mp2Evnt = anim?.mp2Evnt;
+                        const aabb = character.aabbAnimMap.get(animName);
                         if (metaAnim) {
                             return {
                                 cmdl: model, animationData: {
                                     cskr: assertExists(model.cskr),
                                     cinf: assertExists(character.skel),
                                     metaAnim: metaAnim,
-                                    animSysContext: new AnimSysContext(ancs.animationSet.transitionDatabase, resourceSystem)
+                                    mp2Evnt: mp2Evnt ? mp2Evnt : null,
+                                    aabb: aabb ? aabb : model?.bbox,
+                                    animSysContext: new AnimSysContext(ancs.animationSet.transitionDatabase, resourceSystem),
+                                    charIdx: charID,
                                 }
                             };
                         }
@@ -159,6 +173,7 @@ export class Entity {
 export class AreaAttributes extends Entity {
     public needSky: boolean = false;
     public overrideSky: CMDL | null = null;
+    public darkWorld: boolean = false;
 
     public override readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
         switch (propertyID) {
@@ -169,6 +184,31 @@ export class AreaAttributes extends Entity {
         case 0xD208C9FA:
             this.overrideSky = resourceSystem.loadAssetByID<CMDL>(stream.readAssetID(), 'CMDL');
             break;
+
+        case 0xB24FDE1A:
+            this.darkWorld = stream.readBool();
+            break;
+        }
+    }
+}
+
+export class Effect extends Entity {
+    public particle: PART | null = null;
+    public electric: ELSC | null = null;
+
+    public override readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
+        const shouldParseParticles = (resourceSystem.game === ResourceGame.MP1 || resourceSystem.game === ResourceGame.MP2);
+
+        switch (propertyID) {
+        case 0x0A479D6F: {
+            const id = stream.readAssetID();
+            if (shouldParseParticles) {
+                const resource = resourceSystem.findResourceByID(id);
+                if (resource?.fourCC === 'PART')
+                    this.particle = resourceSystem.loadAssetByID<PART>(id, 'PART');
+            }
+            break;
+        }
         }
     }
 }
@@ -183,6 +223,9 @@ function createEntity_MP2(type: string, entityID: number): Entity | null {
 
     case 'REAA':
         return new AreaAttributes(type, entityID);
+
+    case 'EFCT':
+        return new Effect(type, entityID);
 
     default:
         return new Entity(type, entityID);
@@ -204,7 +247,6 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
 
     let position: vec3 = vec3.fromValues(0, 0, 0);
     let rotation: vec3 = vec3.fromValues(0, 0, 0);
-    let scale: vec3 = vec3.fromValues(1, 1, 1);
 
     if (hasPos) {
         const posX = view.getFloat32(offs + 0x00);
@@ -226,11 +268,12 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
         const scaleX = view.getFloat32(offs + 0x00);
         const scaleY = view.getFloat32(offs + 0x04);
         const scaleZ = view.getFloat32(offs + 0x08);
-        vec3.set(scale, scaleX, scaleY, scaleZ);
+        vec3.set(ent.scale, scaleX, scaleY, scaleZ);
         offs += 0x0C;
     }
 
-    computeModelMatrixSRT(ent.modelMatrix, scale[0], scale[1], scale[2], rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
+    computeModelMatrixSRT(ent.modelMatrixNoScale, 1, 1, 1, rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
+    computeModelMatrixSRT(ent.modelMatrix, ent.scale[0], ent.scale[1], ent.scale[2], rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
     return offs - originalOffs;
 }
 
@@ -358,6 +401,17 @@ export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: numb
             readActorParameters(buffer, entityTableIdx + 0x30, entity);
             entity.model = readAssetID(buffer, entityTableIdx + 0x83, 4, 'CMDL', resourceSystem);
             entity.active = !!(view.getUint8(entityTableIdx + 0xD1));
+            entities.push(entity);
+            break;
+        }
+
+        case MP1EntityType.Effect: {
+            const entity = new Effect(entityType, entityId);
+            entityTableIdx += readName(buffer, entityTableIdx, entity);
+            readTransform(buffer, entityTableIdx + 0x00, entity, true, true, false);
+            entity.particle = readAssetID(buffer, entityTableIdx + 0x24, 4, 'PART', resourceSystem);
+            entity.electric = readAssetID(buffer, entityTableIdx + 0x28, 4, 'ELSC', resourceSystem);
+            entity.active = !!(view.getUint8(entityTableIdx + 0x2f));
             entities.push(entity);
             break;
         }

@@ -2,12 +2,14 @@
 
 import { assert } from '../util';
 
-import { ResourceSystem } from './resource';
+import { ResourceGame, ResourceSystem } from './resource';
 import { CMDL } from './cmdl';
 import { InputStream } from './stream';
 
 import { AdditiveAnimation, Animation, AnimationSet, CreateMetaAnim, CreateMetaTrans, HalfTransition, Transition, TransitionDatabase } from './animation/meta_nodes';
 import { CINF } from './cinf';
+import { AABB } from '../Geometry';
+import * as EVNT from './evnt';
 
 // minimal implementation of character set entry
 export interface MetroidCharacter {
@@ -18,6 +20,7 @@ export interface MetroidCharacter {
     skinID: string;
     skelID: string;
     animNames: string[];
+    aabbAnimMap: Map<string, AABB>;
 }
 
 export interface ANCS {
@@ -53,9 +56,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
             }
             animNames[nameIdx] = stream.readString();
         }
-
-        const char: MetroidCharacter = { charID, name, model, skel, skinID, skelID, animNames };
-        charSet.push(char);
 
         // we don't really care about the rest of the data, but have to parse it to reach the next character in the set
         const pas4 = stream.readFourCC();
@@ -105,12 +105,20 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
             stream.skip(4);
         }
 
+        const aabbAnimMap = new Map<string, AABB>();
         if (charVersion >= 2) {
             const numAnimBounds = stream.readUint32();
 
             for (let animIdx = 0; animIdx < numAnimBounds; animIdx++) {
                 const animName = stream.readString();
-                stream.skip(0x18);
+                const minX = stream.readFloat32();
+                const minY = stream.readFloat32();
+                const minZ = stream.readFloat32();
+                const maxX = stream.readFloat32();
+                const maxY = stream.readFloat32();
+                const maxZ = stream.readFloat32();
+                const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+                aabbAnimMap.set(animName, bbox);
             }
 
             const numEffects = stream.readUint32();
@@ -148,6 +156,9 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
                 }
             }
         }
+
+        const char: MetroidCharacter = { charID, name, model, skel, skinID, skelID, animNames, aabbAnimMap };
+        charSet.push(char);
     }
 
     const animSetVersion = stream.readUint16();
@@ -157,7 +168,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     for (let i = 0; i < numAnims; i++) {
         const name = stream.readString();
         const anim = CreateMetaAnim(stream);
-        animations[i] = { name: name, animation: anim };
+        animations[i] = { name: name, animation: anim, mp2Evnt: null };
     }
 
     const numTrans = stream.readUint32();
@@ -198,6 +209,14 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
                 const b = stream.readUint32();
                 const trans = CreateMetaTrans(stream);
                 halfTransitions[i] = { b: b, transition: trans };
+            }
+
+            if (resourceSystem.game === ResourceGame.MP2) {
+                const numEventSets = stream.readUint32();
+                assert(numEventSets === animations.length);
+                for (let i = 0; i < numEventSets; i++) {
+                    animations[i].mp2Evnt = EVNT.parse(stream, resourceSystem);
+                }
             }
         }
     }

@@ -2,7 +2,7 @@
 import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
-import { GfxDevice, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Camera } from "../Camera";
 import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { LiveActor } from "./LiveActor";
@@ -201,9 +201,7 @@ export const enum DrawType {
     MessageBoardCapture            = 0x4E,
     MiiFaceIcon                    = 0x4F,
     MiiFaceNew                     = 0x50,
-    CameraCovrer                   = 0x51,
-
-    GravityExplainer               = 0x200,
+    CameraCover                    = 0x51,
 };
 
 export class NameObj {
@@ -392,8 +390,8 @@ export class SceneNameObjListExecutor {
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, cameraType: DrawCameraType): void {
-        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport, cameraType);
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, cameraType: DrawCameraType): void {
+        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, cameraType);
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {

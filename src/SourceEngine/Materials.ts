@@ -3,27 +3,27 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4, ReadonlyVec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPacker, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType, BSPLeaf, WorldLightFlags } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix, computeModelMatrixT } from "../MathHelpers";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero, Vec3UnitX, Vec3NegX, Vec3UnitY, Vec3NegY, Vec3UnitZ, Vec3NegZ, scaleMatrix } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, colorFromRGBA, colorNewFromRGBA, TransparentBlack, colorScale, OpaqueBlack } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
-import { ParticleStaticResource } from "./Particles_Simple";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { AABB } from "../Geometry";
-import { GfxrTemporalTexture } from "../gfx/render/GfxRenderGraph";
+import { GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
+import { ParticleSystemCache } from "./ParticleSystem";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -51,6 +51,7 @@ export const enum LateBindingTexture {
     FramebufferColor    = `framebuffer-color`,
     FramebufferDepth    = `framebuffer-depth`,
     WaterReflection     = `water-reflection`,
+    ProjectedLightDepth = `projected-light-depth`,
 }
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/const.h#L340-L387
@@ -466,10 +467,16 @@ class ParameterMatrix {
 }
 
 class ParameterVector {
-    protected internal: ParameterNumber[];
+    public internal: ParameterNumber[];
 
     constructor(length: number, values: number[] | null = null) {
         this.internal = nArray(length, (i) => new ParameterNumber(values !== null ? values[i] : 0));
+    }
+
+    public setArray(v: readonly number[] | Float32Array): void {
+        assert(this.internal.length === v.length);
+        for (let i = 0; i < this.internal.length; i++)
+            this.internal[i].value = v[i];
     }
 
     public parse(S: string): void {
@@ -781,6 +788,12 @@ export abstract class BaseMaterial {
             return false;
 
         return vtf.lateBinding !== null;
+    }
+
+    protected paramFillVector4(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterVector).internal;
+        assert(m.length === 4);
+        return fillVec4(d, offs, m[0].value, m[1].value, m[2].value, m[3].value);
     }
 
     protected paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
@@ -1948,7 +1961,11 @@ void mainPS() {
 #endif
 
     if (all(greaterThan(t_ProjectedLightCoord.xyz, vec3(0.0))) && all(lessThan(t_ProjectedLightCoord.xyz, vec3(1.0)))) {
-        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedLightCoord.xy);
+        vec2 t_ProjectedGoboTexCoord = t_ProjectedLightCoord.xy;
+#ifndef GFX_VIEWPORT_ORIGIN_TL
+        t_ProjectedGoboTexCoord.y = 1.0 - t_ProjectedGoboTexCoord.y;
+#endif
+        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedGoboTexCoord.xy);
         vec3 t_ProjectedLightColor = (t_ProjectedLightSample.rgb * u_ProjectedLightColor.rgb);
 
         vec3 t_WorldToProjectedLight = u_ProjectedLightOrigin.xyz - v_PositionWorld.xyz;
@@ -1959,7 +1976,7 @@ void mainPS() {
         float t_DistanceAttenuation = saturate(invlerp(1.0, 0.6, t_DistanceNorm));
         t_ProjectedLightColor *= t_DistanceAttenuation * t_AngleAttenuation;
 
-        if (all(greaterThan(t_ProjectedLightColor.rgb, vec3(0.0)))) {
+        if (any(greaterThan(t_ProjectedLightColor.rgb, vec3(0.0)))) {
             float t_ShadowVisibility = 1.0 - CalcShadowPCF(PP_SAMPLER_2DShadow(u_TextureProjectedLightDepth), t_ProjectedLightCoord.xyz, 0.01);
             t_ProjectedLightColor.rgb *= t_ShadowVisibility;
 
@@ -2062,7 +2079,7 @@ class Material_Generic extends BaseMaterial {
             wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
-            this.wantsStaticVertexLighting = false;
+            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
@@ -2388,8 +2405,7 @@ class Material_Generic extends BaseMaterial {
         this.paramGetTexture('$envmap').fillTextureMapping(dst[11], this.paramGetInt('$envmapframe'));
 
         if (this.wantsProjectedTexture && renderContext.currentView.viewType !== SourceEngineViewType.ShadowMap) {
-            dst[12].gfxTexture = this.projectedLight!.depthTexture.getTextureForSampling();
-            dst[12].gfxSampler = renderContext.materialCache.staticResources.shadowSampler;
+            dst[12].lateBinding = LateBindingTexture.ProjectedLightDepth;
             this.projectedLight!.texture!.fillTextureMapping(dst[13], this.projectedLight!.textureFrame);
         }
     }
@@ -2398,13 +2414,16 @@ class Material_Generic extends BaseMaterial {
         if (this.shaderType === GenericShaderType.UnlitGeneric)
             return;
 
-        let renderer = renderContext.currentProjectedLightRenderer;
-        if (renderer !== null) {
-            if (!renderer.light.frustumView.frustum.contains(bbox))
-                renderer = null;
+        let projectedLightRenderer = null;
+        if (renderContext.currentViewRenderer !== null)
+            projectedLightRenderer = renderContext.currentViewRenderer.currentProjectedLightRenderer;
+
+        if (projectedLightRenderer !== null) {
+            if (!projectedLightRenderer.light.frustumView.frustum.contains(bbox))
+                projectedLightRenderer = null;
         }
 
-        this.projectedLight = renderer !== null ? renderer.light : null;
+        this.projectedLight = projectedLightRenderer !== null ? projectedLightRenderer.light : null;
 
         this.wantsProjectedTexture = this.projectedLight !== null && this.projectedLight.texture !== null;
         if (this.shaderInstance.setDefineBool('USE_PROJECTED_LIGHT', this.wantsProjectedTexture))
@@ -3291,6 +3310,11 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
+#ifdef USE_VERTEX_MODULATE
+    // XXX(jstpierre): ParticleSystem uses a uniform buffer until
+    // we can switch it to using custom vertex data.
+    vec4 u_FakeVertexModulate;
+#endif
 };
 
 #define u_RefractAmount (u_RefractTint.a)
@@ -3301,6 +3325,10 @@ varying vec3 v_TexCoord0;
 // Normal Map Coordinates
 varying vec2 v_TexCoord1;
 varying vec3 v_PositionWorld;
+
+#ifdef USE_VERTEX_MODULATE
+varying vec4 v_Modulate;
+#endif
 
 // 3x3 matrix for our tangent space basis.
 varying vec3 v_TangentSpaceBasis0;
@@ -3336,6 +3364,10 @@ void mainVS() {
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
+    
+#ifdef USE_VERTEX_MODULATE
+    v_Modulate.rgba = a_Color.rgba * u_FakeVertexModulate.rgba;
+#endif
 }
 #endif
 
@@ -3354,22 +3386,22 @@ void mainPS() {
     t_RefractTint *= 2.0 * t_RefractTintTextureSample.rgb;
 #endif
 
+#ifdef USE_VERTEX_MODULATE
+    t_RefractTint.rgb *= v_Modulate.rgb;
+#endif
+
 #ifdef USE_LOCAL_REFRACT
     vec3 t_LookDirWorld = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
-    // Get the tangent-space look direction so we can refract into the texture.
+    // Get the tangent-space look direction to offset our texture.
     vec3 t_LookDirTangent = normalize(CalcWorldToTangent(t_LookDirWorld, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2));
-    // "Refract" it. Currently, that doesn't do anything.
-    vec3 t_LookDirRefract = t_LookDirTangent;
-    // Refracted look direction dot surface normal. Since we're in tangent space, N is just (0,0,1)
-    float t_RoN = -t_LookDirRefract.z;
 
-    // Intersect with plane.
-    vec2 t_RefractPointOnPlane = t_LookDirRefract.xy / t_RoN;
-    // Compute our bent texture coordinates into the texture.
-    vec2 t_RefractTexCoordOffs = vec2(0.0);
-    t_RefractTexCoordOffs += t_RefractPointOnPlane.xy;
-    t_RefractTexCoordOffs += t_BumpmapNormal.xy;
-    t_RefractTexCoordOffs += (1.0 - t_BumpmapNormal.z) * t_RefractPointOnPlane;
+    // Look dir in tangent space gives us the texture offset.
+    // That is, when viewed in view-space, we move parallel to the view-space surface normal.
+    vec2 t_RefractOffs = -t_LookDirTangent.xy / t_LookDirTangent.zz;
+    vec2 t_RefractTexCoordOffs = t_RefractOffs.xy;
+
+    // Add on the bumpmap normal for displacement.
+    t_RefractTexCoordOffs += t_BumpmapNormal.xy + (1.0 - t_BumpmapNormal.z) * t_RefractOffs.xy;
 
     vec2 t_TexSize = vec2(textureSize(TEXTURE(u_TextureBase), 0));
     vec2 t_Aspect = vec2(-t_TexSize.y / t_TexSize.x, 1.0);
@@ -3377,15 +3409,26 @@ void mainPS() {
     vec2 t_RefractTexCoord = v_TexCoord1.xy + t_RefractTexCoordOffs.xy;
 
     vec4 t_Refract1 = texture(SAMPLER_2D(u_TextureBase), saturate(t_RefractTexCoord));
-    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
-    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
-    float t_Fresnel = pow(t_BumpmapNormal.z, 3.0);
 
-    t_FinalColor.rgb += t_Refract.rgb * t_Fresnel * t_RefractTint.rgb;
+    // "Shadow" since this is used to emulate light.
+    vec4 t_Refract2 = texture(SAMPLER_2D(u_TextureBase), saturate(v_TexCoord1.xy + t_BumpmapNormal.xy * 0.1));
+
+    vec3 t_Refract = mix(t_Refract1.rgb, t_Refract2.aaa, 0.025);
+
+    // Add some cheap, fake, glass-y lighting using the bumpmap.
+    float t_GlassLighting = pow(t_BumpmapNormal.z, 3.0);
+
+    t_FinalColor.rgb += t_Refract.rgb * t_GlassLighting * t_RefractTint.rgb;
 #else
     // "Classic" refract
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
-    vec2 t_RefractTexCoord = t_ProjTexCoord + (u_RefractAmount * t_BumpmapSample.a) * t_BumpmapNormal.xy;
+
+    float t_RefractAmount = u_RefractAmount;
+#ifdef USE_VERTEX_MODULATE
+    t_RefractAmount *= v_Modulate.a;
+#endif
+
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (t_RefractAmount * t_BumpmapSample.a) * t_BumpmapNormal.xy;
 
     vec4 t_BlurAccum = vec4(0);
     int g_BlurAmount = BLUR_AMOUNT;
@@ -3435,6 +3478,7 @@ void mainPS() {
 class Material_Refract extends BaseMaterial {
     private wantsEnvmap: boolean = false;
     private wantsLocalRefract: boolean = false;
+    private wantsVertexModulate: boolean = false;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram;
@@ -3462,6 +3506,7 @@ class Material_Refract extends BaseMaterial {
         p['$bluramount']                   = new ParameterNumber(1, false);
         p['$localrefract']                 = new ParameterBoolean(false, false);
         p['$localrefractdepth']            = new ParameterNumber(0.05);
+        p['$vertexcolormodulate']          = new ParameterBoolean(false, false);
 
         this.paramGetTexture('$basetexture').ref = '_rt_RefractTexture';
     }
@@ -3487,6 +3532,15 @@ class Material_Refract extends BaseMaterial {
 
         const blurAmount = this.paramGetNumber('$bluramount') | 0;
         this.shaderInstance.setDefineString('BLUR_AMOUNT', '' + blurAmount);
+
+        if (this.hasVertexColorInput && (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha'))) {
+            this.shaderInstance.setDefineBool('USE_VERTEX_COLOR', true);
+
+            if (this.paramGetBoolean('$vertexcolormodulate')) {
+                this.shaderInstance.setDefineBool('USE_VERTEX_MODULATE', true);
+                this.wantsVertexModulate = true;
+            }
+        }
 
         const isTranslucent = this.textureIsTranslucent('$basetexture');
         this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendMode(isTranslucent));
@@ -3516,7 +3570,7 @@ class Material_Refract extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 20);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Refract.ub_ObjectParams, 24);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Refract.ub_ObjectParams);
 
         offs += this.paramFillScaleBias(d, offs, '$bumptransform');
@@ -3530,6 +3584,9 @@ class Material_Refract extends BaseMaterial {
             const fresnelReflection = this.paramGetNumber('$fresnelreflection');
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
         }
+
+        if (this.wantsVertexModulate)
+            offs += this.paramFillGammaColor(d, offs, `$color`, this.paramGetNumber(`$alpha`));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -3573,7 +3630,7 @@ layout(std140) uniform ub_ObjectParams {
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
-varying vec3 v_PositionWorld;
+varying vec4 v_PositionWorld;
 
 layout(binding = 0) uniform sampler2D u_TextureBase;
 layout(binding = 1) uniform sampler2D u_TextureDetail1;
@@ -3588,6 +3645,10 @@ void mainVS() {
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_PositionWorld.w = -gl_Position.z;
+#ifndef GFX_CLIPSPACE_NEAR_ZERO
+    v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
+#endif
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
@@ -3620,6 +3681,10 @@ void mainVS() {
 #endif
 
 ${SampleFlowMap}
+
+float CalcCameraFade(in float t_PosProjZ) {
+    return smoothstep(0.0, 1.0, saturate(t_PosProjZ * 0.025));
+}
 
 #ifdef FRAG
 void mainPS() {
@@ -3691,6 +3756,8 @@ void mainPS() {
     t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
     t_FinalColor.a = 1.0;
 #endif
+
+    t_FinalColor.a *= CalcCameraFade(v_PositionWorld.w);
 
     CalcFog(t_FinalColor, v_PositionWorld.xyz);
     OutputLinearColor(t_FinalColor);
@@ -3815,8 +3882,8 @@ class Material_SolidEnergy extends BaseMaterial {
 
         if (this.wantsFlowmap) {
             offs += fillVec4(d, offs,
-                1.0 / this.paramGetNumber('$flow_worlduvscale'),
-                1.0 / this.paramGetNumber('$flow_normaluvscale'),
+                this.paramGetNumber('$flow_worlduvscale'),
+                this.paramGetNumber('$flow_normaluvscale'),
                 this.paramGetNumber('$flow_noise_scale'),
                 this.paramGetNumber('$outputintensity'));
 
@@ -4040,7 +4107,247 @@ class Material_Sky extends BaseMaterial {
 }
 //#endregion
 
+//#region SpriteCard
+class ShaderTemplate_SpriteCard extends MaterialShaderTemplateBase {
+    public static ub_ObjectParams = 2;
+
+    public override generateProgramString(m: Map<string, string>): string {
+        return `
+precision mediump float;
+
+${MaterialShaderTemplateBase.Common}
+
+// In the future, we should use vertex data for some of this...
+layout(std140) uniform ub_ObjectParams {
+    vec4 u_BaseTextureScaleBias[4]; // Two animation frames, dual
+    vec4 u_Color;
+    vec4 u_Misc[1];
+};
+#define u_BlendFactor0 (u_Misc[0].x)
+#define u_BlendFactor1 (u_Misc[0].y)
+
+varying vec4 v_TexCoord0;
+varying vec4 v_TexCoord1;
+varying vec4 v_Color;
+varying vec4 v_Misc;
+
+layout(binding = 0) uniform sampler2D u_Texture;
+
+#ifdef VERT
+void mainVS() {
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[0]);
+    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[1]);
+    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[2]);
+    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias[3]);
+    v_Color = u_Color;
+    v_Misc.x = u_BlendFactor0;
+    v_Misc.y = u_BlendFactor1;
+}
+#endif
+
+#ifdef FRAG
+float Lum(in vec3 t_Sample) {
+    return dot(vec3(0.3, 0.59, 0.11), t_Sample.rgb);
+}
+
+vec4 MaxLumFrameBlend(in vec4 t_Sample0, in vec4 t_Sample1, in float t_BlendFactor) {
+    float t_Lum0 = Lum(t_Sample0.rgb * t_BlendFactor);
+    float t_Lum1 = Lum(t_Sample1.rgb * (1.0 - t_BlendFactor));
+    return t_Lum0 > t_Lum1 ? t_Sample0 : t_Sample1;
+}
+
+void mainPS() {
+    vec4 t_Base00 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.xy);
+    vec4 t_Base01 = texture(SAMPLER_2D(u_Texture), v_TexCoord0.zw);
+    float t_BlendFactor0 = v_Misc.x;
+
+    bool t_BlendFrames = ${getDefineBool(m, `BLEND_FRAMES`)};
+    bool t_MaxLumFrameBlend1 = ${getDefineBool(m, `MAX_LUM_FRAMEBLEND_1`)};
+    vec4 t_Base0, t_Base;
+
+    if (t_MaxLumFrameBlend1) {
+        t_Base0 = MaxLumFrameBlend(t_Base00, t_Base01, t_BlendFactor0);
+    } else if (t_BlendFrames) {
+        t_Base0 = mix(t_Base00, t_Base01, t_BlendFactor0);
+    } else {
+        t_Base0 = t_Base00;
+    }
+    t_Base = t_Base0;
+
+    bool t_DualSequence = ${getDefineBool(m, `DUAL_SEQUENCE`)};
+    if (t_DualSequence) {
+        vec4 t_Base10 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.xy);
+        vec4 t_Base11 = texture(SAMPLER_2D(u_Texture), v_TexCoord1.zw);
+        bool t_MaxLumFrameBlend2 = ${getDefineBool(m, `MAX_LUM_FRAMEBLEND_2`)};
+        float t_BlendFactor1 = v_Misc.y;
+
+        vec4 t_Base1;
+        if (t_MaxLumFrameBlend2) {
+            t_Base1 = MaxLumFrameBlend(t_Base10, t_Base11, t_BlendFactor1);
+        } else {
+            t_Base1 = mix(t_Base10, t_Base11, t_BlendFactor1);
+        }
+
+        int t_CombineMode = ${getDefineString(m, `DUAL_COMBINE_MODE`)};
+        if (t_CombineMode == 0) { // COMBINE_MODE_AVERAGE
+            t_Base = (t_Base0 + t_Base1) * 0.5;
+        } else if (t_CombineMode == 1) { // COMBINE_MODE_USE_FIRST_AS_ALPHA_MASK_ON_SECOND
+            t_Base.rgb = t_Base1.rgb;
+        } else if (t_CombineMode == 2) { // COMBINE_MODE_USE_FIRST_OVER_SECOND
+            t_Base.rgb = mix(t_Base0.rgb, t_Base1.rgb, t_Base1.a);
+        }
+    }
+
+    vec4 t_FinalColor = t_Base;
+    // TODO(jstpierre): MOD2X, ADDSELF, ADDBASETEXTURE2
+
+    t_FinalColor.rgba *= v_Color.rgba;
+
+    bool t_UseAlphaTest = true;
+    if (t_UseAlphaTest) {
+        if (t_FinalColor.a < (1.0/255.0))
+            discard;
+    }
+
+    OutputLinearColor(t_FinalColor.rgba);
+}
+#endif
+`;
+    }
+}
+
+class Material_SpriteCard extends BaseMaterial {
+    private shaderInstance: UberShaderInstanceBasic;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    public isSpriteCard = true;
+
+    protected override initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$blendframes']           = new ParameterBoolean(true);
+        p['$maxlumframeblend1']     = new ParameterBoolean(false);
+        p['$maxlumframeblend2']     = new ParameterBoolean(false);
+        p['$dualsequence']          = new ParameterBoolean(false);
+        p['$sequence_blend_mode']   = new ParameterNumber(0);
+
+        // Stuff hacked in by the particle system.
+        p['_b00'] = new ParameterVector(4);
+        p['_b01'] = new ParameterVector(4);
+        p['_blend0'] = new ParameterNumber(0);
+        p['_b10'] = new ParameterVector(4);
+        p['_b11'] = new ParameterVector(4);
+        p['_blend1'] = new ParameterNumber(0);
+    }
+
+    protected override initStatic(materialCache: MaterialCache) {
+        super.initStatic(materialCache);
+
+        this.shaderInstance = new UberShaderInstanceBasic(materialCache.shaderTemplates.SpriteCard);
+        this.shaderInstance.setDefineBool(`BLEND_FRAMES`, this.paramGetBoolean(`$blendframes`));
+        this.shaderInstance.setDefineBool(`MAX_LUM_FRAMEBLEND_1`, this.paramGetBoolean(`$maxlumframeblend1`));
+        this.shaderInstance.setDefineBool(`MAX_LUM_FRAMEBLEND_2`, this.paramGetBoolean(`$maxlumframeblend2`));
+        this.shaderInstance.setDefineBool(`DUAL_SEQUENCE`, this.paramGetBoolean(`$dualsequence`));
+        this.shaderInstance.setDefineString(`DUAL_COMBINE_MODE`, '' + this.paramGetInt(`$sequence_blend_mode`));
+
+        // TODO(jstpierre): Additive modes
+        let isAdditive = this.paramGetBoolean('$additive');
+        this.setAlphaBlendMode(this.megaStateFlags, isAdditive ? AlphaBlendMode.Add : AlphaBlendMode.Blend);
+        this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+
+        this.setSkinningMode(this.shaderInstance);
+        this.setFogMode(this.shaderInstance);
+        this.setCullMode(this.megaStateFlags);
+
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.gfxProgram = this.shaderInstance.getGfxProgram(materialCache.cache);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(dst: TextureMapping[]): void {
+        resetTextureMappings(dst);
+        this.paramGetTexture('$basetexture').fillTextureMapping(dst[0], this.paramGetInt('$frame'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings(textureMappings);
+
+        this.setupOverrideSceneParams(renderContext, renderInst);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SolidEnergy.ub_ObjectParams, 24);
+        const d = renderInst.mapUniformBufferF32(ShaderTemplate_SolidEnergy.ub_ObjectParams);
+
+        offs += this.paramFillVector4(d, offs, '_b00');
+        offs += this.paramFillVector4(d, offs, '_b01');
+        offs += this.paramFillVector4(d, offs, '_b10');
+        offs += this.paramFillVector4(d, offs, '_b11');
+        offs += this.paramFillGammaColor(d, offs, '$color', this.paramGetNumber('$alpha'));
+        offs += fillVec4(d, offs, this.paramGetNumber('_blend0'), this.paramGetNumber('_blend1'));
+
+        renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+//#endregion
+
 //#region Material Cache
+class StaticQuad {
+    private vertexBufferQuad: GfxBuffer;
+    private indexBufferQuad: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputStateQuad: GfxInputState;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        const n0 = 1, n1 = -1;
+        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
+            0, n0, n0, 1, 0, 1, 1, 1, 1,
+            0, n0, n1, 1, 1, 1, 1, 1, 1,
+            0, n1, n0, 0, 0, 1, 1, 1, 1,
+            0, n1, n1, 0, 1, 1, 1, 1, 1,
+        ]).buffer);
+        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([
+            0, 1, 2, 2, 1, 3,
+        ]).buffer);
+
+        this.inputStateQuad = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBufferQuad, byteOffset: 0 },
+        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+    }
+
+    public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStateQuad);
+        renderInst.drawIndexes(6);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputState(this.inputStateQuad);
+        device.destroyBuffer(this.vertexBufferQuad);
+        device.destroyBuffer(this.indexBufferQuad);
+    }
+}
+
 class StaticResources {
     public whiteTexture2D: GfxTexture;
     public opaqueBlackTexture2D: GfxTexture;
@@ -4049,7 +4356,7 @@ class StaticResources {
     public linearRepeatSampler: GfxSampler;
     public pointClampSampler: GfxSampler;
     public shadowSampler: GfxSampler;
-    public particleStaticResource: ParticleStaticResource;
+    public staticQuad: StaticQuad;
     public zeroVertexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
@@ -4092,7 +4399,7 @@ class StaticResources {
             wrapT: GfxWrapMode.Clamp,
         });
         this.zeroVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new ArrayBuffer(16));
-        this.particleStaticResource = new ParticleStaticResource(device, cache);
+        this.staticQuad = new StaticQuad(device, cache);
     }
 
     public destroy(device: GfxDevice): void {
@@ -4100,7 +4407,7 @@ class StaticResources {
         device.destroyTexture(this.opaqueBlackTexture2D);
         device.destroyTexture(this.transparentBlackTexture2D);
         device.destroyBuffer(this.zeroVertexBuffer);
-        this.particleStaticResource.destroy(device);
+        this.staticQuad.destroy(device);
     }
 }
 
@@ -4113,6 +4420,7 @@ class ShaderTemplates {
     public SolidEnergy = new ShaderTemplate_SolidEnergy();
     public Sky = new ShaderTemplate_Sky();
     public SkyHDRCompressed = new ShaderTemplate_SkyHDRCompressed();
+    public SpriteCard = new ShaderTemplate_SpriteCard();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -4123,6 +4431,7 @@ class ShaderTemplates {
         this.SolidEnergy.destroy(device);
         this.Sky.destroy(device);
         this.SkyHDRCompressed.destroy(device);
+        this.SpriteCard.destroy(device);
     }
 }
 
@@ -4131,6 +4440,7 @@ export class MaterialCache {
     private texturePromiseCache = new Map<string, Promise<VTF>>();
     private materialPromiseCache = new Map<string, Promise<VMT>>();
     private usingHDR: boolean = false;
+    public readonly particleSystemCache: ParticleSystemCache;
     public ssbumpNormalize = false;
     public staticResources: StaticResources;
     public materialDefines: string[] = [];
@@ -4149,7 +4459,16 @@ export class MaterialCache {
         this.textureCache.set('_rt_Depth', new VTF(device, cache, null, '_rt_Depth', false, LateBindingTexture.FramebufferDepth));
         this.staticResources = new StaticResources(device, cache);
 
+        this.particleSystemCache = new ParticleSystemCache(this.filesystem);
+
         this.deviceNeedsFlipY = gfxDeviceNeedsFlipY(device);
+    }
+
+    public isInitialized(): boolean {
+        if (!this.particleSystemCache.isLoaded)
+            return false;
+
+        return true;
     }
 
     public setRenderConfig(hdr: boolean, bspVersion: number): void {
@@ -4206,6 +4525,8 @@ export class MaterialCache {
             return new Material_SolidEnergy(vmt);
         else if (shaderType === 'sky')
             return new Material_Sky(vmt);
+        else if (shaderType === 'spritecard')
+            return new Material_SpriteCard(vmt);
         else
             return new Material_Generic(vmt);
     }
@@ -4495,14 +4816,10 @@ export class ProjectedLight {
     public textureFrame: number = 0;
     public lightColor = colorNewCopy(White);
     public brightnessScale: number = 1.0;
-    public depthTexture = new GfxrTemporalTexture();
+    public resolveTextureID: GfxrResolveTextureID;
 
     constructor() {
         this.frustumView.viewType = SourceEngineViewType.ShadowMap;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.depthTexture.destroy(device);
     }
 }
 
@@ -5084,6 +5401,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
         this.registerProxyFactory(MaterialProxy_EntityRandom);
+        this.registerProxyFactory(MaterialProxy_FizzlerVortex);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -5573,6 +5891,17 @@ class MaterialProxy_EntityRandom {
 
         const scale = paramGetNum(map, this.scale);
         paramSetNum(map, this.resultvar, entityParams.randomNumber * scale);
+    }
+}
+
+class MaterialProxy_FizzlerVortex {
+    public static type = `fizzlervortex`;
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
+        const param = map['$flow_color_intensity'] as ParameterNumber;
+        if (param === undefined)
+            return;
+        param.value = 1.0;
     }
 }
 //#endregion

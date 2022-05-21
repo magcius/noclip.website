@@ -321,11 +321,10 @@ export class BezierRail {
                 if (coord < this.railPartCoords[i])
                     return i;
         } else {
-            // TODO(jstpierre): No part of this seems right...
             for (let i = this.railPartCoords.length - 1; i >= 0; i--) {
                 const railPartCoord = i === 0 ? 0 : this.railPartCoords[i - 1];
                 if (coord > railPartCoord && coord <= this.railPartCoords[i])
-                    return (i + 1) - (((i + 1) / this.pointRecordCount) | 0) * this.pointRecordCount;
+                    return (i + 1) % this.railPartCoords.length;
             }
         }
 
@@ -396,7 +395,7 @@ export class RailRider {
     public currentPos = vec3.create();
     public currentDir = vec3.create();
     public currentPointId: number = -1;
-    public coord: number = 0;
+    public coord: number = -1;
     public speed: number = 0;
     public direction: RailDirection = RailDirection.TowardsEnd;
     public startPos = vec3.create();
@@ -460,7 +459,12 @@ export class RailRider {
     }
 
     public setCoord(v: number): void {
-        this.coord = this.bezierRail.normalizePos(v, 1);
+        if (this.coord === v)
+            return;
+        const coord = this.bezierRail.normalizePos(v, 1);
+        if (this.coord === coord)
+            return;
+        this.coord = coord;
         this.syncPosDir();
     }
 

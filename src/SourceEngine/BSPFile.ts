@@ -6,7 +6,6 @@ import { readString, assertExists, assert, nArray, decodeString } from "../util"
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
-import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
@@ -14,6 +13,7 @@ import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
 import { lerp, saturate } from "../MathHelpers";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT";
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -1092,12 +1092,12 @@ export class BSPFile {
             const texinfo = facelist.getUint16(idx + 0x0A, true);
             const tex = texinfoa[texinfo];
 
-            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
-                continue;
-
             // Normals are stored in the data for all surfaces, even for displacements.
             const vertnormalBase = vertnormalIdx;
             vertnormalIdx += numedges;
+
+            if (!!(tex.flags & (TexinfoFlags.SKY | TexinfoFlags.SKY2D)))
+                continue;
 
             const lightofs = facelist.getInt32(idx + 0x14, true);
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => facelist.getUint32(idx + 0x24 + i * 4, true));
@@ -1353,6 +1353,7 @@ export class BSPFile {
 
                 // Tangent
                 vec3.cross(scratchTangentS, v.normal, scratchTangentT);
+                vec3.normalize(scratchTangentS, scratchTangentS);
                 vertexData[dstOffsVertex++] = scratchTangentS[0];
                 vertexData[dstOffsVertex++] = scratchTangentS[1];
                 vertexData[dstOffsVertex++] = scratchTangentS[2];
@@ -1905,4 +1906,20 @@ export class BSPFile {
     public destroy(): void {
         // Nothing to do...
     }
+}
+
+// This is in the same file because it also parses keyfiles, even though it's not material-related.
+export interface BSPEntity {
+    classname: string;
+    [k: string]: string;
+}
+
+function parseEntitiesLump(str: string): BSPEntity[] {
+    const p = new ValveKeyValueParser(str);
+    const entities: BSPEntity[] = [];
+    while (p.hastok()) {
+        entities.push(pairs2obj(p.unit() as VKFPair[]) as BSPEntity);
+        p.skipwhite();
+    }
+    return entities;
 }

@@ -91,8 +91,6 @@ interface BlockIter {
 }
 
 const scratchMtx0 = mat4.create();
-const scratchBox0 = new AABB();
-const scratchVec0 = vec3.create();
 
 export class MapInstance {
     private matrix: mat4 = mat4.create(); // map-to-world
@@ -151,11 +149,13 @@ export class MapInstance {
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
+        modelCtx.cullByAabb = true;
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
             b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
         }
+        modelCtx.cullByAabb = undefined;
     }
 
     public async reloadBlocks(dataFetcher: DataFetcher) {
@@ -244,7 +244,7 @@ class MapSceneRenderer extends SFARenderer {
             showDevGeometry: false,
             ambienceIdx: 0,
             outdoorAmbientColor: White,
-            setupPointLights: () => {},
+            setupLights: () => {},
         };
 
         this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);

@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
 import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
@@ -55,8 +55,6 @@ export const enum GfxrAttachmentSlot {
     DepthStencil,
 }
 
-export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x: 0, y: 0, w: 1, h: 1 };
-
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;
 
@@ -71,6 +69,12 @@ export interface GfxrPass {
      * Set the debug name of a given pass. Strongly encouraged.
      */
     setDebugName(debugName: string): void;
+
+    /**
+     * Set the viewport for the given render pass in *normalized* coordinates (0..1).
+     * Not required; defaults to full viewport.
+     */
+    setViewport(x: number, y: number, w: number, h: number): void;
 
     /**
      * Call when you want to output a debug thumbnail.
@@ -88,11 +92,6 @@ export interface GfxrPass {
      * Attach the occlusion query pool used by this rendering pass.
      */
     attachOcclusionQueryPool(queryPool: GfxQueryPool): void;
-
-    /**
-     * Set the viewport used by this rendering pass.
-     */
-    setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void;
 
     /**
      * Attach the resolve texture ID to the given pass. All resolve textures used within the pass
@@ -132,8 +131,6 @@ class PassImpl implements GfxrPass {
     // GfxrAttachmentSlot => refcount.
     public renderTargetExtraRefs: boolean[] = [];
 
-    public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
-
     public resolveTextureInputTextures: GfxTexture[] = [];
 
     public renderTargets: (RenderTarget | null)[] = [];
@@ -154,8 +151,8 @@ class PassImpl implements GfxrPass {
 
     public viewportX: number = 0;
     public viewportY: number = 0;
-    public viewportW: number = 0;
-    public viewportH: number = 0;
+    public viewportW: number = 1;
+    public viewportH: number = 1;
 
     // Execution callback from user.
     public execFunc: PassExecFunc | null = null;
@@ -166,6 +163,13 @@ class PassImpl implements GfxrPass {
 
     public setDebugName(debugName: string): void {
         this.debugName = debugName;
+    }
+
+    public setViewport(x: number, y: number, w: number, h: number): void {
+        this.viewportX = x;
+        this.viewportY = y;
+        this.viewportW = w;
+        this.viewportH = h;
     }
 
     public pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void {
@@ -183,10 +187,6 @@ class PassImpl implements GfxrPass {
 
     public attachOcclusionQueryPool(queryPool: GfxQueryPool): void {
         this.descriptor.occlusionQueryPool = queryPool;
-    }
-
-    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.viewport = viewport;
     }
 
     public resolveToExternalTexture(attachmentSlot: GfxrAttachmentSlot, texture: GfxTexture): void {
@@ -808,10 +808,11 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         }
 
         if (rtWidth > 0 && rtHeight > 0) {
-            const x = rtWidth  * pass.viewport.x;
-            const y = rtHeight * pass.viewport.y;
-            const w = rtWidth  * pass.viewport.w;
-            const h = rtHeight * pass.viewport.h;
+            // Convert from normalized to normalized viewport.
+            const x = rtWidth  * pass.viewportX;
+            const y = rtHeight * pass.viewportY;
+            const w = rtWidth  * pass.viewportW;
+            const h = rtHeight * pass.viewportH;
             pass.viewportX = x;
             pass.viewportY = y;
             pass.viewportW = w;

@@ -8,8 +8,8 @@ import { GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetID } from '.
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { colorCopy, colorNewFromRGBA, White } from '../Color';
+import { getDebugOverlayCanvas2D, drawWorldSpaceText } from "../DebugJunk";
+import { colorCopy, colorNewFromRGBA } from '../Color';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -28,6 +28,7 @@ import { SFATextureFetcher } from './textures';
 import { SphereMapManager } from './SphereMaps';
 import { computeViewMatrix } from '../Camera';
 import { nArray } from '../util';
+import { transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 
 const scratchVec0 = vec3.create();
 const scratchMtx0 = mat4.create();
@@ -134,13 +135,13 @@ export class World {
                 lights[i].reset();
                 if (light.type === LightType.DIRECTIONAL) {
                     vec3.scale(lights[i].Position, light.direction, -100000.0);
-                    vec3.transformMat4(lights[i].Position, lights[i].Position, worldViewSR);
+                    transformVec3Mat4w0(lights[i].Position, worldViewSR, lights[i].Position);
                     colorCopy(lights[i].Color, light.color);
                     vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0);
                     vec3.set(lights[i].DistAtten, 1.0, 0.0, 0.0);
                 } else { // LightType.POINT
                     light.getPosition(scratchVec0);
-                    vec3.transformMat4(lights[i].Position, scratchVec0, worldView);
+                    transformVec3Mat4w1(lights[i].Position, worldView, scratchVec0);
                     // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
                     // TODO: use correct parameters
                     colorCopy(lights[i].Color, light.color);
@@ -328,7 +329,7 @@ class WorldRenderer extends SFARenderer {
             showDevGeometry: this.showDevGeometry,
             ambienceIdx: 0,
             outdoorAmbientColor: scratchColor0,
-            setupPointLights: undefined!,
+            setupLights: undefined!,
         };
 
         const lights = nArray(8, () => new GX_Material.Light());
@@ -341,11 +342,8 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    this.setupLightsForObject(lights, obj, sceneCtx, LightType.POINT);
-
-                    modelCtx.setupPointLights = (dst: GX_Material.Light[], sceneCtx: SceneRenderContext) => {
-                        for (let i = 0; i < dst.length; i++)
-                            dst[i].copy(lights[i]);
+                    modelCtx.setupLights = (lights: GX_Material.Light[], typeMask: LightType) => {
+                        this.setupLightsForObject(lights, obj, sceneCtx, typeMask);
                     };
 
                     obj.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
@@ -359,6 +357,7 @@ class WorldRenderer extends SFARenderer {
             }
         }
 
+        modelCtx.setupLights = () => {};
         if (this.world.mapInstance !== null)
             this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 

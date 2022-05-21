@@ -9,10 +9,12 @@ import { AnimSource } from './data_source';
 import { AnimSourceReader, AnimSourceReaderBase, AnimSourceReaderCompressed } from './source_readers';
 import { randomRange, saturate } from '../../MathHelpers';
 import { ResourceSystem } from '../resource';
+import { EVNT } from '../evnt';
 
 export interface Animation {
     name: string;
     animation: IMetaAnim;
+    mp2Evnt: EVNT | null;
 }
 
 export interface AdditiveAnimation {
@@ -216,7 +218,8 @@ export class MetaAnimRandom implements IMetaAnim {
     public GetAnimationTree(context: AnimSysContext): AnimTreeNode {
         const r = randomRange(1, 100);
         let useRd: RandomData;
-        for (const rd of this.randomData) {
+        for (let i = 0; i < this.randomData.length; ++i) {
+            const rd = this.randomData[i];
             useRd = rd;
             if (r <= rd.probability)
                 break;

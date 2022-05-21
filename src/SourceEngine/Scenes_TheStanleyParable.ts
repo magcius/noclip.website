@@ -3,7 +3,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { decodeString } from "../util";
-import { CustomMount, SourceFileSystem, SourceLoadContext } from "./Main";
+import { LooseMount, SourceFileSystem, SourceLoadContext } from "./Main";
 import { createScene } from "./Scenes";
 
 class TheStanleyParableDesc implements SceneDesc {
@@ -19,7 +19,7 @@ class TheStanleyParableDesc implements SceneDesc {
             ]);
             const dir = decodeString(await context.dataFetcher.fetchData(`${pathBase}/thestanleyparable/dir.txt`));
             const files = dir.split('\n');
-            filesystem.custom.push(new CustomMount(`${pathBase}/thestanleyparable`, files));
+            filesystem.loose.push(new LooseMount(`${pathBase}/thestanleyparable`, files));
             return filesystem;
         });
 

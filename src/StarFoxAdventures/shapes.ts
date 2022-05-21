@@ -2,23 +2,29 @@ import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
-import { GXMaterial } from '../gx/gx_material';
-import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../gx/gx_render';
-import { computeNormalMatrix } from '../MathHelpers';
+import { createInputLayout, MaterialParams, DrawParams } from '../gx/gx_render';
+import { transformVec3Mat4w1 } from '../MathHelpers';
 import { nArray } from '../util';
+import * as GX_Material from '../gx/gx_material';
 
 import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { setGXMaterialOnRenderInst } from './render';
 import { mat4SetTranslation } from './util';
 import { LightType } from './WorldLights';
+import { wrap } from '@sentry/browser/dist/helpers';
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk';
+
+export interface ShapeRenderContext {
+    modelCtx: ModelRenderContext;
+    setupLights: (dst: GX_Material.Light[]) => void;
+}
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -190,11 +196,11 @@ export class ShapeGeometry {
             // Set sort depth from center of AABB
             this.aabb.centerPoint(scratchVec0);
             // FIXME: Should aabb.transform be used instead?
-            vec3.transformMat4(scratchVec0, scratchVec0, modelToViewMtx);
+            transformVec3Mat4w1(scratchVec0, modelToViewMtx, scratchVec0);
             const depth = -scratchVec0[2];
 
             // const debugCtx = getDebugOverlayCanvas2D();
-            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, matrix);
+            // drawWorldSpaceAABB(debugCtx, camera.clipFromWorldMatrix, this.aabb, modelToWorldMtx);
 
             // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
             // Hopefully our depth range is adequate.
@@ -211,7 +217,7 @@ export class ShapeGeometry {
         }
     }
 
-    public getdrawParams() {
+    public getDrawParams() {
         return this.drawParams;
     }
     
@@ -240,48 +246,41 @@ export class ShapeMaterial {
         this.material = material;
     }
 
-    public setOnMaterialParams(params: MaterialParams, geom: ShapeGeometry, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
+    public setOnMaterialParams(params: MaterialParams, geom: ShapeGeometry, modelToWorldMtx: ReadonlyMat4, shapeCtx: ShapeRenderContext, matOptions: MaterialOptions) {
         if (this.matCtx === undefined) {
             this.matCtx = {
-                sceneCtx: modelCtx.sceneCtx,
-                worldToViewMtx: mat4.create(),
-                viewToWorldMtx: mat4.create(),
+                sceneCtx: shapeCtx.modelCtx.sceneCtx,
                 modelToViewMtx: mat4.create(),
                 viewToModelMtx: mat4.create(),
-                ambienceIdx: modelCtx.ambienceIdx,
+                ambienceIdx: shapeCtx.modelCtx.ambienceIdx,
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
                 furLayer: matOptions.furLayer ?? 0,
             };
         }
 
-        this.matCtx.sceneCtx = modelCtx.sceneCtx;
-        this.matCtx.ambienceIdx = modelCtx.ambienceIdx;
-        colorCopy(this.matCtx.outdoorAmbientColor, modelCtx.outdoorAmbientColor);
+        this.matCtx.sceneCtx = shapeCtx.modelCtx.sceneCtx;
+        this.matCtx.ambienceIdx = shapeCtx.modelCtx.ambienceIdx;
+        colorCopy(this.matCtx.outdoorAmbientColor, shapeCtx.modelCtx.outdoorAmbientColor);
         this.matCtx.furLayer = matOptions.furLayer ?? 0;
 
-        computeViewMatrix(this.matCtx.worldToViewMtx, modelCtx.sceneCtx.viewerInput.camera);
-        mat4.invert(this.matCtx.viewToWorldMtx, this.matCtx.worldToViewMtx);
-
-        mat4.mul(this.matCtx.modelToViewMtx, this.matCtx.worldToViewMtx, modelToWorldMtx);
+        mat4.mul(this.matCtx.modelToViewMtx, this.matCtx.sceneCtx.worldToViewMtx, modelToWorldMtx);
         mat4.invert(this.matCtx.viewToModelMtx, this.matCtx.modelToViewMtx);
 
-        modelCtx.setupPointLights(params.u_Lights, modelCtx.sceneCtx);
+        shapeCtx.setupLights(params.u_Lights);
 
-        modelCtx.mapLights = [];
-        if (modelCtx.sceneCtx.world !== undefined && geom.aabb !== undefined && this.material instanceof StandardMapMaterial) {
+        shapeCtx.modelCtx.mapLights = [];
+        if (shapeCtx.modelCtx.sceneCtx.world !== undefined && geom.aabb !== undefined && this.material instanceof StandardMapMaterial) {
             scratchBox0.copy(geom.aabb);
             scratchBox0.transform(scratchBox0, modelToWorldMtx);
-            const worldView = scratchMtx0;
-            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
-            const probedLights = modelCtx.sceneCtx.world.worldLights.probeLightsOnMapBox(scratchBox0, LightType.POINT, 8);
-            // XXX: actually, it seems there is a maximum of 2 map-affecting lights per shape in the original game.
-            for (let i = 0; i < probedLights.length && i < 8; i++) {
+            const MAX_MAP_AFFECTING_LIGHTS = 2;
+            const probedLights = shapeCtx.modelCtx.sceneCtx.world.worldLights.probeLightsOnMapBox(scratchBox0, LightType.POINT, MAX_MAP_AFFECTING_LIGHTS);
+            for (let i = 0; i < probedLights.length && i < MAX_MAP_AFFECTING_LIGHTS; i++) {
                 const viewPosition = scratchVec0;
                 probedLights[i].getPosition(viewPosition);
                 // const ctx = getDebugOverlayCanvas2D();
                 // drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, viewPosition);
-                vec3.transformMat4(viewPosition, viewPosition, worldView);
-                modelCtx.mapLights.push({
+                transformVec3Mat4w1(viewPosition, this.matCtx.sceneCtx.worldToViewMtx, viewPosition);
+                shapeCtx.modelCtx.mapLights.push({
                     radius: probedLights[i].radius,
                     color: probedLights[i].color,
                     viewPosition: vec3.clone(viewPosition),
@@ -289,7 +288,7 @@ export class ShapeMaterial {
             }
         }
 
-        this.matCtx.mapLights = modelCtx.mapLights;
+        this.matCtx.mapLights = shapeCtx.modelCtx.mapLights;
 
         this.material.setOnMaterialParams(params, this.matCtx);
     }
@@ -310,16 +309,16 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
-        this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
-        this.material.setOnMaterialParams(scratchMaterialParams, this.geom, modelToWorldMtx, modelCtx, matOptions);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelToWorldMtx: ReadonlyMat4, shapeCtx: ShapeRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+        this.geom.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, matrixPalette, shapeCtx.modelCtx.sceneCtx.viewerInput.camera, overrideSortDepth, overrideSortLayer);
+        this.material.setOnMaterialParams(scratchMaterialParams, this.geom, modelToWorldMtx, shapeCtx, matOptions);
 
-        const drawParams = this.geom.getdrawParams();
+        const drawParams = this.geom.getDrawParams();
 
         // For environment mapping
-        if (this.geom.hasSkinning && modelCtx.object !== undefined) {
+        if (this.geom.hasSkinning && shapeCtx.modelCtx.object !== undefined) {
             const descaleMtx = mat4.create();
-            const invScale = 1.0 / modelCtx.object.scale;
+            const invScale = 1.0 / shapeCtx.modelCtx.object.scale;
             mat4.fromScaling(descaleMtx, [invScale, invScale, invScale])
             for (let i = 0; i < drawParams.u_PosMtx.length; i++) {
                 // XXX: this is the game's peculiar way of creating normal matrices
@@ -336,9 +335,9 @@ export class Shape {
         setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);
     }
 
-    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelToWorldMtx: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelToWorldMtx: ReadonlyMat4, shapeCtx: ShapeRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, modelCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelToWorldMtx, shapeCtx, matOptions, matrixPalette, overrideSortDepth, overrideSortLayer);
         renderInstManager.submitRenderInst(renderInst);
     }
     

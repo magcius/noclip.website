@@ -19,6 +19,9 @@ import * as ANIM from './anim';
 import * as EVNT from './evnt';
 import * as CSKR from './cskr';
 import * as CINF from './cinf';
+import * as PART from './part';
+import * as SWHC from './swhc';
+import * as ELSC from './elsc';
 import { InputStream } from './stream';
 
 export const enum ResourceGame {
@@ -28,8 +31,8 @@ export const enum ResourceGame {
     DKCR
 }
 
-type ParseFunc<T> = (stream: InputStream, resourceSystem: ResourceSystem, assetID: string, loadDetails?: any) => T;
-type Resource = any;
+export type ParseFunc<T> = (stream: InputStream, resourceSystem: ResourceSystem, assetID: string, loadDetails?: any) => T;
+export type Resource = any;
 
 export const invalidAssetID: string = '\xFF\xFF\xFF\xFF';
 
@@ -45,6 +48,9 @@ const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'EVNT': EVNT.parse,
     'CSKR': CSKR.parse,
     'CINF': CINF.parse,
+    'PART': PART.parse,
+    'SWHC': SWHC.parse,
+    'ELSC': ELSC.parse,
 };
 
 interface NameDataAsset {
@@ -61,7 +67,7 @@ export interface NameData {
     Areas: { [key: string]: NameDataArea },
 }
 
-function hexName(id: string): string {
+export function hexName(id: string): string {
     let S = '';
     for (let i = 0; i < id.length; i++)
         S += hexzero(id.charCodeAt(i), 2).toUpperCase();
@@ -80,8 +86,8 @@ function combineBuffers(totalSize: number, buffers: Uint8Array[]): Uint8Array {
 }
 
 export interface LoadContext {
-    cachePriority: number,
-    loadDetails: any
+    cachePriority: number;
+    loadDetails: any;
 }
 
 export class ResourceSystem {
@@ -196,15 +202,22 @@ export class ResourceSystem {
         return null;
     }
 
-    public loadAssetByID<T extends Resource>(assetID: string, fourCC: string, loadContext?: LoadContext): T | null {
+    public findResourceByName(assetName: string): FileResource | null {
+        for (const pak of this.paks) {
+            const resource = pak.namedResourceTable.get(assetName);
+            if (resource)
+                return resource;
+        }
+        return null;
+    }
+
+    public loadAssetByIDWithFunc<T extends Resource>(assetID: string, fourCC: string, loaderFunc: ParseFunc<Resource>, loadContext?: LoadContext): T | null {
         if (assetID === '\xFF\xFF\xFF\xFF' || assetID === '\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF')
             return null;
 
         const cached = this._cache.get(assetID);
         if (cached !== undefined && (!loadContext || cached.priority >= loadContext.cachePriority))
             return cached.resource;
-
-        const loaderFunc = assertExists(FourCCLoaders[fourCC]);
 
         const resource = this.findResourceByID(assetID);
         if (!resource)
@@ -216,5 +229,17 @@ export class ResourceSystem {
         const inst = loaderFunc(stream, this, assetID, loadContext?.loadDetails);
         this._cache.set(assetID, { resource: inst, priority: loadContext?.cachePriority ?? 0 });
         return inst;
+    }
+
+    public loadAssetByID<T extends Resource>(assetID: string, fourCC: string, loadContext?: LoadContext): T | null {
+        return this.loadAssetByIDWithFunc(assetID, fourCC, assertExists(FourCCLoaders[fourCC]), loadContext);
+    }
+
+    public loadAssetByName<T extends Resource>(assetName: string, fourCC: string, loadContext?: LoadContext): T | null {
+        const resource = this.findResourceByName(assetName);
+        if (!resource)
+            return null;
+
+        return this.loadAssetByID(resource.fileID, fourCC, loadContext);
     }
 }

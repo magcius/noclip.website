@@ -34,11 +34,8 @@ export class DebugTextDrawer {
         this.charWriter.setFont(fontData, 0, 0);
 
         const ddraw = this.ddraw;
-        ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         ddraw.setVtxDesc(GX.Attr.POS, true);
-        ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         ddraw.setVtxDesc(GX.Attr.CLR0, true);
-        ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
         ddraw.setVtxDesc(GX.Attr.TEX0, true);
     }
 

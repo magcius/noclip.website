@@ -208,7 +208,6 @@ class dDlst_alphaModel_c {
         projectionMatrixConvertClipSpaceNearZ(this.orthoSceneParams.u_Projection, clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
@@ -697,7 +696,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
                 if (group === EffectDrawGroup.Indirect) {
                     texPrjMtx = scratchMatrix;
-                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
                 }
 
                 this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
@@ -1072,19 +1071,6 @@ class SceneDesc {
 
         dStage_dt_c_stageInitLoader(globals, globals.dStage_dt, dzs);
         dStage_dt_c_stageLoader(globals, globals.dStage_dt, dzs);
-
-        /*dStage_actorCreate(globals, 'Link', {
-            roomNo: 44,
-            enemyNo: 0,
-            gbaName: 0,
-            parentPcId: -1,
-            subtype: 0,
-            layer: 0,
-            parameters: 0,
-            pos: vec3.fromValues(-202620, 400, 316000),
-            rot: vec3.fromValues(0, 0.4 * 0xFFFF, 0),
-            scale: vec3.fromValues(1, 1, 1),
-        });*/
 
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)

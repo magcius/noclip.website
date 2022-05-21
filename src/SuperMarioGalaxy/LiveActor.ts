@@ -3,7 +3,7 @@ import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { J3DModelData, J3DModelInstance, MaterialInstance, TEX1Data } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxDevice, GfxFormat, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from "../gx/gx_displaylist";
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT, computeNormalMatrix } from "../MathHelpers";
 import { align, assertExists, fallback, nArray, nullify } from "../util";
@@ -23,7 +23,7 @@ import { ShadowControllerList } from "./Shadow";
 import { Spine } from "./Spine";
 import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
 import * as GX from '../gx/gx_enum';
-import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeDisplayFlags, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { ANK1, BCK, BMD, BPK, BRK, BTK, BTP, BVA, ShapeMtxType, TexMtxMapMode, TPT1, TRK1, TTK1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { MaterialParams, DrawParams } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
@@ -175,7 +175,7 @@ function mtxModeIsUsingProjMap(mode: TexMtxMapMode): boolean {
 function patchBMD(bmd: BMD): void {
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
-        if (shape.displayFlags !== ShapeDisplayFlags.MULTI)
+        if (shape.shapeMtxType !== ShapeMtxType.Multi)
             continue;
 
         const material = bmd.mat3.materialEntries[shape.materialIndex];
@@ -238,24 +238,10 @@ function patchBMD(bmd: BMD): void {
                 shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
-
-    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
-    // This should only be done on opaque objects.
-    // TODO(jstpierre): This was used to clear the shadows in NoShadowed pass, but that doesn't
-    // work anymore given that we moved shadows to their own alpha RT now. Likely need multiple
-    // draws. Boo :/
-    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
-        const mat = bmd.mat3.materialEntries[i];
-        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
-            continue;
-
-        mat.gxMaterial.ropInfo.alphaUpdate = true;
-        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
-    }
 }
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawParams: DrawParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, drawParams: DrawParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -276,7 +262,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
         materialInstance.calcPostTexMtxInput(dst, texMtx, viewMatrix);
         const texSRT = scratchMatrix;
         materialInstance.calcTexSRT(texSRT, i);
-        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
+        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
     }
 
     if (hasAnyEnvMap) {
@@ -289,8 +275,8 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
 }
 
 function patchModelData(bmdModel: J3DModelData): void {
-    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
-    // of its own sort, which needs to be RE'd.
+    // Kill off the sort-key bias -- we don't need it.
+    // TODO(jstpierre): sortKeyBias should probably be moved to J3DGraphSimple.
     for (let i = 0; i < bmdModel.shapeData.length; i++)
         bmdModel.shapeData[i].sortKeyBias = 0;
 
@@ -1012,6 +998,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         const indDummy = this.modelInstance.getTextureMappingReference('IndDummy');
         if (indDummy !== null)
             sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
+
+        const shadowProjDummy = this.modelInstance.getTextureMappingReference('ShadowProjDummy');
+        if (shadowProjDummy !== null)
+            sceneObjHolder.specialTextureBinder.registerTextureMapping(shadowProjDummy, SpecialTextureType.MarioShadowTexture);
 
         if (this.actorLightCtrl !== null) {
             this.actorLightCtrl.loadLight(this.modelInstance, camera);

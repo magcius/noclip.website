@@ -8,10 +8,10 @@ import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, computeModelMatrixS, getMatrixTranslation, Vec3UnitZ } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
@@ -21,7 +21,7 @@ import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
 import { BSPFile, Model, Surface } from "./BSPFile";
-import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, point_camera, sky_camera, worldspawn } from "./EntitySystem";
+import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
@@ -35,7 +35,7 @@ import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { dfRange, dfShow } from "../DebugFloaters";
 
-export class CustomMount {
+export class LooseMount {
     constructor(public path: string, public files: string[] = []) {
     }
 
@@ -57,7 +57,7 @@ export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public zip: ZipFile[] = [];
     public vpk: VPKMount[] = [];
-    public custom: CustomMount[] = [];
+    public loose: LooseMount[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -126,9 +126,9 @@ export class SourceFileSystem {
     }
 
     public hasEntry(resolvedPath: string): boolean {
-        for (let i = 0; i < this.custom.length; i++) {
-            const custom = this.custom[i];
-            if (custom.hasEntry(resolvedPath))
+        for (let i = 0; i < this.loose.length; i++) {
+            const loose = this.loose[i];
+            if (loose.hasEntry(resolvedPath))
                 return true;
         }
 
@@ -156,8 +156,8 @@ export class SourceFileSystem {
     }
 
     public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
-        for (let i = 0; i < this.custom.length; i++) {
-            const custom = this.custom[i];
+        for (let i = 0; i < this.loose.length; i++) {
+            const custom = this.loose[i];
             if (custom.hasEntry(resolvedPath))
                 return custom.fetchEntryData(this.dataFetcher, resolvedPath);
         }
@@ -590,7 +590,6 @@ export class SourceEngineView {
         this.aspect = camera.aspect;
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
-        this.finishSetup();
     }
 
     public reset(): void {
@@ -922,20 +921,19 @@ class DebugStatistics {
 export class ProjectedLightRenderer {
     public light = new ProjectedLight();
     public debugName: string = 'ProjectedLight';
-    public depthTextureValid = false;
-
-    public prepareRenderTarget(renderContext: SourceRenderContext): void {
-        const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-        depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
-        this.light.depthTexture.setDescription(renderContext.device, depthTargetDesc);
-    }
+    public outputDepthTargetID: GfxrRenderTargetID | null = null;
+    public outputDepthTextureID: GfxrResolveTextureID | null = null;
+    public enabled = false;
 
     public preparePasses(renderer: SourceRenderer): void {
+        if (this.enabled)
+            return;
+
+        this.enabled = true;
+
         const renderContext = renderer.renderContext;
         renderContext.currentView = this.light.frustumView;
         const renderInstManager = renderer.renderHelper.renderInstManager;
-
-        this.prepareRenderTarget(renderContext);
 
         for (let i = 0; i < renderer.bspRenderers.length; i++) {
             const bspRenderer = renderer.bspRenderers[i];
@@ -950,9 +948,10 @@ export class ProjectedLightRenderer {
     }
 
     public pushPasses(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder): void {
-        if (this.depthTextureValid)
+        if (this.outputDepthTargetID !== null)
             return;
 
+        assert(this.enabled);
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
         depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
@@ -968,13 +967,15 @@ export class ProjectedLightRenderer {
             });
         });
 
-        builder.resolveRenderTargetToExternalTexture(depthTargetID, this.light.depthTexture.getTextureForResolving());
-
-        this.depthTextureValid = true;
+        this.outputDepthTargetID = depthTargetID;
+        this.outputDepthTextureID = builder.resolveRenderTarget(depthTargetID);
     }
 
-    public destroy(device: GfxDevice): void {
-        this.light.destroy(device);
+    public reset(): void {
+        this.enabled = false;
+        this.light.frustumView.reset();
+        this.outputDepthTargetID = null;
+        this.outputDepthTextureID = null;
     }
 }
 
@@ -1010,8 +1011,6 @@ class Flashlight {
 
     private updateFrustumView(renderContext: SourceRenderContext): void {
         const frustumView = this.projectedLightRenderer.light.frustumView;
-        this.projectedLightRenderer.depthTextureValid = false;
-
         const worldFromViewMatrix = renderContext.currentView.worldFromViewMatrix;
 
         // Move the flashlight in front of us a bit to provide a bit of cool perspective...
@@ -1023,10 +1022,7 @@ class Flashlight {
 
     public movement(renderContext: SourceRenderContext): void {
         this.updateFrustumView(renderContext);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.projectedLightRenderer.destroy(device);
+        this.projectedLightRenderer.reset();
     }
 }
 
@@ -1049,12 +1045,13 @@ export class SourceRenderContext {
     public materialProxySystem = new MaterialProxySystem();
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
+    public currentViewRenderer: SourceWorldViewRenderer | null = null;
     public currentView: SourceEngineView;
     public colorCorrection: SourceColorCorrection;
     public toneMapParams = new ToneMapParams();
     public renderCache: GfxRenderCache;
-    public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public currentPointCamera: point_camera | null = null;
+    public currentShake: env_shake | null = null;
     public flashlight: Flashlight;
 
     // Public settings
@@ -1089,6 +1086,19 @@ export class SourceRenderContext {
         }
     }
 
+    public crossedTime(time: number): boolean {
+        const oldTime = this.globalTime - this.globalDeltaTime;
+        return (time >= oldTime) && (time < this.globalTime);
+    }
+
+    public crossedRepeatTime(start: number, interval: number): boolean {
+        if (this.globalTime <= start)
+            return false;
+
+        const base = start + (((this.globalTime - start) / interval) | 0) * interval;
+        return this.crossedTime(base);
+    }
+
     public isUsingHDR(): boolean {
         return this.materialCache.isUsingHDR();
     }
@@ -1099,7 +1109,6 @@ export class SourceRenderContext {
         this.materialCache.destroy(device);
         this.studioModelCache.destroy(device);
         this.colorCorrection.destroy(device);
-        this.flashlight.destroy(device);
     }
 }
 
@@ -1129,6 +1138,7 @@ export class SourceWorldViewRenderer {
     public drawSkybox3D = true;
     public drawIndirect = true;
     public drawWorld = true;
+    public drawProjectedShadows = true;
     public renderObjectMask = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities;
     public pvsEnabled = true;
     public pvsFallback = true;
@@ -1137,14 +1147,56 @@ export class SourceWorldViewRenderer {
     public skyboxView = new SourceEngineView();
     public enabled = false;
 
+    public currentProjectedLightRenderer: ProjectedLightRenderer | null = null;
     public outputColorTargetID: GfxrRenderTargetID | null = null;
+    public outputColorTextureID: GfxrResolveTextureID | null = null;
 
-    constructor(public name: string, private viewType: SourceEngineViewType) {
+    constructor(public name: string, viewType: SourceEngineViewType) {
         this.mainView.viewType = viewType;
         this.skyboxView.viewType = viewType;
     }
 
+    private calcProjectedLight(renderer: SourceRenderer): void {
+        this.currentProjectedLightRenderer = null;
+
+        if (!this.drawProjectedShadows)
+            return;
+
+        let bestDistance = Infinity;
+        let bestProjectedLight: ProjectedLightRenderer | null = null;
+
+        for (let i = 0; i < renderer.bspRenderers.length; i++) {
+            const bspRenderer = renderer.bspRenderers[i];
+            let projectedLight: env_projectedtexture | null = null;
+            while (projectedLight = bspRenderer.entitySystem.findEntityByType<env_projectedtexture>(env_projectedtexture, projectedLight)) {
+                if (!projectedLight.shouldDraw())
+                    continue;
+
+                projectedLight.getAbsOrigin(scratchVec3);
+                const dist = vec3.squaredDistance(this.mainView.cameraPos, scratchVec3);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestProjectedLight = projectedLight.projectedLightRenderer;
+                }
+            }
+        }
+
+        const renderContext = renderer.renderContext, flashlight = renderContext.flashlight;
+        if (bestProjectedLight === null && flashlight.enabled) {
+            renderContext.currentView = this.mainView;
+            flashlight.movement(renderContext);
+            renderContext.currentView = null!;
+            if (flashlight.isReady())
+                bestProjectedLight = flashlight.projectedLightRenderer;
+        }
+
+        this.currentProjectedLightRenderer = bestProjectedLight;
+    }
+
     public prepareToRender(renderer: SourceRenderer, parentViewRenderer: SourceWorldViewRenderer | null): void {
+        if (this.enabled)
+            return;
+
         this.enabled = true;
         const renderContext = renderer.renderContext, renderInstManager = renderer.renderHelper.renderInstManager;
 
@@ -1155,6 +1207,12 @@ export class SourceWorldViewRenderer {
         mat4.mul(this.skyboxView.viewFromWorldMatrix, this.skyboxView.viewFromWorldMatrix, scratchMatrix);
         this.skyboxView.finishSetup();
 
+        this.calcProjectedLight(renderer);
+
+        if (this.currentProjectedLightRenderer !== null)
+            this.currentProjectedLightRenderer.preparePasses(renderer);
+
+        renderContext.currentViewRenderer = this;
         renderContext.currentView = this.skyboxView;
 
         if (this.drawSkybox2D && renderer.skyboxRenderer !== null)
@@ -1206,10 +1264,30 @@ export class SourceWorldViewRenderer {
         renderContext.currentView = null!;
     }
 
-    public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
-        const staticResources = renderer.renderContext.materialCache.staticResources;
+    private lateBindTextureAttachPass(renderContext: SourceRenderContext, builder: GfxrGraphBuilder, pass: GfxrPass): void {
+        if (renderContext.currentPointCamera !== null && renderContext.currentPointCamera.viewRenderer !== this)
+            pass.attachResolveTexture(renderContext.currentPointCamera.viewRenderer.resolveColorTarget(builder));
+        if (this.currentProjectedLightRenderer !== null)
+            pass.attachResolveTexture(this.currentProjectedLightRenderer.outputDepthTextureID!);
+    }
 
+    private lateBindTextureSetOnPassRenderer(renderer: SourceRenderer, scope: GfxrPassScope): void {
+        const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
+        if (renderContext.currentPointCamera !== null && renderContext.currentPointCamera.viewRenderer !== this)
+            renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(renderContext.currentPointCamera.viewRenderer.outputColorTextureID!), staticResources.linearRepeatSampler);
+        if (this.currentProjectedLightRenderer !== null)
+            renderer.setLateBindingTexture(LateBindingTexture.ProjectedLightDepth, scope.getResolveTextureForID(this.currentProjectedLightRenderer.outputDepthTextureID!), staticResources.shadowSampler);
+    }
+
+    public pushPasses(renderer: SourceRenderer, builder: GfxrGraphBuilder, renderTargetDesc: GfxrRenderTargetDescription): void {
         assert(this.enabled);
+        if (this.outputColorTextureID !== null)
+            return;
+
+        const renderContext = renderer.renderContext, staticResources = renderContext.materialCache.staticResources;
+
+        if (this.currentProjectedLightRenderer !== null)
+            this.currentProjectedLightRenderer.pushPasses(renderContext, renderer.renderHelper.renderInstManager, builder);
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.copyDimensions(renderTargetDesc);
@@ -1235,23 +1313,15 @@ export class SourceWorldViewRenderer {
 
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, `${this.name} - Main Depth`);
 
-        const pointCamera = renderer.renderContext.currentPointCamera;
-        let cameraResolveTextureID: GfxrResolveTextureID | null = null;
-        if (pointCamera !== null && pointCamera.viewRenderer.outputColorTargetID !== null)
-            cameraResolveTextureID = builder.resolveRenderTarget(pointCamera.viewRenderer.outputColorTargetID);
-
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
-            if (cameraResolveTextureID !== null)
-                pass.attachResolveTexture(cameraResolveTextureID);
+            this.lateBindTextureAttachPass(renderContext, builder, pass);
 
             pass.exec((passRenderer, scope) => {
-                if (cameraResolveTextureID !== null)
-                    renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
-
+                this.lateBindTextureSetOnPassRenderer(renderer, scope);
                 renderer.executeOnPass(passRenderer, this.mainView.mainList);
             });
         });
@@ -1274,12 +1344,16 @@ export class SourceWorldViewRenderer {
                     pass.attachResolveTexture(reflectColorResolveTextureID);
                 }
 
+                this.lateBindTextureAttachPass(renderContext, builder, pass);
+
                 pass.exec((passRenderer, scope) => {
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferColor, scope.getResolveTextureForID(mainColorResolveTextureID), staticResources.linearClampSampler);
                     renderer.setLateBindingTexture(LateBindingTexture.FramebufferDepth, scope.getResolveTextureForID(mainDepthResolveTextureID), staticResources.pointClampSampler);
 
-                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : renderer.renderContext.materialCache.staticResources.opaqueBlackTexture2D;
+                    const reflectColorTexture = reflectColorResolveTextureID !== null ? scope.getResolveTextureForID(reflectColorResolveTextureID) : staticResources.opaqueBlackTexture2D;
                     renderer.setLateBindingTexture(LateBindingTexture.WaterReflection, reflectColorTexture, staticResources.linearClampSampler);
+
+                    this.lateBindTextureSetOnPassRenderer(renderer, scope);
 
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
                 });
@@ -1291,20 +1365,25 @@ export class SourceWorldViewRenderer {
                 pass.setDebugName('Translucent');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-    
-                if (cameraResolveTextureID !== null)
-                    pass.attachResolveTexture(cameraResolveTextureID);
-    
+                
+                this.lateBindTextureAttachPass(renderContext, builder, pass);
+
                 pass.exec((passRenderer, scope) => {
-                    if (cameraResolveTextureID !== null)
-                        renderer.setLateBindingTexture(LateBindingTexture.Camera, scope.getResolveTextureForID(cameraResolveTextureID), staticResources.linearRepeatSampler);
-    
+                    this.lateBindTextureSetOnPassRenderer(renderer, scope);
                     renderer.executeOnPass(passRenderer, this.mainView.translucentList);
                 });
             });
         }
 
         this.outputColorTargetID = mainColorTargetID;
+        this.outputColorTextureID = null;
+    }
+
+    public resolveColorTarget(builder: GfxrGraphBuilder): GfxrResolveTextureID {
+        if (this.outputColorTextureID === null)
+            this.outputColorTextureID = builder.resolveRenderTarget(assertExists(this.outputColorTargetID));
+
+        return this.outputColorTextureID;
     }
 
     public reset(): void {
@@ -1312,6 +1391,7 @@ export class SourceWorldViewRenderer {
         this.skyboxView.reset();
         this.enabled = false;
         this.outputColorTargetID = null;
+        this.outputColorTextureID = null;
     }
 }
 
@@ -1379,6 +1459,11 @@ void main() {
     gl_FragColor = t_Color;
 }
 `;
+
+    constructor(useBloom: boolean) {
+        super();
+        this.setDefineBool('USE_BLOOM', useBloom);
+    }
 }
 
 class BloomDownsampleProgram extends DeviceProgram {
@@ -1495,14 +1580,21 @@ export class SourceRenderer implements SceneGfx {
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
 
-    private textureMapping = nArray(4, () => new TextureMapping());
-    private bindingMapping: string[] = [LateBindingTexture.Camera, LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection];
+    private textureMapping = nArray(5, () => new TextureMapping());
+    private bindingMapping: string[] = [LateBindingTexture.Camera, LateBindingTexture.FramebufferColor, LateBindingTexture.FramebufferDepth, LateBindingTexture.WaterReflection, LateBindingTexture.ProjectedLightDepth];
 
     public mainViewRenderer = new SourceWorldViewRenderer(`Main View`, SourceEngineViewType.MainView);
     public reflectViewRenderer = new SourceWorldViewRenderer(`Reflection View`, SourceEngineViewType.WaterReflectView);
 
+    private bloomDownsampleProgram: GfxProgram;
+    private bloomBlurXProgram: GfxProgram;
+    private bloomBlurYProgram: GfxProgram;
+    private fullscreenPostProgram: GfxProgram;
+    private fullscreenPostProgramBloom: GfxProgram;
+
     constructor(private sceneContext: SceneContext, public renderContext: SourceRenderContext) {
         // Make the reflection view a bit cheaper.
+        this.reflectViewRenderer.drawProjectedShadows = false;
         this.reflectViewRenderer.pvsFallback = false;
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
 
@@ -1510,6 +1602,13 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
+
+        const cache = renderContext.renderCache;
+        this.bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
+        this.bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
+        this.bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
+        this.fullscreenPostProgram = cache.createProgram(new FullscreenPostProgram(false));
+        this.fullscreenPostProgramBloom = cache.createProgram(new FullscreenPostProgram(true));
     }
 
     private resetTextureMappings(): void {
@@ -1650,39 +1749,6 @@ export class SourceRenderer implements SceneGfx {
         return [renderHacksPanel];
     }
 
-    private calcProjectedLight(): void {
-        let bestDistance = Infinity;
-        let bestProjectedLight: ProjectedLightRenderer | null = null;
-
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
-            let projectedLight: env_projectedtexture | null = null;
-            while (projectedLight = bspRenderer.entitySystem.findEntityByType<env_projectedtexture>(env_projectedtexture, projectedLight)) {
-                if (!projectedLight.enabled || !projectedLight.alive)
-                    continue;
-
-                projectedLight.getAbsOrigin(scratchVec3);
-                const dist = vec3.squaredDistance(this.mainViewRenderer.mainView.cameraPos, scratchVec3);
-                if (dist < bestDistance) {
-                    bestDistance = dist;
-                    bestProjectedLight = projectedLight.projectedLightRenderer;
-                }
-            }
-        }
-
-        const renderContext = this.renderContext, flashlight = renderContext.flashlight;
-        if (bestProjectedLight === null && flashlight.enabled) {
-            renderContext.currentView = this.mainViewRenderer.mainView;
-            flashlight.movement(renderContext);
-            renderContext.currentView = null!;
-            if (flashlight.isReady())
-                bestProjectedLight = flashlight.projectedLightRenderer;
-        }
-
-        this.renderContext.currentProjectedLightRenderer = bestProjectedLight;
-    }
-
-    private overrideView: SourceEngineView | null = null;
     public prepareToRender(viewerInput: ViewerRenderInput): void {
         const renderContext = this.renderContext, device = renderContext.device;
 
@@ -1692,16 +1758,13 @@ export class SourceRenderer implements SceneGfx {
         renderContext.debugStatistics.reset();
 
         // Update the main view early, since that's what movement/entities will use
-        if (this.overrideView !== null) {
-            this.mainViewRenderer.mainView.copy(this.overrideView);
-            this.mainViewRenderer.mainView.finishSetup();
-        } else {
-            this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
-        }
+        this.mainViewRenderer.mainView.setupFromCamera(viewerInput.camera);
+        if (renderContext.currentShake !== null)
+            renderContext.currentShake.adjustView(this.mainViewRenderer.mainView);
+        this.mainViewRenderer.mainView.finishSetup();
 
         renderContext.currentPointCamera = null;
 
-        this.calcProjectedLight();
         this.movement();
 
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -1709,9 +1772,6 @@ export class SourceRenderer implements SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
         template.setBindingLayouts(bindingLayouts);
-
-        if (renderContext.currentProjectedLightRenderer !== null)
-            renderContext.currentProjectedLightRenderer.preparePasses(this);
 
         if (renderContext.currentPointCamera !== null)
             (renderContext.currentPointCamera as point_camera).preparePasses(this);
@@ -1784,10 +1844,6 @@ export class SourceRenderer implements SceneGfx {
         const cache = this.renderContext.renderCache;
         const staticResources = this.renderContext.materialCache.staticResources;
 
-        const bloomDownsampleProgram = cache.createProgram(new BloomDownsampleProgram());
-        const bloomBlurXProgram = cache.createProgram(new BloomBlurProgram(false));
-        const bloomBlurYProgram = cache.createProgram(new BloomBlurProgram(true));
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayoutsPost);
         renderInst.setInputLayoutAndState(null, null);
@@ -1816,7 +1872,7 @@ export class SourceRenderer implements SceneGfx {
             pass.exec((passRenderer, scope) => {
                 this.resetTextureMappings();
         
-                renderInst.setGfxProgram(bloomDownsampleProgram);
+                renderInst.setGfxProgram(this.bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1833,7 +1889,7 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(downsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(bloomBlurXProgram);
+                renderInst.setGfxProgram(this.bloomBlurXProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1850,7 +1906,7 @@ export class SourceRenderer implements SceneGfx {
             pass.attachResolveTexture(downsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(bloomBlurYProgram);
+                renderInst.setGfxProgram(this.bloomBlurYProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1877,10 +1933,6 @@ export class SourceRenderer implements SceneGfx {
         // Render the camera
         if (renderContext.currentPointCamera !== null)
             renderContext.currentPointCamera.pushPasses(this, builder, mainColorDesc);
-
-        // Render the depth map first if necessary
-        if (renderContext.currentProjectedLightRenderer !== null)
-            renderContext.currentProjectedLightRenderer.pushPasses(renderContext, renderInstManager, builder);
 
         // Render reflection view first.
         if (this.reflectViewRenderer.enabled)
@@ -1912,19 +1964,18 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
-            const postProgram = new FullscreenPostProgram();
-
+            let postProgram = this.fullscreenPostProgram;
             let bloomResolveTextureID: GfxrResolveTextureID | null = null;
             if (bloomColorTargetID !== null) {
                 bloomResolveTextureID = builder.resolveRenderTarget(bloomColorTargetID);
                 pass.attachResolveTexture(bloomResolveTextureID);
-                postProgram.setDefineBool('USE_BLOOM', true);
+                postProgram = this.fullscreenPostProgramBloom;
             }
 
             const postRenderInst = renderInstManager.newRenderInst();
             postRenderInst.setBindingLayouts(bindingLayoutsPost);
             postRenderInst.setInputLayoutAndState(null, null);
-            postRenderInst.setGfxProgram(cache.createProgram(postProgram));
+            postRenderInst.setGfxProgram(postProgram);
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
             postRenderInst.drawPrimitives(3);
 

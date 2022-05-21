@@ -366,7 +366,7 @@ export class XanimePlayer {
 
             this.updateInterpoleRatio(deltaTimeFrames);
 
-            // XXX(jstpierre): Apply some easing. This is to make the animations look a bit smoother,
+            // HACK(jstpierre): Apply some easing. This is to make the animations look a bit smoother,
             // and compensate for the lack of exponential slide in updateInterpoleRatio.
             this.core.interpoleRatio = getEaseInOutValue(this.interpoleRatio);
         }

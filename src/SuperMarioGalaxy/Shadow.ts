@@ -221,7 +221,7 @@ class ShadowController {
         if (this.calcDropGravityMode === CalcDropGravityMode.Off || this.calcDropGravityMode === CalcDropGravityMode.PrivateOff)
             return false;
 
-        // XXX(jstpierre): It doesn't seem to check OneTime? Bug in the original game?
+        // NOTE(jstpierre): It doesn't seem to check OneTime? Bug in the original game?
         // if (this.calcDropGravityMode === CalcDropGravityMode.On || this.calcDropGravityMode === CalcDropGravityMode.PrivateOn)
         //     return true;
 
@@ -352,7 +352,6 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
     }
 
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -660,7 +659,6 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowVolumeBox', controller);
 
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
     }
 
@@ -852,7 +850,6 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
     constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
         super(sceneObjHolder, 'ShadowVolumeLine', controller);
 
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
     }
 
@@ -1056,8 +1053,6 @@ class AlphaShadow extends NameObj {
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);

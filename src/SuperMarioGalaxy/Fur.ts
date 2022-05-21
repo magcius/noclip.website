@@ -235,7 +235,7 @@ function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLengt
     let posOffs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.POS];
     let nrmOffs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.NRM];
     let tex0Offs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.TEX0];
-    assert(loadedVertexLayout.vertexAttributeFormats[GX.Attr.POS] === GfxFormat.F32_RGBA);
+    assert(loadedVertexLayout.vertexAttributeFormats[GX.Attr.POS] === GfxFormat.F32_RGB);
     assert(loadedVertexLayout.vertexAttributeFormats[GX.Attr.NRM] === GfxFormat.F32_RGB);
     assert(loadedVertexLayout.vertexAttributeFormats[GX.Attr.TEX0] === GfxFormat.F32_RG);
 

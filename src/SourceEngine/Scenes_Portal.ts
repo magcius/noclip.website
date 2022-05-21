@@ -1,10 +1,10 @@
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
+import { BSPEntity } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
 import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
 import { createScene } from "./Scenes";
-import { BSPEntity } from "./VMT";
 
 class npc_portal_turret_floor extends BaseEntity {
     public static classname = 'npc_portal_turret_floor';
@@ -14,7 +14,6 @@ class npc_portal_turret_floor extends BaseEntity {
         this.setModelName(renderContext, 'models/props/Turret_01.mdl');
     }
 }
-
 
 class PortalSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {

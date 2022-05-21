@@ -1,5 +1,5 @@
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { lerp, lerpAngle } from '../MathHelpers';
+import { computeModelMatrixSRT, lerp, lerpAngle } from '../MathHelpers';
 import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
@@ -135,6 +135,7 @@ export class AnimFile {
             numKeyframes: data.getUint8(0x7),
             keyframeStride: data.getUint8(0x8),
         };
+        // console.log(`keyframe count: ${header.numKeyframes}`);
         // console.log(`Anim ${num} header: ${JSON.stringify(header, null, '\t')}`);
 
         function loadKeyframe(kfNum: number): Keyframe {
@@ -233,7 +234,12 @@ export class AnimFile {
             // console.log(`speed: ${speed}`);
             const numTimes = data.getUint16(timesOffs);
             timesOffs += 0x2;
-            // console.log(`num times: ${numTimes}`);
+            // console.log(`num times: ${numTimes} for ${header.numKeyframes} keyframes`);
+            for (let i = 0; i < numTimes; i++) {
+                const time = data.getUint16(timesOffs);
+                timesOffs += 0x2;
+                // console.log(`time ${i}: ${time}`);
+            }
         }
 
         const anim = { keyframes, speed, times: [] };
@@ -262,49 +268,56 @@ export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?
     return result;
 }
 
-const scratchQuat = quat.create();
-const scratchVec0 = vec3.create();
-const scratchVec1 = vec3.create();
-
-// Applies rotations in Z -> Y -> X order.
+// Applies rotations in the order: X then Y then Z.
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
-    quat.identity(scratchQuat);
-    // TODO: verify correctness
-    quat.rotateZ(scratchQuat, scratchQuat, pose.axes[2].rotation);
-    quat.rotateY(scratchQuat, scratchQuat, pose.axes[1].rotation);
-    quat.rotateX(scratchQuat, scratchQuat, pose.axes[0].rotation);
-    vec3.set(scratchVec0, pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
-    vec3.set(scratchVec1, pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale);
-    mat4.fromRotationTranslationScale(dst, scratchQuat, scratchVec0, scratchVec1);
+    computeModelMatrixSRT(dst,
+        pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale,
+        pose.axes[0].rotation, pose.axes[1].rotation, pose.axes[2].rotation,
+        pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
 }
 
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
     const numPoses = Math.min(kf0.poses.length, kf1.poses.length);
     const result: Keyframe = reuse !== undefined ? reuse : createKeyframe(numPoses);
 
-    for (let i = 0; i < numPoses; i++) {
+    for (let i = 0; i < numPoses; i++)
         result.poses[i] = interpolatePoses(kf0.poses[i], kf1.poses[i], ratio, result.poses[i]);
-    }
 
     return result;
 }
 
 const scratchMtx = mat4.create();
 
-export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, amap: DataView | null) {
+export function applyPosesToModel(poses: Keyframe, modelInst: ModelInstance, amap: DataView | null) {
     modelInst.resetPose();
 
-    for (let i = 0; i < kf.poses.length && i < modelInst.model.joints.length; i++) {
+    for (let i = 0; i < poses.poses.length && i < modelInst.model.joints.length; i++) {
         let poseNum = i;
-        if (amap !== null) {
+        if (amap !== null)
             poseNum = amap.getInt8(i);
-        }
 
-        const pose = kf.poses[poseNum];
+        const pose = poses.poses[poseNum];
         getLocalTransformForPose(scratchMtx, pose);
 
         modelInst.setJointPose(i, scratchMtx);
     }
+}
+
+export function applyAnimationToModel(time: number, modelInst: ModelInstance, anim: Anim, animNum: number) {
+    // TODO: use time values from animation data?
+    const amap = modelInst.getAmap(animNum);
+    const keyframeTime = (time * anim.keyframes.length) % anim.keyframes.length;
+
+    const kf0Num = Math.floor(keyframeTime);
+    let kf1Num = kf0Num + 1;
+    if (kf1Num >= anim.keyframes.length)
+        kf1Num = 0;
+
+    const keyframe0 = anim.keyframes[kf0Num];
+    const keyframe1 = anim.keyframes[kf1Num];
+    const ratio = keyframeTime - kf0Num;
+    modelInst.poses = interpolateKeyframes(keyframe0, keyframe1, ratio, modelInst.poses);
+    applyPosesToModel(modelInst.poses, modelInst, amap);
 }
 
 export class AmapCollection {

@@ -1,17 +1,21 @@
 
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { DataFetcher } from "../DataFetcher";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { getMatrixTranslation, scaleMatrix, Vec3NegX } from "../MathHelpers";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { EmptyScene } from "../Scenes_Test";
 import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
 import { decodeString } from "../util";
 import { SceneGfx } from "../viewer";
+import { BSPEntity } from "./BSPFile";
 import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
+import { BSPRenderer, LooseMount, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
+import { BaseMaterial } from "./Materials";
 import { createScene } from "./Scenes";
-import { BSPEntity } from "./VMT";
 
 class trigger_portal_button extends trigger_multiple {
     public static override classname = `trigger_portal_button`;
@@ -162,6 +166,78 @@ class prop_testchamber_door extends BaseEntity {
     }
 }
 
+const scratchVec3a = vec3.create();
+const scratchMat4a = mat4.create();
+class prop_indicator_panel extends BaseEntity {
+    public static classname = `prop_indicator_panel`;
+    public materialInstance: BaseMaterial | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.setMaterial(renderContext, `vgui/signage/vgui_indicator_unchecked.vmt`);
+
+        this.registerInput('check', this.input_check.bind(this));
+        this.registerInput('uncheck', this.input_uncheck.bind(this));
+    }
+
+    public async setMaterial(renderContext: SourceRenderContext, materialName: string) {
+        const materialInstance = await renderContext.materialCache.createMaterialInstance(materialName);
+        materialInstance.entityParams = this.ensureMaterialParams();
+        await materialInstance.init(renderContext);
+        this.materialInstance = materialInstance;
+    }
+
+    private setIndicatorLights(entitySystem: EntitySystem, valueNum: number): void {
+        if (this.entity.indicatorlights === undefined)
+            return;
+
+        for (let i = 0; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+            if (!entitySystem.entityMatchesTargetName(entity, this.entity.indicatorlights))
+                continue;
+
+            const materialParams = entity.materialParams;
+            if (materialParams !== null)
+                materialParams.textureFrameIndex = valueNum;
+        }
+    }
+
+    private input_check(entitySystem: EntitySystem): void {
+        this.setIndicatorLights(entitySystem, 1);
+        this.setMaterial(entitySystem.renderContext, `vgui/signage/vgui_indicator_checked.vmt`);
+    }
+
+    private input_uncheck(entitySystem: EntitySystem): void {
+        this.setIndicatorLights(entitySystem, 0);
+        this.setMaterial(entitySystem.renderContext, `vgui/signage/vgui_indicator_unchecked.vmt`);
+    }
+
+    public override prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager): void {
+        if (!this.shouldDraw())
+            return;
+
+        if (this.materialInstance === null)
+            return;
+
+        const view = renderContext.currentView;
+        const modelMatrix = this.updateModelMatrix();
+        getMatrixTranslation(scratchVec3a, modelMatrix);
+        if (!view.frustum.containsSphere(scratchVec3a, 16))
+            return;
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderContext.materialCache.staticResources.staticQuad.setQuadOnRenderInst(renderInst);
+
+        mat4.translate(scratchMat4a, modelMatrix, Vec3NegX);
+        scaleMatrix(scratchMat4a, scratchMat4a, 16);
+        this.materialInstance.setOnRenderInstModelMatrix(renderInst, scratchMat4a);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst);
+
+        this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
+    }
+}
+
 async function createPortal2SourceLoadContext(context: SceneContext): Promise<SourceLoadContext> {
     function registerEntityFactories(registry: EntityFactoryRegistry): void {
         registry.registerFactory(trigger_portal_button);
@@ -172,6 +248,7 @@ async function createPortal2SourceLoadContext(context: SceneContext): Promise<So
         registry.registerFactory(prop_under_button);
         registry.registerFactory(prop_under_floor_button);
         registry.registerFactory(prop_testchamber_door);
+        registry.registerFactory(prop_indicator_panel);
     }
 
     const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
@@ -182,6 +259,11 @@ async function createPortal2SourceLoadContext(context: SceneContext): Promise<So
             filesystem.createVPKMount(`${pathBase}/portal2_dlc1/pak01`),
             filesystem.createVPKMount(`${pathBase}/portal2_dlc2/pak01`),
         ]);
+
+        filesystem.loose.push(new LooseMount(`${pathBase}/portal2`, [
+            'particles/particles_manifest.txt',
+        ]));
+
         return filesystem;
     });
 
@@ -359,104 +441,104 @@ const sceneDescs = [
     new Portal2SceneDesc("sp_a1_intro6"),
     new Portal2SceneDesc("sp_a1_intro7"),
     new Portal2SceneDesc("sp_a1_wakeup"),
+    new Portal2SceneDesc("sp_a2_intro"),
+    new Portal2SceneDesc("sp_a2_laser_intro"),
+    new Portal2SceneDesc("sp_a2_laser_stairs"),
+    new Portal2SceneDesc("sp_a2_dual_lasers"),
+    new Portal2SceneDesc("sp_a2_laser_over_goo"),
+    new Portal2SceneDesc("sp_a2_catapult_intro"),
+    new Portal2SceneDesc("sp_a2_trust_fling"),
+    new Portal2SceneDesc("sp_a2_pit_flings"),
+    new Portal2SceneDesc("sp_a2_fizzler_intro"),
+    new Portal2SceneDesc("sp_a2_sphere_peek"),
+    new Portal2SceneDesc("sp_a2_ricochet"),
     new Portal2SceneDesc("sp_a2_bridge_intro"),
     new Portal2SceneDesc("sp_a2_bridge_the_gap"),
+    new Portal2SceneDesc("sp_a2_turret_intro"),
+    new Portal2SceneDesc("sp_a2_laser_relays"),
+    new Portal2SceneDesc("sp_a2_turret_blocker"),
+    new Portal2SceneDesc("sp_a2_laser_vs_turret"),
+    new Portal2SceneDesc("sp_a2_pull_the_rug"),
+    new Portal2SceneDesc("sp_a2_column_blocker"),
+    new Portal2SceneDesc("sp_a2_laser_chaining"),
+    new Portal2SceneDesc("sp_a2_triple_laser"),
     new Portal2SceneDesc("sp_a2_bts1"),
     new Portal2SceneDesc("sp_a2_bts2"),
     new Portal2SceneDesc("sp_a2_bts3"),
     new Portal2SceneDesc("sp_a2_bts4"),
     new Portal2SceneDesc("sp_a2_bts5"),
     new Portal2SceneDesc("sp_a2_bts6"),
-    new Portal2SceneDesc("sp_a2_catapult_intro"),
-    new Portal2SceneDesc("sp_a2_column_blocker"),
     new Portal2SceneDesc("sp_a2_core"),
-    new Portal2SceneDesc("sp_a2_dual_lasers"),
-    new Portal2SceneDesc("sp_a2_fizzler_intro"),
-    new Portal2SceneDesc("sp_a2_intro"),
-    new Portal2SceneDesc("sp_a2_laser_chaining"),
-    new Portal2SceneDesc("sp_a2_laser_intro"),
-    new Portal2SceneDesc("sp_a2_laser_over_goo"),
-    new Portal2SceneDesc("sp_a2_laser_relays"),
-    new Portal2SceneDesc("sp_a2_laser_stairs"),
-    new Portal2SceneDesc("sp_a2_laser_vs_turret"),
-    new Portal2SceneDesc("sp_a2_pit_flings"),
-    new Portal2SceneDesc("sp_a2_pull_the_rug"),
-    new Portal2SceneDesc("sp_a2_ricochet"),
-    new Portal2SceneDesc("sp_a2_sphere_peek"),
-    new Portal2SceneDesc("sp_a2_triple_laser"),
-    new Portal2SceneDesc("sp_a2_trust_fling"),
-    new Portal2SceneDesc("sp_a2_turret_blocker"),
-    new Portal2SceneDesc("sp_a2_turret_intro"),
     new Portal2SceneDesc("sp_a3_00"),
     new Portal2SceneDesc("sp_a3_01"),
     new Portal2SceneDesc("sp_a3_03"),
+    new Portal2SceneDesc("sp_a3_jump_intro"),
     new Portal2SceneDesc("sp_a3_bomb_flings"),
     new Portal2SceneDesc("sp_a3_crazy_box"),
-    new Portal2SceneDesc("sp_a3_end"),
-    new Portal2SceneDesc("sp_a3_jump_intro"),
-    new Portal2SceneDesc("sp_a3_portal_intro"),
-    new Portal2SceneDesc("sp_a3_speed_flings"),
-    new Portal2SceneDesc("sp_a3_speed_ramp"),
     new Portal2SceneDesc("sp_a3_transition01"),
+    new Portal2SceneDesc("sp_a3_speed_ramp"),
+    new Portal2SceneDesc("sp_a3_speed_flings"),
+    new Portal2SceneDesc("sp_a3_portal_intro"),
+    new Portal2SceneDesc("sp_a3_end"),
+    new Portal2SceneDesc("sp_a4_intro"),
+    new Portal2SceneDesc("sp_a4_tb_intro"),
+    new Portal2SceneDesc("sp_a4_tb_trust_drop"),
+    new Portal2SceneDesc("sp_a4_tb_wall_button"),
+    new Portal2SceneDesc("sp_a4_tb_polarity"),
+    new Portal2SceneDesc("sp_a4_tb_catch"),
+    new Portal2SceneDesc("sp_a4_stop_the_box"),
+    new Portal2SceneDesc("sp_a4_laser_catapult"),
+    new Portal2SceneDesc("sp_a4_laser_platform"),
+    new Portal2SceneDesc("sp_a4_speed_tb_catch"),
+    new Portal2SceneDesc("sp_a4_jump_polarity"),
     new Portal2SceneDesc("sp_a4_finale1"),
     new Portal2SceneDesc("sp_a4_finale2"),
     new Portal2SceneDesc("sp_a4_finale3"),
     new Portal2SceneDesc("sp_a4_finale4"),
-    new Portal2SceneDesc("sp_a4_intro"),
-    new Portal2SceneDesc("sp_a4_jump_polarity"),
-    new Portal2SceneDesc("sp_a4_laser_catapult"),
-    new Portal2SceneDesc("sp_a4_laser_platform"),
-    new Portal2SceneDesc("sp_a4_speed_tb_catch"),
-    new Portal2SceneDesc("sp_a4_stop_the_box"),
-    new Portal2SceneDesc("sp_a4_tb_catch"),
-    new Portal2SceneDesc("sp_a4_tb_intro"),
-    new Portal2SceneDesc("sp_a4_tb_polarity"),
-    new Portal2SceneDesc("sp_a4_tb_trust_drop"),
-    new Portal2SceneDesc("sp_a4_tb_wall_button"),
     new Portal2SceneDesc("sp_a5_credits"),
     "Multi-Player",
-    new Portal2SceneDesc("mp_coop_catapult_1"),
-    new Portal2SceneDesc("mp_coop_catapult_2"),
-    new Portal2SceneDesc("mp_coop_catapult_wall_intro"),
-    new Portal2SceneDesc("mp_coop_come_along"),
-    new Portal2SceneDesc("mp_coop_credits"),
-    new Portal2SceneDesc("mp_coop_doors"),
-    new Portal2SceneDesc("mp_coop_fan"),
-    new Portal2SceneDesc("mp_coop_fling_1"),
-    new Portal2SceneDesc("mp_coop_fling_3"),
-    new Portal2SceneDesc("mp_coop_fling_crushers"),
-    new Portal2SceneDesc("mp_coop_infinifling_train"),
-    new Portal2SceneDesc("mp_coop_laser_2"),
-    new Portal2SceneDesc("mp_coop_laser_crusher"),
-    new Portal2SceneDesc("mp_coop_lobby_2"),
-    new Portal2SceneDesc("mp_coop_multifling_1"),
-    new Portal2SceneDesc("mp_coop_paint_bridge"),
-    new Portal2SceneDesc("mp_coop_paint_come_along"),
-    new Portal2SceneDesc("mp_coop_paint_longjump_intro"),
-    new Portal2SceneDesc("mp_coop_paint_red_racer"),
-    new Portal2SceneDesc("mp_coop_paint_redirect"),
-    new Portal2SceneDesc("mp_coop_paint_speed_catch"),
-    new Portal2SceneDesc("mp_coop_paint_speed_fling"),
-    new Portal2SceneDesc("mp_coop_paint_walljumps"),
-    new Portal2SceneDesc("mp_coop_race_2"),
-    new Portal2SceneDesc("mp_coop_rat_maze"),
     new Portal2SceneDesc("mp_coop_start"),
-    new Portal2SceneDesc("mp_coop_tbeam_catch_grind_1"),
+    new Portal2SceneDesc("mp_coop_lobby_2"),
+    new Portal2SceneDesc("mp_coop_doors"),
+    new Portal2SceneDesc("mp_coop_race_2"),
+    new Portal2SceneDesc("mp_coop_laser_2"),
+    new Portal2SceneDesc("mp_coop_rat_maze"),
+    new Portal2SceneDesc("mp_coop_laser_crusher"),
+    new Portal2SceneDesc("mp_coop_teambts"),
+    new Portal2SceneDesc("mp_coop_fling_3"),
+    new Portal2SceneDesc("mp_coop_infinifling_train"),
+    new Portal2SceneDesc("mp_coop_come_along"),
+    new Portal2SceneDesc("mp_coop_fling_1"),
+    new Portal2SceneDesc("mp_coop_catapult_1"),
+    new Portal2SceneDesc("mp_coop_multifling_1"),
+    new Portal2SceneDesc("mp_coop_fling_crushers"),
+    new Portal2SceneDesc("mp_coop_fan"),
+    new Portal2SceneDesc("mp_coop_wall_intro"),
+    new Portal2SceneDesc("mp_coop_wall_2"),
+    new Portal2SceneDesc("mp_coop_catapult_wall_intro"),
+    new Portal2SceneDesc("mp_coop_wall_block"),
+    new Portal2SceneDesc("mp_coop_catapult_2"),
+    new Portal2SceneDesc("mp_coop_turret_walls"),
+    new Portal2SceneDesc("mp_coop_turret_ball"),
+    new Portal2SceneDesc("mp_coop_wall_5"),
+    new Portal2SceneDesc("mp_coop_tbeam_redirect"),
     new Portal2SceneDesc("mp_coop_tbeam_drill"),
-    new Portal2SceneDesc("mp_coop_tbeam_end"),
+    new Portal2SceneDesc("mp_coop_tbeam_catch_grind_1"),
     new Portal2SceneDesc("mp_coop_tbeam_laser_1"),
-    new Portal2SceneDesc("mp_coop_tbeam_maze"),
     new Portal2SceneDesc("mp_coop_tbeam_polarity"),
     new Portal2SceneDesc("mp_coop_tbeam_polarity2"),
     new Portal2SceneDesc("mp_coop_tbeam_polarity3"),
-    new Portal2SceneDesc("mp_coop_tbeam_redirect"),
-    new Portal2SceneDesc("mp_coop_teambts"),
-    new Portal2SceneDesc("mp_coop_turret_ball"),
-    new Portal2SceneDesc("mp_coop_turret_walls"),
-    new Portal2SceneDesc("mp_coop_wall_2"),
-    new Portal2SceneDesc("mp_coop_wall_5"),
-    new Portal2SceneDesc("mp_coop_wall_block"),
-    new Portal2SceneDesc("mp_coop_wall_intro"),
+    new Portal2SceneDesc("mp_coop_tbeam_maze"),
+    new Portal2SceneDesc("mp_coop_tbeam_end"),
+    new Portal2SceneDesc("mp_coop_paint_come_along"),
+    new Portal2SceneDesc("mp_coop_paint_redirect"),
+    new Portal2SceneDesc("mp_coop_paint_bridge"),
+    new Portal2SceneDesc("mp_coop_paint_walljumps"),
+    new Portal2SceneDesc("mp_coop_paint_speed_fling"),
+    new Portal2SceneDesc("mp_coop_paint_red_racer"),
+    new Portal2SceneDesc("mp_coop_paint_speed_catch"),
+    new Portal2SceneDesc("mp_coop_paint_longjump_intro"),
+    new Portal2SceneDesc("mp_coop_credits"),
     "Super 8 Teaser",
     new Portal2SceneDesc("e1912"),
     "Workshop",

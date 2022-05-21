@@ -125,6 +125,24 @@ export class AABB {
         this.maxZ = dstMax[2];
     }
 
+    public offset(src: AABB, offset: ReadonlyVec3): void {
+        this.minX = src.minX + offset[0];
+        this.minY = src.minY + offset[1];
+        this.minZ = src.minZ + offset[2];
+        this.maxX = src.maxX + offset[0];
+        this.maxY = src.maxY + offset[1];
+        this.maxZ = src.maxZ + offset[2];
+    }
+
+    public expandByExtent(src: AABB, extent: ReadonlyVec3): void {
+        this.minX = src.minX - extent[0];
+        this.minY = src.minY - extent[1];
+        this.minZ = src.minZ - extent[2];
+        this.maxX = src.maxX + extent[0];
+        this.maxY = src.maxY + extent[1];
+        this.maxZ = src.maxZ + extent[2];
+    }
+
     public set(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
         this.minX = minX;
         this.minY = minY;

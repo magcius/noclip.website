@@ -79,6 +79,7 @@ const sceneDescs = [
     new PsychonautsSceneDesc("ASRU", "Ruins"),
     "The Milkman Conspiracy",
     new PsychonautsSceneDesc("MMI1", "The Neighborhood"),
+    new PsychonautsSceneDesc("MMI2", "The Book Repository"),
     new PsychonautsSceneDesc("MMDM", "The Den Mother"),
     "Gloria's Theater",
     new PsychonautsSceneDesc("THMS", "The Stage"),
