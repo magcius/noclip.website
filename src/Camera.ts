@@ -153,7 +153,7 @@ const scratchQuat = quat.create();
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
     aabb.centerPoint(v);
     return computeViewSpaceDepthFromWorldSpacePoint(viewMatrix, v);
 }
@@ -169,7 +169,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
+ export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
 }
@@ -251,7 +251,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProj
     // Compute the corners of screen-space square that encloses the sphere.
     for (let xs = -1; xs <= 1; xs += 2) {
         for (let ys = -1; ys <= 1; ys += 2) {
-            vec4.set(v4, viewCenterX + radius * xs, viewCenterY + radius * ys, viewCenterZ, 1.0);
+            vec4.set(v4, viewCenterX + radius*xs, viewCenterY + radius*ys, viewCenterZ, 1.0);
             vec4.transformMat4(v4, v4, camera.projectionMatrix);
             divideByW(v4, v4);
             screenSpaceProjection.union(v4[0], v4[1]);
@@ -293,7 +293,7 @@ export interface CameraControllerClass {
 }
 
 // Movement speeds have been designed for a 60fps experience.
-const FPS = 1000 / 60;
+const FPS = 1000/60;
 
 function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
     // Quantize to nearest world axis.
@@ -310,7 +310,7 @@ export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
     public useViewUp: boolean = true;
-    public onkeymovespeed: () => void = () => { };
+    public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
     private mouseMovement = vec3.create();
@@ -318,7 +318,7 @@ export class FPSCameraController implements CameraController {
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
     private keyMoveSlashMult = 0.1;
-    private keyMoveVelocityMult = 1 / 5;
+    private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
     private keyAngleChangeVelSlow = 0.02;
@@ -587,10 +587,10 @@ export class XRCameraController {
         }
 
         let updated = false;
-        if (!vec3.exactEquals(keyMovement, Vec3Zero)) {
+        if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
             const viewMovementSpace = webXRContext.xrViewerSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
-                    new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), { x: 0, y: 0, z: 1.0, w: 1.0 }));
+                    new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
             const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
 
             if (pose) {
@@ -633,7 +633,7 @@ export class XRCameraController {
             vec3.scaleAndAdd(cameraWorldMatrixTranslation, cameraAdditionalOffset, cameraWorldMatrixTranslation, this.worldScale);
 
             mat4.fromRotationTranslationScale(cameraWorldMatrix, cameraOrientation, cameraWorldMatrixTranslation, cameraScale);
-
+            
             camera.isOrthographic = false;
 
             mat4.copy(camera.worldMatrix, cameraWorldMatrix);
@@ -643,7 +643,7 @@ export class XRCameraController {
             // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
             const cameraProjectionMatrix = xrView.projectionMatrix;
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
-            const fov = 2.0 * Math.atan(1.0 / cameraProjectionMatrix[5]);
+            const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
 
             // Extract camera properties
@@ -666,7 +666,7 @@ export class XRCameraController {
 export class OrbitCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
-    public onkeymovespeed: () => void = () => { };
+    public onkeymovespeed: () => void = () => {};
 
     public x: number = -Math.PI / 2;
     public y: number = 2;
@@ -729,13 +729,13 @@ export class OrbitCameraController implements CameraController {
         // Get new velocities from inputs.
         if (!!(inputManager.buttons & 4)) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
-            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) / 5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xVel += inputManager.dx / -200 * invertXMult;
             this.yVel += inputManager.dy / -200 * invertYMult;
         } else if (shouldOrbit) {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
-                this.orbitXVel += (this.orbitSpeed * 1 / 50);
+                this.orbitXVel += (this.orbitSpeed * 1/50);
         }
         let keyVelX = 0, keyVelY = 0;
         if (inputManager.isKeyDown('KeyA'))
@@ -817,7 +817,7 @@ function snapToMultIncr(n: number, incr: number): number {
 export class OrthoCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
-    public onkeymovespeed: () => void = () => { };
+    public onkeymovespeed: () => void = () => {};
 
     public x: number = -Math.PI / 2;
     public y: number = 2;
@@ -902,12 +902,12 @@ export class OrthoCameraController implements CameraController {
         // Get new velocities from inputs.
         if (!!(inputManager.buttons & 4)) {
             this.txVel += inputManager.dx * (-10 - Math.min(-this.z, 0.01)) / -5000;
-            this.tyVel += inputManager.dy * (-10 - Math.min(-this.z, 0.01)) / 5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(-this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xTarget += inputManager.dx / 200 * invertXMult;
             this.yTarget += inputManager.dy / 200 * invertYMult;
         } else if (shouldOrbit) {
-            this.xTarget += this.orbitSpeed * 1 / 25;
+            this.xTarget += this.orbitSpeed * 1/25;
         }
 
         let zTargetAdjAmt = inputManager.dz * 80.0;
@@ -987,19 +987,19 @@ export class OrthoCameraController implements CameraController {
 }
 
 export function serializeMat4(view: DataView, byteOffs: number, m: mat4): number {
-    view.setFloat32(byteOffs + 0x00, m[0], true);
-    view.setFloat32(byteOffs + 0x04, m[4], true);
-    view.setFloat32(byteOffs + 0x08, m[8], true);
+    view.setFloat32(byteOffs + 0x00, m[0],  true);
+    view.setFloat32(byteOffs + 0x04, m[4],  true);
+    view.setFloat32(byteOffs + 0x08, m[8],  true);
     view.setFloat32(byteOffs + 0x0C, m[12], true);
-    view.setFloat32(byteOffs + 0x10, m[1], true);
-    view.setFloat32(byteOffs + 0x14, m[5], true);
-    view.setFloat32(byteOffs + 0x18, m[9], true);
+    view.setFloat32(byteOffs + 0x10, m[1],  true);
+    view.setFloat32(byteOffs + 0x14, m[5],  true);
+    view.setFloat32(byteOffs + 0x18, m[9],  true);
     view.setFloat32(byteOffs + 0x1C, m[13], true);
-    view.setFloat32(byteOffs + 0x20, m[2], true);
-    view.setFloat32(byteOffs + 0x24, m[6], true);
+    view.setFloat32(byteOffs + 0x20, m[2],  true);
+    view.setFloat32(byteOffs + 0x24, m[6],  true);
     view.setFloat32(byteOffs + 0x28, m[10], true);
     view.setFloat32(byteOffs + 0x2C, m[14], true);
-    return 0x04 * 4 * 3;
+    return 0x04*4*3;
 }
 
 export function serializeCamera(view: DataView, byteOffs: number, camera: Camera): number {
@@ -1008,51 +1008,51 @@ export function serializeCamera(view: DataView, byteOffs: number, camera: Camera
 
 export function deserializeCamera(camera: Camera, view: DataView, byteOffs: number): number {
     const m = camera.worldMatrix;
-    m[0] = view.getFloat32(byteOffs + 0x00, true);
-    m[4] = view.getFloat32(byteOffs + 0x04, true);
-    m[8] = view.getFloat32(byteOffs + 0x08, true);
+    m[0]  = view.getFloat32(byteOffs + 0x00, true);
+    m[4]  = view.getFloat32(byteOffs + 0x04, true);
+    m[8]  = view.getFloat32(byteOffs + 0x08, true);
     m[12] = view.getFloat32(byteOffs + 0x0C, true);
-    m[1] = view.getFloat32(byteOffs + 0x10, true);
-    m[5] = view.getFloat32(byteOffs + 0x14, true);
-    m[9] = view.getFloat32(byteOffs + 0x18, true);
+    m[1]  = view.getFloat32(byteOffs + 0x10, true);
+    m[5]  = view.getFloat32(byteOffs + 0x14, true);
+    m[9]  = view.getFloat32(byteOffs + 0x18, true);
     m[13] = view.getFloat32(byteOffs + 0x1C, true);
-    m[2] = view.getFloat32(byteOffs + 0x20, true);
-    m[6] = view.getFloat32(byteOffs + 0x24, true);
+    m[2]  = view.getFloat32(byteOffs + 0x20, true);
+    m[6]  = view.getFloat32(byteOffs + 0x24, true);
     m[10] = view.getFloat32(byteOffs + 0x28, true);
     m[14] = view.getFloat32(byteOffs + 0x2C, true);
-    m[3] = 0;
-    m[7] = 0;
+    m[3]  = 0;
+    m[7]  = 0;
     m[11] = 0;
     m[15] = 1;
     mat4.invert(camera.viewMatrix, camera.worldMatrix);
     camera.worldMatrixUpdated();
-    return 0x04 * 4 * 3;
+    return 0x04*4*3;
 }
 
 function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
     const projMtx = camera.projectionMatrix;
 
     // Avoid multiplications where we know the result will be 0.
-    dst[0] = projMtx[0] * scaleS;
-    dst[4] = 0.0;
-    dst[8] = projMtx[8] * scaleS + projMtx[11] * transS;
+    dst[0]  = projMtx[0]  * scaleS;
+    dst[4]  = 0.0;
+    dst[8]  = projMtx[8]  * scaleS + projMtx[11] * transS;
     dst[12] = projMtx[12] * scaleS + projMtx[15] * transS;
 
-    dst[1] = 0.0;
-    dst[5] = projMtx[5] * scaleT;
-    dst[9] = projMtx[9] * scaleT + projMtx[11] * transT;
+    dst[1]  = 0.0;
+    dst[5]  = projMtx[5]  * scaleT;
+    dst[9]  = projMtx[9]  * scaleT + projMtx[11] * transT;
     dst[13] = projMtx[12] * scaleT + projMtx[15] * transT;
 
     // Move from third column.
-    dst[2] = 0.0;
-    dst[6] = 0.0;
+    dst[2]  = 0.0;
+    dst[6]  = 0.0;
     dst[10] = projMtx[11];
     dst[14] = projMtx[15];
 
     // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
     // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
+    dst[3]  = 9999.0;
+    dst[7]  = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
 }
