@@ -1,6 +1,6 @@
-import { DataFetcher } from "../DataFetcher";
+
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext } from "../SceneBase";
+import { Destroyable, SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
 import { parseStagedefLz } from "./Stagedef";
 import { Renderer } from "./Render";
@@ -10,6 +10,11 @@ import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
 import { StageData } from "./World";
 import { decompressLZ } from "./AVLZ";
+
+// TODO(jstpierre): Move display list loading to destroyable GmaData rather than
+// this stupid hack...
+interface DestroyableGma extends Gma.Gma, Destroyable {
+}
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -24,43 +29,61 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const stageData = await this.fetchStage(context.dataFetcher, this.stageId);
+        const stageData = await this.fetchStage(context, this.stageId);
         return new Renderer(device, stageData);
     }
 
-    private async fetchStage(dataFetcher: DataFetcher, stageId: StageId): Promise<StageData> {
+    private async fetchStage(context: SceneContext, stageId: StageId): Promise<StageData> {
         const gameFilesPath = "SuperMonkeyBall1/test";
+
+        const dataFetcher = context.dataFetcher;
+        const dataShare = context.dataShare;
+
         const stageIdStr = `${leftPad(stageId.toString(), 3, "0")}`;
         const stagedefPath = `${gameFilesPath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
         const stageGmaPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.gma`;
         const stageTplPath = `${gameFilesPath}/st${stageIdStr}/st${stageIdStr}.tpl`;
         const stageInfo = assertExists(STAGE_INFO_MAP.get(stageId));
 
+        const commonGmaP = dataShare.ensureObject<DestroyableGma>(`${gameFilesPath}/Common`, async () => {
+            const commonGmaPath = `${gameFilesPath}/init/common.gma.lz`;
+            const commonTplPath = `${gameFilesPath}/init/common.tpl.lz`;
+            const [gmaBuf, tplBuf] = await Promise.all([
+                dataFetcher.fetchData(commonGmaPath),
+                dataFetcher.fetchData(commonTplPath),
+            ]);
+            const tpl = parseAVTpl(decompressLZ(tplBuf), "common");
+            const gma = Gma.parseGma(decompressLZ(gmaBuf), tpl) as unknown as DestroyableGma;
+            gma.destroy = () => {}; // HACK
+            return gma;
+        });
+
         const bgFilename = stageInfo.bgInfo.fileName;
-        const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
-        const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
+        const bgGmaP = dataShare.ensureObject<DestroyableGma>(`${gameFilesPath}/bg/${bgFilename}`, async () => {
+            const bgGmaPath = `${gameFilesPath}/bg/${bgFilename}.gma`;
+            const bgTplPath = `${gameFilesPath}/bg/${bgFilename}.tpl`;
+            const [gmaBuf, tplBuf] = await Promise.all([
+                dataFetcher.fetchData(bgGmaPath),
+                dataFetcher.fetchData(bgTplPath),
+            ]);
+            const tpl = parseAVTpl(tplBuf, bgFilename);
+            const gma = Gma.parseGma(gmaBuf, tpl) as unknown as DestroyableGma;
+            gma.destroy = () => {}; // HACK
+            return gma;
+        });
 
-        const commonGmaPath = `${gameFilesPath}/init/common.gma.lz`;
-        const commonTplPath = `${gameFilesPath}/init/common.tpl.lz`;
-
-        const [stagedefBuf, stageGmaBuf, stageTplBuf, bgGmaBuf, bgTplBuf, commonGmaBuf, commonTplBuf] =
+        const [commonGma, bgGma, stagedefBuf, stageGmaBuf, stageTplBuf] =
             await Promise.all([
+                commonGmaP,
+                bgGmaP,
                 dataFetcher.fetchData(stagedefPath),
                 dataFetcher.fetchData(stageGmaPath),
                 dataFetcher.fetchData(stageTplPath),
-                dataFetcher.fetchData(bgGmaPath),
-                dataFetcher.fetchData(bgTplPath),
-                dataFetcher.fetchData(commonGmaPath),
-                dataFetcher.fetchData(commonTplPath),
             ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
-        const bgTpl = parseAVTpl(bgTplBuf, bgFilename);
-        const bgGma = Gma.parseGma(bgGmaBuf, bgTpl);
-        const commonTpl = parseAVTpl(decompressLZ(commonTplBuf), "common");
-        const commonGma = Gma.parseGma(decompressLZ(commonGmaBuf), commonTpl);
 
         return { stageInfo, stagedef, stageGma, bgGma, commonGma };
     }
