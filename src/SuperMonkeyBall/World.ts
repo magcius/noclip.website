@@ -6,6 +6,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GX_Program } from "../gx/gx_material";
 import {
     MathConstants,
+    setMatrixTranslation,
     transformVec3Mat4w0,
     transformVec3Mat4w1,
     Vec3UnitX,
@@ -238,9 +239,7 @@ class Banana {
         mat4.rotateY(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.yRotRadians);
         const pos_rt_view = scratchVec3c;
         transformVec3Mat4w1(pos_rt_view, viewFromAnimGroup, this.bananaData.pos);
-        rp.viewFromModel[12] = pos_rt_view[0];
-        rp.viewFromModel[13] = pos_rt_view[1];
-        rp.viewFromModel[14] = pos_rt_view[2];
+        setMatrixTranslation(rp.viewFromModel, pos_rt_view);
 
         this.model.prepareToRender(ctx, rp);
     }
