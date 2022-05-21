@@ -18,7 +18,8 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
     constructor(stageId: StageId, name: string) {
         this.stageId = stageId;
-        this.id = name;
+        const stageIdStr = `st${leftPad(stageId.toString(), 3, "0")}`;
+        this.id = stageIdStr;
         this.name = name;
     }
 
