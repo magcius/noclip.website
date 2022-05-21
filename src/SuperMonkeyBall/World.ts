@@ -100,23 +100,28 @@ class AnimGroup {
             vec3.scale(rotRadians, this.igData.originRot, S16_TO_RADIANS);
             const anim = this.igData.anim;
 
-            if (anim.posXKeyframes.length !== 0) {
-                translation[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
-            }
-            if (anim.posYKeyframes.length !== 0) {
-                translation[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
-            }
-            if (anim.posZKeyframes.length !== 0) {
-                translation[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
-            }
-            if (anim.rotXKeyframes.length !== 0) {
-                rotRadians[0] = interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
-            }
-            if (anim.rotYKeyframes.length !== 0) {
-                rotRadians[1] = interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
-            }
-            if (anim.rotZKeyframes.length !== 0) {
-                rotRadians[2] = interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
+            if (anim !== null) {
+                if (anim.posXKeyframes.length !== 0) {
+                    translation[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
+                }
+                if (anim.posYKeyframes.length !== 0) {
+                    translation[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
+                }
+                if (anim.posZKeyframes.length !== 0) {
+                    translation[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
+                }
+                if (anim.rotXKeyframes.length !== 0) {
+                    rotRadians[0] =
+                        interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
+                }
+                if (anim.rotYKeyframes.length !== 0) {
+                    rotRadians[1] =
+                        interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
+                }
+                if (anim.rotZKeyframes.length !== 0) {
+                    rotRadians[2] =
+                        interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
+                }
             }
 
             mat4.fromTranslation(this.worldFromAg, translation);
@@ -291,9 +296,10 @@ class Bumper {
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);
         mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[2]);
-        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[1] + this.yRotRadians);
+        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[1]);
         mat4.rotateX(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[0]);
         mat4.scale(rp.viewFromModel, rp.viewFromModel, this.bumperData.scale);
+        mat4.rotateY(rp.viewFromModel, rp.viewFromModel, this.yRotRadians);
 
         this.model.prepareToRender(ctx, rp);
     }

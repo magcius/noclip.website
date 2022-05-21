@@ -186,7 +186,7 @@ export type AnimGroup = {
     originPos: vec3;
     originRot: vec3;
     animType: AnimType;
-    anim: AnimGroupAnim;
+    anim: AnimGroupAnim | null;
     // conveyorVel: vec3;
 
     coliTris: ColiTri[];
@@ -605,7 +605,10 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const initRot = parseVec3s(view, coliHeaderOffs + 0xc);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
-        const animHeader = parseAnimGroupAnim(view, animHeaderOffs);
+        let anim: AnimGroupAnim | null = null;
+        if (animHeaderOffs !== 0) {
+            anim = parseAnimGroupAnim(view, animHeaderOffs);
+        }
         // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,
@@ -710,7 +713,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
             originPos: initPos,
             originRot: initRot,
             animType: animType,
-            anim: animHeader,
+            anim: anim,
             // conveyorVel: conveyorVel,
 
             coliTris: coliTris,
