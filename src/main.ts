@@ -84,6 +84,7 @@ import * as Scenes_JetSetRadio from './JetSetRadio/Scenes';
 import * as Scenes_Subnautica from './Subnautica/scenes';
 import * as Scenes_Glover from './Glover/scenes';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife';
+import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -129,6 +130,7 @@ const sceneGroups = [
     Scenes_PaperMario_TheThousandYearDoor.sceneGroup,
     Scenes_Pikmin2.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,
+    Scenes_SuperMonkeyBall.sceneGroup,
     Scenes_SuperMarioSunshine.sceneGroup,
     Scenes_Zelda_TwilightPrincess.sceneGroup,
     Scenes_Zelda_TheWindWaker.sceneGroup,
