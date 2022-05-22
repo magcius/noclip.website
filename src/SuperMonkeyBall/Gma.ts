@@ -366,6 +366,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     // Parse shapes
     for (let i = 0; i < allMaterialCount; i++) {
         const shape = parseShape(shapeBuff.slice(shapeOffs), i);
+        shapeOffs += shape.size;
         if (shape.material.vtxAttrs & (1 << GX.Attr._NBT)) {
             // TODO: support this?
             continue;
@@ -375,7 +376,6 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
             continue;
         }
         shapes.push(shape);
-        shapeOffs += shape.size;
     }
 
     return {
