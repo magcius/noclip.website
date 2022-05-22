@@ -132,7 +132,7 @@ export type BgModel = {
 // }
 
 // Visual model for the stage itself, parented to anim groups
-export type LevelModel = {
+export type AnimGroupModel = {
     flags: number;
     modelName: string;
 };
@@ -207,7 +207,7 @@ export type AnimGroup = {
     coliCones: ColiCone[];
     coliSpheres: ColiSphere[];
     coliCylinders: ColiCylinder[];
-    levelModels: LevelModel[];
+    animGroupModels: AnimGroupModel[];
 };
 
 export type StageModelPtrA = {
@@ -242,7 +242,7 @@ export type Stage = {
     bumpers: Bumper[];
     jamabars: Jamabar[];
     bananas: Banana[];
-    levelModels: LevelModel[];
+    levelModels: AnimGroupModel[];
     bgModels: BgModel[];
     fgModels: BgModel[]; // Like bg models but tilt with the stage, equivalent for us
     // reflectiveModels: ReflectiveModel[];
@@ -306,7 +306,7 @@ const COLI_CYLINDER_SIZE = 0x1c;
 const BG_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
-const LEVEL_MODEL_SIZE = 0xc;
+const ANIM_GROUP_MODEL_SIZE = 0xc;
 const BG_ANIM_SIZE = 0x60;
 
 function parseVec3f(view: DataView, offset: number): vec3 {
@@ -550,15 +550,15 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
     //     falloutVolumes.push({ pos, size, rot });
     // }
 
-    // Level models
-    const levelModelCount = view.getUint32(0x58);
-    const levelModelListOffs = view.getUint32(0x5c);
-    const levelModels: LevelModel[] = [];
-    for (let i = 0; i < levelModelCount; i++) {
-        const levelModelOffs = levelModelListOffs + i * LEVEL_MODEL_SIZE;
+    // Anim group models
+    const animGroupModelCount = view.getUint32(0x58);
+    const animGroupModelListOffs = view.getUint32(0x5c);
+    const animGroupModels: AnimGroupModel[] = [];
+    for (let i = 0; i < animGroupModelCount; i++) {
+        const levelModelOffs = animGroupModelListOffs + i * ANIM_GROUP_MODEL_SIZE;
         const flags = view.getUint32(levelModelOffs + 0x0);
         const modelName = readString(buffer, view.getUint32(levelModelOffs + 0x4));
-        levelModels.push({ flags, modelName });
+        animGroupModels.push({ flags, modelName });
     }
 
     const bgModels = parseBgModelList(buffer, 0x68);
@@ -695,12 +695,12 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
             coliCylinderListOffs,
             COLI_CYLINDER_SIZE
         );
-        const subLevelModels = parseSlicedList(
+        const subAnimGroupModels = parseSlicedList(
             view,
             coliHeaderOffs + 0x7c,
-            levelModels,
-            levelModelListOffs,
-            LEVEL_MODEL_SIZE
+            animGroupModels,
+            animGroupModelListOffs,
+            ANIM_GROUP_MODEL_SIZE
         );
         // const subFalloutVolumes = parseSlicedList(view, coliHeaderOffs + 0x7C, falloutVolumes, falloutVolumeListOffs, FALLOUT_VOLUME_SIZE);
         // TODO reflective stage models, stage model instances, model A/B ptr
@@ -732,7 +732,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
             coliCones: subColiCones,
             coliSpheres: subColiSpheres,
             coliCylinders: subColiCylinders,
-            levelModels: subLevelModels,
+            animGroupModels: subAnimGroupModels,
             // reflectiveStageModels: [],
             // stageModelInstances: [],
             // stageModelPtrB: [],
@@ -751,7 +751,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         bumpers,
         jamabars,
         bananas,
-        levelModels,
+        levelModels: animGroupModels,
         bgModels,
         fgModels,
         // reflectiveModels: [],

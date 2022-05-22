@@ -23,7 +23,7 @@ import { ModelInst, RenderParams, RenderSort } from "./Model";
 import { GmaSrc, ModelCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
-import { BgInfo, CommonGmaModelIDs, StageInfo } from "./StageInfo";
+import { BgInfo, CommonGmaModelIDs, StageId, StageInfo } from "./StageInfo";
 import { MkbTime, S16_TO_RADIANS, Sphere } from "./Utils";
 import * as GX_Material from "../gx/gx_material";
 import { SpotFunction } from "../gx/gx_enum";
@@ -45,6 +45,7 @@ const scratchVec3b = vec3.create();
 const scratchMat4a = mat4.create();
 class AnimGroup {
     private models: ModelInst[];
+    private blurBridgeAccordionModel: ModelInst | null = null;
     private worldFromAg: mat4;
     private originFromAg: mat4;
     private agData: SD.AnimGroup;
@@ -52,11 +53,15 @@ class AnimGroup {
     private goals: Goal[];
     private bumpers: Bumper[];
 
+    // Current translation, needed directly for blur bridge
+    private translation = vec3.create();
+    private loopedTimeSeconds = 0;
+
     constructor(modelCache: ModelCache, private stageData: StageData, private animGroupIdx: number) {
         this.agData = stageData.stagedef.animGroups[animGroupIdx];
         this.models = [];
-        for (let i = 0; i < this.agData.levelModels.length; i++) {
-            const name = this.agData.levelModels[i].modelName;
+        for (let i = 0; i < this.agData.animGroupModels.length; i++) {
+            const name = this.agData.animGroupModels[i].modelName;
             const modelInst = modelCache.getModel(name);
             if (modelInst !== null) {
                 this.models.push(modelInst);
@@ -83,49 +88,52 @@ class AnimGroup {
         this.bananas = this.agData.bananas.map((ban) => new Banana(modelCache, ban));
         this.goals = this.agData.goals.map((goal) => new Goal(modelCache, goal));
         this.bumpers = this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
+
+        if (stageData.stageInfo.id === StageId.St101_Blur_Bridge) {
+            this.blurBridgeAccordionModel = assertExists(modelCache.getModel("MOT_STAGE101_BLUR"));
+        }
     }
 
     public update(t: MkbTime): void {
         // Check if this is the world space anim group
         if (this.animGroupIdx > 0) {
-            const loopedTimeSeconds = loopWrap(
+            this.loopedTimeSeconds = loopWrap(
                 t.getAnimTimeSeconds(),
                 this.stageData.stagedef.loopStartSeconds,
                 this.stageData.stagedef.loopEndSeconds
             );
 
             // Use initial values if there are no corresponding keyframes
-            const translation = scratchVec3a;
-            vec3.copy(translation, this.agData.originPos);
+            vec3.copy(this.translation, this.agData.originPos);
             const rotRadians = scratchVec3b;
             vec3.scale(rotRadians, this.agData.originRot, S16_TO_RADIANS);
             const anim = this.agData.anim;
 
             if (anim !== null) {
                 if (anim.posXKeyframes.length !== 0) {
-                    translation[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
+                    this.translation[0] = interpolateKeyframes(this.loopedTimeSeconds, anim.posXKeyframes);
                 }
                 if (anim.posYKeyframes.length !== 0) {
-                    translation[1] = interpolateKeyframes(loopedTimeSeconds, anim.posYKeyframes);
+                    this.translation[1] = interpolateKeyframes(this.loopedTimeSeconds, anim.posYKeyframes);
                 }
                 if (anim.posZKeyframes.length !== 0) {
-                    translation[2] = interpolateKeyframes(loopedTimeSeconds, anim.posZKeyframes);
+                    this.translation[2] = interpolateKeyframes(this.loopedTimeSeconds, anim.posZKeyframes);
                 }
                 if (anim.rotXKeyframes.length !== 0) {
                     rotRadians[0] =
-                        interpolateKeyframes(loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
+                        interpolateKeyframes(this.loopedTimeSeconds, anim.rotXKeyframes) * MathConstants.DEG_TO_RAD;
                 }
                 if (anim.rotYKeyframes.length !== 0) {
                     rotRadians[1] =
-                        interpolateKeyframes(loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
+                        interpolateKeyframes(this.loopedTimeSeconds, anim.rotYKeyframes) * MathConstants.DEG_TO_RAD;
                 }
                 if (anim.rotZKeyframes.length !== 0) {
                     rotRadians[2] =
-                        interpolateKeyframes(loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
+                        interpolateKeyframes(this.loopedTimeSeconds, anim.rotZKeyframes) * MathConstants.DEG_TO_RAD;
                 }
             }
 
-            mat4.fromTranslation(this.worldFromAg, translation);
+            mat4.fromTranslation(this.worldFromAg, this.translation);
             mat4.rotateZ(this.worldFromAg, this.worldFromAg, rotRadians[2]);
             mat4.rotateY(this.worldFromAg, this.worldFromAg, rotRadians[1]);
             mat4.rotateX(this.worldFromAg, this.worldFromAg, rotRadians[0]);
@@ -140,10 +148,43 @@ class AnimGroup {
         }
     }
 
+    private drawBlurBridgeAccordion(ctx: RenderContext, lighting: Lighting): void {
+        if (
+            this.blurBridgeAccordionModel === null ||
+            this.animGroupIdx === 0 ||
+            this.agData.animGroupModels.length === 0 ||
+            this.agData.anim === null
+        ) {
+            return;
+        }
+
+        const rp = scratchRenderParams;
+        rp.reset();
+        rp.lighting = lighting;
+
+        const accordionPos = scratchVec3a;
+        vec3.copy(accordionPos, this.translation);
+
+        const prevX = interpolateKeyframes(this.loopedTimeSeconds - 0.5, this.agData.anim.posXKeyframes);
+        const flip = prevX >= accordionPos[0];
+        const deltaX = Math.abs(prevX - accordionPos[0]);
+        accordionPos[0] = (accordionPos[0] + prevX) / 2 + (flip ? 1 : -1);
+
+        mat4.translate(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, accordionPos);
+        if (flip) {
+            mat4.rotateY(rp.viewFromModel, rp.viewFromModel, Math.PI);
+        }
+
+        const scale = scratchVec3a;
+        vec3.set(scale, deltaX / 2, 1, 1);
+        mat4.scale(rp.viewFromModel, rp.viewFromModel, scale);
+
+        this.blurBridgeAccordionModel.prepareToRender(ctx, rp);
+    }
+
     public prepareToRender(ctx: RenderContext, lighting: Lighting) {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         const viewFromAnimGroup = scratchMat4a;
@@ -162,49 +203,51 @@ class AnimGroup {
         for (let i = 0; i < this.bumpers.length; i++) {
             this.bumpers[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
         }
+
+        this.drawBlurBridgeAccordion(ctx, lighting);
     }
 }
 
 export class Lighting {
     public ambientColor: Color;
-    public infLight_rt_view: GX_Material.Light;
+    public infLightViewSpace: GX_Material.Light;
 
-    private infLight_rt_world: GX_Material.Light;
+    private infLightWorldSpace: GX_Material.Light;
 
     constructor(bgInfo: BgInfo) {
         this.ambientColor = colorNewCopy(bgInfo.ambientColor);
 
-        this.infLight_rt_world = new GX_Material.Light();
-        this.infLight_rt_view = new GX_Material.Light();
+        this.infLightWorldSpace = new GX_Material.Light();
+        this.infLightViewSpace = new GX_Material.Light();
 
-        colorCopy(this.infLight_rt_world.Color, bgInfo.infLightColor);
+        colorCopy(this.infLightWorldSpace.Color, bgInfo.infLightColor);
 
-        vec3.set(this.infLight_rt_world.Position, 0, 0, -1);
+        vec3.set(this.infLightWorldSpace.Position, 0, 0, -1);
         vec3.rotateX(
-            this.infLight_rt_world.Position,
-            this.infLight_rt_world.Position,
+            this.infLightWorldSpace.Position,
+            this.infLightWorldSpace.Position,
             Vec3Zero,
             S16_TO_RADIANS * bgInfo.infLightRotX
         );
         vec3.rotateY(
-            this.infLight_rt_world.Position,
-            this.infLight_rt_world.Position,
+            this.infLightWorldSpace.Position,
+            this.infLightWorldSpace.Position,
             Vec3Zero,
             S16_TO_RADIANS * bgInfo.infLightRotY
         );
         // Move point light far away to emulate directional light
-        vec3.scale(this.infLight_rt_world.Position, this.infLight_rt_world.Position, 10000);
+        vec3.scale(this.infLightWorldSpace.Position, this.infLightWorldSpace.Position, 10000);
 
-        GX_Material.lightSetSpot(this.infLight_rt_world, 0, SpotFunction.OFF);
+        GX_Material.lightSetSpot(this.infLightWorldSpace, 0, SpotFunction.OFF);
 
-        this.infLight_rt_view.copy(this.infLight_rt_world);
+        this.infLightViewSpace.copy(this.infLightWorldSpace);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput) {
         transformVec3Mat4w0(
-            this.infLight_rt_view.Position,
+            this.infLightViewSpace.Position,
             viewerInput.camera.viewMatrix,
-            this.infLight_rt_world.Position
+            this.infLightWorldSpace.Position
         );
     }
 }
@@ -230,16 +273,16 @@ class Banana {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
+        rp.reset();
         rp.sort = RenderSort.None;
         rp.lighting = lighting;
 
         // Bananas' positions are parented to their anim group, but they have a global rotation in
         // world space
         mat4.rotateY(rp.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.yRotRadians);
-        const pos_rt_view = scratchVec3c;
-        transformVec3Mat4w1(pos_rt_view, viewFromAnimGroup, this.bananaData.pos);
-        setMatrixTranslation(rp.viewFromModel, pos_rt_view);
+        const posViewSpace = scratchVec3c;
+        transformVec3Mat4w1(posViewSpace, viewFromAnimGroup, this.bananaData.pos);
+        setMatrixTranslation(rp.viewFromModel, posViewSpace);
 
         this.model.prepareToRender(ctx, rp);
     }
@@ -261,8 +304,7 @@ class Goal {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.goalData.pos);
@@ -290,8 +332,7 @@ class Bumper {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);
