@@ -371,10 +371,6 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
             // TODO: support this?
             continue;
         }
-        if (shape.material.tevLayerIdxs[0] < 0) {
-            // TODO(complexplane): Support 0 TEV layer shapes
-            continue;
-        }
         shapes.push(shape);
     }
 
