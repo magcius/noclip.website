@@ -45,7 +45,7 @@ const scratchVec3b = vec3.create();
 const scratchMat4a = mat4.create();
 class AnimGroup {
     private models: ModelInst[];
-    private blurBridgeAcoordionModel: ModelInst | null;
+    private blurBridgeAcoordionModel: ModelInst | null = null;
     private worldFromAg: mat4;
     private originFromAg: mat4;
     private agData: SD.AnimGroup;
@@ -182,7 +182,6 @@ class AnimGroup {
         mat4.scale(rp.viewFromModel, rp.viewFromModel, scale);
 
         this.blurBridgeAcoordionModel.prepareToRender(ctx, rp);
-        console.log("Drew blur bridge accordion for ID", this.animGroupIdx);
     }
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting) {
