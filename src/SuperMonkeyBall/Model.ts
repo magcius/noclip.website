@@ -60,11 +60,11 @@ export class ModelInst {
         mat4.getScaling(scale, renderParams.viewFromModel);
         const maxScale = Math.max(...scale);
 
-        const center_rt_world = scratchVec3a;
-        transformVec3Mat4w1(center_rt_world, renderParams.viewFromModel, this.modelData.boundSphereCenter);
-        transformVec3Mat4w1(center_rt_world, ctx.viewerInput.camera.worldMatrix, center_rt_world);
+        const centerWorldSpace = scratchVec3a;
+        transformVec3Mat4w1(centerWorldSpace, renderParams.viewFromModel, this.modelData.boundSphereCenter);
+        transformVec3Mat4w1(centerWorldSpace, ctx.viewerInput.camera.worldMatrix, centerWorldSpace);
         const inFrustum = ctx.viewerInput.camera.frustum.containsSphere(
-            center_rt_world,
+            centerWorldSpace,
             this.modelData.boundSphereRadius * maxScale
         );
         if (!inFrustum) return;

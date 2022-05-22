@@ -184,9 +184,9 @@ export class ShapeInst {
                 (this.translucent && renderParams.sort === RenderSort.Translucent) ||
                 renderParams.sort === RenderSort.All
             ) {
-                const origin_rt_view = scratchVec3a;
-                transformVec3Mat4w1(origin_rt_view, renderParams.viewFromModel, this.shapeData.origin);
-                inst.sortKey = -vec3.sqrLen(origin_rt_view);
+                const originViewSpace = scratchVec3a;
+                transformVec3Mat4w1(originViewSpace, renderParams.viewFromModel, this.shapeData.origin);
+                inst.sortKey = -vec3.sqrLen(originViewSpace);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {
                 ctx.opaqueInstList.submitRenderInst(inst);
