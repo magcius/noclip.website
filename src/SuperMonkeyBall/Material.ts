@@ -93,9 +93,6 @@ export class MaterialInst {
             this.tevLayers.push(modelTevLayers[tevLayerIdx]);
         }
 
-        if (this.tevLayers.length === 0)
-            assert(!!(materialData.flags & Gma.MaterialFlags.SimpleMaterial));
-
         this.genGXMaterial();
     }
 
@@ -173,7 +170,33 @@ export class MaterialInst {
             texGenSrc: GX.TexGenSrc.TEX0,
         };
 
-        if (this.tevLayers.length !== 0) {
+        if (this.materialData.flags & Gma.MaterialFlags.SimpleMaterial) {
+            mb.setTevOrder(
+                buildState.stage,
+                GX.TexCoordID.TEXCOORD_NULL,
+                GX.TexMapID.TEXMAP_NULL,
+                GX.RasColorChannelID.COLOR0A0
+            );
+            mb.setTevColorIn(buildState.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
+            mb.setTevColorOp(
+                buildState.stage,
+                GX.TevOp.ADD,
+                GX.TevBias.ZERO,
+                GX.TevScale.SCALE_1,
+                true,
+                GX.Register.PREV
+            );
+            mb.setTevAlphaIn(buildState.stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, alphaIn);
+            mb.setTevAlphaOp(
+                buildState.stage,
+                GX.TevOp.ADD,
+                GX.TevBias.ZERO,
+                GX.TevScale.SCALE_1,
+                true,
+                GX.Register.PREV
+            );
+            buildState.stage++;
+        } else {
             for (let layerIdx = 0; layerIdx < this.tevLayers.length; layerIdx++) {
                 const layer = this.tevLayers[layerIdx];
                 const layerTypeFlags =
@@ -193,13 +216,6 @@ export class MaterialInst {
                 colorIn = GX.CC.CPREV;
                 alphaIn = GX.CA.APREV;
             }
-        } else {
-            mb.setTevOrder(buildState.stage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(buildState.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
-            mb.setTevColorOp(buildState.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaIn(buildState.stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, alphaIn);
-            mb.setTevAlphaOp(buildState.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            buildState.stage++;
         }
 
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
