@@ -88,11 +88,8 @@ export class MaterialInst {
     ) {
         this.tevLayers = [];
 
-        for (let i = 0; i < materialData.tevLayerIdxs.length; i++) {
+        for (let i = 0; i < materialData.tevLayerCount; i++) {
             const tevLayerIdx = materialData.tevLayerIdxs[i];
-            // Materials can use 0 to 3 TEV layers defined in the model. The first -1 TEV layer  index
-            // denotes the end of the list.
-            if (tevLayerIdx < 0) break;
             this.tevLayers.push(modelTevLayers[tevLayerIdx]);
         }
 
