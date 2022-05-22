@@ -158,10 +158,8 @@ class AnimGroup {
             return;
         }
 
-        // TODO(complexplane): Add a reset() method to RenderParams
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         const accordionPos = scratchVec3a;
@@ -186,8 +184,7 @@ class AnimGroup {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting) {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         const viewFromAnimGroup = scratchMat4a;
@@ -276,7 +273,7 @@ class Banana {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
+        rp.reset();
         rp.sort = RenderSort.None;
         rp.lighting = lighting;
 
@@ -307,8 +304,7 @@ class Goal {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.goalData.pos);
@@ -336,8 +332,7 @@ class Bumper {
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
-        rp.alpha = 1.0;
-        rp.sort = RenderSort.Translucent;
+        rp.reset();
         rp.lighting = lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);

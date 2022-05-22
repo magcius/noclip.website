@@ -21,10 +21,22 @@ export const enum RenderSort {
 
 export class RenderParams {
     public viewFromModel = mat4.create();
-    public alpha = 1;
-    public sort = RenderSort.Translucent;
+    public alpha: number;
+    public sort: RenderSort;
     public texMtx = mat4.create();
-    public lighting: Lighting | null = null;
+    public lighting: Lighting | null;
+
+    constructor() {
+        this.reset();
+    }
+
+    public reset(): void {
+        mat4.identity(this.viewFromModel);
+        this.alpha = 1;
+        this.sort = RenderSort.Translucent;
+        mat4.identity(this.texMtx);
+        this.lighting = null;
+    }
 }
 
 const scratchVec3a = vec3.create();

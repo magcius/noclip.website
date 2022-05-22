@@ -101,13 +101,12 @@ export class BgModelInst {
         if (!this.visible) return;
 
         const renderParams = scratchRenderParams;
+        renderParams.reset();
         renderParams.alpha = 1 - this.translucency;
         renderParams.sort = this.translucency < EPSILON ? RenderSort.Translucent : RenderSort.All;
         if (texMtx !== undefined) {
             mat4.copy(renderParams.texMtx, texMtx);
-        } else {
-            mat4.identity(renderParams.texMtx);
-        }
+        } 
 
         mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
 
