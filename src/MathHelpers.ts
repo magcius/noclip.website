@@ -237,9 +237,9 @@ export function compareEpsilon(a: number, b: number) {
  * Returns whether matrix {@param m} has a uniform scale.
  */
 export function matrixHasUniformScale(m: ReadonlyMat4): boolean {
-    const sx = Math.hypot(m[0], m[4], m[8]);
-    const sy = Math.hypot(m[1], m[5], m[9]);
-    const sz = Math.hypot(m[2], m[6], m[10]);
+    const sx = (m[0]*m[0] + m[4]*m[4] + m[8]*m[8]);
+    const sy = (m[1]*m[1] + m[5]*m[5] + m[9]*m[9]);
+    const sz = (m[2]*m[2] + m[6]*m[6] + m[10]*m[10]);
     return compareEpsilon(sx, sy) && compareEpsilon(sx, sz);
 }
 
@@ -743,4 +743,31 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
 
 export function randomRange(a: number, b = -a): number {
     return lerp(a, b, Math.random());
+}
+
+export function calcMatrixSRTInverse(dst: mat4, src: ReadonlyMat4): void {
+    const sx = (src[0]*src[0] + src[4]*src[4] + src[8]*src[8]);
+    const sy = (src[1]*src[1] + src[5]*src[5] + src[9]*src[9]);
+    const sz = (src[2]*src[2] + src[6]*src[6] + src[10]*src[10]);
+
+    // Transpose and scale the upper 3x3
+    dst[0] = src[0] / sx;
+    dst[1] = src[4] / sx;
+    dst[2] = src[8] / sx;
+    dst[3] = 0.0;
+
+    dst[4] = src[1] / sy;
+    dst[5] = src[5] / sy;
+    dst[6] = src[9] / sy;
+    dst[7] = 0.0;
+
+    dst[8] = src[2] / sz;
+    dst[9] = src[6] / sz;
+    dst[10] = src[10] / sz;
+    dst[11] = 0.0;
+
+    dst[12] = -(src[12]*dst[0] + src[13]*dst[4] + src[14]*dst[8]);
+    dst[13] = -(src[12]*dst[1] + src[13]*dst[5] + src[14]*dst[9]);
+    dst[14] = -(src[12]*dst[2] + src[13]*dst[6] + src[14]*dst[10]);
+    dst[15] = 1.0;
 }
