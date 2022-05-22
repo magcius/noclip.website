@@ -53,49 +53,8 @@ function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     return vatFormat;
 }
 
-function generateLoadedVertexData(
-    dlist: ArrayBufferSlice,
-    vat: GX_VtxAttrFmt[][],
-    fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1,
-    isNBT: boolean,
-    loader: VtxLoader
-): LoadedVertexData {
+function generateLoadedVertexData(dlist: ArrayBufferSlice, loader: VtxLoader): LoadedVertexData {
     const arrays: GX_Array[] = [];
-    arrays[GX.Attr.POS] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS),
-    };
-    arrays[GX.Attr.NRM] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) * (isNBT ? 3 : 1),
-    };
-    arrays[GX.Attr.CLR0] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR0),
-    };
-    arrays[GX.Attr.CLR1] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR1),
-    };
-    arrays[GX.Attr.TEX0] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX0),
-    };
-    arrays[GX.Attr.TEX1] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1),
-    };
-    arrays[GX.Attr.TEX2] = {
-        buffer: dlist,
-        offs: 0x00,
-        stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2),
-    };
     const loadedVertexData = loader.runVertices(arrays, dlist);
     return loadedVertexData;
 }
@@ -139,9 +98,8 @@ export class ShapeInst {
         const loadedVertexLayout = loader.loadedVertexLayout;
 
         // 16-bit models use VTXFMT1
-        const vtxFmt = modelFlags & Gma.ModelFlags.Vat16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0;
         const loadedVertexDatas = shapeData.dlists.map((dlist) =>
-            generateLoadedVertexData(dlist.data.slice(1), vat, vtxFmt, isNBT, loader)
+            generateLoadedVertexData(dlist.data.slice(1), loader)
         );
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
         this.subShapes = shapeData.dlists.map((dlist, i) => {
