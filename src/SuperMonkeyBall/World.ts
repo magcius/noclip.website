@@ -45,7 +45,7 @@ const scratchVec3b = vec3.create();
 const scratchMat4a = mat4.create();
 class AnimGroup {
     private models: ModelInst[];
-    private blurBridgeAcoordionModel: ModelInst | null = null;
+    private blurBridgeAccordionModel: ModelInst | null = null;
     private worldFromAg: mat4;
     private originFromAg: mat4;
     private agData: SD.AnimGroup;
@@ -90,7 +90,7 @@ class AnimGroup {
         this.bumpers = this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
 
         if (stageData.stageInfo.id === StageId.St101_Blur_Bridge) {
-            this.blurBridgeAcoordionModel = assertExists(modelCache.getModel("MOT_STAGE101_BLUR"));
+            this.blurBridgeAccordionModel = assertExists(modelCache.getModel("MOT_STAGE101_BLUR"));
         }
     }
 
@@ -150,7 +150,7 @@ class AnimGroup {
 
     private drawBlurBridgeAccordion(ctx: RenderContext, lighting: Lighting): void {
         if (
-            this.blurBridgeAcoordionModel === null ||
+            this.blurBridgeAccordionModel === null ||
             this.animGroupIdx === 0 ||
             this.agData.animGroupModels.length === 0 ||
             this.agData.anim === null
@@ -179,7 +179,7 @@ class AnimGroup {
         vec3.set(scale, deltaX / 2, 1, 1);
         mat4.scale(rp.viewFromModel, rp.viewFromModel, scale);
 
-        this.blurBridgeAcoordionModel.prepareToRender(ctx, rp);
+        this.blurBridgeAccordionModel.prepareToRender(ctx, rp);
     }
 
     public prepareToRender(ctx: RenderContext, lighting: Lighting) {
