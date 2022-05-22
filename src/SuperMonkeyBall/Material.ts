@@ -12,7 +12,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color";
 import { RenderParams } from "./Model";
 import { mat4 } from "gl-matrix";
-import { assertExists } from "../util";
+import { assert, assertExists } from "../util";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],
@@ -87,13 +87,14 @@ export class MaterialInst {
         private cullMode: GX.CullMode
     ) {
         this.tevLayers = [];
-        for (let i = 0; i < materialData.tevLayerIdxs.length; i++) {
+
+        for (let i = 0; i < materialData.tevLayerCount; i++) {
             const tevLayerIdx = materialData.tevLayerIdxs[i];
-            // Materials can use 0 to 3 TEV layers defined in the model. The first -1 TEV layer  index
-            // denotes the end of the list.
-            if (tevLayerIdx < 0) break;
             this.tevLayers.push(modelTevLayers[tevLayerIdx]);
         }
+
+        if (this.tevLayers.length === 0)
+            assert(!!(materialData.flags & Gma.MaterialFlags.SimpleMaterial));
 
         this.genGXMaterial();
     }
@@ -172,24 +173,33 @@ export class MaterialInst {
             texGenSrc: GX.TexGenSrc.TEX0,
         };
 
-        for (let layerIdx = 0; layerIdx < this.tevLayers.length; layerIdx++) {
-            const layer = this.tevLayers[layerIdx];
-            const layerTypeFlags =
-                layer.tevLayerData.flags &
-                (Gma.TevLayerFlags.TypeAlphaBlend |
-                    Gma.TevLayerFlags.TypeViewSpecular |
-                    Gma.TevLayerFlags.TypeWorldSpecular);
-            if (layerTypeFlags === 0) {
-                buildDiffuseLayer(mb, buildState, colorIn, alphaIn);
-            } else if (layerTypeFlags & Gma.TevLayerFlags.TypeAlphaBlend) {
-                buildAlphaBlendLayer(mb, buildState, colorIn, alphaIn);
-            } else {
-                // TODO(complexplane): The other kinds of layers
-                buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
-            }
+        if (this.tevLayers.length !== 0) {
+            for (let layerIdx = 0; layerIdx < this.tevLayers.length; layerIdx++) {
+                const layer = this.tevLayers[layerIdx];
+                const layerTypeFlags =
+                    layer.tevLayerData.flags &
+                    (Gma.TevLayerFlags.TypeAlphaBlend |
+                        Gma.TevLayerFlags.TypeViewSpecular |
+                        Gma.TevLayerFlags.TypeWorldSpecular);
+                if (layerTypeFlags === 0) {
+                    buildDiffuseLayer(mb, buildState, colorIn, alphaIn);
+                } else if (layerTypeFlags & Gma.TevLayerFlags.TypeAlphaBlend) {
+                    buildAlphaBlendLayer(mb, buildState, colorIn, alphaIn);
+                } else {
+                    // TODO(complexplane): The other kinds of layers
+                    buildDummyPassthroughLayer(mb, buildState, colorIn, alphaIn);
+                }
 
-            colorIn = GX.CC.CPREV;
-            alphaIn = GX.CA.APREV;
+                colorIn = GX.CC.CPREV;
+                alphaIn = GX.CA.APREV;
+            }
+        } else {
+            mb.setTevOrder(buildState.stage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+            mb.setTevColorIn(buildState.stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, colorIn);
+            mb.setTevColorOp(buildState.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaIn(buildState.stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, alphaIn);
+            mb.setTevAlphaOp(buildState.stage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            buildState.stage++;
         }
 
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);

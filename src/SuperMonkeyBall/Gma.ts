@@ -366,16 +366,12 @@ function parseModel(buffer: ArrayBufferSlice, name: string, tpl: AVTpl): Model {
     // Parse shapes
     for (let i = 0; i < allMaterialCount; i++) {
         const shape = parseShape(shapeBuff.slice(shapeOffs), i);
+        shapeOffs += shape.size;
         if (shape.material.vtxAttrs & (1 << GX.Attr._NBT)) {
             // TODO: support this?
             continue;
         }
-        if (shape.material.tevLayerIdxs[0] < 0) {
-            // TODO(complexplane): Support 0 TEV layer shapes
-            continue;
-        }
         shapes.push(shape);
-        shapeOffs += shape.size;
     }
 
     return {
