@@ -402,7 +402,7 @@ const sceneDescs = [
     new OdysseySceneDesc("KillerRoadNoCapExStage"),
     new OdysseySceneDesc("BikeSteelNoCapExStage"),
     new OdysseySceneDesc("SenobiTowerYoshiExStage"),
-    new OdysseySceneDesc("ShootingCityYoshiExStage", "Tank Sublevel, with Yoshi""),
+    new OdysseySceneDesc("ShootingCityYoshiExStage", "Tank Sublevel, with Yoshi"),
     new OdysseySceneDesc("LavaWorldUpDownYoshiExStage"),
     new OdysseySceneDesc("Special1WorldTowerStackerStage", "Topper Rematch"),
     new OdysseySceneDesc("Special1WorldTowerBombTailStage"),
