@@ -1795,10 +1795,6 @@ void mainPS() {
                     t_Albedo.a = 1.0; // Reset alpha
                 }
 
-                // TODO(jstpierre): I believe games pre-Portal 2 should not normalize influence; it
-                // doesn't appear to be in the Source SDK 2013 shaders posted to GitHub, but Portal 2
-                // definitely needs it.
-
                 bool use_ssbump_normalize = ${getDefineBool(m, `USE_SSBUMP_NORMALIZE`)};
                 t_NormalizeInfluence = use_ssbump_normalize;
             } else {
