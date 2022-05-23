@@ -3175,7 +3175,7 @@ class BaseMonitor extends BaseEntity {
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
-        this.target = this.entity.target;
+        this.target = fallbackUndefined(this.entity.target, '');
     }
 
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -3409,7 +3409,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);
         this.registerFactory(info_player_start);
-        this.registerFactory(info_particle_system);
+        // this.registerFactory(info_particle_system);
     }
 
     public registerFactory(factory: EntityFactory): void {
