@@ -1,6 +1,7 @@
 
 import { mat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { IS_DEVELOPMENT } from "../BuildVersion";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { Color, colorNewCopy, Magenta, White } from "../Color";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -1825,6 +1826,9 @@ export class ParticleSystemInstance {
     }
 
     private debugDraw(renderContext: SourceRenderContext): void {
+        if (!IS_DEVELOPMENT)
+            return;
+
         if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView)
             return;
 
