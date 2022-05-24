@@ -4,7 +4,7 @@ jobs:
   build:
     branches:
       only:
-        - master
+        - a
 
     docker:
       - image: cimg/rust:1.58-node
