@@ -10,6 +10,7 @@ import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
 import { StageData } from "./World";
 import { decompressLZ } from "./AVLZ";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...
@@ -85,9 +86,12 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
 
-        return { stageInfo, stagedef, stageGma, bgGma, commonGma };
+        return { kind: "Stage", stageInfo, stagedef, stageGma, bgGma, commonGma };
     }
 }
+
+// export function createSceneFromGmaTplBuffers(context: SceneContext, gmaBuf: ArrayBufferSlice, tplBuf: ArrayBufferSlice): Renderer {
+// }
 
 const id = "supermonkeyball";
 const name = "Super Monkey Ball";

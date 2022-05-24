@@ -1,5 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
-import { Color, colorCopy, colorNewCopy } from "../Color";
+import { Color, colorCopy, colorNewCopy, TransparentBlack } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -20,25 +20,35 @@ import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams, RenderSort } from "./Model";
-import { GmaSrc, ModelCache } from "./ModelCache";
+import { GmaSrc, ModelCache, TextureHolder } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
-import { BgInfo, CommonGmaModelIDs, StageId, StageInfo } from "./StageInfo";
+import { BgInfo, CommonGmaModelIDs, StageId, StageInfo, BgInfos } from "./StageInfo";
 import { MkbTime, S16_TO_RADIANS, Sphere } from "./Utils";
 import * as GX_Material from "../gx/gx_material";
 import { SpotFunction } from "../gx/gx_enum";
 import { assertExists } from "../util";
+import * as UI from "../ui";
+import { ColorFlagStart } from "../PokemonSnap/room";
 
 const scratchRenderParams = new RenderParams();
 
 // Immutable parsed stage definition
 export type StageData = {
+    kind: "Stage",
     stageInfo: StageInfo;
     stagedef: SD.Stage;
     stageGma: Gma.Gma;
     bgGma: Gma.Gma;
     commonGma: Gma.Gma;
 };
+
+export type GmaData = {
+    kind: "Gma",
+    gma: Gma.Gma;
+}
+
+export type WorldData = StageData | GmaData;
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -346,20 +356,31 @@ class Bumper {
     }
 }
 
-export class World {
+export interface World {
+    update(viewerInput: Viewer.ViewerRenderInput): void;
+    prepareToRender(ctx: RenderContext): void;
+    getTextureHolder(): TextureHolder;
+    getClearColor(): Color;
+    setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void;
+    destroy(device: GfxDevice): void;
+}
+
+export class StageWorld implements World {
     private mkbTime: MkbTime;
     private animGroups: AnimGroup[];
     private background: Background;
     private lighting: Lighting;
+    private modelCache: ModelCache;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, private modelCache: ModelCache, stageData: StageData) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, private stageData: StageData) {
+        this.modelCache = new ModelCache(device, renderCache, stageData);
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
-        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(modelCache, stageData, i));
+        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(this.modelCache, stageData, i));
 
         const bgModels: BgModelInst[] = [];
         for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
             if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
-            const model = modelCache.getModel(bgModel.modelName);
+            const model = this.modelCache.getModel(bgModel.modelName);
             if (model === null) continue;
             bgModels.push(new BgModelInst(model, bgModel));
         }
@@ -384,7 +405,68 @@ export class World {
         this.background.prepareToRender(ctx, this.lighting);
     }
 
+    public getTextureHolder(): TextureHolder {
+        return this.modelCache.getTextureHolder();
+    }
+
+    public getClearColor(): Color {
+        return this.stageData.stageInfo.bgInfo.clearColor;
+    }
+
+    public setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void {
+        this.modelCache.setMaterialHacks(hacks);
+    }
+
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device); // Destroys GPU resources that transitively exist in cache
+    }
+}
+
+// Just render all models in a single GMA, not a stage+bg and all
+export class GmaWorld implements World {
+    private lighting: Lighting;
+    private models: ModelInst[];
+    private textureHolder: TextureHolder;
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, gmaData: GmaData) {
+        this.textureHolder = new TextureHolder();
+        this.models = [];
+        for (const model of gmaData.gma.idMap.values()) {
+            this.models.push(new ModelInst(device, renderCache, model, this.textureHolder));
+        }
+        this.lighting = new Lighting(BgInfos.Jungle); // Just assume Jungle's lighting, it's used in a few other BGs
+    }
+
+    public update(viewerInput: Viewer.ViewerRenderInput): void {
+    }
+
+    public prepareToRender(ctx: RenderContext): void {
+        const renderParams = scratchRenderParams;
+        renderParams.reset();
+        renderParams.lighting = this.lighting;
+        for (let i = 0; i < this.models.length; i++) {
+            this.models[i].prepareToRender(ctx, renderParams);
+        }
+    }
+
+    public getTextureHolder(): TextureHolder {
+        return this.textureHolder;
+    }
+
+    public getClearColor(): Color {
+        return TransparentBlack;
+    }
+
+    public setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void {
+        for (let i = 0; i < this.models.length; i++) {
+            this.models[i].setMaterialHacks(hacks);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.models.length; i++) {
+            this.models[i].destroy(device);
+        }
+        this.textureHolder.destroy(device);
     }
 }
