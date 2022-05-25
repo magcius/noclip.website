@@ -1,4 +1,3 @@
-
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Destroyable, SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
@@ -8,14 +7,14 @@ import { StageId, STAGE_INFO_MAP } from "./StageInfo";
 import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
-import { StageData } from "./World";
+import { GmaData, StageData } from "./World";
 import { decompressLZ } from "./AVLZ";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { NamedArrayBufferSlice } from "../DataFetcher";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...
-interface DestroyableGma extends Gma.Gma, Destroyable {
-}
+interface DestroyableGma extends Gma.Gma, Destroyable {}
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -73,14 +72,13 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
             return gma;
         });
 
-        const [commonGma, bgGma, stagedefBuf, stageGmaBuf, stageTplBuf] =
-            await Promise.all([
-                commonGmaP,
-                bgGmaP,
-                dataFetcher.fetchData(stagedefPath),
-                dataFetcher.fetchData(stageGmaPath),
-                dataFetcher.fetchData(stageTplPath),
-            ]);
+        const [commonGma, bgGma, stagedefBuf, stageGmaBuf, stageTplBuf] = await Promise.all([
+            commonGmaP,
+            bgGmaP,
+            dataFetcher.fetchData(stagedefPath),
+            dataFetcher.fetchData(stageGmaPath),
+            dataFetcher.fetchData(stageTplPath),
+        ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
@@ -90,8 +88,22 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-// export function createSceneFromGmaTplBuffers(context: SceneContext, gmaBuf: ArrayBufferSlice, tplBuf: ArrayBufferSlice): Renderer {
-// }
+export function createSceneFromNamedBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]): Renderer | null {
+    if (buffers.length !== 2) return null;
+    let [gmaBuf, tplBuf] = buffers;
+    if (gmaBuf.name.endsWith(".tpl")) {
+        [gmaBuf, tplBuf] = [tplBuf, gmaBuf];
+    }
+    if (!gmaBuf.name.endsWith(".gma") || !tplBuf.name.endsWith(".tpl")) return null;
+
+    const tpl = parseAVTpl(tplBuf, tplBuf.name);
+    const gma = Gma.parseGma(gmaBuf, tpl);
+    const worldData: GmaData = {
+        kind: "Gma",
+        gma: gma,
+    };
+    return new Renderer(context.device, worldData);
+}
 
 const id = "supermonkeyball";
 const name = "Super Monkey Ball";

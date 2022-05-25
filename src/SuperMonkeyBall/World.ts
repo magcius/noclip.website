@@ -438,12 +438,14 @@ export class GmaWorld implements World {
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
+        this.lighting.update(viewerInput);
     }
 
     public prepareToRender(ctx: RenderContext): void {
         const renderParams = scratchRenderParams;
         renderParams.reset();
         renderParams.lighting = this.lighting;
+        mat4.copy(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix);
         for (let i = 0; i < this.models.length; i++) {
             this.models[i].prepareToRender(ctx, renderParams);
         }
