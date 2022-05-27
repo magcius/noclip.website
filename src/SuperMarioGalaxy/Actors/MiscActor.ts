@@ -5259,12 +5259,14 @@ class OceanRingPipeOutside extends LiveActor {
         mat4.mul(dst, dst, scratchMatrix);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x1465FFB9);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], 0xFFFFFFFF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.AMB0], 0x00000000);
 
         // TODO(jstpierre): Figure out how this gets loaded.
         const alpha2 = materialParams.u_Lights[2];
         alpha2.reset();
         alpha2.Color.a = 0.5;
-        alpha2.Direction[1] = -1.0;
+        alpha2.Direction[2] = -1.0;
 
         const materialHelper = this.materialHelper;
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
