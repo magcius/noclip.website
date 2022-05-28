@@ -324,7 +324,7 @@ export class BezierRail {
             for (let i = this.railPartCoords.length - 1; i >= 0; i--) {
                 const railPartCoord = i === 0 ? 0 : this.railPartCoords[i - 1];
                 if (coord > railPartCoord && coord <= this.railPartCoords[i])
-                    return (i + 1) % this.railPartCoords.length;
+                    return (i + 1) % this.pointRecordCount;
             }
         }
 
