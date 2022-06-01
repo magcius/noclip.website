@@ -606,24 +606,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public getOnscreenTexture(): GfxTexture {
         return this._scTexture!;
     }
-
-    public present(): void {
-        const gl = this.gl;
-
-        // Force alpha to white.
-
-        // TODO(jstpierre): Remove this eventually?
-        if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
-            gl.colorMask(false, false, false, true);
-            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
-        }
-
-        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
-        // gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
-
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-    }
     //#endregion
 
     //#region GfxDevice
@@ -1276,6 +1258,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(this._currentRenderPassDescriptor !== null);
         this.endPass();
         this._currentRenderPassDescriptor = null;
+    }
+
+    public beginFrame(): void {
+    }
+
+    public endFrame(): void {
+        const gl = this.gl;
+
+        // Force alpha to white.
+
+        // TODO(jstpierre): Remove this eventually?
+        if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
+            gl.colorMask(false, false, false, true);
+            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+        }
+
+        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
+        // gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
+
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {

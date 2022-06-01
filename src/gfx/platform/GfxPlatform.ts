@@ -316,7 +316,6 @@ export interface GfxSwapChain {
     getDevice(): GfxDevice;
     getCanvas(): HTMLCanvasElement | OffscreenCanvas;
     getOnscreenTexture(): GfxTexture;
-    present(): void;
     createWebXRLayer(webXRSession: XRSession): PromiseLike<XRWebGLLayer>;
 }
 
@@ -398,6 +397,8 @@ export interface GfxDevice {
     createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
+    beginFrame(): void;
+    endFrame(): void;
 
     // Copying.
     copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;

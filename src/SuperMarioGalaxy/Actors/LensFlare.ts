@@ -16,6 +16,7 @@ import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
 import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
+import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);
@@ -114,7 +115,6 @@ export class BrightObjBase {
 
     private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: ReadonlyVec3): void {
         project(scratchVec4, position, sceneObjHolder.viewerInput);
-        calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
 
         let peekZResult: PeekZResult;
         if (checkArg.pointsNum === checkArg.peekZ.length) {
@@ -124,9 +124,10 @@ export class BrightObjBase {
             peekZResult = checkArg.peekZ[checkArg.pointsNum];
         }
 
-        // Position is originally in screen space. Convert to NDC.
-        const x = (scratchVec2[0] / sceneObjHolder.viewerInput.backbufferWidth) * 2 - 1;
-        const y = (scratchVec2[1] / sceneObjHolder.viewerInput.backbufferHeight) * 2 - 1;
+        let x = scratchVec4[0];
+        let y = scratchVec4[1];
+        if (!gfxDeviceNeedsFlipY(sceneObjHolder.modelCache.device))
+            y *= -1;
 
         sceneObjHolder.drawSyncManager.peekZ.newData(peekZResult, x, y);
 
@@ -145,6 +146,7 @@ export class BrightObjBase {
 
             if (visible) {
                 checkArg.pointsVisibleNum++;
+                calcScreenPosition(scratchVec2, scratchVec4, sceneObjHolder.viewerInput);
                 vec2.add(checkArg.posCenterAccum, checkArg.posCenterAccum, scratchVec2);
             }
         }

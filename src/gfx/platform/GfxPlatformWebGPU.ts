@@ -79,7 +79,6 @@ interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
-    gpuCommandEncoder: GPUCommandEncoder | null;
     gpuResultBuffer: GPUBuffer;
     done: boolean;
 }
@@ -449,7 +448,6 @@ function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescri
 }
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
-    public commandEncoder: GPUCommandEncoder | null = null;
     public descriptor!: GfxRenderPassDescriptor;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
@@ -459,6 +457,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
     private gfxDepthStencilAttachment: GfxTextureSharedP_WebGPU | null = null;
     private gfxDepthStencilResolveTo: GfxTextureSharedP_WebGPU | null = null;
+    private frameCommandEncoder: GPUCommandEncoder | null;
 
     constructor() {
         this.gpuColorAttachments = [];
@@ -581,10 +580,11 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassDescriptor.occlusionQuerySet = descriptor.occlusionQueryPool !== null ? getPlatformQuerySet(descriptor.occlusionQueryPool) : undefined;
     }
 
-    public beginRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): void {
+    public beginRenderPass(commandEncoder: GPUCommandEncoder, renderPassDescriptor: GfxRenderPassDescriptor): void {
         assert(this.gpuRenderPassEncoder === null);
         this.setRenderPassDescriptor(renderPassDescriptor);
-        this.gpuRenderPassEncoder = this.commandEncoder!.beginRenderPass(this.gpuRenderPassDescriptor);
+        this.frameCommandEncoder = commandEncoder;
+        this.gpuRenderPassEncoder = this.frameCommandEncoder.beginRenderPass(this.gpuRenderPassDescriptor);
     }
 
     public setViewport(x: number, y: number, w: number, h: number): void {
@@ -674,10 +674,10 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         assert(src.height === dst.height);
         assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
         assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
-        this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [dst.width, dst.height, 1]);
+        this.frameCommandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [dst.width, dst.height, 1]);
     }
 
-    public finish(): GPUCommandBuffer {
+    public finish(): void {
         this.gpuRenderPassEncoder!.end();
         this.gpuRenderPassEncoder = null;
 
@@ -697,7 +697,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             }
         }
 
-        return this.commandEncoder!.finish();
+        this.frameCommandEncoder = null;
     }
 }
 
@@ -808,15 +808,13 @@ fn fs() -> FragmentOutput {
         });
     }
 
-    public render(device: GPUDevice, onscreenTexture: GPUTextureView): void {
-        const encoder = device.createCommandEncoder();
+    public render(encoder: GPUCommandEncoder, onscreenTexture: GPUTextureView): void {
         const renderPass = encoder.beginRenderPass({
             colorAttachments: [{ view: onscreenTexture, loadOp: 'load', storeOp: 'store', }],
         });
         renderPass.setPipeline(this.pipeline);
         renderPass.draw(3);
         renderPass.end();
-        device.queue.submit([encoder.finish()]);
     }
 
     public destroy(device: GPUDevice): void {
@@ -844,6 +842,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
 
     private _fullscreenAlphaClear: FullscreenAlphaClear;
+    private _frameCommandEncoder: GPUCommandEncoder | null = null;
+    private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
@@ -929,10 +929,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public getCanvas(): HTMLCanvasElement | OffscreenCanvas {
         return this.canvas;
-    }
-
-    public present(): void {
-        this._fullscreenAlphaClear.render(this.device, this.canvasContext.getCurrentTexture().createView());
     }
 
     // GfxDevice
@@ -1293,7 +1289,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createReadback(byteCount: number): GfxReadback {
         const o: GfxReadbackP_WebGPU = {
             _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(),
-            gpuCommandEncoder: this.device.createCommandEncoder(),
             gpuResultBuffer: this.device.createBuffer({ size: byteCount, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
             done: false,
         };
@@ -1373,36 +1368,48 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         let pass = this._renderPassPool.pop();
         if (pass === undefined)
             pass = new GfxRenderPassP_WebGPU();
-        pass.commandEncoder = this.device.createCommandEncoder();
-        pass.beginRenderPass(renderPassDescriptor);
+        pass.beginRenderPass(this._frameCommandEncoder!, renderPassDescriptor);
         return pass;
     }
 
     public submitPass(o: GfxPass): void {
-        const queue = this.device.queue;
-
-        const pass = o as GfxRenderPassP_WebGPU;
-        const b = pass.finish()!;
-        queue.submit([b]);
-        pass.commandEncoder = null;
-
         if (o instanceof GfxRenderPassP_WebGPU) {
-            this._renderPassPool.push(o);
+            const pass = o as GfxRenderPassP_WebGPU;
+            pass.finish();
+            this._renderPassPool.push(pass);
         }
     }
 
-    public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
-        const cmd = this.device.createCommandEncoder();
+    public beginFrame(): void {
+        assert(this._frameCommandEncoder === null);
+        this._frameCommandEncoder = this.device.createCommandEncoder();
+    }
 
+    public endFrame(): void {
+        assert(this._frameCommandEncoder !== null);
+
+        this._fullscreenAlphaClear.render(this._frameCommandEncoder, this.canvasContext.getCurrentTexture().createView());
+        this.device.queue.submit([this._frameCommandEncoder.finish()]);
+        this._frameCommandEncoder = null;
+
+        // Do any post-command-submit scheduling work
+        for (let i = 0; i < this._readbacksSubmitted.length; i++) {
+            const readback = this._readbacksSubmitted[i];
+            readback.gpuResultBuffer.mapAsync(GPUMapMode.READ).then(() => {
+                readback.done = true;
+            });
+        }
+        this._readbacksSubmitted.length = 0;
+    }
+
+    public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
         const dst = dst_ as GfxTextureP_WebGPU;
         const src = src_ as GfxTextureP_WebGPU;
         const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture, origin: [srcX, srcY, 0] };
         const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture, origin: [dstX, dstY, 0] };
         assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
         assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
-        cmd.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
-
-        this.device.queue.submit([cmd.finish()]);
+        this._frameCommandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
     }
 
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void {
@@ -1449,19 +1456,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const formatByteSize = getFormatByteSize(texture.pixelFormat);
         const copySrc: GPUImageCopyTexture = { texture: texture.gpuTexture, origin: [x, y, 0] };
         const copyDst: GPUImageCopyBuffer = { buffer: readback.gpuResultBuffer, offset: dstOffset * formatByteSize };
-        readback.gpuCommandEncoder!.copyTextureToBuffer(copySrc, copyDst, [1, 1, 1]);
+        this._frameCommandEncoder!.copyTextureToBuffer(copySrc, copyDst, [1, 1, 1]);
     }
 
     public submitReadback(o: GfxReadback): void {
         const readback = o as GfxReadbackP_WebGPU;
-        const cmdBuffer = readback.gpuCommandEncoder!.finish();
-        readback.gpuCommandEncoder = null;
-        this.device.queue.submit([cmdBuffer]);
-
-        readback.gpuResultBuffer.mapAsync(GPUMapMode.READ);
-        this.device.queue.onSubmittedWorkDone().then(() => {
-            readback.done = true;
-        });
+        assert(!readback.done);
+        this._readbacksSubmitted.push(readback);
     }
 
     public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
@@ -1470,9 +1471,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const src = new Uint32Array(readback.gpuResultBuffer.getMappedRange());
             dst.set(src, dstOffs);
 
-            // Reset the readback by creating a new command buffer; can reuse the result buffer.
-            assert(readback.gpuCommandEncoder === null);
-            readback.gpuCommandEncoder = this.device.createCommandEncoder();
+            // Reset the readback object.
             readback.gpuResultBuffer.unmap();
             readback.done = false;
 
