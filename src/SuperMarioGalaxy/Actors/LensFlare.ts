@@ -12,7 +12,7 @@ import { isFirstStep } from "../Spine";
 import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
-import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform/GfxPlatform";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
 import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
@@ -136,7 +136,10 @@ export class BrightObjBase {
             // Test if the depth buffer is less than our projected Z coordinate.
             // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
             // Put projected coordinate in 0-1 normalized space.
-            const projectedZ = scratchVec4[2] * 0.5 + 0.5;
+            let projectedZ = scratchVec4[2];
+
+            if (sceneObjHolder.modelCache.device.queryVendorInfo().clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+                projectedZ = projectedZ * 0.5 + 0.5;
 
             const visible = compareDepthValues(projectedZ, peekZResult.value, GfxCompareMode.Less);
 

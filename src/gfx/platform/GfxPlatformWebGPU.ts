@@ -79,6 +79,9 @@ interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
+    gpuCommandEncoder: GPUCommandEncoder | null;
+    gpuResultBuffer: GPUBuffer;
+    done: boolean;
 }
 
 interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
@@ -325,7 +328,7 @@ function translateBlendState(attachmentState: GfxAttachmentState): GPUBlendState
 }
 
 function translateColorState(attachmentState: GfxAttachmentState, format: GfxFormat): GPUColorTargetState {
-    return { 
+    return {
         format: translateTextureFormat(format),
         blend: translateBlendState(attachmentState),
         writeMask: attachmentState.channelWriteMask,
@@ -702,14 +705,14 @@ function isFormatTextureCompressionBC(format: GfxFormat): boolean {
     const formatTypeFlags = getFormatTypeFlags(format);
 
     switch (formatTypeFlags) {
-    case FormatTypeFlags.BC1:
-    case FormatTypeFlags.BC2:
-    case FormatTypeFlags.BC3:
-    case FormatTypeFlags.BC4_SNORM:
-    case FormatTypeFlags.BC4_UNORM:
-    case FormatTypeFlags.BC5_SNORM:
-    case FormatTypeFlags.BC5_UNORM:
-        return true;
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+            return true;
     }
 
     return false;
@@ -719,15 +722,15 @@ function getFormatByteSizePerBlock(format: GfxFormat): number {
     const formatTypeFlags = getFormatTypeFlags(format);
 
     switch (formatTypeFlags) {
-    case FormatTypeFlags.BC1:
-    case FormatTypeFlags.BC4_SNORM:
-    case FormatTypeFlags.BC4_UNORM:
-        return 8;
-    case FormatTypeFlags.BC2:
-    case FormatTypeFlags.BC3:
-    case FormatTypeFlags.BC5_SNORM:
-    case FormatTypeFlags.BC5_UNORM:
-        return 16;
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+            return 8;
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+            return 16;
     }
 
     return getFormatByteSize(format);
@@ -737,14 +740,14 @@ function getFormatBlockSize(format: GfxFormat): number {
     const formatTypeFlags = getFormatTypeFlags(format);
 
     switch (formatTypeFlags) {
-    case FormatTypeFlags.BC1:
-    case FormatTypeFlags.BC2:
-    case FormatTypeFlags.BC3:
-    case FormatTypeFlags.BC4_SNORM:
-    case FormatTypeFlags.BC4_UNORM:
-    case FormatTypeFlags.BC5_SNORM:
-    case FormatTypeFlags.BC5_UNORM:
-        return 4;
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC2:
+        case FormatTypeFlags.BC3:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC4_UNORM:
+        case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+            return 4;
     }
 
     return 1;
@@ -905,7 +908,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         // TODO(jstpierre): Figure out how to wrap more efficiently.
         const gpuTexture = this.canvasContext.getCurrentTexture();
         const gpuTextureView = gpuTexture.createView();
-        const texture: GfxTextureP_WebGPU = { _T: _T.Texture, ResourceUniqueId: 0,
+        const texture: GfxTextureP_WebGPU = {
+            _T: _T.Texture, ResourceUniqueId: 0,
             gpuTexture, gpuTextureView,
             pixelFormat: GfxFormat.U8_RGBA_RT,
             width: this._swapChainWidth,
@@ -960,7 +964,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTextureView = gpuTexture.createView({
             dimension: translateViewDimension(descriptor.dimension),
         });
-        const texture: GfxTextureSharedP_WebGPU = { 
+        const texture: GfxTextureSharedP_WebGPU = {
             pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
             height: descriptor.height,
@@ -1030,7 +1034,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createRenderTargetFromTexture(gfxTexture: GfxTexture): GfxRenderTarget {
         const { pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels, gpuTexture, gpuTextureView, usage } = gfxTexture as GfxTextureP_WebGPU;
         assert(!!(usage & GPUTextureUsage.RENDER_ATTACHMENT));
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(),
+        const attachment: GfxAttachmentP_WebGPU = {
+            _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(),
             pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels,
             usage, gpuTexture, gpuTextureView,
             dimension: GfxTextureDimension.n2D,
@@ -1044,7 +1049,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         let code: string;
         try {
             code = this.glsl_compile(sourceText, shaderStage, validationEnabled);
-        } catch(e) {
+        } catch (e) {
             console.error(sourceText);
             throw "whoops";
         }
@@ -1189,7 +1194,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createInputState(inputLayout: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState {
         // GfxInputState is a GL-only thing, as VAOs suck. We emulate it with a VAO-alike here.
-        const inputState: GfxInputStateP_WebGPU = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(),
+        const inputState: GfxInputStateP_WebGPU = {
+            _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(),
             inputLayout, vertexBuffers, indexBuffer,
         };
         return inputState;
@@ -1203,7 +1209,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const gpuRenderPipeline: GPURenderPipeline | null = null;
         const isCreatingAsync = false;
-        const renderPipeline: GfxRenderPipelineP_WebGPU = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
+        const renderPipeline: GfxRenderPipelineP_WebGPU = {
+            _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(),
             descriptor, isCreatingAsync, gpuRenderPipeline,
         };
         this._createRenderPipeline(renderPipeline, true);
@@ -1241,7 +1248,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         let fragment: GPUFragmentState | undefined = undefined;
         if (fragmentStage !== null) {
             fragment = {
-                ... fragmentStage,
+                ...fragmentStage,
                 targets,
             };
         }
@@ -1249,7 +1256,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuRenderPipelineDescriptor: GPURenderPipelineDescriptor = {
             layout,
             vertex: {
-                ... vertexStage,
+                ...vertexStage,
                 buffers,
             },
             primitive,
@@ -1283,8 +1290,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         renderPipeline.isCreatingAsync = false;
     }
 
-    public createReadback(): GfxReadback {
-        const o: GfxReadbackP_WebGPU = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId() };
+    public createReadback(byteCount: number): GfxReadback {
+        const o: GfxReadbackP_WebGPU = {
+            _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(),
+            gpuCommandEncoder: this.device.createCommandEncoder(),
+            gpuResultBuffer: this.device.createBuffer({ size: byteCount, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+            done: false,
+        };
         return o;
     }
 
@@ -1293,7 +1305,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             type: translateQueryPoolType(type),
             count: elemCount,
         });
-        const o: GfxQueryPoolP_WebGPU = { _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId(),
+        const o: GfxQueryPoolP_WebGPU = {
+            _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId(),
             querySet,
         };
         return o;
@@ -1338,6 +1351,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyReadback(o: GfxReadback): void {
+        const readback = o as GfxReadbackP_WebGPU;
+        readback.gpuResultBuffer.destroy();
     }
 
     public destroyQueryPool(o: GfxQueryPool): void {
@@ -1428,14 +1443,43 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
+    public readPixelFromTexture(o: GfxReadback, dstOffset: number, texture_: GfxTexture, x: number, y: number): void {
+        const readback = o as GfxReadbackP_WebGPU;
+        const texture = (texture_ as GfxTextureP_WebGPU);
+        const formatByteSize = getFormatByteSize(texture.pixelFormat);
+        const copySrc: GPUImageCopyTexture = { texture: texture.gpuTexture, origin: [x, y, 0] };
+        const copyDst: GPUImageCopyBuffer = { buffer: readback.gpuResultBuffer, offset: dstOffset * formatByteSize };
+        readback.gpuCommandEncoder!.copyTextureToBuffer(copySrc, copyDst, [1, 1, 1]);
     }
 
     public submitReadback(o: GfxReadback): void {
+        const readback = o as GfxReadbackP_WebGPU;
+        const cmdBuffer = readback.gpuCommandEncoder!.finish();
+        readback.gpuCommandEncoder = null;
+        this.device.queue.submit([cmdBuffer]);
+
+        readback.gpuResultBuffer.mapAsync(GPUMapMode.READ);
+        this.device.queue.onSubmittedWorkDone().then(() => {
+            readback.done = true;
+        });
     }
 
     public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
-        return true;
+        const readback = o as GfxReadbackP_WebGPU;
+        if (readback.done) {
+            const src = new Uint32Array(readback.gpuResultBuffer.getMappedRange());
+            dst.set(src, dstOffs);
+
+            // Reset the readback by creating a new command buffer; can reuse the result buffer.
+            assert(readback.gpuCommandEncoder === null);
+            readback.gpuCommandEncoder = this.device.createCommandEncoder();
+            readback.gpuResultBuffer.unmap();
+            readback.done = false;
+
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null {

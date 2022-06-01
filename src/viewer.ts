@@ -393,7 +393,7 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
 }
 
 export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const useWebGPU = window.localStorage.getItem('webgpu');
+    const useWebGPU = true || window.localStorage.getItem('webgpu');
     if (useWebGPU)
         return initializeViewerWebGPU(out, canvas);
     else
