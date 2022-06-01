@@ -169,8 +169,6 @@ float CalcFresnelTerm2Ranges(float t_DotProduct, in vec3 t_Ranges) {
         return mix(t_Ranges.x, t_Ranges.y, invlerp(0.0, 0.5, t_Fresnel));
     else
         return mix(t_Ranges.y, t_Ranges.z, invlerp(0.5, 1.0, t_Fresnel));
-    // Workaround for https://github.com/gfx-rs/naga/issues/1053
-    return 0.0;
 }
 
 vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
@@ -1315,9 +1313,6 @@ vec3 WorldLightCalcDirection(in WorldLight t_WorldLight, in vec3 t_PositionWorld
     } else {
         return normalize(t_WorldLight.Position.xyz - t_PositionWorld);
     }
-
-    // Workaround for https://github.com/gfx-rs/naga/issues/1053
-    return vec3(0.0);
 }
 
 float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
@@ -1332,9 +1327,6 @@ float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWor
     } else {
         return max(0.0, t_NoL);
     }
-
-    // Workaround for https://github.com/gfx-rs/naga/issues/1053
-    return 0.0;
 }
 
 vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert, in float t_Attenuation, in WorldLight t_WorldLight) {

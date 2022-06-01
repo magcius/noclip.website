@@ -2,7 +2,7 @@
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
-import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
+import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
 
@@ -462,9 +462,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
         this.gpuDepthStencilAttachment = {
             view: null!,
-            depthLoadValue: 'load',
+            depthLoadOp: 'load',
             depthStoreOp: 'store',
-            stencilLoadValue: 'load',
+            stencilLoadOp: 'load',
             stencilStoreOp: 'store',
         };
 
@@ -533,15 +533,44 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.gpuDepthStencilAttachment;
             dstAttachment.view = dsAttachment.gpuTextureView;
-            dstAttachment.depthLoadValue = descriptor.depthClearValue;
-            dstAttachment.stencilLoadValue = descriptor.stencilClearValue;
-            dstAttachment.depthStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
-            dstAttachment.stencilStoreOp = descriptor.depthStencilStore ? 'store' : 'discard';
-            this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
-            if (this.gfxDepthStencilResolveTo !== null) {
-                dstAttachment.depthStoreOp = 'store';
-                dstAttachment.stencilStoreOp = 'store';
+
+            const hasDepth = !!(getFormatFlags(dsAttachment.pixelFormat) & FormatFlags.Depth);
+            if (hasDepth) {
+                if (descriptor.depthClearValue === 'load') {
+                    dstAttachment.depthLoadOp = 'load';
+                } else {
+                    dstAttachment.depthLoadOp = 'clear';
+                    dstAttachment.depthClearValue = descriptor.depthClearValue;
+                }
+
+                if (descriptor.depthStencilStore || this.gfxDepthStencilResolveTo !== null)
+                    dstAttachment.depthStoreOp = 'store';
+                else
+                    dstAttachment.depthStoreOp = 'discard';
+            } else {
+                dstAttachment.depthLoadOp = undefined;
+                dstAttachment.depthStoreOp = undefined;
             }
+
+            const hasStencil = !!(getFormatFlags(dsAttachment.pixelFormat) & FormatFlags.Stencil);
+            if (hasStencil) {
+                if (descriptor.stencilClearValue === 'load') {
+                    dstAttachment.stencilLoadOp = 'load';
+                } else {
+                    dstAttachment.stencilLoadOp = 'clear';
+                    dstAttachment.stencilClearValue = descriptor.stencilClearValue;
+                }
+
+                if (descriptor.depthStencilStore || this.gfxDepthStencilResolveTo !== null)
+                    dstAttachment.stencilStoreOp = 'store';
+                else
+                    dstAttachment.stencilStoreOp = 'discard';
+            } else {
+                dstAttachment.stencilLoadOp = undefined;
+                dstAttachment.stencilStoreOp = undefined;
+            }
+
+            this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
         } else {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
@@ -646,7 +675,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public finish(): GPUCommandBuffer {
-        this.gpuRenderPassEncoder!.endPass();
+        this.gpuRenderPassEncoder!.end();
         this.gpuRenderPassEncoder = null;
 
         // Fake a resolve with a copy for non-MSAA.
@@ -736,11 +765,11 @@ function translateImageLayout(size: GPUExtent3DDictStrict, layout: GPUImageDataL
 
 const fullscreenVS = `
 struct VertexOutput {
-    [[builtin(position)]] pos: vec4<f32>;
+    @builtin(position) pos: vec4<f32>,
 };
 
-[[stage(vertex)]]
-fn vs([[builtin(vertex_index)]] index: u32) -> VertexOutput {
+@stage(vertex)
+fn vs(@builtin(vertex_index) index: u32) -> VertexOutput {
     var out: VertexOutput;
     out.pos.x = select(-1.0, 3.0, index == 1u);
     out.pos.y = select(-1.0, 3.0, index == 2u);
@@ -759,9 +788,9 @@ class FullscreenAlphaClear {
     private shaderText = `
 ${fullscreenVS}
 
-struct FragmentOutput { [[location(0)]] color: vec4<f32>; };
+struct FragmentOutput { @location(0) color: vec4<f32>, };
 
-[[stage(fragment)]]
+@stage(fragment)
 fn fs() -> FragmentOutput {
     return FragmentOutput(vec4<f32>(1.0, 0.0, 1.0, 1.0));
 }
@@ -770,6 +799,7 @@ fn fs() -> FragmentOutput {
     constructor(device: GPUDevice, format: GPUTextureFormat) {
         this.shaderModule = device.createShaderModule({ code: this.shaderText });
         this.pipeline = device.createRenderPipeline({
+            layout: 'auto',
             vertex: { module: this.shaderModule, entryPoint: 'vs', },
             fragment: { module: this.shaderModule, entryPoint: 'fs', targets: [{ format, writeMask: 0x08, }] },
         });
@@ -782,7 +812,7 @@ fn fs() -> FragmentOutput {
         });
         renderPass.setPipeline(this.pipeline);
         renderPass.draw(3);
-        renderPass.endPass();
+        renderPass.end();
         device.queue.submit([encoder.finish()]);
     }
 
@@ -850,8 +880,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             debugger;
         };
 
-        this._swapChainFormat = this.canvasContext.getPreferredFormat(this.adapter);
+        this._swapChainFormat = navigator.gpu.getPreferredCanvasFormat();
         this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device, this._swapChainFormat);
+
+        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, compositingAlphaMode: 'opaque' });
     }
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): GfxTextureP_WebGPU {
@@ -865,12 +897,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     // GfxSwapChain
     public configureSwapChain(width: number, height: number): void {
-        if (this._swapChainWidth === width && this._swapChainHeight === height)
-            return;
         this._swapChainWidth = width;
         this._swapChainHeight = height;
-        const size = { width, height };
-        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, size });
     }
 
     public getOnscreenTexture(): GfxTexture {
@@ -1030,6 +1058,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
                 return `vec4<f32>(textureSample(T_${depthTextureName}${cap}), 0.0, 0.0, 0.0);`
             });
         }
+
+        // Workaround for https://bugs.chromium.org/p/tint/issues/detail?id=1503
+        code = code.replace('@vertex', '@stage(vertex)');
+        code = code.replace('@fragment', '@stage(fragment)');
 
         const shaderModule = this.device.createShaderModule({ code });
         return { module: shaderModule, entryPoint: 'main' };
