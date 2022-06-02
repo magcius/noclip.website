@@ -3428,6 +3428,11 @@ void mainPS() {
     for (int y = -g_BlurAmount; y <= g_BlurAmount; y++) {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
             vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
+
+#ifdef GFX_VIEWPORT_ORIGIN_TL
+            t_TexCoord.y = 1.0 - t_TexCoord.y;
+#endif
+
             t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_TextureBase), t_TexCoord);
         }
     }
