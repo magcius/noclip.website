@@ -1263,8 +1263,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             fragment,
         };
 
-        // this.device.pushErrorScope('validation');
-
         if (async) {
             const gpuRenderPipeline = await this.device.createRenderPipelineAsync(gpuRenderPipelineDescriptor);
 
@@ -1275,10 +1273,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else {
             renderPipeline.gpuRenderPipeline = this.device.createRenderPipeline(gpuRenderPipelineDescriptor);
         }
-
-        // const e = await this.device.popErrorScope();
-        // if (e)
-        //     debugger;
 
         if (renderPipeline.ResourceName !== undefined)
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
@@ -1505,6 +1499,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
                 return false;
             return this._featureTextureCompressionBC;
         }
+
+        switch (format) {
+        case GfxFormat.U16_RGBA_NORM: return false;
+        case GfxFormat.F32_RGBA: return false; // unfilterable
+        }
+
         return true;
     }
 

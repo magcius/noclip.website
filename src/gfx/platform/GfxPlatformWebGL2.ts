@@ -658,8 +658,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGBA8_SNORM;
         case GfxFormat.S8_RG_NORM:
             return WebGL2RenderingContext.RG8_SNORM;
-        case GfxFormat.U16_RGBA_5551:
-            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case GfxFormat.BC1:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
