@@ -36,7 +36,7 @@ import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, Live
 import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
+import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
 import { addShadowVolumeCylinder, addShadowVolumeLine, getShadowProjectionLength, getShadowProjectionNormal, getShadowProjectionPos, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, isShadowProjected, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, onShadowVolumeCutDropLength, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr, setShadowVolumeBoxSize, setShadowVolumeEndDropOffset } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
@@ -9156,8 +9156,10 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         else
             connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
+        const hasCrystalBox = !!(sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1);
+
         const containerTypeArg = fallback(getJMapInfoArg3(infoIter), -1);
-        if (containerTypeArg === -1) {
+        if (containerTypeArg === -1 && hasCrystalBox) {
             this.container = new ModelObj(zoneAndLayer, sceneObjHolder, `${this.name} CrystalBox`, `CrystalBox`, this.baseMtx, DrawBufferType.CrystalBox, -2, -2);
             this.container.makeActorAppeared(sceneObjHolder);
             startBck(this.container, 'CrystalBox');
@@ -9251,10 +9253,12 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
         const modelName = MorphItemObjNeo.getModelName(type);
         sceneObjHolder.modelCache.requestObjectData(modelName);
 
-        const container = fallback(getJMapInfoArg3(infoIter), -1);
-        if (container === 0) {
+        const hasCrystalBox = !!(sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1);
+
+        const containerTypeArg = fallback(getJMapInfoArg3(infoIter), -1);
+        if (containerTypeArg === 0) {
             ItemBubble.requestArchives(sceneObjHolder, infoIter);
-        } else if (container === -1) {
+        } else if (containerTypeArg === -1 && hasCrystalBox) {
             sceneObjHolder.modelCache.requestObjectData('CrystalBox');
             sceneObjHolder.modelCache.requestObjectData('CrystalBoxBreak');
         }
