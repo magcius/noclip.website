@@ -435,7 +435,31 @@ function translateSourceVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[])
 export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = false): LoadedVertexLayout {
     const bufferIndex = 0;
 
-    function allocateVertexInput(attrInput: VertexAttributeInput, format: GfxFormat): SingleVertexInputLayout {
+    function getFormatForAttrInput(attrInput: VertexAttributeInput): GfxFormat {
+        switch (attrInput) {
+        case VertexAttributeInput.TEX0123MTXIDX:
+        case VertexAttributeInput.TEX4567MTXIDX:
+            return GfxFormat.U8_RGBA_NORM;
+        case VertexAttributeInput.POS:
+            return GfxFormat.F32_RGBA; // Also can include PNMTXIDX if the material requests it; assume it does.
+        case VertexAttributeInput.NRM:
+        case VertexAttributeInput.TANGENT:
+        case VertexAttributeInput.BINRM:
+            return GfxFormat.F32_RGB;
+        case VertexAttributeInput.CLR0:
+        case VertexAttributeInput.CLR1:
+            return GfxFormat.U8_RGBA_NORM;
+        case VertexAttributeInput.TEX01:
+        case VertexAttributeInput.TEX23:
+        case VertexAttributeInput.TEX45:
+        case VertexAttributeInput.TEX67:
+            return GfxFormat.F32_RGBA;
+        default:
+            throw "whoops";
+        }
+    }
+
+    function allocateVertexInput(attrInput: VertexAttributeInput, format = getFormatForAttrInput(attrInput)): SingleVertexInputLayout {
         const existingInput = singleVertexInputLayouts.find((layout) => layout.attrInput === attrInput);
 
         if (existingInput !== undefined) {
@@ -478,37 +502,37 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
         } else if (isVtxAttribTexMtxIdx(vtxAttrib)) {
             // Allocate the base if it doesn't already exist.
             const attrInput = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? VertexAttributeInput.TEX0123MTXIDX : VertexAttributeInput.TEX4567MTXIDX;
-            input = allocateVertexInput(attrInput, GfxFormat.U8_RGBA_NORM);
+            input = allocateVertexInput(attrInput);
             fieldCompOffset = (vtxAttrib - GX.Attr.TEX0MTXIDX) & 0x03;
             fieldFormat = GfxFormat.U8_RGBA;
         } else if (vtxAttrib === GX.Attr.POS) {
             // POS and PNMTX are packed together.
-            input = allocateVertexInput(VertexAttributeInput.POS, GfxFormat.F32_RGBA);
+            input = allocateVertexInput(VertexAttributeInput.POS);
             fieldFormat = GfxFormat.F32_RGB;
         } else if (vtxAttrib === GX.Attr.PNMTXIDX) {
             // PNMTXIDX is packed in w of POS.
-            input = allocateVertexInput(VertexAttributeInput.POS, GfxFormat.F32_RGBA);
+            input = allocateVertexInput(VertexAttributeInput.POS);
             fieldCompOffset = 3;
             fieldFormat = GfxFormat.F32_R;
         } else if (vtxAttrib === GX.Attr.NRM && useNBT) {
             // NBT. Allocate inputs for all of NRM, BINRM, TANGENT.
-            input = allocateVertexInput(VertexAttributeInput.NRM, GfxFormat.F32_RGB);
-            allocateVertexInput(VertexAttributeInput.BINRM, GfxFormat.F32_RGB);
-            allocateVertexInput(VertexAttributeInput.TANGENT, GfxFormat.F32_RGB);
+            input = allocateVertexInput(VertexAttributeInput.NRM);
+            allocateVertexInput(VertexAttributeInput.BINRM);
+            allocateVertexInput(VertexAttributeInput.TANGENT);
             fieldFormat = input.format;
         } else if (vtxAttrib === GX.Attr.NRM) {
             // Regular NRM.
-            input = allocateVertexInput(VertexAttributeInput.NRM, GfxFormat.F32_RGB);
+            input = allocateVertexInput(VertexAttributeInput.NRM);
             fieldFormat = input.format;
         } else if (isVtxAttribTex(vtxAttrib)) {
             const texAttr = vtxAttrib - GX.Attr.TEX0;
             const attrInput = VertexAttributeInput.TEX01 + (texAttr >>> 1);
-            input = allocateVertexInput(attrInput, GfxFormat.F32_RGBA);
+            input = allocateVertexInput(attrInput);
             fieldCompOffset = (texAttr & 0x01) * 2;
             fieldFormat = GfxFormat.F32_RG;
         } else if (isVtxAttribColor(vtxAttrib)) {
             const attrInput = getAttrInputForAttr(vtxAttrib);
-            input = allocateVertexInput(attrInput, GfxFormat.U8_RGBA_NORM);
+            input = allocateVertexInput(attrInput);
             fieldFormat = input.format;
         } else {
             throw "whoops";
@@ -530,11 +554,6 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
 //#endregion
 
 //#region Vertex Loader JIT
-interface VtxLoaderEntry {
-    srcLayout: SourceVatLayout;
-    func: SingleVtxLoaderFunc;
-}
-
 type SingleVtxLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, dlView: DataView, dlOffs: number, vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
 type SingleVatLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, loadedVertexLayout: LoadedVertexLayout, dlView: DataView, drawCalls: DrawCall[], vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
 
@@ -893,8 +912,6 @@ class VtxLoaderImpl implements VtxLoader {
     }
 
     public parseDisplayList(srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
-        // TODO(jstpierre): Clean this up eventually
-
         function newDraw(indexOffset: number): LoadedVertexDraw {
             return {
                 indexOffset,
@@ -921,7 +938,7 @@ class VtxLoaderImpl implements VtxLoader {
             if (cmd === 0)
                 break;
 
-            // TODO(jstpierre): This hardcodes some assumptions about the arrays and indexed units.
+            // NOTE(jstpierre): This hardcodes some assumptions about the arrays and indexed units.
             switch (cmd) {
             case GX.Command.LOAD_INDX_A: { // Position Matrices
                 currentDraw = null;
@@ -1474,9 +1491,9 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
             } else {
                 const indexOffset = totalIndexCount + draw.indexOffset;
                 const indexCount = draw.indexCount;
-                const posNrmMatrixTable = draw.posMatrixTable;
+                const posMatrixTable = draw.posMatrixTable;
                 const texMatrixTable = draw.texMatrixTable;
-                draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
+                draws.push({ indexOffset, indexCount, posMatrixTable, texMatrixTable });
             }
         }
 
