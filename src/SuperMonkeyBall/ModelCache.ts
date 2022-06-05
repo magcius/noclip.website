@@ -16,7 +16,7 @@ import * as SD from "./Stagedef";
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
 
-export class TextureHolder implements UI.TextureListHolder {
+export class TextureCache implements UI.TextureListHolder {
     public viewerTextures: Viewer.Texture[] = [];
     public onnewtextures: (() => void) | null = null;
     private cache: Map<string, LoadedTexture> = new Map();
@@ -64,7 +64,7 @@ export const enum GmaSrc {
 export class ModelCache {
     // Earlier appearance in this list is higher search precedence
     private entries: CacheEntry[];
-    private textureHolder: TextureHolder;
+    private textureCache: TextureCache;
 
     private blueGoalModel: ModelInst | null = null;
     private greenGoalModel: ModelInst | null = null;
@@ -77,7 +77,7 @@ export class ModelCache {
             new CacheEntry(stageData.bgGma),
             new CacheEntry(stageData.commonGma),
         ];
-        this.textureHolder = new TextureHolder();
+        this.textureCache = new TextureCache();
 
         // TODO(complexplane): Don't do these in modelcache?
         // TODO(complexplane): The game seems to search blue goal using "GOAL" prefix instead of 2
@@ -116,7 +116,7 @@ export class ModelCache {
         if (modelInst !== undefined) {
             return modelInst;
         }
-        const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureHolder);
+        const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureCache);
         entry.modelCache.set(modelData.name, freshModelInst);
         return freshModelInst;
     }
@@ -150,8 +150,8 @@ export class ModelCache {
         return this.bumperModel;
     }
 
-    public getTextureHolder(): TextureHolder {
-        return this.textureHolder;
+    public gettextureCache(): TextureCache {
+        return this.textureCache;
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {
@@ -166,6 +166,6 @@ export class ModelCache {
         for (let i = 0; i < this.entries.length; i++) {
             this.entries[i].modelCache.forEach((model) => model.destroy(device));
         }
-        this.textureHolder.destroy(device);
+        this.textureCache.destroy(device);
     }
 }

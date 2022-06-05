@@ -8,6 +8,10 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { AVTpl } from "./AVTpl";
 import { parseVec2f, parseVec3f } from "./Utils";
 import { assertExists } from "../util";
+import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { LoadedTexture } from "../TextureHolder";
+import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { TextureCache } from "./ModelCache";
 
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;
@@ -160,6 +164,7 @@ function parseMeshList<T>(view: DataView, meshOffs: number, parseVtxFunc: ParseV
         const materialColorR = view.getFloat32(meshOffs + 0x30);
         const materialColorG = view.getFloat32(meshOffs + 0x34);
         const materialColorB = view.getFloat32(meshOffs + 0x38);
+        const materialColor = colorNewFromRGBA(materialColorR, materialColorG, materialColorB, materialColorA);
 
         const dispListSize = view.getUint32(meshOffs + 0x4c);
         const dispListOffs = meshOffs + 0x50;
@@ -171,7 +176,7 @@ function parseMeshList<T>(view: DataView, meshOffs: number, parseVtxFunc: ParseV
             tex,
             meshType,
             ambientColorScale,
-            materialColor: colorNewFromRGBA(materialColorR, materialColorG, materialColorB, materialColorA),
+            materialColor,
             dispList,
         });
 
@@ -213,4 +218,14 @@ export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
         }
     }
     return obj;
+}
+
+class MaterialInst {
+    private materialHelper: GXMaterialHelperGfx;
+    private loadedTex: LoadedTexture;
+    private gfxSampler: GfxSampler;
+
+    constructor(private meshData: Mesh<unknown>, textureCache: TextureCache) {
+        
+    }
 }

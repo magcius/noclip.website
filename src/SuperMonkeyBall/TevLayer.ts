@@ -5,7 +5,7 @@ import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { LoadedTexture, TextureMapping } from "../TextureHolder";
 import * as Gma from "./Gma";
 import * as GX from "../gx/gx_enum";
-import { TextureHolder } from "./ModelCache";
+import { TextureCache } from "./ModelCache";
 import { translateWrapModeGfx } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
@@ -17,9 +17,9 @@ export class TevLayerInst {
         device: GfxDevice,
         renderCache: GfxRenderCache,
         public tevLayerData: Gma.TevLayer,
-        textureHolder: TextureHolder
+        textureCache: TextureCache
     ) {
-        this.loadedTex = textureHolder.getTexture(device, tevLayerData.gxTexture);
+        this.loadedTex = textureCache.getTexture(device, tevLayerData.gxTexture);
 
         const wrapS = ((tevLayerData.flags >> 2) & 0x03) as GX.WrapMode;
         const wrapT = ((tevLayerData.flags >> 4) & 0x03) as GX.WrapMode;

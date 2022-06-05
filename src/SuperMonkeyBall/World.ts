@@ -20,7 +20,7 @@ import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams, RenderSort } from "./Model";
-import { GmaSrc, ModelCache, TextureHolder } from "./ModelCache";
+import { GmaSrc, ModelCache, TextureCache } from "./ModelCache";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
 import { BgInfo, CommonGmaModelIDs, StageId, StageInfo, BgInfos } from "./StageInfo";
@@ -365,7 +365,7 @@ class Bumper {
 export interface World {
     update(viewerInput: Viewer.ViewerRenderInput): void;
     prepareToRender(ctx: RenderContext): void;
-    getTextureHolder(): TextureHolder;
+    gettextureCache(): TextureCache;
     getClearColor(): Color;
     setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void;
     destroy(device: GfxDevice): void;
@@ -411,8 +411,8 @@ export class StageWorld implements World {
         this.background.prepareToRender(ctx, this.lighting);
     }
 
-    public getTextureHolder(): TextureHolder {
-        return this.modelCache.getTextureHolder();
+    public gettextureCache(): TextureCache {
+        return this.modelCache.gettextureCache();
     }
 
     public getClearColor(): Color {
@@ -432,13 +432,13 @@ export class StageWorld implements World {
 export class FileDropWorld implements World {
     private lighting: Lighting;
     private models: ModelInst[] = [];
-    private textureHolder: TextureHolder;
+    private textureCache: TextureCache;
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private worldData: GmaData | NlData) {
-        this.textureHolder = new TextureHolder();
+        this.textureCache = new TextureCache();
         if (worldData.kind === "Gma") {
             for (const model of worldData.gma.idMap.values()) {
-                this.models.push(new ModelInst(device, renderCache, model, this.textureHolder));
+                this.models.push(new ModelInst(device, renderCache, model, this.textureCache));
             }
         } else {
             // TODO(complexplane): Build NL models
@@ -460,8 +460,8 @@ export class FileDropWorld implements World {
         }
     }
 
-    public getTextureHolder(): TextureHolder {
-        return this.textureHolder;
+    public gettextureCache(): TextureCache {
+        return this.textureCache;
     }
 
     public getClearColor(): Color {
@@ -478,6 +478,6 @@ export class FileDropWorld implements World {
         for (let i = 0; i < this.models.length; i++) {
             this.models[i].destroy(device);
         }
-        this.textureHolder.destroy(device);
+        this.textureCache.destroy(device);
     }
 }

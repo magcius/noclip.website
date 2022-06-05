@@ -30,7 +30,7 @@ export type RenderContext = {
 export class Renderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private world: World;
-    public textureHolder: UI.TextureListHolder;
+    public textureCache: UI.TextureListHolder;
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
 
@@ -41,9 +41,9 @@ export class Renderer implements Viewer.SceneGfx {
         } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
             this.world = new FileDropWorld(device, this.renderHelper.getCache(), worldData);
         }
-        const textureHolder = this.world.getTextureHolder();
-        this.textureHolder = textureHolder;
-        textureHolder.updateViewerTextures();
+        const textureCache = this.world.gettextureCache();
+        this.textureCache = textureCache;
+        textureCache.updateViewerTextures();
     }
 
     public createPanels(): UI.Panel[] {
