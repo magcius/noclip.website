@@ -1,5 +1,9 @@
 // NaomiLib (NL) model format support
 
+// SMB1 supports rendering Arcade Monkey Ball stages to some extent, but every stage playable in the
+// game without using debug menu (except Bonus Wave) is predominantly GMA-based. Some one-off NL
+// models are used in some cases though, such as the LCD timer models on the goal and the goaltape.
+
 import { TextureInputGX } from "../gx/gx_texture";
 import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
 
@@ -12,6 +16,9 @@ import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { LoadedTexture } from "../TextureHolder";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { TextureCache } from "./ModelCache";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { TSDraw } from "../SuperMarioGalaxy/DDraw";
 
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;
@@ -221,11 +228,60 @@ export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
 }
 
 class MaterialInst {
-    private materialHelper: GXMaterialHelperGfx;
-    private loadedTex: LoadedTexture;
+    private loadedTex: LoadedTexture | null; // Null if we're using TEXMAP_NULL
     private gfxSampler: GfxSampler;
+    private materialHelper: GXMaterialHelperGfx;
 
-    constructor(private meshData: Mesh<unknown>, textureCache: TextureCache) {
+    private initSampler(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        meshData: Mesh<unknown>,
+        textureCache: TextureCache
+    ) {
+        this.loadedTex = meshData.tex === null ? null : textureCache.getTexture(device, meshData.tex);
+
+        let wrapS: GfxWrapMode;
+        let wrapT: GfxWrapMode;
+        if (meshData.texFlags & TexFlags.SClamp) {
+            wrapS = GfxWrapMode.Clamp;
+        } else if (meshData.texFlags & TexFlags.SMirror) {
+            wrapS = GfxWrapMode.Mirror;
+        } else {
+            wrapS = GfxWrapMode.Repeat;
+        }
+        if (meshData.texFlags & TexFlags.TClamp) {
+            wrapT = GfxWrapMode.Clamp;
+        } else if (meshData.texFlags & TexFlags.TMirror) {
+            wrapT = GfxWrapMode.Mirror;
+        } else {
+            wrapT = GfxWrapMode.Repeat;
+        }
+
+        const texFilter = (meshData.texFlags & 3) === 0 ? GfxTexFilterMode.Point : GfxTexFilterMode.Bilinear;
+
+        this.gfxSampler = renderCache.createSampler({
+            wrapS,
+            wrapT,
+            minFilter: texFilter,
+            magFilter: texFilter,
+            mipFilter: GfxMipFilterMode.NoMip,
+            minLOD: 0,
+            maxLOD: 0,
+        });
+    }
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>, textureCache: TextureCache) {
+        this.initSampler(device, renderCache, meshData, textureCache);
+        // TODO(complexplane): Init GX material
+    }
+}
+
+class MeshInst {
+    private tsDraw: TSDraw;
+}
+
+class ModelInst {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Model, texHolder: TextureCache) {
         
     }
 }
