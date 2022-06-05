@@ -11,7 +11,7 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
 import * as Viewer from "../viewer";
 import { ModelCache } from "./ModelCache";
-import { GmaWorld, StageData, StageWorld, World, WorldData } from "./World";
+import { FileDropWorld, StageData, StageWorld, World, WorldData } from "./World";
 import * as UI from "../ui";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { S16_TO_RADIANS, Sphere } from "./Utils";
@@ -38,8 +38,8 @@ export class Renderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
         if (worldData.kind === "Stage") {
             this.world = new StageWorld(device, this.renderHelper.getCache(), worldData);
-        } else {
-            this.world = new GmaWorld(device, this.renderHelper.getCache(), worldData);
+        } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
+            this.world = new FileDropWorld(device, this.renderHelper.getCache(), worldData);
         }
         const textureHolder = this.world.getTextureHolder();
         this.textureHolder = textureHolder;

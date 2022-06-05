@@ -56,7 +56,7 @@ const enum MeshType {
 type Mesh<T> = {
     flags: number;
     texFlags: TexFlags;
-    tex: TextureInputGX;
+    tex: TextureInputGX | null;
     meshType: MeshType;
     ambientColorScale: number;
     materialColor: Color;
@@ -86,7 +86,7 @@ type Model = {
 
 // NaomiLib model archive analogous to GMA
 // There's model names too but I'm only considering model idx at this point
-type Obj = Map<number, Model>;
+export type Obj = Map<number, Model>;
 
 type ParseVtxFunc<T> = (view: DataView, offs: number) => T;
 
@@ -106,7 +106,17 @@ function parseVtxTypeB(view: DataView, vtxOffs: number): VtxTypeB {
 
 function parseDispList<T>(view: DataView, dispListOffs: number, parseVtxFunc: ParseVtxFunc<T>): DispList<T> {
     const flags = view.getUint32(dispListOffs + 0x0) as DispListFlags;
-    const vtxCount = view.getUint32(dispListOffs + 0x4);
+    const vtxOrFaceCount = view.getUint32(dispListOffs + 0x4);
+    let vtxCount: number;
+    if (flags & DispListFlags.Quads) {
+        vtxCount = vtxOrFaceCount * 4;
+    } else if (flags & DispListFlags.Triangles) {
+        vtxCount = vtxOrFaceCount * 3;
+    } else if (flags & DispListFlags.TriangleStrip) {
+        vtxCount = vtxOrFaceCount;
+    } else {
+        throw new Error("Invalid NL display list primitive type");
+    }
 
     const vertices: T[] = [];
     let vtxOffs = dispListOffs + DISP_LIST_HEADER_SIZE;
@@ -133,6 +143,7 @@ function parseDispList<T>(view: DataView, dispListOffs: number, parseVtxFunc: Pa
 // Otherwise return null.
 function parseMeshList<T>(view: DataView, meshOffs: number, parseVtxFunc: ParseVtxFunc<T>, tpl: AVTpl): Mesh<T>[] {
     const meshes: Mesh<T>[] = [];
+    let meshIdx = 0;
 
     while (true) {
         const valid = view.getInt32(meshOffs + 0x0);
@@ -141,7 +152,7 @@ function parseMeshList<T>(view: DataView, meshOffs: number, parseVtxFunc: ParseV
         const flags = view.getUint32(meshOffs + 0x4);
         const texFlags = view.getUint32(meshOffs + 0x8) as TexFlags;
         const tplTexIdx = view.getInt32(meshOffs + 0x20);
-        const tex = assertExists(tpl.get(tplTexIdx));
+        const tex = tplTexIdx < 0 ? null : assertExists(tpl.get(tplTexIdx));
         const meshType = view.getInt32(meshOffs + 0x24) as MeshType;
         const ambientColorScale = view.getFloat32(meshOffs + 0x28);
         const materialColorA = view.getFloat32(meshOffs + 0x2c);
@@ -164,6 +175,7 @@ function parseMeshList<T>(view: DataView, meshOffs: number, parseVtxFunc: ParseV
         });
 
         meshOffs = dispListOffs + dispListSize;
+        meshIdx++;
     }
 }
 

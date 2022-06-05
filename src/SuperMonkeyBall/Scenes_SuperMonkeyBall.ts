@@ -7,10 +7,11 @@ import { StageId, STAGE_INFO_MAP } from "./StageInfo";
 import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
-import { GmaData, StageData } from "./World";
+import { GmaData, NlData, StageData } from "./World";
 import { decompressLZ } from "./AVLZ";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
+import * as Nl from "./NaomiLib";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...
@@ -90,19 +91,35 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 
 export function createSceneFromNamedBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]): Renderer | null {
     if (buffers.length !== 2) return null;
-    let [gmaBuf, tplBuf] = buffers;
-    if (gmaBuf.name.endsWith(".tpl")) {
-        [gmaBuf, tplBuf] = [tplBuf, gmaBuf];
-    }
-    if (!gmaBuf.name.endsWith(".gma") || !tplBuf.name.endsWith(".tpl")) return null;
+    let [modelsBuf, tplBuf] = buffers;
 
-    const tpl = parseAVTpl(tplBuf, tplBuf.name);
-    const gma = Gma.parseGma(gmaBuf, tpl);
-    const worldData: GmaData = {
-        kind: "Gma",
-        gma: gma,
-    };
-    return new Renderer(context.device, worldData);
+    // GMA case: .gma for models, .tpl for TPL
+    // NL case: _p.lz for models, .lz for TPL
+    if (tplBuf.name.endsWith(".gma") || tplBuf.name.endsWith("_p.lz")) {
+        [modelsBuf, tplBuf] = [tplBuf, modelsBuf];
+    }
+
+    if (modelsBuf.name.endsWith(".gma") && tplBuf.name.endsWith(".tpl")) {
+        const tpl = parseAVTpl(tplBuf, tplBuf.name);
+        const gma = Gma.parseGma(modelsBuf, tpl);
+        const worldData: GmaData = {
+            kind: "Gma",
+            gma: gma,
+        };
+        return new Renderer(context.device, worldData);
+    }
+
+    if (modelsBuf.name.endsWith("_p.lz") && tplBuf.name.endsWith(".lz")) {
+        const tpl = parseAVTpl(decompressLZ(tplBuf), tplBuf.name);
+        const nlObj = Nl.parseObj(decompressLZ(modelsBuf), tpl);
+        const worldData: NlData = {
+            kind: "Nl",
+            obj: nlObj,
+        };
+        return new Renderer(context.device, worldData);
+    }
+
+    return null;
 }
 
 const id = "supermonkeyball";

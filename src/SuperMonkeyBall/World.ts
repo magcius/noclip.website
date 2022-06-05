@@ -30,6 +30,7 @@ import { SpotFunction } from "../gx/gx_enum";
 import { assertExists } from "../util";
 import * as UI from "../ui";
 import { ColorFlagStart } from "../PokemonSnap/room";
+import * as Nl from "./NaomiLib";
 
 const scratchRenderParams = new RenderParams();
 
@@ -48,7 +49,12 @@ export type GmaData = {
     gma: Gma.Gma;
 }
 
-export type WorldData = StageData | GmaData;
+export type NlData = {
+    kind: "Nl",
+    obj: Nl.Obj;
+}
+
+export type WorldData = StageData | GmaData | NlData;
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -422,17 +428,20 @@ export class StageWorld implements World {
     }
 }
 
-// Just render all models in a single GMA, not a stage+bg and all
-export class GmaWorld implements World {
+// Just render all models in a single GMA or NaomiLib object, not a stage+bg and all
+export class FileDropWorld implements World {
     private lighting: Lighting;
-    private models: ModelInst[];
+    private models: ModelInst[] = [];
     private textureHolder: TextureHolder;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, gmaData: GmaData) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, private worldData: GmaData | NlData) {
         this.textureHolder = new TextureHolder();
-        this.models = [];
-        for (const model of gmaData.gma.idMap.values()) {
-            this.models.push(new ModelInst(device, renderCache, model, this.textureHolder));
+        if (worldData.kind === "Gma") {
+            for (const model of worldData.gma.idMap.values()) {
+                this.models.push(new ModelInst(device, renderCache, model, this.textureHolder));
+            }
+        } else {
+            // TODO(complexplane): Build NL models
         }
         this.lighting = new Lighting(BgInfos.Jungle); // Just assume Jungle's lighting, it's used in a few other BGs
     }
