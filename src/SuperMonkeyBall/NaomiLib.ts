@@ -131,8 +131,9 @@ function parseDispList<T>(view: DataView, dispListOffs: number, parseVtxFunc: Pa
             // Our "vertex" is a 0x8 structure, u32 at 0x4 gives offset to actual vertex relative to
             // where we currently are in disp list. Just copy the vtx if it's used twice, don't
             // bother to try to figure out index buffer stuff here.
-            const actualVtxOffs = view.getUint32(vtxOffs + 0x4);
-            vertices.push(parseVtxFunc(view, vtxOffs + actualVtxOffs + VTX_OFFSET_DESC_SIZE));
+            const relativeVtxOffs = view.getInt32(vtxOffs + 0x4); // Game reads as u32 but it's really signed
+            const actualVtxOffs = vtxOffs + relativeVtxOffs + VTX_OFFSET_DESC_SIZE;
+            vertices.push(parseVtxFunc(view, actualVtxOffs));
             vtxOffs += VTX_OFFSET_DESC_SIZE;
         }
     }
