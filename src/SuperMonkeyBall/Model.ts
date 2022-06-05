@@ -10,8 +10,9 @@ import { TevLayerInst } from "./TevLayer";
 import { ShapeInst } from "./Shape";
 import { RenderContext } from "./Render";
 import { Color, colorNewFromRGBA } from "../Color";
-import { Lighting } from "./World";
+import { ModelInterface } from "./World";
 import { transformVec3Mat4w1 } from "../MathHelpers";
+import { Lighting } from "./Lighting";
 
 export const enum RenderSort {
     Translucent, // Depth sort "translucent" shapes only
@@ -40,7 +41,7 @@ export class RenderParams {
 }
 
 const scratchVec3a = vec3.create();
-export class ModelInst {
+export class ModelInst implements ModelInterface {
     private shapes: ShapeInst[];
     private tevLayers: TevLayerInst[]; // Each shape's material uses up to three of these
 

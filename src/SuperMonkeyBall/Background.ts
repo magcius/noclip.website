@@ -4,7 +4,7 @@ import { RenderParams } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
 import { MkbTime, MKB_FPS } from "./Utils";
-import { Lighting } from "./World";
+import { Lighting } from "./Lighting";
 
 export interface Background {
     update(t: MkbTime): void;

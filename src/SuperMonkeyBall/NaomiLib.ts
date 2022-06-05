@@ -19,6 +19,11 @@ import { TextureCache } from "./ModelCache";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw";
+import { ModelInterface } from "./World";
+import { GXMaterialHacks } from "../gx/gx_material";
+import { RenderParams } from "./Model";
+import { RenderContext } from "./Render";
+import * as GX from "../gx/gx_enum";
 
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;
@@ -73,6 +78,16 @@ type Mesh<T> = {
     materialColor: Color;
     dispList: DispList<T>;
 };
+
+type MeshWithType =
+    | {
+          kind: "A";
+          mesh: Mesh<VtxTypeA>;
+      }
+    | {
+          kind: "B";
+          mesh: Mesh<VtxTypeB>;
+      };
 
 const enum ModelFlags {
     VtxTypeA, // All meshes in model have vertices of type A (type B if unset)
@@ -277,11 +292,72 @@ class MaterialInst {
 }
 
 class MeshInst {
-    private tsDraw: TSDraw;
+    private ddraw: TSDraw;
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: MeshWithType) {
+        this.ddraw = new TSDraw();
+
+        if (meshData.kind === "A") {
+            this.ddraw.setVtxDesc(GX.Attr.POS, true);
+            this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+            this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+            meshData.mesh.dispList.vertices[0];
+        } else {
+            this.ddraw.setVtxDesc(GX.Attr.POS, true);
+            this.ddraw.setVtxDesc(GX.Attr.NRM, true);
+            this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        }
+
+        this.ddraw.beginDraw();
+
+        if (meshData.mesh.dispList.flags & DispListFlags.Triangles) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLES);
+        } else if (meshData.mesh.dispList.flags & DispListFlags.Quads) {
+            this.ddraw.begin(GX.Command.DRAW_QUADS);
+        } else if (meshData.mesh.dispList.flags & DispListFlags.TriangleStrip) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        } else {
+            throw new Error("Invalid display list primitive type");
+        }
+
+        if (meshData.kind === "A") {
+            for (const vtx of meshData.mesh.dispList.vertices) {
+                this.ddraw.position3vec3(vtx.pos);
+                this.ddraw.color4color(GX.Attr.CLR0, vtx.materialColor);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, vtx.texCoord);
+            }
+        } else {
+            for (const vtx of meshData.mesh.dispList.vertices) {
+                this.ddraw.position3vec3(vtx.pos);
+                this.ddraw.normal3vec3(vtx.normal);
+                this.ddraw.texCoord2vec2(GX.Attr.TEX0, vtx.texCoord);
+            }
+        }
+
+        this.ddraw.endDraw(renderCache);
+    }
 }
 
-class ModelInst {
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Model, texHolder: TextureCache) {
-        
+export class ModelInst implements ModelInterface {
+    private meshes: MeshInst[] = [];
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Model, textureCache: TextureCache) {
+        if (modelData.meshList.kind === "A") {
+            this.meshes = modelData.meshList.meshes.map(
+                (meshData) => new MeshInst(device, renderCache, { kind: "A", mesh: meshData })
+            );
+        } else {
+            this.meshes = modelData.meshList.meshes.map(
+                (meshData) => new MeshInst(device, renderCache, { kind: "B", mesh: meshData })
+            );
+        }
+    }
+
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+    }
+
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams): void {
+    }
+
+    public destroy(device: GfxDevice): void {
     }
 }
