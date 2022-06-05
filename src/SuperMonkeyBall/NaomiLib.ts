@@ -69,22 +69,20 @@ const enum ModelFlags {
     Opaque, // Model has at least 1 opaque mesh
 }
 
-type ModelWithVtxType<T> = {
+type Model = {
     flags: ModelFlags;
     boundSphereCenter: vec3;
     boundSphereRadius: number;
-    meshes: Mesh<T>[];
+    meshList:
+        | {
+              kind: "A";
+              meshes: Mesh<VtxTypeA>[];
+          }
+        | {
+              kind: "B";
+              meshes: Mesh<VtxTypeB>[];
+          };
 };
-
-type Model =
-    | {
-          kind: "A";
-          model: ModelWithVtxType<VtxTypeA>;
-      }
-    | {
-          kind: "B";
-          model: ModelWithVtxType<VtxTypeB>;
-      };
 
 // NaomiLib model archive analogous to GMA
 // There's model names too but I'm only considering model idx at this point
@@ -180,18 +178,12 @@ function parseModel(view: DataView, modelOffs: number, tpl: AVTpl): Model | null
 
     if (flags & ModelFlags.VtxTypeA) {
         const meshes = parseMeshList(view, modelOffs + 0x18, parseVtxTypeA, tpl);
-        return {
-            kind: "A",
-            model: { flags, boundSphereCenter, boundSphereRadius, meshes },
-        };
+        return { flags, boundSphereCenter, boundSphereRadius, meshList: { kind: "A", meshes } };
     }
 
     // Vtx type B
     const meshes = parseMeshList(view, modelOffs + 0x18, parseVtxTypeB, tpl);
-    return {
-        kind: "B",
-        model: { flags, boundSphereCenter, boundSphereRadius, meshes },
-    };
+    return { flags, boundSphereCenter, boundSphereRadius, meshList: { kind: "B", meshes } };
 }
 
 export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
