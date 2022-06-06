@@ -5,7 +5,7 @@ import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, Gfx
 import { nArray, assert, assertExists, nullify } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4, ReadonlyVec4 } from "gl-matrix";
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem, SourceEngineView, BSPRenderer, SourceEngineViewType } from "./Main";
@@ -2015,7 +2015,9 @@ void mainPS() {
 
     t_FinalColor.rgb += t_FinalDiffuse;
 
+#ifndef DEBUG_DIFFUSEONLY
     t_FinalColor.rgb += t_SpecularLighting.rgb;
+#endif
 
     t_FinalColor.a = t_Albedo.a;
     if (!use_base_alpha_envmap_mask)
