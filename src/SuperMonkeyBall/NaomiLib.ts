@@ -6,12 +6,7 @@
 
 import { mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import {
-    Color,
-    colorCopy, colorNewFromRGBA,
-    colorNewFromRGBA8,
-    colorScale
-} from "../Color";
+import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, colorScale } from "../Color";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -34,6 +29,27 @@ import { ModelInterface } from "./World";
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;
 const DISP_LIST_HEADER_SIZE = 0x8;
+
+const NL_TO_GX_COMPARE = [
+    GX.CompareType.NEVER,
+    GX.CompareType.GEQUAL,
+    GX.CompareType.EQUAL,
+    GX.CompareType.GEQUAL,
+    GX.CompareType.LEQUAL,
+    GX.CompareType.NEQUAL,
+    GX.CompareType.LEQUAL,
+    GX.CompareType.ALWAYS,
+];
+
+const NL_TO_GX_CULL_MODE = [GX.CullMode.ALL, GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT];
+
+// prettier-ignore
+const FLIP_T_TEX_MTX = mat4.fromValues(
+    1, 0, 0, 0, 
+    0, -1, 0, 0, 
+    0, 0, 1, 0, 
+    0, 0, 0, 1
+);
 
 const enum TexFlags {
     ScaleFilterNear = (1 << 13) | (1 << 14), // If either set, min/mag scale is nearest, else linear
@@ -252,25 +268,6 @@ export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
     return obj;
 }
 
-const NL_TO_GX_COMPARE = [
-    GX.CompareType.NEVER,
-    GX.CompareType.GEQUAL,
-    GX.CompareType.EQUAL,
-    GX.CompareType.GEQUAL,
-    GX.CompareType.LEQUAL,
-    GX.CompareType.NEQUAL,
-    GX.CompareType.LEQUAL,
-    GX.CompareType.ALWAYS,
-];
-
-// prettier-ignore
-const FLIP_T_TEX_MTX = mat4.fromValues(
-    1, 0, 0, 0, 
-    0, -1, 0, 0, 
-    0, 0, 1, 0, 
-    0, 0, 0, 1
-);
-
 const scratchMaterialParams = new MaterialParams();
 class MaterialInst {
     private loadedTex: LoadedTexture | null; // Null if we're using TEXMAP_NULL
@@ -322,6 +319,8 @@ class MaterialInst {
 
     private genGXMaterial(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>): void {
         const mb = new GXMaterialBuilder();
+
+        mb.setCullMode(NL_TO_GX_CULL_MODE[meshData.dispList.flags & 3]);
 
         mb.setTevDirect(0);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
