@@ -8,13 +8,9 @@ import { mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import {
     Color,
-    colorCopy,
-    colorMult,
-    colorNewCopy,
-    colorNewFromRGBA,
+    colorCopy, colorNewFromRGBA,
     colorNewFromRGBA8,
-    colorScale,
-    White,
+    colorScale
 } from "../Color";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
@@ -474,10 +470,14 @@ class MaterialInst {
     }
 }
 
+const scratchDrawParams = new DrawParams();
+
 class MeshInst {
     private ddraw: TSDraw;
+    private material: MaterialInst;
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: MeshWithType) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: MeshWithType, textureCache: TextureCache) {
+        this.material = new MaterialInst(device, renderCache, meshData.mesh, textureCache);
         this.ddraw = new TSDraw();
 
         if (meshData.kind === "A") {
@@ -517,7 +517,26 @@ class MeshInst {
             }
         }
 
+        this.ddraw.end();
         this.ddraw.endDraw(renderCache);
+    }
+
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        this.material.setMaterialHacks(hacks);
+    }
+
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams) {
+        const drawParams = scratchDrawParams;
+        mat4.copy(drawParams.u_PosMtx[0], renderParams.viewFromModel);
+
+        const inst = ctx.renderInstManager.newRenderInst();
+        this.material.setOnRenderInst(ctx.device, ctx.renderInstManager.gfxRenderCache, inst, drawParams, renderParams);
+        this.ddraw.setOnRenderInst(inst);
+        ctx.opaqueInstList.submitRenderInst(inst); // TODO(complexplane): Translucent depth sort stuff
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }
 
@@ -526,18 +545,30 @@ export class ModelInst implements ModelInterface {
     constructor(device: GfxDevice, renderCache: GfxRenderCache, public modelData: Model, textureCache: TextureCache) {
         if (modelData.meshList.kind === "A") {
             this.meshes = modelData.meshList.meshes.map(
-                (meshData) => new MeshInst(device, renderCache, { kind: "A", mesh: meshData })
+                (meshData) => new MeshInst(device, renderCache, { kind: "A", mesh: meshData }, textureCache)
             );
         } else {
             this.meshes = modelData.meshList.meshes.map(
-                (meshData) => new MeshInst(device, renderCache, { kind: "B", mesh: meshData })
+                (meshData) => new MeshInst(device, renderCache, { kind: "B", mesh: meshData }, textureCache)
             );
         }
     }
 
-    public setMaterialHacks(hacks: GXMaterialHacks): void {}
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        for (let i = 0; i < this.meshes.length; i++) {
+            this.meshes[i].setMaterialHacks(hacks);
+        }
+    }
 
-    public prepareToRender(ctx: RenderContext, renderParams: RenderParams): void {}
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams): void {
+        for (let i = 0; i < this.meshes.length; i++) {
+            this.meshes[i].prepareToRender(ctx, renderParams);
+        }
+    }
 
-    public destroy(device: GfxDevice): void {}
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.meshes.length; i++) {
+            this.meshes[i].destroy(device);
+        }
+    }
 }
