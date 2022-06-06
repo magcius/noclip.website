@@ -4,26 +4,26 @@
 // game without using debug menu (except Bonus Wave) is predominantly GMA-based. Some one-off NL
 // models are used in some cases though, such as the LCD timer models on the goal and the goaltape.
 
-import { TextureInputGX } from "../gx/gx_texture";
-import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
-
 import { vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { AVTpl } from "./AVTpl";
-import { parseVec2f, parseVec3f } from "./Utils";
-import { assertExists } from "../util";
-import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { LoadedTexture } from "../TextureHolder";
-import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { TextureCache } from "./ModelCache";
+import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw";
-import { ModelInterface } from "./World";
-import { GXMaterialHacks } from "../gx/gx_material";
-import { RenderParams } from "./Model";
-import { RenderContext } from "./Render";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
+import { GXMaterialHacks } from "../gx/gx_material";
+import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { TextureInputGX } from "../gx/gx_texture";
+import { TSDraw } from "../SuperMarioGalaxy/DDraw";
+import { LoadedTexture } from "../TextureHolder";
+import { assertExists } from "../util";
+import { AVTpl } from "./AVTpl";
+import { RenderParams } from "./Model";
+import { TextureCache } from "./ModelCache";
+import { RenderContext } from "./Render";
+import { parseVec2f, parseVec3f } from "./Utils";
+import { ModelInterface } from "./World";
 
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;
@@ -67,6 +67,10 @@ const enum MeshType {
     UnlitConstMatColor = -1,
     LitConstMatColor = -2, // These types aren't actually rendered but non-negative types are this
     UnlitVertMatColor = -3,
+}
+
+const enum MeshFlags {
+    DisableDepthWrite = 1 << 24,
 }
 
 type Mesh<T> = {
@@ -242,6 +246,17 @@ export function parseObj(nlObjBuffer: ArrayBufferSlice, tpl: AVTpl): Obj {
     return obj;
 }
 
+const NL_TO_GX_COMPARE = [
+    GX.CompareType.NEVER,
+    GX.CompareType.GEQUAL,
+    GX.CompareType.EQUAL,
+    GX.CompareType.GEQUAL,
+    GX.CompareType.LEQUAL,
+    GX.CompareType.NEQUAL,
+    GX.CompareType.LEQUAL,
+    GX.CompareType.ALWAYS,
+];
+
 class MaterialInst {
     private loadedTex: LoadedTexture | null; // Null if we're using TEXMAP_NULL
     private gfxSampler: GfxSampler;
@@ -252,7 +267,7 @@ class MaterialInst {
         renderCache: GfxRenderCache,
         meshData: Mesh<unknown>,
         textureCache: TextureCache
-    ) {
+    ): void {
         this.loadedTex = meshData.tex === null ? null : textureCache.getTexture(device, meshData.tex);
 
         let wrapS: GfxWrapMode;
@@ -285,9 +300,101 @@ class MaterialInst {
         });
     }
 
+    private genGXMaterial(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>): void {
+        const mb = new GXMaterialBuilder();
+
+        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.CLEAR);
+        mb.setFog(GX.FogType.NONE, false);
+
+        if (this.loadedTex === null) {
+            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        } else {
+            switch ((meshData.texFlags >> 6) & 3) {
+                case 0: {
+                    mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+                    mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+                    mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+                    mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    break;
+                }
+                case 1: {
+                    mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+                    mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+                    mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+                    mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    break;
+                }
+                case 2: {
+                    mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+                    mb.setTevColorIn(0, GX.CC.RASC, GX.CC.TEXC, GX.CC.TEXA, GX.CC.ZERO);
+                    mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+                    mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    break;
+                }
+                case 3: {
+                    // Equivalent to 1?
+                    mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+                    mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+                    mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+                    mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                    break;
+                }
+            }
+        }
+
+        switch (meshData.meshType) {
+            case MeshType.UnlitConstMatColor: {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0A0,
+                    false,
+                    GX.ColorSrc.REG,
+                    GX.ColorSrc.REG,
+                    0,
+                    GX.DiffuseFunction.CLAMP,
+                    GX.AttenuationFunction.SPOT
+                );
+                break;
+            }
+            case MeshType.UnlitVertMatColor: {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0A0,
+                    false,
+                    GX.ColorSrc.VTX,
+                    GX.ColorSrc.VTX,
+                    0,
+                    GX.DiffuseFunction.CLAMP,
+                    GX.AttenuationFunction.SPOT
+                );
+                break;
+            }
+            default: {
+                mb.setChanCtrl(
+                    GX.ColorChannelID.COLOR0A0,
+                    true,
+                    GX.ColorSrc.REG,
+                    GX.ColorSrc.REG,
+                    1, // We only have one directional light for now
+                    GX.DiffuseFunction.CLAMP,
+                    GX.AttenuationFunction.SPOT
+                );
+                break;
+            }
+        }
+
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+
+        const zCompare = NL_TO_GX_COMPARE[meshData.flags >> 29];
+        const depthWrite = !(meshData.flags & MeshFlags.DisableDepthWrite);
+        mb.setZMode(true, zCompare, depthWrite);
+    }
+
     constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>, textureCache: TextureCache) {
         this.initSampler(device, renderCache, meshData, textureCache);
-        // TODO(complexplane): Init GX material
+        this.genGXMaterial(device, renderCache, meshData);
     }
 }
 
@@ -352,12 +459,9 @@ export class ModelInst implements ModelInterface {
         }
     }
 
-    public setMaterialHacks(hacks: GXMaterialHacks): void {
-    }
+    public setMaterialHacks(hacks: GXMaterialHacks): void {}
 
-    public prepareToRender(ctx: RenderContext, renderParams: RenderParams): void {
-    }
+    public prepareToRender(ctx: RenderContext, renderParams: RenderParams): void {}
 
-    public destroy(device: GfxDevice): void {
-    }
+    public destroy(device: GfxDevice): void {}
 }
