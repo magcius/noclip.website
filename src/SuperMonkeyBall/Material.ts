@@ -1,18 +1,18 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
+import { mat4 } from "gl-matrix";
+import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks, SwapTable } from "../gx/gx_material";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
+import { assertExists } from "../util";
 import * as Gma from "./Gma";
-import { TevLayerInst } from "./TevLayer";
-import * as GX from "../gx/gx_enum";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color";
 import { RenderParams } from "./Model";
-import { mat4 } from "gl-matrix";
-import { assert, assertExists } from "../util";
+import { TevLayerInst } from "./TevLayer";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],

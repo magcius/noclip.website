@@ -4,16 +4,26 @@
 // game without using debug menu (except Bonus Wave) is predominantly GMA-based. Some one-off NL
 // models are used in some cases though, such as the LCD timer models on the goal and the goaltape.
 
-import { vec2, vec3 } from "gl-matrix";
+import { mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
+import {
+    Color,
+    colorCopy,
+    colorMult,
+    colorNewCopy,
+    colorNewFromRGBA,
+    colorNewFromRGBA8,
+    colorScale,
+    White,
+} from "../Color";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHacks } from "../gx/gx_material";
-import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
 import { TextureInputGX } from "../gx/gx_texture";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw";
 import { LoadedTexture } from "../TextureHolder";
@@ -257,9 +267,18 @@ const NL_TO_GX_COMPARE = [
     GX.CompareType.ALWAYS,
 ];
 
+// prettier-ignore
+const FLIP_T_TEX_MTX = mat4.fromValues(
+    1, 0, 0, 0, 
+    0, -1, 0, 0, 
+    0, 0, 1, 0, 
+    0, 0, 0, 1
+);
+
+const scratchMaterialParams = new MaterialParams();
 class MaterialInst {
     private loadedTex: LoadedTexture | null; // Null if we're using TEXMAP_NULL
-    private gfxSampler: GfxSampler;
+    private gfxSampler: GfxSampler | null;
     private materialHelper: GXMaterialHelperGfx;
 
     private initSampler(
@@ -268,7 +287,12 @@ class MaterialInst {
         meshData: Mesh<unknown>,
         textureCache: TextureCache
     ): void {
-        this.loadedTex = meshData.tex === null ? null : textureCache.getTexture(device, meshData.tex);
+        if (meshData.tex === null) {
+            this.loadedTex = null;
+            this.gfxSampler = null;
+            return;
+        }
+        this.loadedTex = textureCache.getTexture(device, meshData.tex);
 
         let wrapS: GfxWrapMode;
         let wrapT: GfxWrapMode;
@@ -302,6 +326,9 @@ class MaterialInst {
 
     private genGXMaterial(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>): void {
         const mb = new GXMaterialBuilder();
+
+        mb.setTevDirect(0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
 
         mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.CLEAR);
         mb.setFog(GX.FogType.NONE, false);
@@ -390,9 +417,58 @@ class MaterialInst {
         const zCompare = NL_TO_GX_COMPARE[meshData.flags >> 29];
         const depthWrite = !(meshData.flags & MeshFlags.DisableDepthWrite);
         mb.setZMode(true, zCompare, depthWrite);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, meshData: Mesh<unknown>, textureCache: TextureCache) {
+    public setMaterialHacks(hacks: GXMaterialHacks): void {
+        this.materialHelper.setMaterialHacks(hacks);
+    }
+
+    public setOnRenderInst(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        inst: GfxRenderInst,
+        drawParams: DrawParams,
+        renderParams: RenderParams
+    ): void {
+        // Shader program
+        this.materialHelper.setOnRenderInst(device, renderCache, inst);
+
+        // Sampler bindings
+        const materialParams = scratchMaterialParams;
+        materialParams.clear();
+        if (this.loadedTex !== null && this.gfxSampler !== null) {
+            materialParams.m_TextureMapping[0].gfxTexture = this.loadedTex.gfxTexture;
+            materialParams.m_TextureMapping[0].gfxSampler = this.gfxSampler;
+        }
+
+        const lighting = assertExists(renderParams.lighting);
+
+        const targetMatColor = materialParams.u_Color[ColorKind.MAT0];
+        colorCopy(targetMatColor, this.meshData.materialColor);
+
+        // Not 100% sure about alpha...
+        const targetAmbColor = materialParams.u_Color[ColorKind.AMB0];
+        colorScale(targetAmbColor, lighting.ambientColor, this.meshData.ambientColorScale);
+
+        mat4.copy(materialParams.u_TexMtx[0], FLIP_T_TEX_MTX);
+
+        materialParams.u_Lights[0].copy(lighting.infLightViewSpace);
+
+        this.materialHelper.allocateMaterialParamsDataOnInst(inst, materialParams);
+        inst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        // Draw params
+        this.materialHelper.allocateDrawParamsDataOnInst(inst, drawParams);
+    }
+
+    constructor(
+        device: GfxDevice,
+        renderCache: GfxRenderCache,
+        private meshData: Mesh<unknown>,
+        textureCache: TextureCache
+    ) {
         this.initSampler(device, renderCache, meshData, textureCache);
         this.genGXMaterial(device, renderCache, meshData);
     }
