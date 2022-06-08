@@ -806,11 +806,12 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const indTexMatrices: Float32Array[] = [];
 
         const indirectEntryOffs = indirectTableOffset + i * 0x138;
-        const hasIndirectTable = indirectTableOffset !== nameTableOffs;
-        if (hasIndirectTable) {
-            const hasIndirect = view.getUint8(indirectEntryOffs + 0x00);
-            assert(hasIndirect === 0 || hasIndirect === 1);
+        let hasIndirect = false;
 
+        if (indirectTableOffset !== nameTableOffs)
+            hasIndirect = (view.getUint8(indirectEntryOffs + 0x00) === 1);
+
+        if (hasIndirect) {
             const indTexStageNum = view.getUint8(indirectEntryOffs + 0x01);
             assert(indTexStageNum <= 4);
 
@@ -913,7 +914,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             let indTexAddPrev: boolean = false;
             let indTexUseOrigLOD: boolean = false;
 
-            if (hasIndirectTable) {
+            if (hasIndirect) {
                 indTexStage = view.getUint8(indTexStageOffs + 0x00);
                 indTexFormat = view.getUint8(indTexStageOffs + 0x01);
                 indTexBiasSel = view.getUint8(indTexStageOffs + 0x02);

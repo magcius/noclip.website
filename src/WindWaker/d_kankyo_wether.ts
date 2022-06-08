@@ -2,7 +2,7 @@
 import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
-import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
@@ -19,7 +19,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
-import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
@@ -1365,7 +1365,7 @@ const enum SunPeekZResult {
     Visible, Obscured, Culled,
 }
 
-function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, offs: vec2): SunPeekZResult {
+function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: ReadonlyVec3, offs: ReadonlyVec2, clipSpaceNearZ: GfxClipSpaceNearZ): SunPeekZResult {
     // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
     // This was meant to be used against a 640x480 FB space, so:
     const scaleX = 1/640, scaleY = 1/480;
@@ -1381,7 +1381,10 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, of
     // Test if the depth buffer is less than our projected Z coordinate.
     // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
     // Put projected coordinate in 0-1 normalized space.
-    const projectedZ = v[2] * 0.5 + 0.5;
+    let projectedZ = v[2];
+
+    if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+        projectedZ = projectedZ * 0.5 + 0.5;
 
     // Point is visible if our projected Z is in front of the depth buffer.
     const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
@@ -1415,6 +1418,8 @@ function dKyr_sun_move(globals: dGlobals): void {
 
     let numCenterPointsVisible = 0, numPointsVisible = 0, numCulledPoints = 0;
 
+    const clipSpaceNearZ = globals.modelCache.device.queryVendorInfo().clipSpaceNearZ;
+
     let staringAtSunAmount = 0.0;
     if (dKyr__sun_arrival_check(envLight)) {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 1.0, 0.5, 0.1, 0.01);
@@ -1426,7 +1431,7 @@ function dKyr_sun_move(globals: dGlobals): void {
             const peekZ = globals.dlst.peekZ;
 
             for (let i = 0; i < pkt.chkPoints.length; i++) {
-                const res = dKyr_sun_move__PeekZ(pkt.peekZResults[i], peekZ, scratchVec3, pkt.chkPoints[i]);
+                const res = dKyr_sun_move__PeekZ(pkt.peekZResults[i], peekZ, scratchVec3, pkt.chkPoints[i], clipSpaceNearZ);
 
                 if (res === SunPeekZResult.Culled) {
                     numCulledPoints++;
@@ -2023,7 +2028,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
             const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
             wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
         }
-
+ 
         // Sea flat fade.
         if (envLight.waveFlatInter > 0.0) {
             const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);

@@ -59,7 +59,7 @@ export class PeekZManager {
         const frame = assertExists(this.currentFrame);
 
         // Check for trivial result.
-        if (x < -1 || x > 1 || y < -1 || y > 1) {
+        if (x <= -1 || x >= 1 || y <= -1 || y >= 1) {
             dst.triviallyCulled = true;
             return true;
         }

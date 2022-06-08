@@ -1466,6 +1466,10 @@ void main() {
     }
 }
 
+const bindingLayoutsBloom: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 1, },
+];
+
 class BloomDownsampleProgram extends DeviceProgram {
     public override both = `
 layout(std140) uniform ub_Params {
@@ -1845,7 +1849,7 @@ export class SourceRenderer implements SceneGfx {
         const staticResources = this.renderContext.materialCache.staticResources;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setBindingLayouts(bindingLayoutsPost);
+        renderInst.setBindingLayouts(bindingLayoutsBloom);
         renderInst.setInputLayoutAndState(null, null);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.drawPrimitives(3);
@@ -1871,7 +1875,7 @@ export class SourceRenderer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 this.resetTextureMappings();
-        
+
                 renderInst.setGfxProgram(this.bloomDownsampleProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 this.textureMapping[0].gfxSampler = staticResources.linearClampSampler;

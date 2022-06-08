@@ -163,6 +163,7 @@ export class Viewer {
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
+        this.gfxDevice.beginFrame();
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
@@ -170,9 +171,9 @@ export class Viewer {
 
         this.renderViewport();
 
-        this.gfxSwapChain.present();
-
         this.gfxDevice.popDebugGroup();
+        this.gfxDevice.endFrame();
+
         const renderStatistics = this.renderStatisticsTracker.endFrame();
         this.finishRenderStatistics(renderStatistics, this.debugGroup);
         this.onstatistics(renderStatistics);
@@ -207,6 +208,7 @@ export class Viewer {
         this.gfxSwapChain.configureSwapChain(baseLayer.framebufferWidth, baseLayer.framebufferHeight, baseLayer.framebuffer);
         const swapChainTex = this.gfxSwapChain.getOnscreenTexture();
 
+        this.gfxDevice.beginFrame();
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
@@ -233,8 +235,8 @@ export class Viewer {
             this.viewerRenderInput.deltaTime = 0;
         }
 
-        this.gfxSwapChain.present();
         this.gfxDevice.popDebugGroup();
+        this.gfxDevice.endFrame();
         const renderStatistics = this.renderStatisticsTracker.endFrame();
         this.finishRenderStatistics(renderStatistics, this.debugGroup);
         this.onstatistics(renderStatistics);

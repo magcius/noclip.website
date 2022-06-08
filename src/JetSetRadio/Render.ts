@@ -28,11 +28,11 @@ export class JSRProgram extends DeviceProgram {
     public override both = `
 precision mediump float;
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_LightDirection;
 };
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix;
     Mat4x2 u_TextureMatrix;
     vec4   u_Diffuse;
@@ -56,10 +56,18 @@ uniform sampler2D u_Texture;
 
     public override vert = `
 layout(location = 0) in vec3 a_Position;
+#ifdef NORMAL
 layout(location = 1) in vec3 a_Normal;
+#endif
+#ifdef TEXTURE
 layout(location = 2) in vec2 a_TexCoord;
+#endif
+#ifdef DIFFUSE
 layout(location = 3) in vec4 a_Diffuse;
+#endif
+#ifdef SPECULAR
 layout(location = 4) in vec4 a_Specular;
+#endif
 void main() {
     gl_Position = vec4(a_Position, 1.0);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix), gl_Position));

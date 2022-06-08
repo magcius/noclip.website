@@ -606,23 +606,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public getOnscreenTexture(): GfxTexture {
         return this._scTexture!;
     }
-
-    public present(): void {
-        const gl = this.gl;
-
-        // Force alpha to white.
-
-        // TODO(jstpierre): Remove this eventually?
-        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
-        if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
-            gl.colorMask(false, false, false, true);
-            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
-        }
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
-    }
     //#endregion
 
     //#region GfxDevice
@@ -675,8 +658,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGBA8_SNORM;
         case GfxFormat.S8_RG_NORM:
             return WebGL2RenderingContext.RG8_SNORM;
-        case GfxFormat.U16_RGBA_5551:
-            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case GfxFormat.BC1:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
@@ -1275,6 +1256,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(this._currentRenderPassDescriptor !== null);
         this.endPass();
         this._currentRenderPassDescriptor = null;
+    }
+
+    public beginFrame(): void {
+    }
+
+    public endFrame(): void {
+        const gl = this.gl;
+
+        // Force alpha to white.
+
+        // TODO(jstpierre): Remove this eventually?
+        if (this._currentMegaState.attachmentsState[0].channelWriteMask !== GfxChannelWriteMask.Alpha) {
+            gl.colorMask(false, false, false, true);
+            this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
+        }
+
+        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
+        // gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
+
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {

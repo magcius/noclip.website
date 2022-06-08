@@ -230,7 +230,7 @@ class SingleEmitter {
 }
 
 const scratchColor = colorNewCopy(White);
-export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
+function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
     vec3.set(m.emitterCallBack.offset,
         fallback(autoEffectIter.getValueNumber('OffsetX'), 0),
         fallback(autoEffectIter.getValueNumber('OffsetY'), 0),
