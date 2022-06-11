@@ -1197,18 +1197,13 @@ export class Binder {
     }
 
     private moveAlongHittedPlanes(sceneObjHolder: SceneObjHolder, dstVel: vec3, dstPos: vec3, velRemainder: vec3, velOrig: ReadonlyVec3, fixReactionVector: vec3): BinderFindBindedPositionRet {
-        if (vec3.dot(velRemainder, fixReactionVector) < 0.0) {
-            // Remove any elements in the direction of our resolution vector from the velocity.
-            vec3.normalize(scratchVec3a, fixReactionVector);
-            vecKillElement(velRemainder, velRemainder, scratchVec3a);
-        }
+        if (vec3.dot(velRemainder, fixReactionVector) < 0.0)
+            vec3.sub(velRemainder, velRemainder, fixReactionVector);
 
-        if (vec3.dot(velRemainder, velOrig) > 0.0) {
+        if (vec3.dot(velRemainder, velOrig) >= 0.0) {
             // Continue moving along the remainder of our velocity, possibly hitting more objects.
-            vec3.copy(scratchVec3a, dstPos);
             const ret = this.findBindedPos(sceneObjHolder, dstPos, velRemainder, true, false);
-            vec3.sub(scratchVec3a, scratchVec3a, dstPos);
-            vec3.add(dstVel, dstVel, scratchVec3a);
+            vec3.add(dstVel, dstVel, velRemainder);
             return ret;
         } else {
             return BinderFindBindedPositionRet.Collide;
