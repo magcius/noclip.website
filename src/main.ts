@@ -775,8 +775,9 @@ class Main {
         const destroyablePool: Destroyable[] = this.destroyablePool;
         const inputManager = this.viewer.inputManager;
         inputManager.reset();
+        const viewerInput = this.viewer.viewerRenderInput;
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager, viewerInput,
         };
 
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.
