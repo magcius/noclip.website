@@ -8,7 +8,7 @@ import { Background } from "./Background";
 import { BgModelInst } from "./BgModel";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams } from "./Model";
-import { ModelCache, TextureCache } from "./ModelCache";
+import { GmaSrc, ModelCache, TextureCache } from "./ModelCache";
 import * as Nl from "./NaomiLib";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
@@ -72,7 +72,7 @@ export class StageWorld implements World {
         const bgModels: BgModelInst[] = [];
         for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
             if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
-            const model = this.modelCache.getModel(bgModel.modelName);
+            const model = this.modelCache.getModel(bgModel.modelName, GmaSrc.StageAndBg);
             if (model === null) continue;
             bgModels.push(new BgModelInst(model, bgModel));
         }

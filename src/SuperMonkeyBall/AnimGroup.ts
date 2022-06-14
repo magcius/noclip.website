@@ -38,7 +38,7 @@ export class AnimGroup {
         this.models = [];
         for (let i = 0; i < this.agData.animGroupModels.length; i++) {
             const name = this.agData.animGroupModels[i].modelName;
-            const modelInst = modelCache.getModel(name);
+            const modelInst = modelCache.getModel(name, GmaSrc.StageAndBg);
             if (modelInst !== null) {
                 this.models.push(modelInst);
             }
@@ -66,7 +66,7 @@ export class AnimGroup {
         this.bumpers = this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
 
         if (stageData.stageInfo.id === StageId.St101_Blur_Bridge) {
-            this.blurBridgeAccordionModel = assertExists(modelCache.getModel("MOT_STAGE101_BLUR"));
+            this.blurBridgeAccordionModel = assertExists(modelCache.getModel("MOT_STAGE101_BLUR", GmaSrc.StageAndBg));
         }
     }
 
