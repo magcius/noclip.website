@@ -25,6 +25,15 @@ function parseBinding(layout: string | undefined): number | null {
     return null;
 }
 
+function getSeparateSamplerTypes(combinedSamplerType: string): [string, string] {
+    let samplerType = ``, textureType = combinedSamplerType;
+    if (combinedSamplerType.endsWith(`Shadow`)) {
+        textureType = textureType.slice(0, -6);
+        samplerType = `Shadow`;
+    }
+    return [textureType, samplerType];
+}
+
 export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null): string {
     // Garbage WebGL2 shader compiler until I get something better down the line...
     const lines = source.split('\n').map((n) => {
@@ -63,14 +72,15 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
         implicitBinding = 0;
 
         assert(vendorInfo.separateSamplerTextures);
-        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, samplerType, samplerName) => {
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, combinedSamplerType, samplerName) => {
             let binding = parseBinding(layout);
             if (binding === null)
                 binding = implicitBinding++;
 
+            const [textureType, samplerType] = getSeparateSamplerTypes(combinedSamplerType);
             return type === 'frag' ? `
-layout(set = ${set}, binding = ${(binding * 2) + 0}) uniform texture${samplerType} T_${samplerName};
-layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler S_${samplerName};`.trim() : '';
+layout(set = ${set}, binding = ${(binding * 2) + 0}) uniform texture${textureType} T_${samplerName};
+layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerType} S_${samplerName};`.trim() : '';
         });
 
         rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
@@ -87,21 +97,21 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler S_${sampler
         precision = precision.replace(/^precision (.*) sampler(.*);$/gm, '');
     } else {
         let implicitBinding = 0;
-        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, samplerType, samplerName) => {
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, combinedSamplerType, samplerName) => {
             let binding = parseBinding(layout);
             if (binding === null)
                 binding = implicitBinding++;
 
-            return `uniform sampler${samplerType} ${samplerName}; // BINDING=${binding}`;
+            return `uniform sampler${combinedSamplerType} ${samplerName}; // BINDING=${binding}`;
         });
     }
 
-    rest = rest.replace(/\bPU_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
-        return `SAMPLER_${samplerType}(P_${samplerName})`;
+    rest = rest.replace(/\bPU_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
+        return `SAMPLER_${combinedSamplerType}(P_${samplerName})`;
     });
 
-    rest = rest.replace(/\bPF_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
-        return `PP_SAMPLER_${samplerType}(P_${samplerName})`;
+    rest = rest.replace(/\bPF_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
+        return `PP_SAMPLER_${combinedSamplerType}(P_${samplerName})`;
     });
 
     rest = rest.replace(/\bPU_TEXTURE\((.*?)\)/g, (substr, samplerName) => {
@@ -109,31 +119,32 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler S_${sampler
     });
 
     if (vendorInfo.separateSamplerTextures) {
-        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
-            return `texture${samplerType} T_P_${samplerName}, sampler S_P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
+            const [textureType, samplerType] = getSeparateSamplerTypes(combinedSamplerType);
+            return `texture${textureType} T_P_${samplerName}, sampler${samplerType} S_P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
             return `T_${samplerName}, S_${samplerName}`;
         });
 
-        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
-            return `sampler${samplerType}(T_${samplerName}, S_${samplerName})`;
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
+            return `sampler${combinedSamplerType}(T_${samplerName}, S_${samplerName})`;
         });
 
         rest = rest.replace(/\bTEXTURE\((.*?)\)/g, (substr, samplerName) => {
             return `T_${samplerName}`;
         });
     } else {
-        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
-            return `sampler${samplerType} P_${samplerName}`;
+        rest = rest.replace(/\bPD_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
+            return `sampler${combinedSamplerType} P_${samplerName}`;
         });
 
-        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        rest = rest.replace(/\bPP_SAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
             return samplerName;
         });
 
-        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, samplerType, samplerName) => {
+        rest = rest.replace(/\bSAMPLER_(\w+)\((.*?)\)/g, (substr, combinedSamplerType, samplerName) => {
             return samplerName;
         });
 

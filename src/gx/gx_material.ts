@@ -1408,8 +1408,6 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
         return u_TexMtx[(t_MtxIdx - 10u)];
     else
         return u_PosMtx[t_MtxIdx];
-    // Workaround for https://github.com/gfx-rs/naga/issues/1053
-    return u_PosMtx[0u];
 }
 
 ${GfxShaderLibrary.MulNormalMatrix}

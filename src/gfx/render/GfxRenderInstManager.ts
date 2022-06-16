@@ -344,6 +344,7 @@ export class GfxRenderInst {
      */
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
         assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
+        assert(bufferIndex < this._bindingDescriptors[0].bindingLayout.numUniformBuffers);
         this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
