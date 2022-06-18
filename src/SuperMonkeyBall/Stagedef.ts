@@ -92,37 +92,38 @@ export const enum BgModelFlags {
     Visible = 1 << 0, // Sometimes other flags used for visibility?
 }
 
-export type BgModel = {
+export type NightWindowAnim = {
+    pos: vec3;
+    rot: vec3;
+    id: number; // Which list of flipbook models to animate
+};
+
+export type StormFireAnim = {
+    pos: vec3;
+    frameOffset: number;
+};
+
+export type FlipbookAnims = {
+    nightWindowAnims: NightWindowAnim[];
+    stormFireAnims: StormFireAnim[];
+};
+
+export type BgObject = {
     flags: BgModelFlags;
     modelName: string;
     pos: vec3;
     rot: vec3;
     scale: vec3;
     translucency: number;
-    // bgAnim: BgAnim;
     anim: BgAnim | null;
-    // effectHeader: EffectHeader;
+    flipbookAnims: FlipbookAnims | null;
 };
-
-// export type EffectHeader = {
-//     fx1Keyframes: Effect1[];
-//     fx2Keyframes: Effect2[];
-//     textureScroll: TextureScroll;
-// }
-
-// export type Effect1 = {
-//     // ??
-// }
-
-// export type Effect2 = {
-//     // ??
-// }
 
 // export type TextureScroll = {
 //     speed: vec3;
 // }
 
-// export type BgModel = {
+// export type BgObject = {
 //     modelName: string;
 //     pos: vec3;
 //     rot: vec3;
@@ -215,7 +216,7 @@ export type StageModelPtrA = {
     stageModel: StageModel;
 };
 
-// export type FgModel = {
+// export type FgObject = {
 //     // Some other unknown fields are here...
 //     modelName: string;
 //     pos: vec3;
@@ -244,8 +245,8 @@ export type Stage = {
     jamabars: Jamabar[];
     bananas: Banana[];
     levelModels: AnimGroupModel[];
-    bgModels: BgModel[];
-    fgModels: BgModel[]; // Like bg models but tilt with the stage, equivalent for us
+    bgObjects: BgObject[];
+    fgObjects: BgObject[]; // Like bg models but tilt with the stage, equivalent for us
     // reflectiveModels: ReflectiveModel[];
 };
 
@@ -309,6 +310,8 @@ const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
 const ANIM_GROUP_MODEL_SIZE = 0xc;
 const BG_ANIM_SIZE = 0x60;
+const NIGHT_WINDOW_ANIM_SIZE = 0x14;
+const STORM_FIRE_ANIM_SIZE = 0x10;
 
 function parseVec3s(view: DataView, offset: number): vec3 {
     const x = view.getInt16(offset);
@@ -333,7 +336,8 @@ function parseKeyframeList(view: DataView, offset: number): Keyframe[] {
     return keyframes;
 }
 
-function parseAnimGroupAnim(view: DataView, offset: number): AnimGroupAnim {
+function parseAnimGroupAnim(view: DataView, offset: number): AnimGroupAnim | null {
+    if (offset === 0) return null;
     const rotXKeyframes = parseKeyframeList(view, offset + 0x0);
     const rotYKeyframes = parseKeyframeList(view, offset + 0x8);
     const rotZKeyframes = parseKeyframeList(view, offset + 0x10);
@@ -368,23 +372,50 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stage {
     return parseStagedefUncompressed(decompressLZ(buffer));
 }
 
-function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgModel[] {
+function parseFlipbookAnims(view: DataView, offset: number): FlipbookAnims | null {
+    if (offset === 0) return null;
+
+    const nightWindowAnims: NightWindowAnim[] = [];
+    const stormFireAnims: StormFireAnim[] = [];
+    const nightWindowAnimCount = view.getInt32(offset + 0x0);
+    const nightWindowAnimsOffs = view.getUint32(offset + 0x4);
+    const stormFireAnimCount = view.getInt32(offset + 0x8);
+    const stormFireAnimsOffs = view.getUint32(offset + 0xc);
+
+    for (let i = 0; i < nightWindowAnimCount; i++) {
+        const nightWindowAnimOffs = nightWindowAnimsOffs + i * NIGHT_WINDOW_ANIM_SIZE;
+        const pos = parseVec3f(view, nightWindowAnimOffs + 0x0);
+        const rot = parseVec3f(view, nightWindowAnimOffs + 0xc);
+        const id = view.getInt8(nightWindowAnimOffs + 0x12);
+        nightWindowAnims.push({ pos, rot, id });
+    }
+    for (let i = 0; i < stormFireAnimCount; i++) {
+        const stormFireAnimOffs = stormFireAnimsOffs + i * STORM_FIRE_ANIM_SIZE;
+        const pos = parseVec3f(view, stormFireAnimOffs + 0x0);
+        const frameOffset = view.getInt8(stormFireAnimOffs + 0x4);
+        stormFireAnims.push({ pos, frameOffset });
+    }
+
+    return { nightWindowAnims, stormFireAnims };
+}
+
+function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgObject[] {
     const view = buffer.createDataView();
     const bgModelCount = view.getUint32(offset);
     const bgModelListOffs = view.getUint32(offset + 0x4);
-    const bgModels: BgModel[] = [];
+    const bgObjects: BgObject[] = [];
     for (let i = 0; i < bgModelCount; i++) {
-        const bgModelOffs = bgModelListOffs + i * BG_MODEL_SIZE;
-        const flags = view.getUint32(bgModelOffs + 0x0) as BgModelFlags;
-        const modelName = readString(buffer, view.getUint32(bgModelOffs + 0x4));
-        const pos = parseVec3f(view, bgModelOffs + 0xc);
-        const rot = parseVec3s(view, bgModelOffs + 0x18);
-        const scale = parseVec3f(view, bgModelOffs + 0x20);
-        const translucency = view.getFloat32(bgModelOffs + 0x2c);
+        const bgObjectOffs = bgModelListOffs + i * BG_MODEL_SIZE;
+        const flags = view.getUint32(bgObjectOffs + 0x0) as BgModelFlags;
+        const modelName = readString(buffer, view.getUint32(bgObjectOffs + 0x4));
+        const pos = parseVec3f(view, bgObjectOffs + 0xc);
+        const rot = parseVec3s(view, bgObjectOffs + 0x18);
+        const scale = parseVec3f(view, bgObjectOffs + 0x20);
+        const translucency = view.getFloat32(bgObjectOffs + 0x2c);
 
         // Background anim
         let anim: BgAnim | null = null;
-        const bgAnimOffs = view.getUint32(bgModelOffs + 0x30);
+        const bgAnimOffs = view.getUint32(bgObjectOffs + 0x30);
         if (bgAnimOffs !== 0) {
             anim = {
                 loopStartSeconds: view.getInt32(bgAnimOffs + 0x0),
@@ -403,12 +434,10 @@ function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgModel[] {
             };
         }
 
-        // Effect header
-        // const effectHeaderOffs = view.getUint32(bgModelOffs + 0x34);
-        // TODO fx1 and fx2 keyfranmes
-        // const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
+        const flipbookAnimsOffs = view.getUint32(bgObjectOffs + 0x34);
+        const flipbookAnims = parseFlipbookAnims(view, flipbookAnimsOffs);
 
-        const bgModel: BgModel = {
+        const bgObject: BgObject = {
             flags,
             modelName,
             pos,
@@ -416,10 +445,11 @@ function parseBgModelList(buffer: ArrayBufferSlice, offset: number): BgModel[] {
             scale,
             anim,
             translucency,
+            flipbookAnims,
         };
-        bgModels.push(bgModel);
+        bgObjects.push(bgObject);
     }
-    return bgModels;
+    return bgObjects;
 }
 
 function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
@@ -549,8 +579,8 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         animGroupModels.push({ flags, modelName });
     }
 
-    const bgModels = parseBgModelList(buffer, 0x68);
-    const fgModels = parseBgModelList(buffer, 0x70);
+    const bgObjects = parseBgModelList(buffer, 0x68);
+    const fgObjects = parseBgModelList(buffer, 0x70);
 
     // // Reflective stage models
     // const reflectiveModelCount = view.getUint32(0x70);
@@ -593,10 +623,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         const initRot = parseVec3s(view, coliHeaderOffs + 0xc);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as AnimType;
         const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
-        let anim: AnimGroupAnim | null = null;
-        if (animHeaderOffs !== 0) {
-            anim = parseAnimGroupAnim(view, animHeaderOffs);
-        }
+        const anim = parseAnimGroupAnim(view, animHeaderOffs);
         // const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,
@@ -740,8 +767,8 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): Stage {
         jamabars,
         bananas,
         levelModels: animGroupModels,
-        bgModels,
-        fgModels,
+        bgObjects,
+        fgObjects,
         // reflectiveModels: [],
     };
 }

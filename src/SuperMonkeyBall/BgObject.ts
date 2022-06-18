@@ -14,12 +14,12 @@ const scratchVec3e = vec3.create();
 const scratchMat4a = mat4.create();
 const scratchRenderParams = new RenderParams();
 
-export class BgModelInst {
+export class BgObjectInst {
     private worldFromModel: mat4 = mat4.create();
     private visible = true;
     private translucency = 0; // 1 - alpha
 
-    constructor(private model: ModelInst, public bgModelData: SD.BgModel) {
+    constructor(private model: ModelInst, public bgModelData: SD.BgObject) {
         this.translucency = bgModelData.translucency;
         const rotRadians = scratchVec3c;
         vec3.scale(rotRadians, bgModelData.rot, S16_TO_RADIANS);

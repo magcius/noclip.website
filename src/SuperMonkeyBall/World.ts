@@ -5,7 +5,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import * as GX_Material from "../gx/gx_material";
 import * as Viewer from "../viewer";
 import { Background } from "./Background";
-import { BgModelInst } from "./BgModel";
+import { BgObjectInst } from "./BgObject";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams } from "./Model";
 import { GmaSrc, ModelCache, TextureCache } from "./ModelCache";
@@ -51,7 +51,7 @@ export interface ModelInterface {
 export interface World {
     update(viewerInput: Viewer.ViewerRenderInput): void;
     prepareToRender(ctx: RenderContext): void;
-    gettextureCache(): TextureCache;
+    getTextureCache(): TextureCache;
     getClearColor(): Color;
     setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void;
     destroy(device: GfxDevice): void;
@@ -69,14 +69,14 @@ export class StageWorld implements World {
         this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
         this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(this.modelCache, stageData, i));
 
-        const bgModels: BgModelInst[] = [];
-        for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
-            if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
-            const model = this.modelCache.getModel(bgModel.modelName, GmaSrc.StageAndBg);
+        const bgObjects: BgObjectInst[] = [];
+        for (const bgObject of stageData.stagedef.bgObjects.concat(stageData.stagedef.fgObjects)) {
+            if (!(bgObject.flags & SD.BgModelFlags.Visible)) continue;
+            const model = this.modelCache.getModel(bgObject.modelName, GmaSrc.StageAndBg);
             if (model === null) continue;
-            bgModels.push(new BgModelInst(model, bgModel));
+            bgObjects.push(new BgObjectInst(model, bgObject));
         }
-        this.background = new stageData.stageInfo.bgInfo.bgConstructor(bgModels);
+        this.background = new stageData.stageInfo.bgInfo.bgConstructor(bgObjects);
 
         this.lighting = new Lighting(stageData.stageInfo.bgInfo);
     }
@@ -97,8 +97,8 @@ export class StageWorld implements World {
         this.background.prepareToRender(ctx, this.lighting);
     }
 
-    public gettextureCache(): TextureCache {
-        return this.modelCache.gettextureCache();
+    public getTextureCache(): TextureCache {
+        return this.modelCache.getTextureCache();
     }
 
     public getClearColor(): Color {
@@ -148,7 +148,7 @@ export class FileDropWorld implements World {
         }
     }
 
-    public gettextureCache(): TextureCache {
+    public getTextureCache(): TextureCache {
         return this.textureCache;
     }
 
