@@ -1,4 +1,3 @@
-
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Destroyable, SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
@@ -8,13 +7,15 @@ import { StageId, STAGE_INFO_MAP } from "./StageInfo";
 import * as Gma from "./Gma";
 import { parseAVTpl } from "./AVTpl";
 import { assertExists, leftPad } from "../util";
-import { StageData } from "./World";
+import { GmaData, NlData, StageData } from "./World";
 import { decompressLZ } from "./AVLZ";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { NamedArrayBufferSlice } from "../DataFetcher";
+import * as Nl from "./NaomiLib";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...
-interface DestroyableGma extends Gma.Gma, Destroyable {
-}
+interface DestroyableGma extends Gma.Gma, Destroyable {}
 
 class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -72,21 +73,53 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
             return gma;
         });
 
-        const [commonGma, bgGma, stagedefBuf, stageGmaBuf, stageTplBuf] =
-            await Promise.all([
-                commonGmaP,
-                bgGmaP,
-                dataFetcher.fetchData(stagedefPath),
-                dataFetcher.fetchData(stageGmaPath),
-                dataFetcher.fetchData(stageTplPath),
-            ]);
+        const [commonGma, bgGma, stagedefBuf, stageGmaBuf, stageTplBuf] = await Promise.all([
+            commonGmaP,
+            bgGmaP,
+            dataFetcher.fetchData(stagedefPath),
+            dataFetcher.fetchData(stageGmaPath),
+            dataFetcher.fetchData(stageTplPath),
+        ]);
 
         const stagedef = parseStagedefLz(stagedefBuf);
         const stageTpl = parseAVTpl(stageTplBuf, `st${stageIdStr}`);
         const stageGma = Gma.parseGma(stageGmaBuf, stageTpl);
 
-        return { stageInfo, stagedef, stageGma, bgGma, commonGma };
+        return { kind: "Stage", stageInfo, stagedef, stageGma, bgGma, commonGma };
     }
+}
+
+export function createSceneFromNamedBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]): Renderer | null {
+    if (buffers.length !== 2) return null;
+    let [modelsBuf, tplBuf] = buffers;
+
+    // GMA case: .gma for models, .tpl for TPL
+    // NL case: _p.lz for models, .lz for TPL
+    if (tplBuf.name.endsWith(".gma") || tplBuf.name.endsWith("_p.lz")) {
+        [modelsBuf, tplBuf] = [tplBuf, modelsBuf];
+    }
+
+    if (modelsBuf.name.endsWith(".gma") && tplBuf.name.endsWith(".tpl")) {
+        const tpl = parseAVTpl(tplBuf, tplBuf.name);
+        const gma = Gma.parseGma(modelsBuf, tpl);
+        const worldData: GmaData = {
+            kind: "Gma",
+            gma: gma,
+        };
+        return new Renderer(context.device, worldData);
+    }
+
+    if (modelsBuf.name.endsWith("_p.lz") && tplBuf.name.endsWith(".lz")) {
+        const tpl = parseAVTpl(decompressLZ(tplBuf), tplBuf.name);
+        const nlObj = Nl.parseObj(decompressLZ(modelsBuf), tpl);
+        const worldData: NlData = {
+            kind: "Nl",
+            obj: nlObj,
+        };
+        return new Renderer(context.device, worldData);
+    }
+
+    return null;
 }
 
 const id = "supermonkeyball";

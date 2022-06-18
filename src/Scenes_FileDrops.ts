@@ -15,6 +15,7 @@ import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
 import * as SourceFileDrops from './SourceEngine/Scenes_FileDrops';
+import * as SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
@@ -105,6 +106,11 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
 
     if (buffer.name.endsWith('.bsp'))
         return SourceFileDrops.createFileDropsScene(context, buffer); 
+
+    const superMonkeyBallRenderer = SuperMonkeyBall.createSceneFromNamedBuffers(context, buffers);
+    if (superMonkeyBallRenderer !== null) {
+        return superMonkeyBallRenderer;
+    }
 
     throw "whoops";
 }

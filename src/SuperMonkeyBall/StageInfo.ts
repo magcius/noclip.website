@@ -227,7 +227,7 @@ export type StageInfo = {
     // TODO(complexplane): Next stage
 };
 
-namespace BgInfos {
+export namespace BgInfos {
     export const Jungle: BgInfo = {
         fileName: "bg_jun",
         clearColor: colorNewFromRGBA8(0xffffffff),

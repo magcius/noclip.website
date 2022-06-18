@@ -11,7 +11,7 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
 import * as Viewer from "../viewer";
 import { ModelCache } from "./ModelCache";
-import { StageData, World } from "./World";
+import { FileDropWorld, StageData, StageWorld, World, WorldData } from "./World";
 import * as UI from "../ui";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { S16_TO_RADIANS, Sphere } from "./Utils";
@@ -30,18 +30,20 @@ export type RenderContext = {
 export class Renderer implements Viewer.SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private world: World;
-    private modelCache: ModelCache;
-    public textureHolder: UI.TextureListHolder;
+    public textureCache: UI.TextureListHolder;
     private opaqueInstList = new GfxRenderInstList();
     private translucentInstList = new GfxRenderInstList();
-    private firstRender = true;
 
-    constructor(device: GfxDevice, private stageData: StageData) {
+    constructor(device: GfxDevice, private worldData: WorldData) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.modelCache = new ModelCache(device, this.renderHelper.getCache(), stageData);
-        this.world = new World(device, this.renderHelper.getCache(), this.modelCache, stageData);
-        this.textureHolder = this.modelCache.getTextureHolder();
-        this.modelCache.getTextureHolder().updateViewerTextures();
+        if (worldData.kind === "Stage") {
+            this.world = new StageWorld(device, this.renderHelper.getCache(), worldData);
+        } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
+            this.world = new FileDropWorld(device, this.renderHelper.getCache(), worldData);
+        }
+        const textureCache = this.world.gettextureCache();
+        this.textureCache = textureCache;
+        textureCache.updateViewerTextures();
     }
 
     public createPanels(): UI.Panel[] {
@@ -51,7 +53,7 @@ export class Renderer implements Viewer.SceneGfx {
         // Enable Vertex Color
         const enableVertexColorsCheckbox = new UI.Checkbox("Enable Vertex Colors", true);
         enableVertexColorsCheckbox.onchanged = () => {
-            this.modelCache.setMaterialHacks({
+            this.world.setMaterialHacks({
                 disableVertexColors: !enableVertexColorsCheckbox.checked,
             });
         };
@@ -60,7 +62,7 @@ export class Renderer implements Viewer.SceneGfx {
         // Enable Texture
         const enableTextures = new UI.Checkbox("Enable Textures", true);
         enableTextures.onchanged = () => {
-            this.modelCache.setMaterialHacks({
+            this.world.setMaterialHacks({
                 disableTextures: !enableTextures.checked,
             });
         };
@@ -76,10 +78,6 @@ export class Renderer implements Viewer.SceneGfx {
         translucentInstList: GfxRenderInstList
     ): void {
         this.world.update(viewerInput);
-
-        if (this.firstRender) {
-            this.firstRender = false;
-        }
 
         viewerInput.camera.setClipPlanes(0.1);
         // The GXRenderHelper's pushTemplateRenderInst() sets some stuff on the template inst for
@@ -106,7 +104,7 @@ export class Renderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.Color0,
             viewerInput,
-            makeAttachmentClearDescriptor(this.stageData.stageInfo.bgInfo.clearColor)
+            makeAttachmentClearDescriptor(this.world.getClearColor())
         );
         const mainDepthDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.DepthStencil,

@@ -9,6 +9,7 @@ import { vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
 import { decompressLZ } from "./AVLZ";
+import { parseVec2f, parseVec3f } from "./Utils";
 
 export const enum BananaType {
     Single,
@@ -308,19 +309,6 @@ const ANIM_KEYFRAME_SIZE = 0x14;
 const COLI_TRI_SIZE = 0x40;
 const ANIM_GROUP_MODEL_SIZE = 0xc;
 const BG_ANIM_SIZE = 0x60;
-
-function parseVec3f(view: DataView, offset: number): vec3 {
-    const x = view.getFloat32(offset);
-    const y = view.getFloat32(offset + 0x4);
-    const z = view.getFloat32(offset + 0x8);
-    return vec3.fromValues(x, y, z);
-}
-
-function parseVec2f(view: DataView, offset: number): vec2 {
-    const x = view.getFloat32(offset);
-    const y = view.getFloat32(offset + 0x4);
-    return vec2.fromValues(x, y);
-}
 
 function parseVec3s(view: DataView, offset: number): vec3 {
     const x = view.getInt16(offset);

@@ -6,7 +6,7 @@ import { MathConstants } from "../MathHelpers";
 import { RenderContext } from "./Render";
 import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils";
 import { colorCopy } from "../Color";
-import { Lighting } from "./World";
+import { Lighting } from "./Lighting";
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();

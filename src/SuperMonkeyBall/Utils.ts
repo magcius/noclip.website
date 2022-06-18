@@ -1,4 +1,4 @@
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { clamp } from "../MathHelpers";
 
 export const S16_TO_RADIANS = Math.PI / 0x8000;
@@ -62,4 +62,17 @@ export class MkbTime {
 export type Sphere = {
     center: vec3;
     radius: number;
+}
+
+export function parseVec3f(view: DataView, offset: number): vec3 {
+    const x = view.getFloat32(offset);
+    const y = view.getFloat32(offset + 0x4);
+    const z = view.getFloat32(offset + 0x8);
+    return vec3.fromValues(x, y, z);
+}
+
+export function parseVec2f(view: DataView, offset: number): vec2 {
+    const x = view.getFloat32(offset);
+    const y = view.getFloat32(offset + 0x4);
+    return vec2.fromValues(x, y);
 }

@@ -16,7 +16,7 @@ import * as SD from "./Stagedef";
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.
 
-export class TextureHolder implements UI.TextureListHolder {
+export class TextureCache implements UI.TextureListHolder {
     public viewerTextures: Viewer.Texture[] = [];
     public onnewtextures: (() => void) | null = null;
     private cache: Map<string, LoadedTexture> = new Map();
@@ -59,12 +59,17 @@ export const enum GmaSrc {
     Stage,
     Bg,
     Common,
+    StageAndBg,
 }
 
 export class ModelCache {
     // Earlier appearance in this list is higher search precedence
-    private entries: CacheEntry[];
-    private textureHolder: TextureHolder;
+    private stageEntry: CacheEntry;
+    private bgEntry: CacheEntry;
+    private commonEntry: CacheEntry;
+    private allEntries: CacheEntry[];
+
+    private textureCache: TextureCache;
 
     private blueGoalModel: ModelInst | null = null;
     private greenGoalModel: ModelInst | null = null;
@@ -72,12 +77,11 @@ export class ModelCache {
     private bumperModel: ModelInst | null = null;
 
     constructor(private device: GfxDevice, private renderCache: GfxRenderCache, stageData: StageData) {
-        this.entries = [
-            new CacheEntry(stageData.stageGma),
-            new CacheEntry(stageData.bgGma),
-            new CacheEntry(stageData.commonGma),
-        ];
-        this.textureHolder = new TextureHolder();
+        this.stageEntry = new CacheEntry(stageData.stageGma);
+        this.bgEntry = new CacheEntry(stageData.bgGma);
+        this.commonEntry = new CacheEntry(stageData.commonGma);
+        this.allEntries = [this.stageEntry, this.bgEntry, this.commonEntry];
+        this.textureCache = new TextureCache();
 
         // TODO(complexplane): Don't do these in modelcache?
         // TODO(complexplane): The game seems to search blue goal using "GOAL" prefix instead of 2
@@ -90,19 +94,18 @@ export class ModelCache {
     }
 
     private findBgSpecificModel(postfix: string): ModelInst | null {
-        for (let src = GmaSrc.Stage; src <= GmaSrc.Common; src++) {
-            const entry = this.entries[src];
+        for (let i = 0; i < this.allEntries.length; i++) {
+            const entry = this.allEntries[i];
             for (const gma of entry.gma.idMap.values()) {
                 if (gma.name.slice(4) === postfix) {
-                    return this.getModelFromSrc(gma.name, src);
+                    return this.getModelFromEntry(gma.name, entry);
                 }
             }
         }
         return null;
     }
 
-    private getModelFromSrc(model: string | number, src: GmaSrc): ModelInst | null {
-        const entry = this.entries[src];
+    private getModelFromEntry(model: string | number, entry: CacheEntry): ModelInst | null {
         let modelData: Gma.Model | undefined;
         if (typeof model === "number") {
             modelData = entry.gma.idMap.get(model);
@@ -116,20 +119,29 @@ export class ModelCache {
         if (modelInst !== undefined) {
             return modelInst;
         }
-        const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureHolder);
+        const freshModelInst = new ModelInst(this.device, this.renderCache, modelData, this.textureCache);
         entry.modelCache.set(modelData.name, freshModelInst);
         return freshModelInst;
     }
 
-    public getModel(model: string | number, src?: GmaSrc): ModelInst | null {
-        if (src !== undefined) {
-            return this.getModelFromSrc(model, src);
+    public getModel(model: string | number, src: GmaSrc): ModelInst | null {
+        switch (src) {
+            case GmaSrc.Stage: {
+                return this.getModelFromEntry(model, this.stageEntry);
+            }
+            case GmaSrc.Bg: {
+                return this.getModelFromEntry(model, this.bgEntry);
+            }
+            case GmaSrc.Common: {
+                return this.getModelFromEntry(model, this.commonEntry);
+            }
+            case GmaSrc.StageAndBg: {
+                if (typeof model !== "string") {
+                    throw new Error("Must request model by name when searching in multiple sources");
+                }
+                return this.getModelFromEntry(model, this.stageEntry) ?? this.getModelFromEntry(model, this.bgEntry);
+            }
         }
-        for (let i = 0; i < this.entries.length; i++) {
-            const modelInst = this.getModelFromSrc(model, i as GmaSrc);
-            if (modelInst !== null) return modelInst;
-        }
-        return null;
     }
 
     // Screw it, don't make fancy generic prefix whatever lookup just for goals, just do it here
@@ -150,22 +162,22 @@ export class ModelCache {
         return this.bumperModel;
     }
 
-    public getTextureHolder(): TextureHolder {
-        return this.textureHolder;
+    public gettextureCache(): TextureCache {
+        return this.textureCache;
     }
 
     public setMaterialHacks(hacks: GXMaterialHacks): void {
-        for (let i = 0; i < this.entries.length; i++) {
-            for (const model of this.entries[i].modelCache.values()) {
+        for (let i = 0; i < this.allEntries.length; i++) {
+            for (const model of this.allEntries[i].modelCache.values()) {
                 model.setMaterialHacks(hacks);
             }
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.entries.length; i++) {
-            this.entries[i].modelCache.forEach((model) => model.destroy(device));
+        for (let i = 0; i < this.allEntries.length; i++) {
+            this.allEntries[i].modelCache.forEach((model) => model.destroy(device));
         }
-        this.textureHolder.destroy(device);
+        this.textureCache.destroy(device);
     }
 }
