@@ -3,7 +3,7 @@ import { BgObjectInst } from "./BgObject";
 import { ModelInst, RenderParams } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
-import { MkbTime, MKB_FPS } from "./Utils";
+import { getMat4RotY, MkbTime, MKB_FPS } from "./Utils";
 import { Lighting } from "./Lighting";
 import { BgStormModelID } from "./ModelInfo";
 import { GmaSrc, ModelCache } from "./ModelCache";
@@ -293,10 +293,14 @@ export class BgStorm implements Background {
                     (Math.floor(state.time.getAnimTimeFrames()) + 4 * fireAnim.frameOffset) % STORM_FIRE_MODELS.length;
                 const fireModel = assertExists(state.modelCache.getModel(STORM_FIRE_MODELS[fireFrame], GmaSrc.Bg));
 
+                // Face fire towards camera on Y axis
+                const rotY = getMat4RotY(ctx.viewerInput.camera.worldMatrix);
+
                 const renderParams = scratchRenderParams;
                 renderParams.reset();
                 renderParams.lighting = state.lighting;
                 mat4.translate(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, fireAnim.pos);
+                mat4.rotateY(renderParams.viewFromModel, renderParams.viewFromModel, rotY);
                 fireModel.prepareToRender(ctx, renderParams);
             }
         }

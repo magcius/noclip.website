@@ -1,5 +1,5 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
-import { clamp } from "../MathHelpers";
+import { clamp, transformVec3Mat4w0, Vec3UnitX } from "../MathHelpers";
 
 export const S16_TO_RADIANS = Math.PI / 0x8000;
 export const EPSILON = 1.1920928955078125e-7;
@@ -75,4 +75,13 @@ export function parseVec2f(view: DataView, offset: number): vec2 {
     const x = view.getFloat32(offset);
     const y = view.getFloat32(offset + 0x4);
     return vec2.fromValues(x, y);
+}
+
+const scratchVec3a = vec3.create();
+export function getMat4RotY(mtx: mat4): number {
+    const res = scratchVec3a;
+    transformVec3Mat4w0(res, mtx, Vec3UnitX);
+    res[1] = 0;
+    vec3.normalize(res, res);
+    return Math.atan2(-res[2], res[0]);
 }
