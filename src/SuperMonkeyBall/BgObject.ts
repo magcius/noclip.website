@@ -7,6 +7,7 @@ import { RenderContext } from "./Render";
 import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils";
 import { colorCopy } from "../Color";
 import { Lighting } from "./Lighting";
+import { WorldState } from "./World";
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
@@ -19,11 +20,11 @@ export class BgObjectInst {
     private visible = true;
     private translucency = 0; // 1 - alpha
 
-    constructor(private model: ModelInst, public bgModelData: SD.BgObject) {
-        this.translucency = bgModelData.translucency;
+    constructor(private model: ModelInst, public bgObjectData: SD.BgObject) {
+        this.translucency = bgObjectData.translucency;
         const rotRadians = scratchVec3c;
-        vec3.scale(rotRadians, bgModelData.rot, S16_TO_RADIANS);
-        this.buildWorldFromModelMtx(bgModelData.pos, rotRadians, bgModelData.scale);
+        vec3.scale(rotRadians, bgObjectData.rot, S16_TO_RADIANS);
+        this.buildWorldFromModelMtx(bgObjectData.pos, rotRadians, bgObjectData.scale);
     }
 
     private buildWorldFromModelMtx(pos: vec3, rotRadians: vec3, scale: vec3): void {
@@ -34,12 +35,12 @@ export class BgObjectInst {
         mat4.scale(this.worldFromModel, this.worldFromModel, scale);
     }
 
-    public update(t: MkbTime): void {
-        const anim = this.bgModelData.anim;
+    public update(state: WorldState): void {
+        const anim = this.bgObjectData.anim;
         if (anim === null) return;
 
         const loopedTimeSeconds = loopWrap(
-            t.getAnimTimeSeconds(),
+            state.time.getAnimTimeSeconds(),
             anim.loopStartSeconds,
             anim.loopEndSeconds
         );
@@ -60,11 +61,11 @@ export class BgObjectInst {
 
         // Use initial values if there are no corresponding keyframes
         const pos = scratchVec3c;
-        vec3.copy(pos, this.bgModelData.pos);
+        vec3.copy(pos, this.bgObjectData.pos);
         const rotRadians = scratchVec3e;
-        vec3.scale(rotRadians, this.bgModelData.rot, S16_TO_RADIANS);
+        vec3.scale(rotRadians, this.bgObjectData.rot, S16_TO_RADIANS);
         const scale = scratchVec3d;
-        vec3.copy(scale, this.bgModelData.scale);
+        vec3.copy(scale, this.bgObjectData.scale);
 
         if (anim.posXKeyframes.length !== 0) {
             pos[0] = interpolateKeyframes(loopedTimeSeconds, anim.posXKeyframes);
@@ -97,7 +98,7 @@ export class BgObjectInst {
         this.buildWorldFromModelMtx(pos, rotRadians, scale);
     }
 
-    public prepareToRender(ctx: RenderContext, lighting: Lighting, texMtx?: mat4) {
+    public prepareToRender(state: WorldState, ctx: RenderContext, texMtx?: mat4) {
         if (!this.visible) return;
 
         const renderParams = scratchRenderParams;
@@ -110,7 +111,7 @@ export class BgObjectInst {
 
         mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
 
-        renderParams.lighting = lighting;
+        renderParams.lighting = state.lighting;
 
         this.model.prepareToRender(ctx, renderParams);
     }

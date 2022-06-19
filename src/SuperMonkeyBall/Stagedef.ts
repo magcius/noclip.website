@@ -392,7 +392,7 @@ function parseFlipbookAnims(view: DataView, offset: number): FlipbookAnims | nul
     for (let i = 0; i < stormFireAnimCount; i++) {
         const stormFireAnimOffs = stormFireAnimsOffs + i * STORM_FIRE_ANIM_SIZE;
         const pos = parseVec3f(view, stormFireAnimOffs + 0x0);
-        const frameOffset = view.getInt8(stormFireAnimOffs + 0x4);
+        const frameOffset = view.getInt8(stormFireAnimOffs + 0xc);
         stormFireAnims.push({ pos, frameOffset });
     }
 
