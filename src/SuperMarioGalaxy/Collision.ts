@@ -1069,11 +1069,12 @@ export class Binder {
         // If we hit something in one of the other ray steps, ret is MoveAlongHittedPlanes,
         // indicating we need to take some of our velocity and project it onto the hit
         // surfaces.
-        let ret = this.findBindedPos(sceneObjHolder, posCurr, velOrig, false, stopped);
+        const velCurr = vec3.copy(scratchVec3f, velOrig);
+        let ret = this.findBindedPos(sceneObjHolder, posCurr, velCurr, false, stopped);
 
         if (ret === BinderFindBindedPositionRet.NoCollide) {
             // Didn't hit anything -- actor can travel the full original velocity.
-            vec3.copy(dstVel, velOrig);
+            vec3.copy(dstVel, velCurr);
         } else {
             // We hit something. posCurr has been updated to reflect the step where we hit something.
 
@@ -1082,9 +1083,6 @@ export class Binder {
             this.obtainMomentFixReaction(fixReactionVector);
             vec3.add(posCurr, posCurr, fixReactionVector);
             vec3.copy(this.fixReactionVector, fixReactionVector);
-
-            // Our velocity so far is the new position minus the old position.
-            const velCurr = vec3.sub(scratchVec3f, posCurr, posOrig);
 
             while (!stopped && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
                 // Put the remainder of the velocity energy along the hit surfaces.
@@ -1118,21 +1116,29 @@ export class Binder {
             sceneObjHolder.collisionDirector.keepers[CollisionKeeperCategory.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
-    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: ReadonlyVec3, resuming: boolean, stopped: boolean): BinderFindBindedPositionRet {
+    private findBindedPos(sceneObjHolder: SceneObjHolder, dstPos: vec3, dstVel: vec3, resuming: boolean, stopped: boolean): BinderFindBindedPositionRet {
         const keeper = sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map];
 
-        const speed = vec3.length(vel);
+        const speed = vec3.length(dstVel);
+        if (speed === 0)
+            return BinderFindBindedPositionRet.NoCollide;
+
         const numSteps = ((speed / 35.0) | 0) + 1;
 
         for (let i = 0; i <= numSteps; i++) {
-            if (i > 0 || resuming)
-                vec3.scaleAndAdd(pos, pos, vel, 1.0 / numSteps);
+            if (i === 0) {
+                if (resuming)
+                    continue;
+            } else {
+                vec3.scaleAndAdd(dstPos, dstPos, dstVel, 1.0 / numSteps);
+            }
 
-            const hitCount = keeper.checkStrikeBall(sceneObjHolder, pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
+            const hitCount = keeper.checkStrikeBall(sceneObjHolder, dstPos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
             if (hitCount === 0)
                 continue;
 
             // Hit something. We can stop searching.
+            vec3.scale(dstVel, dstVel, i / numSteps);
             this.storeCurrentHitInfo(keeper, stopped);
 
             if (i < numSteps)
@@ -1197,18 +1203,13 @@ export class Binder {
     }
 
     private moveAlongHittedPlanes(sceneObjHolder: SceneObjHolder, dstVel: vec3, dstPos: vec3, velRemainder: vec3, velOrig: ReadonlyVec3, fixReactionVector: vec3): BinderFindBindedPositionRet {
-        if (vec3.dot(velRemainder, fixReactionVector) < 0.0) {
-            // Remove any elements in the direction of our resolution vector from the velocity.
-            vec3.normalize(scratchVec3a, fixReactionVector);
-            vecKillElement(velRemainder, velRemainder, scratchVec3a);
-        }
+        if (vec3.dot(velRemainder, fixReactionVector) < 0.0)
+            vec3.sub(velRemainder, velRemainder, fixReactionVector);
 
-        if (vec3.dot(velRemainder, velOrig) > 0.0) {
+        if (vec3.dot(velRemainder, velOrig) >= 0.0) {
             // Continue moving along the remainder of our velocity, possibly hitting more objects.
-            vec3.copy(scratchVec3a, dstPos);
             const ret = this.findBindedPos(sceneObjHolder, dstPos, velRemainder, true, false);
-            vec3.sub(scratchVec3a, scratchVec3a, dstPos);
-            vec3.add(dstVel, dstVel, scratchVec3a);
+            vec3.add(dstVel, dstVel, velRemainder);
             return ret;
         } else {
             return BinderFindBindedPositionRet.Collide;
@@ -1216,12 +1217,12 @@ export class Binder {
     }
 
     private moveWithCollisionParts(dstPos: vec3): void {
-        if (this.floorHitInfo.distance <= 0.0)
+        if (this.floorHitInfo.distance < 0.0)
             return;
         if (!isHostMoved(this.floorHitInfo))
             return;
 
-        this.floorHitInfo.collisionParts!.calcForceMovePower(scratchVec3a, dstPos);
+        this.floorHitInfo.calcForceMovePower(scratchVec3a, dstPos);
         vec3.add(dstPos, dstPos, scratchVec3a);
     }
 

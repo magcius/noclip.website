@@ -496,6 +496,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObj);
                 this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
                 this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+                this.drawOpa(passRenderer, DrawBufferType.Player);
                 this.drawOpa(passRenderer, DrawBufferType.Npc);
                 this.drawOpa(passRenderer, DrawBufferType.Ride);
                 this.drawOpa(passRenderer, DrawBufferType.Enemy);
@@ -539,6 +540,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObj);
                 this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
                 this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+                this.drawXlu(passRenderer, DrawBufferType.Player);
                 this.drawXlu(passRenderer, DrawBufferType.Npc);
                 this.drawXlu(passRenderer, DrawBufferType.Ride);
                 this.drawXlu(passRenderer, DrawBufferType.Enemy);
@@ -1756,8 +1758,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
-        // TODO(jstpierre): This is ugly.
-        sceneObjHolder.viewerInput = window.main.viewer.viewerRenderInput;
+        sceneObjHolder.viewerInput = context.viewerInput;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         sceneObjHolder.requestArchives();

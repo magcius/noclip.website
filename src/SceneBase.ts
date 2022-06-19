@@ -25,6 +25,7 @@ export interface SceneContext {
     uiContainer: HTMLElement;
     destroyablePool: Destroyable[];
     inputManager: InputManager;
+    viewerInput: ViewerRenderInput;
 }
 
 export interface SceneDesc {

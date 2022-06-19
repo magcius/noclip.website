@@ -642,6 +642,7 @@ export class AstroMapObj extends MapObjActor {
         initInfo.setupModelName(AstroMapObj.getModelName(objectName, domeId));
         initInfo.setupConnectToScene();
         initInfo.setupEffect(objectName);
+        initInfo.setupHitSensor();
 
         if (objectName === 'AstroRotateStepA' || objectName === 'AstroRotateStepB' || objectName === 'AstroDecoratePartsA')
             initInfo.setupRotator();
@@ -650,6 +651,9 @@ export class AstroMapObj extends MapObjActor {
 
         tryStartAllAnim(this, 'Open');
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
+
+        if (this.name === 'AstroDomeEntrance' || this.name === 'AstroLibrary')
+            initCollisionParts(sceneObjHolder, this, 'Open', this.getSensor('body')!);
 
         if (this.rotator !== null)
             this.startMapPartsFunctions(sceneObjHolder);
