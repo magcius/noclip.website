@@ -282,6 +282,9 @@ export class BgStorm implements Background {
     }
 
     public prepareToRender(state: WorldState, ctx: RenderContext): void {
+        // Face fire towards camera on Y axis
+        const cameraRotY = getMat4RotY(ctx.viewerInput.camera.worldMatrix);
+
         for (let i = 0; i < this.bgObjects.length; i++) {
             this.bgObjects[i].prepareToRender(state, ctx);
 
@@ -293,14 +296,11 @@ export class BgStorm implements Background {
                     (Math.floor(state.time.getAnimTimeFrames()) + 4 * fireAnim.frameOffset) % STORM_FIRE_MODELS.length;
                 const fireModel = assertExists(state.modelCache.getModel(STORM_FIRE_MODELS[fireFrame], GmaSrc.Bg));
 
-                // Face fire towards camera on Y axis
-                const rotY = getMat4RotY(ctx.viewerInput.camera.worldMatrix);
-
                 const renderParams = scratchRenderParams;
                 renderParams.reset();
                 renderParams.lighting = state.lighting;
                 mat4.translate(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, fireAnim.pos);
-                mat4.rotateY(renderParams.viewFromModel, renderParams.viewFromModel, rotY);
+                mat4.rotateY(renderParams.viewFromModel, renderParams.viewFromModel, cameraRotY);
                 fireModel.prepareToRender(ctx, renderParams);
             }
         }

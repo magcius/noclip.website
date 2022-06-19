@@ -112,6 +112,7 @@ export class BgObjectInst {
         mat4.mul(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, this.worldFromModel);
 
         renderParams.lighting = state.lighting;
+        renderParams.depthOffset = 400;
 
         this.model.prepareToRender(ctx, renderParams);
     }

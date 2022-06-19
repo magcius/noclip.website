@@ -144,7 +144,7 @@ export class ShapeInst {
             ) {
                 const originViewSpace = scratchVec3a;
                 transformVec3Mat4w1(originViewSpace, renderParams.viewFromModel, this.shapeData.origin);
-                inst.sortKey = -vec3.sqrLen(originViewSpace);
+                inst.sortKey = -(vec3.len(originViewSpace) + renderParams.depthOffset);
                 ctx.translucentInstList.submitRenderInst(inst);
             } else {
                 ctx.opaqueInstList.submitRenderInst(inst);
