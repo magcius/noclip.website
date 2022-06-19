@@ -385,7 +385,7 @@ function parseFlipbookAnims(view: DataView, offset: number): FlipbookAnims | nul
     for (let i = 0; i < nightWindowAnimCount; i++) {
         const nightWindowAnimOffs = nightWindowAnimsOffs + i * NIGHT_WINDOW_ANIM_SIZE;
         const pos = parseVec3f(view, nightWindowAnimOffs + 0x0);
-        const rot = parseVec3f(view, nightWindowAnimOffs + 0xc);
+        const rot = parseVec3s(view, nightWindowAnimOffs + 0xc);
         const id = view.getInt8(nightWindowAnimOffs + 0x12);
         nightWindowAnims.push({ pos, rot, id });
     }

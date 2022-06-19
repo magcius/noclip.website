@@ -1,11 +1,11 @@
 import { RenderContext } from "./Render";
 import { BgObjectInst } from "./BgObject";
-import { ModelInst, RenderParams } from "./Model";
+import { ModelInst, RenderParams, RenderSort } from "./Model";
 import { mat4, vec3 } from "gl-matrix";
 import { Vec3Zero } from "../MathHelpers";
-import { getMat4RotY, MkbTime, MKB_FPS } from "./Utils";
+import { getMat4RotY, MkbTime, MKB_FPS, S16_TO_RADIANS } from "./Utils";
 import { Lighting } from "./Lighting";
-import { BgStormModelID } from "./ModelInfo";
+import { BgNightModelID, BgStormModelID } from "./ModelInfo";
 import { GmaSrc, ModelCache } from "./ModelCache";
 import { Gma } from "./Gma";
 import { assertExists, nArray } from "../util";
@@ -26,7 +26,7 @@ const scratchRenderParams = new RenderParams();
 export class BgJungle implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -46,7 +46,7 @@ export class BgJungle implements Background {
 export class BgWater implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -63,11 +63,161 @@ export class BgWater implements Background {
     }
 }
 
+// Dancing monkey flipbook animations in windows in Night bg
+// "mado" is "window" in Japanese
+
+const NIGHT_WINDOW_A_MODELS = [
+    BgNightModelID.NIG_MADO_A_PT00,
+    BgNightModelID.NIG_MADO_A_PT01,
+    BgNightModelID.NIG_MADO_A_PT02,
+    BgNightModelID.NIG_MADO_A_PT03,
+    BgNightModelID.NIG_MADO_A_PT04,
+    BgNightModelID.NIG_MADO_A_PT05,
+    BgNightModelID.NIG_MADO_A_PT06,
+    BgNightModelID.NIG_MADO_A_PT07,
+    BgNightModelID.NIG_MADO_A_PT08,
+    BgNightModelID.NIG_MADO_A_PT09,
+    BgNightModelID.NIG_MADO_A_PT10,
+    BgNightModelID.NIG_MADO_A_PT11,
+    BgNightModelID.NIG_MADO_A_PT12,
+    BgNightModelID.NIG_MADO_A_PT13,
+];
+
+const NIGHT_WINDOW_B_MODELS = [
+    BgNightModelID.NIG_MADO_B_PT00,
+    BgNightModelID.NIG_MADO_B_PT01,
+    BgNightModelID.NIG_MADO_B_PT02,
+    BgNightModelID.NIG_MADO_B_PT03,
+    BgNightModelID.NIG_MADO_B_PT04,
+    BgNightModelID.NIG_MADO_B_PT05,
+    BgNightModelID.NIG_MADO_B_PT06,
+    BgNightModelID.NIG_MADO_B_PT07,
+    BgNightModelID.NIG_MADO_B_PT08,
+    BgNightModelID.NIG_MADO_B_PT09,
+    BgNightModelID.NIG_MADO_B_PT10,
+];
+
+const NIGHT_WINDOW_C_MODELS = [
+    BgNightModelID.NIG_MADO_C_PT00,
+    BgNightModelID.NIG_MADO_C_PT01,
+    BgNightModelID.NIG_MADO_C_PT02,
+    BgNightModelID.NIG_MADO_C_PT03,
+    BgNightModelID.NIG_MADO_C_PT04,
+    BgNightModelID.NIG_MADO_C_PT05,
+    BgNightModelID.NIG_MADO_C_PT06,
+    BgNightModelID.NIG_MADO_C_PT07,
+    BgNightModelID.NIG_MADO_C_PT08,
+    BgNightModelID.NIG_MADO_C_PT09,
+    BgNightModelID.NIG_MADO_C_PT10,
+    BgNightModelID.NIG_MADO_C_PT11,
+    BgNightModelID.NIG_MADO_C_PT12,
+    BgNightModelID.NIG_MADO_C_PT13,
+    BgNightModelID.NIG_MADO_C_PT14,
+    BgNightModelID.NIG_MADO_C_PT15,
+    BgNightModelID.NIG_MADO_C_PT16,
+    BgNightModelID.NIG_MADO_C_PT17,
+];
+
+const NIGHT_WINDOW_D_MODELS = [
+    BgNightModelID.NIG_MADO_D_PT00,
+    BgNightModelID.NIG_MADO_D_PT01,
+    BgNightModelID.NIG_MADO_D_PT02,
+    BgNightModelID.NIG_MADO_D_PT03,
+    BgNightModelID.NIG_MADO_D_PT04,
+    BgNightModelID.NIG_MADO_D_PT05,
+    BgNightModelID.NIG_MADO_D_PT06,
+    BgNightModelID.NIG_MADO_D_PT07,
+    BgNightModelID.NIG_MADO_D_PT08,
+    BgNightModelID.NIG_MADO_D_PT09,
+    BgNightModelID.NIG_MADO_D_PT10,
+    BgNightModelID.NIG_MADO_D_PT11,
+    BgNightModelID.NIG_MADO_D_PT12,
+    BgNightModelID.NIG_MADO_D_PT13,
+    BgNightModelID.NIG_MADO_D_PT14,
+    BgNightModelID.NIG_MADO_D_PT15,
+    BgNightModelID.NIG_MADO_D_PT16,
+    BgNightModelID.NIG_MADO_D_PT17,
+];
+
+const NIGHT_WINDOW_E_MODELS = [
+    BgNightModelID.NIG_MADO_E_PT00,
+    BgNightModelID.NIG_MADO_E_PT01,
+    BgNightModelID.NIG_MADO_E_PT02,
+    BgNightModelID.NIG_MADO_E_PT03,
+    BgNightModelID.NIG_MADO_E_PT04,
+    BgNightModelID.NIG_MADO_E_PT05,
+    BgNightModelID.NIG_MADO_E_PT06,
+    BgNightModelID.NIG_MADO_E_PT07,
+    BgNightModelID.NIG_MADO_E_PT08,
+    BgNightModelID.NIG_MADO_E_PT09,
+    BgNightModelID.NIG_MADO_E_PT10,
+    BgNightModelID.NIG_MADO_E_PT11,
+    BgNightModelID.NIG_MADO_E_PT12,
+    BgNightModelID.NIG_MADO_E_PT13,
+    BgNightModelID.NIG_MADO_E_PT14,
+    BgNightModelID.NIG_MADO_E_PT15,
+    BgNightModelID.NIG_MADO_E_PT16,
+    BgNightModelID.NIG_MADO_E_PT17,
+];
+
+const NIGHT_WINDOW_F_MODELS = [
+    BgNightModelID.NIG_MADO_F_PT00,
+    BgNightModelID.NIG_MADO_F_PT01,
+    BgNightModelID.NIG_MADO_F_PT02,
+    BgNightModelID.NIG_MADO_F_PT03,
+    BgNightModelID.NIG_MADO_F_PT04,
+    BgNightModelID.NIG_MADO_F_PT05,
+    BgNightModelID.NIG_MADO_F_PT06,
+    BgNightModelID.NIG_MADO_F_PT07,
+    BgNightModelID.NIG_MADO_F_PT08,
+    BgNightModelID.NIG_MADO_F_PT09,
+    BgNightModelID.NIG_MADO_F_PT10,
+    BgNightModelID.NIG_MADO_F_PT11,
+    BgNightModelID.NIG_MADO_F_PT12,
+    BgNightModelID.NIG_MADO_F_PT13,
+    BgNightModelID.NIG_MADO_F_PT14,
+    BgNightModelID.NIG_MADO_F_PT15,
+];
+
+const NIGHT_WINDOW_G_MODELS = [
+    BgNightModelID.NIG_MADO_G_PT00,
+    BgNightModelID.NIG_MADO_G_PT01,
+    BgNightModelID.NIG_MADO_G_PT02,
+    BgNightModelID.NIG_MADO_G_PT03,
+    BgNightModelID.NIG_MADO_G_PT04,
+    BgNightModelID.NIG_MADO_G_PT05,
+    BgNightModelID.NIG_MADO_G_PT06,
+    BgNightModelID.NIG_MADO_G_PT07,
+    BgNightModelID.NIG_MADO_G_PT08,
+    BgNightModelID.NIG_MADO_G_PT09,
+    BgNightModelID.NIG_MADO_G_PT10,
+    BgNightModelID.NIG_MADO_G_PT11,
+    BgNightModelID.NIG_MADO_G_PT12,
+    BgNightModelID.NIG_MADO_G_PT13,
+    BgNightModelID.NIG_MADO_G_PT14,
+];
+
+const NIGHT_WINDOW_MODEL_LISTS = [
+    NIGHT_WINDOW_A_MODELS,
+    NIGHT_WINDOW_B_MODELS,
+    NIGHT_WINDOW_C_MODELS,
+    NIGHT_WINDOW_D_MODELS,
+    NIGHT_WINDOW_E_MODELS,
+    NIGHT_WINDOW_F_MODELS,
+    NIGHT_WINDOW_G_MODELS,
+];
+
 export class BgNight implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
+
+        for (const modelList of NIGHT_WINDOW_MODEL_LISTS) {
+            for (const id of modelList) {
+                state.modelCache.getModel(id, GmaSrc.Bg);
+            }
+        }
     }
 
     public update(state: WorldState): void {
@@ -79,6 +229,38 @@ export class BgNight implements Background {
     public prepareToRender(state: WorldState, ctx: RenderContext): void {
         for (let i = 0; i < this.bgObjects.length; i++) {
             this.bgObjects[i].prepareToRender(state, ctx);
+
+            const flipbookAnims = this.bgObjects[i].bgObjectData.flipbookAnims;
+            if (flipbookAnims === null) continue;
+            for (let j = 0; j < flipbookAnims.nightWindowAnims.length; j++) {
+                const windowAnim = flipbookAnims.nightWindowAnims[j];
+                const modelListIdx = windowAnim.id - 65;
+                const modelList = NIGHT_WINDOW_MODEL_LISTS[modelListIdx] ?? NIGHT_WINDOW_A_MODELS;
+                const animFrame = Math.floor(state.time.getAnimTimeFrames() / 2) % modelList.length;
+                const windowModel = assertExists(state.modelCache.getModel(modelList[animFrame], GmaSrc.Bg));
+
+                const renderParams = scratchRenderParams;
+                renderParams.reset();
+                renderParams.lighting = state.lighting;
+                renderParams.sort = RenderSort.None;
+                mat4.translate(renderParams.viewFromModel, ctx.viewerInput.camera.viewMatrix, windowAnim.pos);
+                mat4.rotateZ(
+                    renderParams.viewFromModel,
+                    renderParams.viewFromModel,
+                    S16_TO_RADIANS * windowAnim.rot[2]
+                );
+                mat4.rotateY(
+                    renderParams.viewFromModel,
+                    renderParams.viewFromModel,
+                    S16_TO_RADIANS * windowAnim.rot[1]
+                );
+                mat4.rotateX(
+                    renderParams.viewFromModel,
+                    renderParams.viewFromModel,
+                    S16_TO_RADIANS * windowAnim.rot[0]
+                );
+                windowModel.prepareToRender(ctx, renderParams);
+            }
         }
     }
 }
@@ -101,7 +283,7 @@ export class BgSunset implements Background {
     private lastTimeFrames: number = 0;
     private mode = BgSunsetMode.Default;
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         for (const bgObject of bgObjects) {
             const name = bgObject.bgObjectData.modelName;
             if (name === "SUN_GROUND" || name.startsWith("SUN_CLOUD_")) {
@@ -171,7 +353,7 @@ export class BgSunset implements Background {
 export class BgSpace implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -191,7 +373,7 @@ export class BgSpace implements Background {
 export class BgSand implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -211,7 +393,7 @@ export class BgSand implements Background {
 export class BgIce implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -266,12 +448,12 @@ const STORM_FIRE_MODELS = [
 export class BgStorm implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
 
         // Cache fire models
-        for (let i = 0; i < STORM_FIRE_MODELS.length; i++) {
-            state.modelCache.getModel(STORM_FIRE_MODELS[i], GmaSrc.Bg);
+        for (const id of STORM_FIRE_MODELS) {
+            state.modelCache.getModel(id, GmaSrc.Bg);
         }
     }
 
@@ -310,7 +492,7 @@ export class BgStorm implements Background {
 export class BgBonus implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
@@ -330,7 +512,7 @@ export class BgBonus implements Background {
 export class BgMaster implements Background {
     private bgObjects: BgObjectInst[] = [];
 
-   constructor(state: WorldState, bgObjects: BgObjectInst[]) {
+    constructor(state: WorldState, bgObjects: BgObjectInst[]) {
         this.bgObjects = bgObjects;
     }
 
