@@ -3437,26 +3437,26 @@ export class StudioPanel extends FloatingPanel {
         if (!obj || !obj.version)
             return false;
 
-        if (obj.version === 2 && obj.studioState
-                && obj.studioState.animation
-                && obj.studioState.animation.posXTrack
-                && obj.studioState.animation.posYTrack
-                && obj.studioState.animation.posZTrack
-                && obj.studioState.animation.lookAtXTrack
-                && obj.studioState.animation.lookAtYTrack
-                && obj.studioState.animation.lookAtZTrack
-                && obj.studioState.animation.bankTrack) {
+        const isValidTrack = (t: any) => {
+            return t && Array.isArray(t.keyframes) && t.keyframes.length >= 1;
+        };
+
+        const isValidAnimObj = (a: any) => {
+            return a &&
+                isValidTrack(a.posXTrack) &&
+                isValidTrack(a.posYTrack) &&
+                isValidTrack(a.posZTrack) &&
+                isValidTrack(a.lookAtXTrack) &&
+                isValidTrack(a.lookAtYTrack) &&
+                isValidTrack(a.lookAtZTrack) &&
+                isValidTrack(a.bankTrack);
+        };
+
+        if (obj.version === 2 && obj.studioState && isValidAnimObj(obj.studioState.animation)) {
             obj.animation = obj.studioState.animation;
             return true;
-        } else if (obj.version === 3) {
-            return obj.animation
-                && obj.animation.posXTrack
-                && obj.animation.posYTrack
-                && obj.animation.posZTrack
-                && obj.animation.lookAtXTrack
-                && obj.animation.lookAtYTrack
-                && obj.animation.lookAtZTrack
-                && obj.animation.bankTrack;
+        } else if (obj.version === 3 && isValidAnimObj(obj.animation)) {
+            return true;
         }
         return false;
     }
