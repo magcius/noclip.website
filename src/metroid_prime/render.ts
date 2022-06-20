@@ -1432,11 +1432,16 @@ interface ActorAttachment {
 }
 
 class Actor {
+    private visible = true;
+
     constructor(public entity: Entity, public cmdlRenderer: CMDLRenderer, public attachments: ActorAttachment[] = []) {
     }
 
     public prepareToRender(renderer: RetroSceneRenderer, viewerInput: Viewer.ViewerRenderInput): void {
         if (!renderer.showAllActors && !this.entity.active)
+            return;
+
+        if (!this.visible)
             return;
 
         if (this.entity.autoSpin) {
