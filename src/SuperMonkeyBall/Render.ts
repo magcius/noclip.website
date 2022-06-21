@@ -41,7 +41,7 @@ export class Renderer implements Viewer.SceneGfx {
         } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
             this.world = new FileDropWorld(device, this.renderHelper.getCache(), worldData);
         }
-        const textureCache = this.world.gettextureCache();
+        const textureCache = this.world.getTextureCache();
         this.textureCache = textureCache;
         textureCache.updateViewerTextures();
     }

@@ -162,7 +162,7 @@ export class ModelCache {
         return this.bumperModel;
     }
 
-    public gettextureCache(): TextureCache {
+    public getTextureCache(): TextureCache {
         return this.textureCache;
     }
 

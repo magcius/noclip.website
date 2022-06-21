@@ -5,7 +5,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import * as GX_Material from "../gx/gx_material";
 import * as Viewer from "../viewer";
 import { Background } from "./Background";
-import { BgModelInst } from "./BgModel";
+import { BgObjectInst } from "./BgObject";
 import * as Gma from "./Gma";
 import { ModelInst, RenderParams } from "./Model";
 import { GmaSrc, ModelCache, TextureCache } from "./ModelCache";
@@ -21,7 +21,7 @@ const scratchRenderParams = new RenderParams();
 
 // Immutable parsed stage definition
 export type StageData = {
-    kind: "Stage",
+    kind: "Stage";
     stageInfo: StageInfo;
     stagedef: SD.Stage;
     stageGma: Gma.Gma;
@@ -30,14 +30,14 @@ export type StageData = {
 };
 
 export type GmaData = {
-    kind: "Gma",
+    kind: "Gma";
     gma: Gma.Gma;
-}
+};
 
 export type NlData = {
-    kind: "Nl",
+    kind: "Nl";
     obj: Nl.Obj;
-}
+};
 
 export type WorldData = StageData | GmaData | NlData;
 
@@ -48,57 +48,67 @@ export interface ModelInterface {
     destroy(device: GfxDevice): void;
 }
 
+// Mutable, global shared state
+export type WorldState = {
+    lighting: Lighting;
+    modelCache: ModelCache;
+    time: MkbTime;
+    // TODO(complexplane): Itemgroup animation state (for raycasts)
+    // TODO(complexplane): Stage bounding sphere (for asteroids in Space?)
+};
+
 export interface World {
     update(viewerInput: Viewer.ViewerRenderInput): void;
     prepareToRender(ctx: RenderContext): void;
-    gettextureCache(): TextureCache;
+    getTextureCache(): TextureCache;
     getClearColor(): Color;
     setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void;
     destroy(device: GfxDevice): void;
 }
 
 export class StageWorld implements World {
-    private mkbTime: MkbTime;
+    private worldState: WorldState;
     private animGroups: AnimGroup[];
     private background: Background;
-    private lighting: Lighting;
-    private modelCache: ModelCache;
 
     constructor(device: GfxDevice, renderCache: GfxRenderCache, private stageData: StageData) {
-        this.modelCache = new ModelCache(device, renderCache, stageData);
-        this.mkbTime = new MkbTime(60); // TODO(complexplane): Per-stage time limit
-        this.animGroups = stageData.stagedef.animGroups.map((_, i) => new AnimGroup(this.modelCache, stageData, i));
+        this.worldState = {
+            modelCache: new ModelCache(device, renderCache, stageData),
+            time: new MkbTime(60), // TODO(complexplane): Per-stage time limit
+            lighting: new Lighting(stageData.stageInfo.bgInfo),
+        };
+        this.animGroups = stageData.stagedef.animGroups.map(
+            (_, i) => new AnimGroup(this.worldState.modelCache, stageData, i)
+        );
 
-        const bgModels: BgModelInst[] = [];
-        for (const bgModel of stageData.stagedef.bgModels.concat(stageData.stagedef.fgModels)) {
-            if (!(bgModel.flags & SD.BgModelFlags.Visible)) continue;
-            const model = this.modelCache.getModel(bgModel.modelName, GmaSrc.StageAndBg);
+        const bgObjects: BgObjectInst[] = [];
+        for (const bgObject of stageData.stagedef.bgObjects.concat(stageData.stagedef.fgObjects)) {
+            if (!(bgObject.flags & SD.BgModelFlags.Visible)) continue;
+            const model = this.worldState.modelCache.getModel(bgObject.modelName, GmaSrc.StageAndBg);
             if (model === null) continue;
-            bgModels.push(new BgModelInst(model, bgModel));
+            bgObjects.push(new BgObjectInst(model, bgObject));
         }
-        this.background = new stageData.stageInfo.bgInfo.bgConstructor(bgModels);
-
-        this.lighting = new Lighting(stageData.stageInfo.bgInfo);
+        this.background = new stageData.stageInfo.bgInfo.bgConstructor(this.worldState, bgObjects);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput): void {
-        this.mkbTime.updateDeltaTimeSeconds(viewerInput.deltaTime / 1000);
+        this.worldState.time.updateDeltaTimeSeconds(viewerInput.deltaTime / 1000);
         for (let i = 0; i < this.animGroups.length; i++) {
-            this.animGroups[i].update(this.mkbTime);
+            this.animGroups[i].update(this.worldState);
         }
-        this.background.update(this.mkbTime);
-        this.lighting.update(viewerInput);
+        this.background.update(this.worldState);
+        this.worldState.lighting.update(viewerInput);
     }
 
     public prepareToRender(ctx: RenderContext): void {
         for (let i = 0; i < this.animGroups.length; i++) {
-            this.animGroups[i].prepareToRender(ctx, this.lighting);
+            this.animGroups[i].prepareToRender(this.worldState, ctx);
         }
-        this.background.prepareToRender(ctx, this.lighting);
+        this.background.prepareToRender(this.worldState, ctx);
     }
 
-    public gettextureCache(): TextureCache {
-        return this.modelCache.gettextureCache();
+    public getTextureCache(): TextureCache {
+        return this.worldState.modelCache.getTextureCache();
     }
 
     public getClearColor(): Color {
@@ -106,11 +116,11 @@ export class StageWorld implements World {
     }
 
     public setMaterialHacks(hacks: GX_Material.GXMaterialHacks): void {
-        this.modelCache.setMaterialHacks(hacks);
+        this.worldState.modelCache.setMaterialHacks(hacks);
     }
 
     public destroy(device: GfxDevice): void {
-        this.modelCache.destroy(device); // Destroys GPU resources that transitively exist in cache
+        this.worldState.modelCache.destroy(device); // Destroys GPU resources that transitively exist in cache
     }
 }
 
@@ -148,7 +158,7 @@ export class FileDropWorld implements World {
         }
     }
 
-    public gettextureCache(): TextureCache {
+    public getTextureCache(): TextureCache {
         return this.textureCache;
     }
 

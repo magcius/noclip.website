@@ -26,6 +26,7 @@ export class RenderParams {
     public sort: RenderSort;
     public texMtx = mat4.create();
     public lighting: Lighting | null;
+    public depthOffset: number;
 
     constructor() {
         this.reset();
@@ -37,6 +38,7 @@ export class RenderParams {
         this.sort = RenderSort.Translucent;
         mat4.identity(this.texMtx);
         this.lighting = null;
+        this.depthOffset = 0;
     }
 }
 

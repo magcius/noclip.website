@@ -8,11 +8,12 @@ import { interpolateKeyframes, loopWrap } from "./Anim";
 import { Lighting } from "./Lighting";
 import { ModelInst, RenderParams, RenderSort } from "./Model";
 import { GmaSrc, ModelCache } from "./ModelCache";
+import { CommonModelID } from "./ModelInfo";
 import { RenderContext } from "./Render";
 import * as SD from "./Stagedef";
-import { CommonGmaModelIDs, StageId } from "./StageInfo";
+import { StageId } from "./StageInfo";
 import { MkbTime, S16_TO_RADIANS } from "./Utils";
-import { StageData } from "./World";
+import { StageData, WorldState } from "./World";
 
 const scratchRenderParams = new RenderParams();
 
@@ -70,11 +71,11 @@ export class AnimGroup {
         }
     }
 
-    public update(t: MkbTime): void {
+    public update(state: WorldState): void {
         // Check if this is the world space anim group
         if (this.animGroupIdx > 0) {
             this.loopedTimeSeconds = loopWrap(
-                t.getAnimTimeSeconds(),
+                state.time.getAnimTimeSeconds(),
                 this.stageData.stagedef.loopStartSeconds,
                 this.stageData.stagedef.loopEndSeconds
             );
@@ -117,14 +118,14 @@ export class AnimGroup {
         }
 
         for (let i = 0; i < this.bananas.length; i++) {
-            this.bananas[i].update(t);
+            this.bananas[i].update(state);
         }
         for (let i = 0; i < this.bumpers.length; i++) {
-            this.bumpers[i].update(t);
+            this.bumpers[i].update(state);
         }
     }
 
-    private drawBlurBridgeAccordion(ctx: RenderContext, lighting: Lighting): void {
+    private drawBlurBridgeAccordion(state: WorldState, ctx: RenderContext): void {
         if (
             this.blurBridgeAccordionModel === null ||
             this.animGroupIdx === 0 ||
@@ -136,7 +137,7 @@ export class AnimGroup {
 
         const rp = scratchRenderParams;
         rp.reset();
-        rp.lighting = lighting;
+        rp.lighting = state.lighting;
 
         const accordionPos = scratchVec3a;
         vec3.copy(accordionPos, this.translation);
@@ -158,10 +159,10 @@ export class AnimGroup {
         this.blurBridgeAccordionModel.prepareToRender(ctx, rp);
     }
 
-    public prepareToRender(ctx: RenderContext, lighting: Lighting) {
+    public prepareToRender(state: WorldState, ctx: RenderContext) {
         const rp = scratchRenderParams;
         rp.reset();
-        rp.lighting = lighting;
+        rp.lighting = state.lighting;
 
         const viewFromAnimGroup = scratchMat4a;
         mat4.mul(viewFromAnimGroup, ctx.viewerInput.camera.viewMatrix, this.worldFromAg);
@@ -171,16 +172,16 @@ export class AnimGroup {
             this.models[i].prepareToRender(ctx, rp);
         }
         for (let i = 0; i < this.bananas.length; i++) {
-            this.bananas[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
+            this.bananas[i].prepareToRender(state, ctx, viewFromAnimGroup);
         }
         for (let i = 0; i < this.goals.length; i++) {
-            this.goals[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
+            this.goals[i].prepareToRender(state, ctx, viewFromAnimGroup);
         }
         for (let i = 0; i < this.bumpers.length; i++) {
-            this.bumpers[i].prepareToRender(ctx, lighting, viewFromAnimGroup);
+            this.bumpers[i].prepareToRender(state, ctx, viewFromAnimGroup);
         }
 
-        this.drawBlurBridgeAccordion(ctx, lighting);
+        this.drawBlurBridgeAccordion(state, ctx);
     }
 }
 
@@ -193,22 +194,22 @@ class Banana {
     constructor(modelCache: ModelCache, private bananaData: SD.Banana) {
         const modelId =
             bananaData.type === SD.BananaType.Single
-                ? CommonGmaModelIDs.OBJ_BANANA_01_LOD150
-                : CommonGmaModelIDs.OBJ_BANANA_02_LOD100;
+                ? CommonModelID.OBJ_BANANA_01_LOD150
+                : CommonModelID.OBJ_BANANA_02_LOD100;
         this.model = assertExists(modelCache.getModel(modelId, GmaSrc.Common));
     }
 
-    public update(t: MkbTime): void {
+    public update(state: WorldState): void {
         const incRadians = S16_TO_RADIANS * (this.bananaData.type === SD.BananaType.Single ? 1024 : 768);
-        this.yRotRadians += incRadians * t.getDeltaTimeFrames();
+        this.yRotRadians += incRadians * state.time.getDeltaTimeFrames();
         this.yRotRadians %= 2 * Math.PI;
     }
 
-    public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
+    public prepareToRender(state: WorldState, ctx: RenderContext, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
         rp.reset();
         rp.sort = RenderSort.None;
-        rp.lighting = lighting;
+        rp.lighting = state.lighting;
 
         // Bananas' positions are parented to their anim group, but they have a global rotation in
         // world space
@@ -235,10 +236,10 @@ class Goal {
         }
     }
 
-    public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
+    public prepareToRender(state: WorldState, ctx: RenderContext, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
         rp.reset();
-        rp.lighting = lighting;
+        rp.lighting = state.lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.goalData.pos);
         mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.goalData.rot[2]);
@@ -257,16 +258,16 @@ class Bumper {
         this.model = assertExists(modelCache.getBumperModel());
     }
 
-    public update(t: MkbTime): void {
+    public update(state: WorldState): void {
         const incRadians = S16_TO_RADIANS * 0x100;
-        this.yRotRadians += incRadians * t.getDeltaTimeFrames();
+        this.yRotRadians += incRadians * state.time.getDeltaTimeFrames();
         this.yRotRadians %= 2 * Math.PI;
     }
 
-    public prepareToRender(ctx: RenderContext, lighting: Lighting, viewFromAnimGroup: mat4): void {
+    public prepareToRender(state: WorldState, ctx: RenderContext, viewFromAnimGroup: mat4): void {
         const rp = scratchRenderParams;
         rp.reset();
-        rp.lighting = lighting;
+        rp.lighting = state.lighting;
 
         mat4.translate(rp.viewFromModel, viewFromAnimGroup, this.bumperData.pos);
         mat4.rotateZ(rp.viewFromModel, rp.viewFromModel, S16_TO_RADIANS * this.bumperData.rot[2]);
