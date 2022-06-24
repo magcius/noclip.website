@@ -90,13 +90,25 @@ class SuperMonkeyBallSceneDesc implements Viewer.SceneDesc {
 }
 
 export function createSceneFromNamedBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]): Renderer | null {
+    // GMA case: .gma(.lz) for models, .tpl(.lz) for TPL
+    // NaomiLib case: _p.lz for models, .lz for TPL
+
     if (buffers.length !== 2) return null;
     let [modelsBuf, tplBuf] = buffers;
 
-    // GMA case: .gma for models, .tpl for TPL
-    // NL case: _p.lz for models, .lz for TPL
-    if (tplBuf.name.endsWith(".gma") || tplBuf.name.endsWith("_p.lz")) {
+    // Fix order
+    if (tplBuf.name.endsWith(".gma") || tplBuf.name.endsWith("_p.lz") || tplBuf.name.endsWith(".gma.lz")) {
         [modelsBuf, tplBuf] = [tplBuf, modelsBuf];
+    }
+
+    // Decompress if GMA/TPL
+    if (modelsBuf.name.endsWith(".gma.lz") && tplBuf.name.endsWith(".tpl.lz")) {
+        [modelsBuf, tplBuf] = [modelsBuf, tplBuf].map((buf) => {
+            const oldName = buf.name;
+            const newBuf = decompressLZ(buf) as NamedArrayBufferSlice;
+            newBuf.name = oldName.slice(0, oldName.length - ".lz".length);
+            return newBuf;
+        });
     }
 
     if (modelsBuf.name.endsWith(".gma") && tplBuf.name.endsWith(".tpl")) {
