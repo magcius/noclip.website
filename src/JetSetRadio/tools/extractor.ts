@@ -341,6 +341,25 @@ function extractModelTable(execBuffer: ArrayBufferSlice, texlists: Texlist[], af
 }
 
 
+function createModelManual(offset: number, texlist: number, texlists: Texlist[], afsFile: AFSReference, mountOffset: number): ModelData[] {
+
+    const models: ModelData[] = [];
+
+        const modelAddr = offset;
+        const modelOffs = modelAddr - mountOffset;
+        let texlistIndex = -1;
+   
+            const texlistAddr = texlist;
+            texlistIndex = findTexlistIndex(texlists, texlist);
+            if (texlistIndex < 0 && texlistAddr !== 0)
+                console.warn(`Manual Model ${hexzero0x(offset)} / (NJ addr ${hexzero0x(modelAddr)}) could not find texlist with addr: ${hexzero0x(texlist)}`);
+        
+        models.push({ ... afsFile.getRefData(), Offset: modelOffs, TexlistIndex: texlistIndex });
+    
+    return models;
+}
+
+
 function extractModelTableIndirect(execBuffer: ArrayBufferSlice, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number | null, tableCount: number): ModelData[] {
     const modelTable = execBuffer.createTypedArray(Uint32Array, modelTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount);
     const texlistTable = texlistTableAddr !== null ? execBuffer.createTypedArray(Uint32Array, texlistTableAddr - EXECUTABLE_ALLOCATION_ADDRESS, tableCount) : null;
@@ -1013,10 +1032,15 @@ function extractStageLast(dstFilename: string, execBuffer: ArrayBufferSlice): vo
 function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
 
+
+    // xayrga: We need to rewrite how textures are handled.
+    // Textures and stages can be loaded to the same address, so we have to load the textures before we load the stage AFS. 
+    // Textures are loaded first on the dreamcast, moved into the texture cache, then filled into their lists. 
+    // We may need to simlate a behavior like this. 
     //extractTexLoadTable(texChunk, execBuffer, 0x8c183d20, 0x8c800000, 2, 18);
 
-    const SCENE_FILE = afsLoad('U_GARAGE.AFS', 1);
-    const OBJECT_COUNT = 15;
+    const SCENE_FILE = afsLoad('GARAGE.AFS', 1);
+    const OBJECT_COUNT = 1;
     const ASSET_COUNT = 1;
 
     function createDummyObject(modelId: number) : ObjectData {
@@ -1030,10 +1054,11 @@ function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     }
 
     function extractObjects() {
-        const ASSET_TABLE_ADDRESS = 0x8c105c24;
-        const TEXTURE_TABLE_ADDRESS = 0x8c105c60;
+        const ASSET_TABLE_ADDRESS = 0x8c853fd8;
+        const TEXTURE_TABLE_ADDRESS = 0x8c10e410;
 
-        const Models = extractModelTableIndirect(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+		const Models =  createModelManual(ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, texChunk.texlists, SCENE_FILE, STAGE_COMPACT_ALLOCATION_ADDRESS);
+        //createModelManual(offset: number, texlist: number, texlists: Texlist[], afsFile: AFSReference, modelTableAddr: number, texlistTableAddr: number | null, tableCount: number): ModelData[] 
         const Objects = [] as ObjectData[];
         for (let i=0; i < ASSET_COUNT; i++)
             Objects[i] = createDummyObject(i);
