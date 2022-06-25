@@ -121,7 +121,7 @@ export class LuminanceHistogram {
     private toneMapScaleHistory: number[] = [];
     private toneMapScaleHistoryCount = 10;
 
-    public debugDrawHistogram: boolean = IS_DEVELOPMENT;
+    public debugDrawHistogram: boolean = false;
     public debugDrawSquares: boolean = false;
 
     constructor(cache: GfxRenderCache) {
