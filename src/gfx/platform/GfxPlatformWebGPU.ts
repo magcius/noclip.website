@@ -854,7 +854,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
 
     public static readonly optionalFeatures: GPUFeatureName[] = [
-        'depth24unorm-stencil8',
         'depth32float-stencil8',
         'texture-compression-bc',
     ];

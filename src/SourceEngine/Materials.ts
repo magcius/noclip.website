@@ -690,11 +690,6 @@ export abstract class BaseMaterial {
                 return false;
         }
 
-        if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView) {
-            if (this instanceof Material_Water)
-                return false;
-        }
-
         return true;
     }
 
@@ -2894,7 +2889,7 @@ vec3 CalcPosWorldFromScreen(vec2 t_ProjTexCoord, float t_DepthSample) {
 float CalcFogAmountFromScreenPos(vec2 t_ProjTexCoord, float t_DepthSample) {
     vec3 t_DepthSamplePosWorld = CalcPosWorldFromScreen(t_ProjTexCoord, t_DepthSample);
 
-    // Now retrieve the height different (+Z is up in Source Engine BSP space)
+    // Now retrieve the height difference (+Z is up in Source Engine BSP space)
     float t_HeightDifference = v_PositionWorld.z - t_DepthSamplePosWorld.z;
 
     // Also account for the distance from the eye (emulate "traditional" scattering fog)
@@ -3279,6 +3274,16 @@ class Material_Water extends BaseMaterial {
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.sortKey = this.sortKeyBase;
+    }
+
+    public override isMaterialVisible(renderContext: SourceRenderContext): boolean {
+        if (!super.isMaterialVisible(renderContext))
+            return false;
+
+        if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView)
+            return false;
+
+        return false;
     }
 }
 //#endregion
