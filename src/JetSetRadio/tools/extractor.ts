@@ -970,6 +970,45 @@ function extractStage6(dstFilename: string, execBuffer: ArrayBufferSlice): void 
     saveStageData(dstFilename, crg1);
 }
 
+function extractStageLast(dstFilename: string, execBuffer: ArrayBufferSlice): void {
+    const texChunk = new TexChunk();
+	//8c1867d0
+    //extractTexLoadTable(texChunk, execBuffer, 0x8c183d20, 0x8c800000, 2, 18);
+
+    extractTexLoadTable(texChunk, execBuffer, 0x8c1867d0);
+	
+    const SCENE_FILE = afsLoad('STAGELAST.AFS', 1);
+    const OBJECT_COUNT = 4;
+    const ASSET_COUNT = 4;
+
+    function createDummyObject(modelId: number) : ObjectData {
+        return {
+            ModelID: modelId,
+            Translation: [0,0,0],
+            Rotation: [0,0,0],
+            Scale: [1,1,1], 
+            Flags: 0 
+        };
+    }
+
+    function extractObjects() {
+        const ASSET_TABLE_ADDRESS = 0x8c1d0dc4;
+        const TEXTURE_TABLE_ADDRESS = 0x8c1d0db0;
+
+        const Models = extractModelTable(execBuffer, texChunk.texlists, SCENE_FILE, ASSET_TABLE_ADDRESS, TEXTURE_TABLE_ADDRESS, ASSET_COUNT);
+        const Objects = [] as ObjectData[];
+        for (let i=0; i < ASSET_COUNT; i++)
+            Objects[i] = createDummyObject(i);
+
+        return { Models, Objects };
+    }
+
+    const slice1 = extractObjects();
+    const crg1 = packStageData(texChunk, [slice1], STAGE_ALLOCATION_ADDRESS);
+    saveStageData(dstFilename, crg1);
+}
+
+
 
 function extractGarage(dstFilename: string, execBuffer: ArrayBufferSlice): void {
     const texChunk = new TexChunk();
@@ -1015,6 +1054,7 @@ function main() {
     extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
     extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
     extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
+	extractStageLast(`${pathBaseOut}/StageLast.crg1`, exec)
 }
 
 main();

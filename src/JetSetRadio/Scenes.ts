@@ -343,6 +343,7 @@ export const sceneDescs = [
     new JetSetRadioSceneDesc('Stage3', 'Benten-cho'),
     new JetSetRadioSceneDesc('Stage5', 'Bantam Street'),
     new JetSetRadioSceneDesc('Stage6', 'Grind Square'),
+	new JetSetRadioSceneDesc('StageLast', 'Test'),
     // new JetSetRadioSceneDesc('Garage', 'GG Hideout'),
 ];
 
