@@ -127,7 +127,7 @@ export class LZXState {
 
         this.extraBitsTable = new Uint8Array(this.positionSlots - 3);
         this.positionBaseTable = new Uint32Array(this.positionSlots - 3);
-        for (let i = 0, j = 1, k = 4; i < this.extraBitsTable.length; i++) {
+        for (let i = 0, j = 1, k = 2; i < this.extraBitsTable.length; i++) {
             this.extraBitsTable[i] = j;
             this.positionBaseTable[i] = k;
             k += 1 << j;
@@ -313,20 +313,15 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
                     const slot = (mainElement - 0x100) >>> 3;
                     let offs: number;
                     if (slot > 3) {
-                        offs = state.positionBaseTable[slot - 4] - 2;
+                        offs = state.positionBaseTable[slot - 4];
 
                         const extraBits = state.extraBitsTable[slot - 4];
-
-                        if (extraBits > 0) {
-                            if (state.blockType === BlockType.Aligned && extraBits >= 3) {
-                                // Aligned block split the extra bits into a verbatim and aligned part.
-                                offs += bs.read(extraBits - 3) << 3;
-                                offs += readHuffSym(state.alignedHuffTable, bs);
-                            } else {
-                                offs += bs.read(extraBits);
-                            }
+                        if (state.blockType === BlockType.Aligned && extraBits >= 3) {
+                            // Aligned block splits the extra bits into a verbatim and aligned part.
+                            offs += bs.read(extraBits - 3) << 3;
+                            offs += readHuffSym(state.alignedHuffTable, bs);
                         } else {
-                            offs = 1;
+                            offs += bs.read(extraBits);
                         }
 
                         // Shuffle LRU.
@@ -343,6 +338,7 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
                         R2 = R0; R0 = offs;
                     } else if (slot === 3) {
                         offs = 1;
+                        // Shuffle LRU.
                         R2 = R1; R1 = R0; R0 = offs;
                     } else {
                         // TypeScript is too dumb to figure out that this never happens...
