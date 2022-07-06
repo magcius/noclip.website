@@ -2138,32 +2138,6 @@ through these levels on your own adventures!</p>
 <p>In my opinion? The artists and game developers. They made everything you actually see here
 on display.</p>
 
-<p>But in terms of, you know, developing the site itself, that would be me, <a href="https://twitter.com/JasperRLZ/">Jasper</a>,
-but I could not have done it alone. I've been assisted by so many others throughout:
-<a href="https://twitter.com/beholdnec">N.E.C.</a>,
-<a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
-<a href="https://twitter.com/Jawchewa">Jawchewa</a>,
-<a href="https://twitter.com/Starschulz">Starschulz</a>,
-<a href="https://twitter.com/kittensandals">SpaceCats</a>,
-<a href="https://twitter.com/arukidev">Aruki</a>,
-<a href="https://twitter.com/TanukiMatthew">TanukiMatthew</a>,
-<a href="https://twitter.com/QuadeZaban">Quade Zaban</a>,
-<a href="https://twitter.com/Murugalstudio">Murugo</a>,
-<a href="https://twitter.com/ambienttiger">pat</a>,
-<a href="https://github.com/agentcatcat/">catcat</a>,
-<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
-<a href="https://twitter.com/LordNed">LordNed</a>,
-<a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
-<a href="https://github.com/blank63">blank63</a>,
-<a href="https://twitter.com/StapleButter">StapleButter</a>,
-<a href="https://twitter.com/xdanieldzd">xdanieldzd</a>,
-<a href="https://github.com/vlad001">vlad001</a>,
-<a href="https://twitter.com/Jewelots_">Jewel</a>,
-<a href="https://twitter.com/instant_grat">Instant Grat</a>,
-<a href="https://github.com/naclomi/">naclomi</a>,
-along with countless others from the modding communities, game reverse
-engineering and research communities, and emulation communities.</p>
-
 <p>All icons you see are from <a href="https://thenounproject.com/">The Noun Project</a>,
 used under Creative Commons CC-BY:</p>
 <ul>
