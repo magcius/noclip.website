@@ -1387,22 +1387,23 @@ void mainVS() {
 
     v_DiffuseLighting.rgb = vec3(1.0);
 
+#ifdef USE_DYNAMIC_LIGHTING
+    vec4 t_LightAtten = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
+    v_DiffuseLighting.rgb = vec3(0.0);
+#endif
+
 #ifdef USE_STATIC_VERTEX_LIGHTING
     // Static vertex lighting should already include ambient lighting.
     // 2.0 here is overbright.
-    v_DiffuseLighting.rgb = GammaToLinear(a_StaticVertexLighting * 2.0);
-#endif
-
-// Mutually exclusive with above.
-#ifdef USE_AMBIENT_CUBE
-    v_DiffuseLighting.rgb = AmbientLight(t_NormalWorld);
-#endif
-
-#ifdef USE_DYNAMIC_LIGHTING
-    vec4 t_LightAtten = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
+    v_DiffuseLighting.rgb += GammaToLinear(a_StaticVertexLighting * 2.0);
 #endif
 
 #ifdef USE_DYNAMIC_VERTEX_LIGHTING
+
+#ifdef USE_AMBIENT_CUBE
+    v_DiffuseLighting.rgb += AmbientLight(t_NormalWorld);
+#endif
+
     bool t_HalfLambert = false;
 #ifdef USE_HALF_LAMBERT
     t_HalfLambert = true;
@@ -1833,13 +1834,16 @@ void mainPS() {
         t_HalfLambert = true;
     }
 
-    // TODO(jstpierre): Add in ambient cube? Or is that in the vertex color already...
     DiffuseLightInput t_DiffuseLightInput;
     t_DiffuseLightInput.PositionWorld = v_PositionWorld.xyz;
     t_DiffuseLightInput.NormalWorld = t_NormalWorld.xyz;
     t_DiffuseLightInput.LightAttenuation = v_LightAtten.xyzw;
     t_DiffuseLightInput.HalfLambert = t_HalfLambert;
-    t_DiffuseLighting.rgb *= WorldLightCalcAllDiffuse(t_DiffuseLightInput);
+    t_DiffuseLighting.rgb += WorldLightCalcAllDiffuse(t_DiffuseLightInput);
+
+#ifdef USE_AMBIENT_CUBE
+    t_DiffuseLighting.rgb += AmbientLight(t_NormalWorld.xyz);
+#endif
 #endif
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
@@ -2065,7 +2069,7 @@ class Material_Generic extends BaseMaterial {
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
             this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
-            this.wantsAmbientCube = false;
+            this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
         } else {
