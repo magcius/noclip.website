@@ -31,7 +31,6 @@
     "webpack-merge": "^5.8.0"
   },
   "dependencies": {
-    "@sentry/browser": "^5.30.0",
     "crc-32": "^1.2.1",
     "gl-matrix": "^3.4.3",
     "librw": "^0.4.0",
