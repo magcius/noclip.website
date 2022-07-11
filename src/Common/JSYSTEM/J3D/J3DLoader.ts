@@ -1037,12 +1037,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
             const attnFn = view.getUint8(colorChanOffs + 0x04);
             const attenuationFunction: GX.AttenuationFunction = (
-                attnFn === 0 ? GX.AttenuationFunction.NONE :
-                attnFn === 1 ? GX.AttenuationFunction.SPEC :
-                attnFn === 2 ? GX.AttenuationFunction.NONE :
-                attnFn === 3 ? GX.AttenuationFunction.SPOT : -1
+                attnFn === 0 ? GX.AttenuationFunction.SPEC :
+                attnFn === 1 ? GX.AttenuationFunction.SPOT :
+                               GX.AttenuationFunction.NONE
             );
-            assert((attenuationFunction as number) !== -1);
             const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
             return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
