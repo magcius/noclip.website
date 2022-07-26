@@ -1385,11 +1385,10 @@ void mainVS() {
     v_Color = vec4(1.0);
 #endif
 
-    v_DiffuseLighting.rgb = vec3(1.0);
+    v_DiffuseLighting.rgb = vec3(0.0);
 
 #ifdef USE_DYNAMIC_LIGHTING
     vec4 t_LightAtten = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
-    v_DiffuseLighting.rgb = vec3(0.0);
 #endif
 
 #ifdef USE_STATIC_VERTEX_LIGHTING
@@ -1399,7 +1398,6 @@ void mainVS() {
 #endif
 
 #ifdef USE_DYNAMIC_VERTEX_LIGHTING
-
 #ifdef USE_AMBIENT_CUBE
     v_DiffuseLighting.rgb += AmbientLight(t_NormalWorld);
 #endif
