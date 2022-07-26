@@ -1255,10 +1255,17 @@ ${this.generateLightAttnFn(chan, lightName)}
     private generateFogFunc(base: string) {
         const fogType = (this.material.ropInfo.fogType & 0x07);
         if (fogType === GX.FogType.PERSP_LIN) {
-            return ``;
+            return base;
+        } else if (fogType === GX.FogType.PERSP_EXP) {
+            return `1.0 - exp2(-8.0 * ${base});`;
+        } else if (fogType === GX.FogType.PERSP_EXP2) {
+            return `1.0 - exp2(-8.0 * ${base} * ${base});`;
+        } else if (fogType === GX.FogType.ORTHO_REVEXP) {
+            return `1.0 - exp2(-8.0 * (1.0 - ${base}));`;
+        } else if (fogType === GX.FogType.ORTHO_REVEXP2) {
+            return `1.0 - exp2(-8.0 * (1.0 - ${base}) * (1.0 - ${base}));`;
         } else {
-            // TODO(jstpierre): Other fog types.
-            return ``;
+            throw "whoops";
         }
     }
 
@@ -1272,8 +1279,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         return `
     float t_FogBase = ${this.generateFogBase()};
 ${this.generateFogAdj(`t_FogBase`)}
-    float t_Fog = saturate(t_FogBase - ${C});
-${this.generateFogFunc(`t_Fog`)}
+    float t_FogZ = saturate(t_FogBase - ${C});
+    float t_Fog = ${this.generateFogFunc(`t_FogZ`)};
     t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_Fog);
 `;
     }
