@@ -3290,7 +3290,7 @@ class Material_Water extends BaseMaterial {
         if (renderContext.currentView.viewType === SourceEngineViewType.WaterReflectView)
             return false;
 
-        return false;
+        return true;
     }
 }
 //#endregion
