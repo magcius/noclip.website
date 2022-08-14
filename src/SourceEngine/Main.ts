@@ -279,6 +279,7 @@ export class SkyboxRenderer {
     private async createMaterialInstance(renderContext: SourceRenderContext, path: string): Promise<BaseMaterial> {
         const materialCache = renderContext.materialCache;
         const materialInstance = await materialCache.createMaterialInstance(path);
+        materialInstance.hasVertexColorInput = false;
         await materialInstance.init(renderContext);
         return materialInstance;
     }

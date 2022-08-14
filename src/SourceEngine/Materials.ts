@@ -182,7 +182,7 @@ vec3 GammaToLinear(in vec3 t_Color) {
 }
 
 void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
-#ifdef USE_FOG
+#if defined USE_FOG
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
     float t_FogFactor = saturate(invlerp(u_FogStart, u_FogEnd, t_DistanceWorld));
     t_FogFactor = min(t_FogFactor, u_FogMaxDensity);
@@ -194,15 +194,15 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 #endif
 }
 
-#ifdef VERT
+#if defined VERT
 layout(location = ${MaterialShaderTemplateBase.a_Position}) in vec3 a_Position;
 layout(location = ${MaterialShaderTemplateBase.a_Normal}) in vec4 a_Normal;
 layout(location = ${MaterialShaderTemplateBase.a_TangentS}) in vec4 a_TangentS;
 layout(location = ${MaterialShaderTemplateBase.a_TexCoord}) in vec4 a_TexCoord;
-#ifdef USE_VERTEX_COLOR
+#if defined USE_VERTEX_COLOR
 layout(location = ${MaterialShaderTemplateBase.a_Color}) in vec4 a_Color;
 #endif
-#ifdef USE_STATIC_VERTEX_LIGHTING
+#if defined USE_STATIC_VERTEX_LIGHTING
 layout(location = ${MaterialShaderTemplateBase.a_StaticVertexLighting}) in vec3 a_StaticVertexLighting;
 #endif
 #if SKINNING_MODE == ${SkinningMode.Smooth}
@@ -227,7 +227,7 @@ Mat4x3 CalcWorldFromLocalMatrix() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 layout(location = 0) out vec4 o_Color0;
 
 void OutputLinearColor(in vec4 t_Color) {
@@ -1165,44 +1165,44 @@ struct WorldLight {
 };
 
 layout(std140) uniform ub_ObjectParams {
-#ifdef USE_AMBIENT_CUBE
+#if defined USE_AMBIENT_CUBE
     // TODO(jstpierre): Pack this more efficiently?
     vec4 u_AmbientCube[6];
 #endif
-#ifdef USE_DYNAMIC_LIGHTING
+#if defined USE_DYNAMIC_LIGHTING
     // We support up to N lights.
     WorldLight u_WorldLights[${ShaderTemplate_Generic.MaxDynamicWorldLights}];
 #endif
     Mat4x2 u_BaseTextureTransform;
-#ifdef USE_BUMPMAP
+#if defined USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
 #endif
-#ifdef USE_BUMPMAP2
+#if defined USE_BUMPMAP2
     Mat4x2 u_Bumpmap2Transform;
 #endif
-#ifdef USE_DETAIL
+#if defined USE_DETAIL
     Mat4x2 u_DetailTextureTransform;
 #endif
-#ifdef USE_ENVMAP_MASK
+#if defined USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
 #endif
-#ifdef USE_BLEND_MODULATE
+#if defined USE_BLEND_MODULATE
     vec4 u_BlendModulateScaleBias;
 #endif
-#ifdef USE_ENVMAP
+#if defined USE_ENVMAP
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnelLightScale;
 #endif
-#ifdef USE_SELFILLUM
+#if defined USE_SELFILLUM
     vec4 u_SelfIllumTint;
 #endif
-#ifdef USE_SELFILLUM_FRESNEL
+#if defined USE_SELFILLUM_FRESNEL
     vec4 u_SelfIllumFresnel;
 #endif
-#ifdef USE_PHONG
+#if defined USE_PHONG
     vec4 u_FresnelRangeSpecBoost;
 #endif
-#ifdef USE_PROJECTED_LIGHT
+#if defined USE_PROJECTED_LIGHT
     Mat4x4 u_ProjectedLightFromWorldMatrix;
     vec4 u_ProjectedLightColor;
     vec4 u_ProjectedLightOrigin;
@@ -1228,14 +1228,14 @@ varying vec4 v_PositionWorld;
 varying vec4 v_Color;
 varying vec3 v_DiffuseLighting;
 
-#ifdef HAS_FULL_TANGENTSPACE
+#if defined HAS_FULL_TANGENTSPACE
 // 3x3 matrix for our tangent space basis.
 varying vec3 v_TangentSpaceBasis0;
 varying vec3 v_TangentSpaceBasis1;
 #endif
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
 varying vec4 v_LightAtten;
 #endif
 
@@ -1334,7 +1334,7 @@ vec3 WorldLightCalcDiffuse(in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool 
     return t_WorldLight.Color.rgb * t_Attenuation * t_Visibility;
 }
 
-#ifdef USE_DYNAMIC_LIGHTING
+#if defined USE_DYNAMIC_LIGHTING
 vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
     vec4 t_FinalAtten = vec4(0.0);
     for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
@@ -1343,7 +1343,7 @@ vec4 WorldLightCalcAllAttenuation(in vec3 t_PositionWorld) {
 }
 
 vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
-#ifdef DEBUG_FULLBRIGHT
+#if defined DEBUG_FULLBRIGHT
     return vec3(0.0);
 #else
     vec3 t_FinalLight = vec3(0.0);
@@ -1354,9 +1354,9 @@ vec3 WorldLightCalcAllDiffuse(in DiffuseLightInput t_DiffuseLightInput) {
 }
 #endif
 
-#ifdef USE_AMBIENT_CUBE
+#if defined USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
-#ifdef DEBUG_FULLBRIGHT
+#if defined DEBUG_FULLBRIGHT
     return vec3(1.0);
 #else
     vec3 t_Weight = t_NormalWorld * t_NormalWorld;
@@ -1370,7 +1370,7 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -1379,7 +1379,7 @@ void mainVS() {
 
     vec3 t_NormalWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Normal.xyz, 0.0));
 
-#ifdef USE_VERTEX_COLOR
+#if defined USE_VERTEX_COLOR
     v_Color = a_Color;
 #else
     v_Color = vec4(1.0);
@@ -1387,23 +1387,28 @@ void mainVS() {
 
     v_DiffuseLighting.rgb = vec3(0.0);
 
-#ifdef USE_DYNAMIC_LIGHTING
+#if !defined USE_DYNAMIC_LIGHTING && !defined USE_STATIC_VERTEX_LIGHTING
+    // If we don't have any lighting, it's fullbright.
+    v_DiffuseLighting.rgb = vec3(1.0);
+#endif
+
+#if defined USE_DYNAMIC_LIGHTING
     vec4 t_LightAtten = WorldLightCalcAllAttenuation(t_PositionWorld.xyz);
 #endif
 
-#ifdef USE_STATIC_VERTEX_LIGHTING
+#if defined USE_STATIC_VERTEX_LIGHTING
     // Static vertex lighting should already include ambient lighting.
     // 2.0 here is overbright.
     v_DiffuseLighting.rgb += GammaToLinear(a_StaticVertexLighting * 2.0);
 #endif
 
-#ifdef USE_DYNAMIC_VERTEX_LIGHTING
-#ifdef USE_AMBIENT_CUBE
+#if defined USE_DYNAMIC_VERTEX_LIGHTING
+#if defined USE_AMBIENT_CUBE
     v_DiffuseLighting.rgb += AmbientLight(t_NormalWorld);
 #endif
 
     bool t_HalfLambert = false;
-#ifdef USE_HALF_LAMBERT
+#if defined USE_HALF_LAMBERT
     t_HalfLambert = true;
 #endif
 
@@ -1416,25 +1421,25 @@ void mainVS() {
     v_DiffuseLighting.rgb += t_DiffuseLighting;
 #endif
 
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
     v_LightAtten.xyzw = t_LightAtten;
 #endif
 
 // TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
-#ifdef USE_MODULATIONCOLOR_COLOR
+#if defined USE_MODULATIONCOLOR_COLOR
     v_Color.rgb *= u_ModulationColor.rgb;
 #endif
 
-#ifdef USE_MODULATIONCOLOR_ALPHA
+#if defined USE_MODULATIONCOLOR_ALPHA
     v_Color.a *= u_ModulationColor.a;
 #endif
 
-#ifdef USE_BASETEXTURE2
+#if defined USE_BASETEXTURE2
     // This is the BaseTexture2 blend factor, smuggled through using unobvious means.
     v_PositionWorld.w = a_Normal.w;
 #endif
 
-#ifdef HAS_FULL_TANGENTSPACE
+#if defined HAS_FULL_TANGENTSPACE
     vec3 t_TangentSWorld = Mul(t_WorldFromLocalMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
@@ -1445,13 +1450,13 @@ void mainVS() {
 
     v_TexCoord0.xy = Mul(u_BaseTextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
     v_TexCoord0.zw = a_TexCoord.xy;
-#ifdef USE_LIGHTMAP
+#if defined USE_LIGHTMAP
     v_TexCoord1.xy = a_TexCoord.zw;
 #endif
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 
 #define COMBINE_MODE_MUL_DETAIL2                             (0)
 #define COMBINE_MODE_RGB_ADDITIVE                            (1)
@@ -1582,7 +1587,7 @@ SpecularLightResult WorldLightCalcSpecular(in SpecularLightInput t_Input, in Wor
 
 SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
     SpecularLightResult t_FinalLight = SpecularLightResult_New();
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
     for (int i = 0; i < ${ShaderTemplate_Generic.MaxDynamicWorldLights}; i++)
         SpecularLightResult_Sum(t_FinalLight, WorldLightCalcSpecular(t_Input, u_WorldLights[i]));
 #endif
@@ -1590,7 +1595,7 @@ SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
 }
 
 vec4 DebugColorTexture(in vec4 t_TextureSample) {
-#ifdef DEBUG_DIFFUSEONLY
+#if defined DEBUG_DIFFUSEONLY
     t_TextureSample.rgb = vec3(0.5);
 #endif
 
@@ -1598,7 +1603,7 @@ vec4 DebugColorTexture(in vec4 t_TextureSample) {
 }
 
 vec3 SampleLightmapTexture(in vec4 t_TextureSample) {
-#ifdef DEBUG_FULLBRIGHT
+#if defined DEBUG_FULLBRIGHT
     return vec3(1.0);
 #endif
 
@@ -1693,7 +1698,7 @@ void mainPS() {
 
     vec4 t_DetailTexture = vec4(0.0);
 
-#ifdef USE_DETAIL
+#if defined USE_DETAIL
     vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.xy, 1.0, 1.0));
     t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
     t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
@@ -1746,7 +1751,7 @@ void mainPS() {
         }
 
         // Transform from tangent space into world-space.
-#ifdef HAS_FULL_TANGENTSPACE
+#if defined HAS_FULL_TANGENTSPACE
         t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 #endif
     } else {
@@ -1815,7 +1820,7 @@ void mainPS() {
 
     t_Albedo *= v_Color;
 
-#ifdef USE_ALPHATEST
+#if defined USE_ALPHATEST
     if (t_Albedo.a < u_AlphaTestReference)
         discard;
 #endif
@@ -1823,7 +1828,7 @@ void mainPS() {
     bool use_half_lambert = ${getDefineBool(m, `USE_HALF_LAMBERT`)};
     bool use_phong = ${getDefineBool(m, `USE_PHONG`)};
 
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
     // World Diffuse
     bool t_HalfLambert = use_half_lambert;
 
@@ -1839,7 +1844,7 @@ void mainPS() {
     t_DiffuseLightInput.HalfLambert = t_HalfLambert;
     t_DiffuseLighting.rgb += WorldLightCalcAllDiffuse(t_DiffuseLightInput);
 
-#ifdef USE_AMBIENT_CUBE
+#if defined USE_AMBIENT_CUBE
     t_DiffuseLighting.rgb += AmbientLight(t_NormalWorld.xyz);
 #endif
 #endif
@@ -1850,7 +1855,7 @@ void mainPS() {
     float t_FresnelDot = dot(t_NormalWorld, t_WorldDirectionToEye);
 
     float t_Fresnel;
-#ifdef USE_PHONG
+#if defined USE_PHONG
     t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
 #else
     t_Fresnel = CalcFresnelTerm2(t_FresnelDot);
@@ -1858,7 +1863,7 @@ void mainPS() {
 
     bool use_base_alpha_envmap_mask = ${getDefineBool(m, `USE_BASE_ALPHA_ENVMAP_MASK`)};
 
-#ifdef USE_ENVMAP
+#if defined USE_ENVMAP
     t_EnvmapFactor *= u_EnvmapTint.rgb;
 
     bool use_envmap_mask = ${getDefineBool(m, `USE_ENVMAP_MASK`)};
@@ -1907,7 +1912,7 @@ void mainPS() {
         }
     }
 
-#ifdef USE_DYNAMIC_PIXEL_LIGHTING
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
     if (use_phong) {
         // Specular mask is either in base map or normal map alpha.
         float t_SpecularMask;
@@ -1934,23 +1939,23 @@ void mainPS() {
     }
 #endif // USE_DYNAMIC_PIXEL_LIGHTING
 
-#ifdef USE_PROJECTED_LIGHT
+#if defined USE_PROJECTED_LIGHT
     // Projected Light (Flashlight, env_projected_texture)
     vec4 t_ProjectedLightCoord = Mul(u_ProjectedLightFromWorldMatrix, vec4(v_PositionWorld.xyz, 1.0));
     t_ProjectedLightCoord.xyz /= t_ProjectedLightCoord.www;
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
     t_ProjectedLightCoord.xy = t_ProjectedLightCoord.xy * 0.5 + 0.5;
-#ifndef GFX_CLIPSPACE_NEAR_ZERO
+#if !defined GFX_CLIPSPACE_NEAR_ZERO
     t_ProjectedLightCoord.z = t_ProjectedLightCoord.z * 0.5 + 0.5;
 #endif
 
     if (all(greaterThan(t_ProjectedLightCoord.xyz, vec3(0.0))) && all(lessThan(t_ProjectedLightCoord.xyz, vec3(1.0)))) {
         vec2 t_ProjectedGoboTexCoord = t_ProjectedLightCoord.xy;
-#ifndef GFX_VIEWPORT_ORIGIN_TL
+#if !defined GFX_VIEWPORT_ORIGIN_TL
         t_ProjectedGoboTexCoord.y = 1.0 - t_ProjectedGoboTexCoord.y;
 #endif
-        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedGoboTexCoord.xy);
+        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedLightCoord.xy);
         vec3 t_ProjectedLightColor = (t_ProjectedLightSample.rgb * u_ProjectedLightColor.rgb);
 
         vec3 t_WorldToProjectedLight = u_ProjectedLightOrigin.xyz - v_PositionWorld.xyz;
@@ -1982,7 +1987,7 @@ void mainPS() {
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
     t_FinalDiffuse = CalcDetailPostLighting(t_FinalDiffuse, t_DetailTexture.rgb);
 
-#ifdef USE_SELFILLUM
+#if defined USE_SELFILLUM
     vec3 t_SelfIllumMask;
 
     bool use_selfillum_envmapmask_alpha = ${getDefineBool(m, `USE_SELFILLUM_ENVMAPMASK_ALPHA`)};
@@ -1998,7 +2003,7 @@ void mainPS() {
 
     vec3 t_SelfIllum = u_SelfIllumTint.rgb * t_Albedo.rgb;
 
-#ifdef USE_SELFILLUM_FRESNEL
+#if defined USE_SELFILLUM_FRESNEL
     float t_SelfIllumFresnelMin = u_SelfIllumFresnel.r;
     float t_SelfIllumFresnelMax = u_SelfIllumFresnel.g;
     float t_SelfIllumFresnelExp = u_SelfIllumFresnel.b;
@@ -2012,7 +2017,7 @@ void mainPS() {
 
     t_FinalColor.rgb += t_FinalDiffuse;
 
-#ifndef DEBUG_DIFFUSEONLY
+#if !defined DEBUG_DIFFUSEONLY
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 #endif
 
@@ -2542,7 +2547,7 @@ varying vec2 v_TexCoord0;
 // BaseTexture
 uniform sampler2D u_BaseTexture;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -2553,7 +2558,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     vec4 t_BaseTextureSample = texture(SAMPLER_2D(u_BaseTexture), v_TexCoord0.xy);
     vec4 t_FinalColor = t_BaseTextureSample;
@@ -2657,7 +2662,7 @@ varying vec4 v_TexCoord0;
 uniform sampler2D u_Texture1;
 uniform sampler2D u_Texture2;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -2669,7 +2674,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture1), v_TexCoord0.xy);
     vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture2), v_TexCoord0.zw);
@@ -2780,7 +2785,7 @@ ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
-#ifdef USE_TEXSCROLL
+#if defined USE_TEXSCROLL
     vec4 u_TexScroll0ScaleBias;
     vec4 u_TexScroll1ScaleBias;
 #endif
@@ -2789,7 +2794,7 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_WaterFogColor;
     Mat4x4 u_ProjectedDepthToWorld;
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     vec4 u_BaseTextureScaleBias;
     vec4 u_Misc[3];
 #endif
@@ -2799,7 +2804,7 @@ layout(std140) uniform ub_ObjectParams {
 #define u_ReflectAmount (u_ReflectTint.a)
 #define u_WaterFogRange (u_WaterFogColor.a)
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
 
 #define u_FlowTexCoordScale                (u_Misc[0].x)
 #define u_FlowNormalTexCoordScale          (u_Misc[0].y)
@@ -2835,7 +2840,7 @@ layout(binding = 10) uniform sampler2DArray u_TextureLightmap;
 layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 layout(binding = 12) uniform sampler2D u_TextureFramebufferDepth;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -2851,9 +2856,9 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 vec2 SampleFramebufferCoord(vec2 t_TexCoord) {
-#ifdef GFX_VIEWPORT_ORIGIN_TL
+#if defined GFX_VIEWPORT_ORIGIN_TL
     t_TexCoord.y = 1.0 - t_TexCoord.y;
 #endif
     return t_TexCoord;
@@ -2872,7 +2877,7 @@ bool IsSomethingInFront(float t_DepthSample) {
 
 vec4 CalcPosClipFromViewport(vec3 t_PosViewport) {
     vec4 t_PosClip = vec4(t_PosViewport.xy * 2.0 - 1.0, t_PosViewport.z, 1.0);
-#ifndef GFX_CLIPSPACE_NEAR_ZERO
+#if !defined GFX_CLIPSPACE_NEAR_ZERO
     t_PosClip.z = t_PosClip.z * 2.0 - 1.0;
 #endif
     return t_PosClip;
@@ -2920,7 +2925,7 @@ void mainPS() {
 
     vec2 t_BumpmapCoord0 = CalcScaleBias(v_TexCoord1.xy, u_BumpScaleBias);
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
 
     vec2 t_FlowTexCoord = t_BumpmapCoord0.xy * u_FlowTexCoordScale;
 
@@ -2944,7 +2949,7 @@ void mainPS() {
 
     // Sample our normal map with scroll offsets.
     vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0);
-#ifdef USE_TEXSCROLL
+#if defined USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = CalcScaleBias(vec2(v_TexCoord1.x + v_TexCoord1.y, -v_TexCoord1.x + v_TexCoord1.y) * 0.1, u_TexScroll0ScaleBias);
     vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord1);
     vec2 t_BumpmapCoord2 = CalcScaleBias(v_TexCoord1.yx * 0.45, u_TexScroll1ScaleBias);
@@ -3039,7 +3044,7 @@ void mainPS() {
 
     vec4 t_FinalColor;
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     bool use_flowmap_basetexture = ${getDefineBool(m, `USE_FLOWMAP_BASETEXTURE`)};
     if (use_flowmap_basetexture) {
         // Parallax scum layer
@@ -3066,7 +3071,7 @@ void mainPS() {
 
     t_FinalColor.rgb = t_RefractColor.rgb + (t_ReflectColor.rgb * t_Fresnel);
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     t_FinalColor.a = u_WaterBlendFactor;
 #endif
 
@@ -3303,11 +3308,11 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_BumpScaleBias;
     vec4 u_RefractTint;
     vec4 u_Misc[1];
-#ifdef USE_ENVMAP
+#if defined USE_ENVMAP
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
-#ifdef USE_VERTEX_MODULATE
+#if defined USE_VERTEX_MODULATE
     // XXX(jstpierre): ParticleSystem uses a uniform buffer until
     // we can switch it to using custom vertex data.
     vec4 u_FakeVertexModulate;
@@ -3323,7 +3328,7 @@ varying vec3 v_TexCoord0;
 varying vec2 v_TexCoord1;
 varying vec3 v_PositionWorld;
 
-#ifdef USE_VERTEX_MODULATE
+#if defined USE_VERTEX_MODULATE
 varying vec4 v_Modulate;
 #endif
 
@@ -3340,7 +3345,7 @@ layout(binding = 2) uniform sampler2D u_TextureRefractTint;
 // Envmap
 layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -3362,13 +3367,13 @@ void mainVS() {
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.xy, u_BumpScaleBias);
     
-#ifdef USE_VERTEX_MODULATE
+#if defined USE_VERTEX_MODULATE
     v_Modulate.rgba = a_Color.rgba * u_FakeVertexModulate.rgba;
 #endif
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
@@ -3378,16 +3383,16 @@ void mainPS() {
     vec4 t_FinalColor = vec4(0);
 
     vec3 t_RefractTint = u_RefractTint.rgb;
-#ifdef USE_REFRACT_TINT_TEXTURE
+#if defined USE_REFRACT_TINT_TEXTURE
     vec4 t_RefractTintTextureSample = texture(SAMPLER_2D(u_TextureRefractTint), t_BumpmapCoord0);
     t_RefractTint *= 2.0 * t_RefractTintTextureSample.rgb;
 #endif
 
-#ifdef USE_VERTEX_MODULATE
+#if defined USE_VERTEX_MODULATE
     t_RefractTint.rgb *= v_Modulate.rgb;
 #endif
 
-#ifdef USE_LOCAL_REFRACT
+#if defined USE_LOCAL_REFRACT
     vec3 t_LookDirWorld = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     // Get the tangent-space look direction to offset our texture.
     vec3 t_LookDirTangent = normalize(CalcWorldToTangent(t_LookDirWorld, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2));
@@ -3421,7 +3426,7 @@ void mainPS() {
     vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
 
     float t_RefractAmount = u_RefractAmount;
-#ifdef USE_VERTEX_MODULATE
+#if defined USE_VERTEX_MODULATE
     t_RefractAmount *= v_Modulate.a;
 #endif
 
@@ -3438,7 +3443,7 @@ void mainPS() {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
             vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
 
-#ifdef GFX_VIEWPORT_ORIGIN_TL
+#if defined GFX_VIEWPORT_ORIGIN_TL
             t_TexCoord.y = 1.0 - t_TexCoord.y;
 #endif
 
@@ -3449,7 +3454,7 @@ void mainPS() {
     t_FinalColor.rgb += t_BlurAccum.rgb * t_RefractTint.rgb;
 #endif
 
-#ifdef USE_ENVMAP
+#if defined USE_ENVMAP
     vec3 t_NormalWorld = CalcTangentToWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
@@ -3609,11 +3614,11 @@ ${MaterialShaderTemplateBase.Common}
 
 layout(std140) uniform ub_ObjectParams {
     Mat4x2 u_BaseTextureTransform;
-#ifdef USE_DETAIL
+#if defined USE_DETAIL
     Mat4x2 u_Detail1TextureTransform;
     Mat4x2 u_Detail2TextureTransform;
 #endif
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     vec4 u_Misc[3];
 #endif
 };
@@ -3641,14 +3646,14 @@ layout(binding = 3) uniform sampler2D u_TextureFlowmap;
 layout(binding = 4) uniform sampler2D u_TextureFlowNoise;
 layout(binding = 5) uniform sampler2D u_TextureFlowBounds;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
     v_PositionWorld.w = -gl_Position.z;
-#ifndef GFX_CLIPSPACE_NEAR_ZERO
+#if !defined GFX_CLIPSPACE_NEAR_ZERO
     v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
 #endif
 
@@ -3662,15 +3667,15 @@ void mainVS() {
 
     v_TexCoord1.xyzw = vec4(0.0);
 
-#ifdef USE_DETAIL
+#if defined USE_DETAIL
     v_TexCoord1.xy = Mul(u_Detail1TextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
     v_TexCoord1.zw = Mul(u_Detail2TextureTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     vec2 t_FlowUV = vec2(0.0);
 
-#ifdef MODEL
+#if defined MODEL
     t_FlowUV.xy = a_TexCoord.xy;
 #else
     t_FlowUV.x = dot(t_TangentSWorld.xyz, v_PositionWorld.xyz);
@@ -3688,12 +3693,12 @@ float CalcCameraFade(in float t_PosProjZ) {
     return smoothstep(0.0, 1.0, saturate(t_PosProjZ * 0.025));
 }
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     vec4 t_BaseTexture = vec4(0.0, 0.0, 0.0, 1.0);
     bool t_UseBaseAlpha = true;
 
-#ifdef USE_FLOWMAP
+#if defined USE_FLOWMAP
     vec4 t_FlowBoundsSample = texture(SAMPLER_2D(u_TextureFlowBounds), v_TexCoord0.xy);
     vec4 t_FlowSample = texture(SAMPLER_2D(u_TextureFlowmap), v_TexCoord0.zw * u_FlowWorldTexCoordScale);
     vec2 t_FlowVectorTangent = UnpackUnsignedNormalMap(t_FlowSample).rg;
@@ -3723,7 +3728,7 @@ void mainPS() {
     vec4 t_FinalColor = t_BaseTexture;
     t_FinalColor.a = 1.0;
 
-#ifdef USE_DETAIL1
+#if defined USE_DETAIL1
     vec4 t_Detail1 = texture(SAMPLER_2D(u_TextureDetail1), v_TexCoord1.xy);
     int t_Detail1BlendMode = DETAIL1_BLENDMODE;
 
@@ -3737,12 +3742,12 @@ void mainPS() {
         t_UseBaseAlpha = false;
 #endif
 
-#ifdef USE_DETAIL2
+#if defined USE_DETAIL2
     vec4 t_Detail2 = texture(SAMPLER_2D(u_TextureDetail2), v_TexCoord1.zw);
     int t_Detail2BlendMode = DETAIL2_BLENDMODE;
 
     if (t_Detail2BlendMode == 0) {
-#ifdef USE_DETAIL1
+#if defined USE_DETAIL1
         t_Detail2.rgb *= t_Detail1.rgb;
 #endif
         t_FinalColor.rgb += t_Detail2.rgb;
@@ -3754,7 +3759,7 @@ void mainPS() {
     if (t_UseBaseAlpha)
         t_FinalColor.a *= t_BaseTexture.a;
 
-#ifdef ADDITIVE
+#if defined ADDITIVE
     t_FinalColor.rgb *= (1.0 + t_FinalColor.a);
     t_FinalColor.a = 1.0;
 #endif
@@ -3925,7 +3930,7 @@ varying vec2 v_TexCoord0;
 
 layout(binding = 0) uniform sampler2D u_Texture;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -3934,7 +3939,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     vec4 t_FinalColor = texture(SAMPLER_2D(u_Texture), v_TexCoord0.xy);
 
@@ -3969,7 +3974,7 @@ varying vec2 v_TexCoordInPixels;
 
 layout(binding = 0) uniform sampler2D u_TextureHdrCompressed;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -3987,7 +3992,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 void mainPS() {
     vec4 t_S00 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord0.xy);
     vec4 t_S01 = texture(SAMPLER_2D(u_TextureHdrCompressed), v_TexCoord0.zw);
@@ -4135,7 +4140,7 @@ varying vec4 v_Misc;
 
 layout(binding = 0) uniform sampler2D u_Texture;
 
-#ifdef VERT
+#if defined VERT
 void mainVS() {
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
     vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
@@ -4150,7 +4155,7 @@ void mainVS() {
 }
 #endif
 
-#ifdef FRAG
+#if defined FRAG
 float Lum(in vec3 t_Sample) {
     return dot(vec3(0.3, 0.59, 0.11), t_Sample.rgb);
 }
