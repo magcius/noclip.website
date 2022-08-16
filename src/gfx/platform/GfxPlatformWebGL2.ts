@@ -347,8 +347,8 @@ function isBlockCompressSized(w: number, h: number, bw: number, bh: number): boo
 
 class ResourceCreationTracker {
     public liveObjects = new Set<GfxResource>();
-    public creationStacks = new Map<GfxResource, string>();
-    public deletionStacks = new Map<GfxResource, string>();
+    public creationStacks = new WeakMap<GfxResource, string>();
+    public deletionStacks = new WeakMap<GfxResource, string>();
 
     public trackResourceCreated(o: GfxResource): void {
         this.creationStacks.set(o, new Error().stack!);
