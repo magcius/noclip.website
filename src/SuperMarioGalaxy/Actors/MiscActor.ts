@@ -4365,7 +4365,7 @@ export class ChooChooTrain extends LiveActor {
 
         getRailDirection(scratchVec3a, this);
         const angle = Math.atan2(scratchVec3a[2], scratchVec3a[0]);
-        this.rotation[1] = -angle + MathConstants.TAU / 4;
+        vec3.set(this.rotation, 0, -angle + MathConstants.TAU / 4, 0);
 
         const coord = getRailCoord(this);
         reverseRailDirection(this);
@@ -4376,7 +4376,7 @@ export class ChooChooTrain extends LiveActor {
             moveTransToOtherActorRailPos(body, this);
             getRailDirection(scratchVec3a, this);
             const angle = Math.atan2(scratchVec3a[2], scratchVec3a[0]);
-            body.rotation[1] = -angle - MathConstants.TAU / 4;
+            vec3.set(body.rotation, 0, -angle - MathConstants.TAU / 4, 0);
         }
 
         reverseRailDirection(this);
