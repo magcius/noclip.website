@@ -26,21 +26,179 @@ function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT)
 export type AbortedCallback = () => void;
 
 class DataFetcherRequest {
-    public request: XMLHttpRequest | null = null;
+    public promise: Promise<NamedArrayBufferSlice>;
     public progress: number = 0;
     public ondone: (() => void) | null = null;
     public onprogress: (() => void) | null = null;
 
-    public promise: Promise<NamedArrayBufferSlice>;
+    private started = false;
+    private request: Request;
+    private response: Response | null = null;
+    private abortController = new AbortController();
     private resolve: (slice: NamedArrayBufferSlice) => void;
     private reject: (e: Error | null) => void;
     private retriesLeft = 2;
 
-    constructor(public url: string, private options: DataFetcherOptions) {
+    constructor(private cache: Cache | null, public url: string, private options: DataFetcherOptions) {
+        this.request = new Request(this.url);
+
+        if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
+            const rangeStart = this.options.rangeStart;
+            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
+            this.request.headers.set('Range', `bytes=${rangeStart}-${rangeEnd}`);
+        }
+
         this.promise = new Promise((resolve, reject) => {
             this.resolve = resolve;
             this.reject = reject;
         });
+    }
+
+    public inFlight(): boolean {
+        return this.started;
+    }
+
+    private isConsidered404Error(): boolean {
+        const response = this.response;
+
+        if (response === null)
+            return false;
+
+        if (response.status === 404)
+            return true;
+
+        // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
+        if (response.status === 0)
+            return true;
+
+        return false;
+    }
+
+    private resolveError(): boolean {
+        const allow404 = !!this.options.allow404;
+        if ((allow404 && this.isConsidered404Error()) || this.abortController.signal.aborted) {
+            const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
+            emptySlice.name = this.url;
+            this.resolve(emptySlice);
+            this.done();
+            return true;
+        }
+
+        const response = this.response;
+        let status = 999;
+        if (response !== null) {
+            status = response.status;
+            if (status === 200 || status === 206)
+                return false;
+        }
+
+        if (this.retriesLeft > 0) {
+            this.retriesLeft--;
+            this.destroy();
+            this.start();
+            return true;
+        } else {
+            console.error(`DataFetcherRequest: Received non-success status code ${status} when fetching file ${this.url}.`);
+            this.reject(null);
+            this.done();
+            return true;
+        }
+    }
+
+    private resolveArrayBuffer(buffer: ArrayBufferLike) {
+        const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
+        slice.name = this.url;
+        this.resolve(slice);
+        this.done();
+    }
+
+    public async start() {
+        this.started = true;
+
+        if (this.cache !== null) {
+            const match = await this.cache.match(this.request);
+            if (match !== undefined) {
+                const arrayBuffer = await match.arrayBuffer();
+                this.resolveArrayBuffer(arrayBuffer);
+            }
+        }
+
+        assert(this.response === null);
+        try {
+            this.response = await fetch(this.request, { signal: this.abortController.signal });
+        } catch(e) {
+            // Error handling below.
+        }
+
+        if (this.resolveError())
+            return;
+
+        const response = this.response!;
+
+        if (response.status === 206) {
+            // Partial responses are unsupported with Cache, for some lovely reason.
+            this.cache = null;
+        }
+
+        // Clone now, so we can add to the cache later (??? Why? What was the point of this?)
+        const responseClone = this.cache !== null ? response.clone() : null;
+
+        let contentLengthStr = response.headers.get('content-length');
+        if (contentLengthStr === null)
+            contentLengthStr = '1';
+
+        // XXX(jstpierre): There's no way to correctly compute progress in fetch()
+        // under the duress of Content-Encoding compression:
+        // https://github.com/whatwg/fetch/issues/1358
+        const contentLength = parseInt(contentLengthStr, 10);
+
+        const chunks: Uint8Array[] = [];
+
+        const reader = response.body!.getReader();
+        let totalBytesReceived = 0;
+        while (true) {
+            try {
+                // XXX(jstpierre): This is so freaking wasteful, lmao.
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+
+                totalBytesReceived += value!.byteLength;
+                this.progress = Math.min(totalBytesReceived / contentLength, 1);
+    
+                if (this.onprogress !== null)
+                    this.onprogress();
+    
+                chunks.push(value!);
+            } catch(e) {
+                break;
+            }
+        }
+
+        if (this.resolveError())
+            return;
+
+        assert(chunks.length >= 1);
+
+        let bigBuffer: Uint8Array;
+        if (chunks.length === 1) {
+            bigBuffer = chunks[0];
+        } else {
+            // Merge together buffers
+            bigBuffer = new Uint8Array(totalBytesReceived);
+            let idx = 0;
+            for (let i = 0; i < chunks.length; i++) {
+                bigBuffer.set(chunks[i], idx);
+                idx += chunks[i].byteLength;
+            }
+        }
+
+        this.resolveArrayBuffer(bigBuffer.buffer);
+
+        if (this.cache !== null)
+            await this.cache.put(this.request, responseClone!);
+
+        this.response = null;
     }
 
     private done(): void {
@@ -51,101 +209,12 @@ class DataFetcherRequest {
             this.ondone();
     }
 
-    private isConsidered404Error(): boolean {
-        const request = this.request!;
-
-        if (request.status === 404)
-            return true;
-
-        // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
-        if (request.status === 0)
-            return true;
-
-        return false;
-    }
-
-    private resolveError(): boolean {
-        const request = this.request!;
-
-        const allow404 = !!this.options.allow404;
-        if (allow404 && this.isConsidered404Error()) {
-            const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
-            emptySlice.name = this.url;
-            this.resolve(emptySlice);
-            this.done();
-            return true;
-        }
-
-        if (request.status === 200 || request.status === 206)
-            return false;
-
-        if (this.retriesLeft > 0) {
-            this.retriesLeft--;
-            this.destroy();
-            this.start();
-            return true;
-        } else {
-            console.error(`DataFetcherRequest: Received non-success status code ${request.status} when fetching file ${this.url}.`);
-            this.reject(null);
-            this.done();
-            return true;
-        }
-    }
-
-    public start(): void {
-        this.request = new XMLHttpRequest();
-        this.request.open("GET", this.url, true);
-        this.request.responseType = "arraybuffer";
-
-        if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
-            const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
-            this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
-        }
-        this.request.send();
-        this.request.onload = (e) => {
-            const hadError = this.resolveError();
-            if (!hadError) {
-                const request = this.request!;
-                const buffer: ArrayBuffer = request.response;
-
-                let slice = new ArrayBufferSlice(buffer);
-
-                const namedSlice = slice as NamedArrayBufferSlice;
-                namedSlice.name = this.url;
-
-                this.resolve(namedSlice);
-                this.done();
-            }
-        };
-        this.request.onerror = (e) => {
-            // TODO(jstpierre): Proper error handling.
-            console.error(`DataFetcherRequest: Received error`, this, this.request, e);
-
-            this.resolveError();
-        };
-        this.request.onprogress = (e) => {
-            if (e.lengthComputable)
-                this.progress = e.loaded / e.total;
-            if (this.onprogress !== null)
-                this.onprogress();
-        };
-    }
-
     public destroy(): void {
-        // Explicitly sever any GC cycles.
-        if (this.request !== null) {
-            this.request.onload = null;
-            this.request.onerror = null;
-            this.request.onprogress = null;
-        }
-
-        this.request = null;
+        this.response = null;
     }
 
     public abort(): void {
-        if (this.request !== null)
-            this.request.abort();
+        this.abortController.abort();
         if (this.options.abortedCallback !== undefined)
             this.options.abortedCallback();
         this.destroy();
@@ -173,6 +242,7 @@ export class DataFetcher {
     public maxParallelRequests: number = 10;
     public aborted: boolean = false;
     public useDevelopmentStorage: boolean | null = null;
+    private cache: Cache | null = null;
 
     constructor(public progressMeter: ProgressMeter) {
     }
@@ -190,6 +260,12 @@ export class DataFetcher {
         } else {
             this.useDevelopmentStorage = false;
         }
+
+        const REQUEST_CACHE_NAME = `request-cache-v1`;
+        this.cache = await caches.open(REQUEST_CACHE_NAME);
+    }
+
+    private manageCache(): void {
     }
 
     public abort(): void {
@@ -225,7 +301,7 @@ export class DataFetcher {
 
     private pump(): void {
         for (let i = 0; i < Math.min(this.requests.length, this.maxParallelRequests); i++) {
-            if (this.requests[i].request === null)
+            if (!this.requests[i].inFlight())
                 this.requests[i].start();
         }
     }
@@ -234,13 +310,14 @@ export class DataFetcher {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
-        const request = new DataFetcherRequest(url, options);
+        const request = new DataFetcherRequest(this.cache, url, options);
         this.requests.push(request);
         request.ondone = () => {
             this.doneRequestCount++;
             request.destroy();
             this.requests.splice(this.requests.indexOf(request), 1);
             this.pump();
+            this.manageCache();
         };
         request.onprogress = () => {
             this.setProgress();
