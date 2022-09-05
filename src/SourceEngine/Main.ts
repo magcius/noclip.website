@@ -34,6 +34,7 @@ import { LuminanceHistogram } from "./LuminanceHistogram";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { dfRange, dfShow } from "../DebugFloaters";
+import { GMA } from "./GMA";
 
 export class LooseMount {
     constructor(public path: string, public files: string[] = []) {
@@ -58,6 +59,7 @@ export class SourceFileSystem {
     public zip: ZipFile[] = [];
     public vpk: VPKMount[] = [];
     public loose: LooseMount[] = [];
+    public gma: GMA[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -79,6 +81,12 @@ export class SourceFileSystem {
         const zip = parseZipFile(data);
         normalizeZip(zip);
         this.zip.push(zip);
+    }
+
+    public async createGMAMount(path: string) {
+        const data = await this.dataFetcher.fetchData(path);
+        const gma = new GMA(data);
+        this.gma.push(gma);
     }
 
     public resolvePath(path: string, ext: string): string {
@@ -152,6 +160,13 @@ export class SourceFileSystem {
                 return true;
         }
 
+        for (let i = 0; i < this.gma.length; i++) {
+            const gma = this.gma[i];
+            const entry = gma.files.find((entry) => entry.filename === resolvedPath);
+            if (entry !== undefined)
+                return true;
+        }
+
         return false;
     }
 
@@ -180,6 +195,13 @@ export class SourceFileSystem {
             const entry = zip.find((entry) => entry.filename === resolvedPath);
             if (entry !== undefined)
                 return decompressZipFileEntry(entry);
+        }
+
+        for (let i = 0; i < this.gma.length; i++) {
+            const gma = this.gma[i];
+            const entry = gma.files.find((entry) => entry.filename === resolvedPath);
+            if (entry !== undefined)
+                return entry.data;
         }
 
         return null;

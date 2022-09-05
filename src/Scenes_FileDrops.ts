@@ -104,7 +104,7 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
 
-    if (buffer.name.endsWith('.bsp'))
+    if (buffer.name.endsWith('.bsp') || buffer.name.endsWith('.gma'))
         return SourceFileDrops.createFileDropsScene(context, buffer); 
 
     const superMonkeyBallRenderer = SuperMonkeyBall.createSceneFromNamedBuffers(context, buffers);
