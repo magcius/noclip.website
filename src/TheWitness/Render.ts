@@ -23,7 +23,7 @@ import { TheWitnessGlobals } from "./Globals";
 import { UberShaderInstance, UberShaderTemplate } from "../SourceEngine/UberShader";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap, nullHashFunc } from "../HashMap";
+import { hashCodeNumberUpdate, HashMap } from "../HashMap";
 
 class DepthCopyProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;
@@ -107,6 +107,7 @@ layout(std140) uniform ub_ObjectParams {
 #define u_BlendFactor    (u_Misc[0].x)
 #define u_LightMap0Blend (u_Misc[0].y)
 #define u_LightMap1Blend (u_Misc[0].z)
+#define u_UsageDetail    (u_Misc[0].w)
 
 uniform sampler2D u_TextureMap0;
 uniform sampler2D u_TextureMap1;
@@ -212,7 +213,22 @@ void CalcTrunkWind(inout vec3 t_PositionWorld, in vec4 a_WindParam, in vec3 t_Ob
 }
 
 void mainVS() {
-    v_PositionWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Position.xyz, 1.0)).xyz;
+    vec3 t_PositionLocal = a_Position.xyz;
+    vec3 t_NormalLocal = a_Normal.xyz;
+
+    bool use_hedge = ${this.is_type(m, Material_Type.Hedge)};
+    float t_ShellT = 0.0;
+    if (use_hedge) {
+        t_ShellT = (float(gl_InstanceID) / u_UsageDetail);
+        float t_ShellExtrude = (t_ShellT * 0.03) + 0.015;
+        t_PositionLocal += (t_NormalLocal * t_ShellExtrude);
+    }
+
+    v_PositionWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(t_PositionLocal, 1.0)).xyz;
+
+    vec3 t_NormalWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(t_NormalLocal, 0.0)).xyz;
+    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentTWorld = cross(t_NormalWorld, t_TangentSWorld);
 
     bool use_wind = ${this.is_flag(m, Material_Flags.Wind_Animation)};
     if (use_wind) {
@@ -230,14 +246,14 @@ void mainVS() {
         v_TexCoord0.y += t_ScrollSpeed * u_SceneTime;
     }
 
-    vec3 t_NormalWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal.xyz, 0.0)).xyz;
-    vec3 t_TangentSWorld = a_TangentS.xyz;
-    vec3 t_TangentTWorld = cross(t_NormalWorld, t_TangentSWorld);
-
     v_TangentSpaceBasis0 = t_TangentSWorld * sign(a_TangentS.w);
     v_TangentSpaceBasis1 = t_TangentTWorld;
     v_TangentSpaceBasis2 = t_NormalWorld;
     v_Color0 = a_Color0;
+
+    if (use_hedge) {
+        v_Color0.w = t_ShellT;
+    }
 
     bool use_vertex_lightmap = ${this.is_flag(m, Material_Flags.Vertex_Lightmap | Material_Flags.Vertex_Lightmap_Auto)};
     if (use_vertex_lightmap) {
@@ -409,7 +425,15 @@ vec4 CalcAlbedo() {
         return vec4(t_Color, 1.0);
     }
 
-    return CalcAlbedoMap();
+    vec4 t_Color = CalcAlbedoMap();
+
+    bool use_hedge = ${this.is_type(m, Material_Type.Hedge)};
+    if (use_hedge) {
+        float t_ShellT = v_Color0.w;
+        t_Color.rgb *= 0.5 + (0.6 * t_ShellT);
+    }
+
+    return t_Color;
 }
 
 float Uncharted2Tonemap(float x) {
@@ -504,6 +528,8 @@ void mainPS() {
     vec3 t_FinalColor = vec3(0.0);
     t_FinalColor.rgb += t_DiffuseLight.rgb * t_Albedo.rgb;
 
+    // TODO(jstpierre): Fog
+
     // Tone mapping & gamma correction
     CalcToneMap(t_FinalColor.rgb);
     t_FinalColor = pow(t_FinalColor, vec3(1.0 / 2.2));
@@ -516,8 +542,11 @@ void mainPS() {
 
     bool use_hedge_alpha = ${this.is_type(m, Material_Type.Hedge)};
     if (use_hedge_alpha) {
-        float t_HedgeInstance = 0.0 + (1.0 - v_Color0.x);
-        t_Alpha = smoothstep(t_HedgeInstance - 0.1, t_HedgeInstance + 0.1, t_Albedo.a);
+        float t_ShellT = v_Color0.w;
+        float t_Thresh = t_ShellT + (1.0 - v_Color0.x);
+        t_Alpha = smoothstep(t_Thresh - 0.1, t_Thresh + 0.1, t_Albedo.a);
+        if (t_Thresh <= 0.01)
+            t_Alpha = 1.0;
     }
 
     bool use_decal_alpha = ${this.is_type(m, Material_Type.Decal)};
@@ -646,7 +675,7 @@ class Device_Material {
         });
 
         const material_type = this.render_material.material_type;
-        const is_terrain = (material_type === Material_Type.Blended3 || material_type === Material_Type.Tinted || material_type === Material_Type.Decal);
+        const is_terrain = material_type === Material_Type.Blended3 || material_type === Material_Type.Tinted || material_type === Material_Type.Decal;
         const is_foliage = material_type === Material_Type.Foliage || material_type === Material_Type.Vegetation;
 
         if (is_terrain)
@@ -739,7 +768,7 @@ class Device_Material {
         offs += fillVec4v(d, offs, this.render_material.specular_parameters);
 
         const blendFactor = 1.0 / this.render_material.blend_ranges[0];
-        offs += fillVec4(d, offs, blendFactor, lightmap0Blend, lightmap1Blend);
+        offs += fillVec4(d, offs, blendFactor, lightmap0Blend, lightmap1Blend, -this.render_material.usage_detail);
 
         // Terrain Tint System
 
