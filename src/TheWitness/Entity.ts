@@ -2,8 +2,9 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { Color, colorNewCopy, Magenta } from "../Color";
+import { drawWorldSpaceAABB, drawWorldSpaceCircle, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { scaleMatrix } from "../MathHelpers";
+import { scaleMatrix, Vec3UnitY } from "../MathHelpers";
 import { leftPad } from "../util";
 import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets";
 import { TheWitnessGlobals } from "./Globals";
@@ -23,10 +24,19 @@ export class Entity_Manager {
             this.entity_list[entity.portable_id] = entity;
         }
 
+        // Set up groups & initial group visibility
+
         // Go through and register clusters.
         for (let i = 0; i < this.flat_entity_list.length; i++)
             if (this.flat_entity_list[i] instanceof Entity_Cluster)
                 (this.flat_entity_list[i] as Entity_Cluster).validate(globals);
+
+        // Initialize groups & group visibility
+        for (let i = 0; i < this.flat_entity_list.length; i++)
+            if (this.flat_entity_list[i] instanceof Entity_Group)
+                (this.flat_entity_list[i] as Entity_Group).initialize(globals);
+
+        // Finalize actor creation.
         for (let i = 0; i < this.flat_entity_list.length; i++)
             this.flat_entity_list[i].transport_create_hook(globals);
 
@@ -37,6 +47,7 @@ export class Entity_Manager {
 export interface Portable {
     portable_id: number;
     revision_number: number;
+    type_name: string;
     [k: string]: any;
 }
 
@@ -72,11 +83,15 @@ export class Lightmap_Table {
 }
 
 const enum Entity_Flags {
-    Invisible = 0x8000,
+    LodsToNothing   = 0x00001000,
+    Invisible       = 0x00008000,
+    DoNotCull       = 0x20000000,
 }
 
 export class Entity implements Portable {
-    public visible = true;
+    public visible = true; // debug visible flag
+    public layer_active = true; // layer/group visible flag
+    public type_name: string;
     public debug_color = colorNewCopy(Magenta);
 
     public entity_manager: Entity_Manager;
@@ -105,9 +120,14 @@ export class Entity implements Portable {
 
     public mesh_instance: Mesh_Instance | null = null;
 
-    // Mesh_Params
+    // Culling Data
+    private lod_distance_squared: number = Infinity;
+    private cull_distance_squared: number = Infinity;
+
+    // Mesh_Render_Params
     public model_matrix = mat4.create();
     public color: Color | null;
+    public mesh_lod: number = 0;
 
     constructor(public portable_id: number, public revision_number: number) {
     }
@@ -128,16 +148,83 @@ export class Entity implements Portable {
         this.bounding_radius_world = this.bounding_radius * this.scale;
     }
 
+    private compute_lod_distance_squared(globals: TheWitnessGlobals): number {
+        let lod_distance = this.lod_distance;
+        if (lod_distance < 0.0) {
+            lod_distance = globals.render_settings.lod_distance;
+            // TODO(jstpierre): grass fade
+        }
+
+        if (!(this.entity_flags & Entity_Flags.LodsToNothing)) {
+            // If we aren't LODing to nothing, and our mesh only has one LOD, then never switch.
+            if (this.mesh_instance !== null && this.mesh_instance.mesh_asset.max_lod_count <= 1)
+                return Infinity;
+
+            lod_distance = Math.min(lod_distance, globals.render_settings.cluster_distance * 0.75);
+        }
+
+        if (lod_distance === 0.0)
+            return 0.0;
+
+        lod_distance += this.bounding_radius_world;
+        return lod_distance ** 2.0;
+    }
+
+    private compute_cull_distance_squared(globals: TheWitnessGlobals): number {
+        // noclip change: since we don't have a LOD transition animation, LodsToNothing just becomes our LOD distance
+        if (!!(this.entity_flags & Entity_Flags.LodsToNothing))
+            return this.lod_distance_squared;
+
+        if (this.entity_flags & (Entity_Flags.DoNotCull | Entity_Flags.LodsToNothing))
+            return Infinity;
+
+        // TODO(jstpierre): Check for cluster
+        // TODO(jstpierre): grass fade
+
+        if (false /*this.is_detail*/) {
+            let cull_distance = globals.render_settings.detail_cull_distance + this.bounding_radius_world;
+            return cull_distance ** 2.0;
+        }
+
+        let cull_distance_squared = (this.bounding_radius_world ** 2.0) / (globals.render_settings.cull_threshold * 0.02);
+        if (this.lod_distance > 0.0)
+            cull_distance_squared = Math.max(cull_distance_squared, (this.lod_distance * 2.0 + this.bounding_radius_world) ** 2.0);
+        return cull_distance_squared;
+    }
+
+    private update_lod_settings(globals: TheWitnessGlobals): void {
+        this.lod_distance_squared = this.compute_lod_distance_squared(globals);
+        this.cull_distance_squared = this.compute_cull_distance_squared(globals);
+    }
+
+    protected create_mesh_instance(globals: TheWitnessGlobals, mesh_asset: Mesh_Asset | null): void {
+        if (mesh_asset === null) {
+            this.mesh_instance = null;
+            return;
+        }
+
+        this.mesh_instance = new Mesh_Instance(globals, mesh_asset);
+        this.update_lod_settings(globals);
+    }
+
     public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager): void {
-        if (!this.visible)
+        if (!this.visible || !this.layer_active)
+            return;
+
+        if (this.mesh_instance === null)
             return;
 
         if (this.cluster_id !== undefined && !globals.occlusion_manager.clusterIsVisible(this.cluster_id))
             return;
 
+        const squared_distance = vec3.squaredDistance(globals.viewpoint.cameraPos, this.bounding_center_world);
+        if (globals.render_settings.cull_distance_enabled && squared_distance >= this.cull_distance_squared)
+            return;
+
+        this.mesh_lod = (globals.render_settings.lod_distance_enabled && squared_distance >= this.lod_distance_squared) ? 1 : 0;
+
         const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.viewpoint.viewFromWorldMatrix, this.bounding_center_world);
-        if (this.mesh_instance !== null)
-            this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
+        this.mesh_instance.prepareToRender(globals, renderInstManager, this, depth);
     }
 }
 
@@ -148,13 +235,12 @@ export class Entity_Inanimate extends Entity {
     public override transport_create_hook(globals: TheWitnessGlobals): void {
         super.transport_create_hook(globals);
 
-        if (!(this.color_override))
+        if (!this.color_override)
             this.color = null;
 
         if (this.mesh_name) {
-            const mesh_data = globals.asset_manager.load_asset(Asset_Type.Mesh, this.mesh_name);
-            if (mesh_data !== null)
-                this.mesh_instance = new Mesh_Instance(globals, mesh_data);
+            const mesh_asset = globals.asset_manager.load_asset(Asset_Type.Mesh, this.mesh_name);
+            this.create_mesh_instance(globals, mesh_asset);
         }
     }
 }
@@ -189,6 +275,51 @@ export class Entity_Cluster extends Entity {
             const entity = globals.entity_manager.entity_list[this.elements[i]];
             entity.cluster_id = this.portable_id;
         }
+    }
+}
+
+export class Entity_Group extends Entity {
+    public elements: number[] = [];
+    public child_groups: number[] = [];
+    public initial_group_visibility = true;
+    public current_group_visibility = true;
+
+    public initialize(globals: TheWitnessGlobals): void {
+        this.current_group_visibility = this.initial_group_visibility;
+        this.update_elements(globals);
+        this.update_visibility(globals);
+    }
+
+    public update_elements(globals: TheWitnessGlobals): void {
+        this.elements.length = 0;
+
+        for (let i = 0; i < globals.entity_manager.flat_entity_list.length; i++) {
+            const entity = globals.entity_manager.flat_entity_list[i];
+            if (entity.group_id === this.portable_id) {
+                this.elements.push(entity.portable_id);
+                if (entity instanceof Entity_Group)
+                    this.child_groups.push(entity.portable_id);
+            }
+        }
+    }
+
+    public update_visibility(globals: TheWitnessGlobals): void {
+        const visible = this.visible && this.layer_active && this.current_group_visibility;
+
+        for (let i = 0; i < this.elements.length; i++) {
+            const entity = globals.entity_manager.entity_list[this.elements[i]];
+            entity.layer_active = visible;
+        }
+
+        for (let i = 0; i < this.child_groups.length; i++) {
+            const entity = globals.entity_manager.entity_list[this.child_groups[i]] as Entity_Group;
+            entity.update_visibility(globals);
+        }
+    }
+
+    public set_group_visible(globals: TheWitnessGlobals, v: boolean): void {
+        this.current_group_visibility = v;
+        this.update_visibility(globals);
     }
 }
 

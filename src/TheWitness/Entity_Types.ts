@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, nullify } from "../util";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster } from "./Entity";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable, Entity_Cluster, Entity_Group } from "./Entity";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -1015,6 +1015,10 @@ class Entity_Type_Group extends Portable_Type {
         m.add_integer('initial_group_visibility', { minimum_revision_number: 0x67, integer_info: make_boolean_integer_info() });
         m.add_integer('necessary_for_gameplay_despite_visibility', { minimum_revision_number: 0x76, integer_info: make_boolean_integer_info() });
         m.add_float('lm_threshold_factor', { minimum_revision_number: 0x68 });
+    }
+
+    public override construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Group(portable_id, revision_number);
     }
 }
 

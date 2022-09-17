@@ -110,12 +110,6 @@ export interface Widget {
     elem: HTMLElement;
 }
 
-declare global {
-    interface CSSStyleDeclaration {
-        caretColor: string;
-    }
-}
-
 function svgStringToCSSBackgroundImage(svgString: string) {
     return `url(data:image/svg+xml,${encodeURI(svgString)})`;
 }
@@ -930,6 +924,7 @@ class SceneSelect extends Panel {
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
     private loadProgress: number;
+    private forceVisible: boolean = IS_DEVELOPMENT;
 
     private currentSearchTokens: RegExp[] = [];
 
@@ -1022,6 +1017,11 @@ class SceneSelect extends Panel {
     private syncRandomButtonVisible(): void {
     }
 
+    public setForceVisible(v: boolean) {
+        this.forceVisible = v;
+        this.syncVisibility();
+    }
+
     private syncVisibility(): void {
         // Start searching!
         const n = this.currentSearchTokens;
@@ -1051,7 +1051,7 @@ class SceneSelect extends Panel {
                 let visible = false;
                 let explicitlyInvisible = false;
 
-                const isHidden = (!!item.hidden) && !IS_DEVELOPMENT;
+                const isHidden = (!!item.hidden) && !this.forceVisible;
                 explicitlyInvisible = item.sceneDescs.length <= 0 || isHidden;
 
                 if (!explicitlyInvisible) {

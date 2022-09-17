@@ -95,6 +95,18 @@ function parse_variables(contents: ArrayBufferSlice): Variables {
     return dst;
 }
 
+class Render_Settings {
+    public grass_fade_begin = 48.0;
+    public lod_distance = 64.0;
+    public cluster_distance = 128.0;
+    public cull_threshold = 0.004;
+    public detail_cull_distance = 96.0;
+
+    // debug
+    public lod_distance_enabled = true;
+    public cull_distance_enabled = true;
+}
+
 export class TheWitnessGlobals {
     public entity_manager = new Entity_Manager();
     public viewpoint = new Viewpoint();
@@ -103,11 +115,13 @@ export class TheWitnessGlobals {
     public sky_variables: Variables;
     public occlusion_manager: Occlusion_Manager;
     public device_material_cache: Device_Material_Cache;
+    public render_settings = new Render_Settings();
+    public scene_time = 0.0;
 
     constructor(public device: GfxDevice, public asset_manager: Asset_Manager) {
         this.cache = new GfxRenderCache(this.device);
         this.occlusion_manager = new Occlusion_Manager(this.device);
-        this.device_material_cache = new Device_Material_Cache(this.cache);
+        this.device_material_cache = new Device_Material_Cache();
 
         this.all_variables = parse_variables(this.asset_manager.load_asset(Asset_Type.Raw, `All.variables`)!);
         this.sky_variables = parse_variables(this.asset_manager.load_asset(Asset_Type.Raw, `sky.variables`)!);

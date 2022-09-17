@@ -123,6 +123,43 @@ function get_mipmap_size(format: D3DFormat, width: number, height: number, depth
     }
 }
 
+
+function convert_data(d3d_format: D3DFormat, data: ArrayBufferSlice): ArrayBufferView {
+    if (d3d_format === D3DFormat.L16) {
+        return data.createTypedArray(Uint16Array);
+    } else if (d3d_format === D3DFormat.A8R8G8B8) {
+        // BGRA8888 => RGBA8888
+        const src = data.createDataView();
+        const n = data.byteLength;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 2);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 0);
+            dst[i++] = src.getUint8(p + 3);
+            p += 4;
+        }
+        return dst;
+    } else if (d3d_format === D3DFormat.X8R8G8B8) {
+        // BGRX8888 => RGBA8888
+        const src = data.createDataView();
+        const n = data.byteLength;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 2);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 0);
+            dst[i++] = 0xFF;
+            p += 4;
+        }
+        return dst;
+    } else {
+        return data.createTypedArray(Uint8Array);
+    }
+}
+
 export class Texture_Asset {
     private width: number;
     private height: number;
@@ -171,12 +208,8 @@ export class Texture_Asset {
         let w = this.width, h = this.height, d = this.depth;
         for (let i = 0; i < this.mipmap_count; i++) {
             const sliceBytes = get_mipmap_size(d3d_format, w, h, d);
-            const bytes = stream.readBytes(sliceBytes);
-            if (d3d_format === D3DFormat.L16) {
-                levelData.push(bytes.createTypedArray(Uint16Array));
-            } else {
-                levelData.push(bytes.createTypedArray(Uint8Array));
-            }
+            const data = convert_data(d3d_format, stream.readBytes(sliceBytes));
+            levelData.push(data);
             w = Math.max((w >>> 1), 1);
             h = Math.max((h >>> 1), 1);
             d = Math.max((d >>> 1), 1);

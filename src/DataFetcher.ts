@@ -46,6 +46,9 @@ class DataFetcherRequest {
             const rangeStart = this.options.rangeStart;
             const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
             this.request.headers.set('Range', `bytes=${rangeStart}-${rangeEnd}`);
+
+            // Partial responses are unsupported with Cache, for some lovely reason.
+            this.cache = null;
         }
 
         this.promise = new Promise((resolve, reject) => {
@@ -120,6 +123,7 @@ class DataFetcherRequest {
             if (match !== undefined) {
                 const arrayBuffer = await match.arrayBuffer();
                 this.resolveArrayBuffer(arrayBuffer);
+                return;
             }
         }
 
@@ -140,8 +144,7 @@ class DataFetcherRequest {
             this.cache = null;
         }
 
-        // Clone now, so we can add to the cache later (??? Why? What was the point of this?)
-        const responseClone = this.cache !== null ? response.clone() : null;
+        const responseClone = response.clone();
 
         let contentLengthStr = response.headers.get('content-length');
         if (contentLengthStr === null)
@@ -152,7 +155,7 @@ class DataFetcherRequest {
         // https://github.com/whatwg/fetch/issues/1358
         const contentLength = parseInt(contentLengthStr, 10);
 
-        const chunks: Uint8Array[] = [];
+        let arrayBuffer: ArrayBuffer | null = null;
 
         const reader = response.body!.getReader();
         let totalBytesReceived = 0;
@@ -163,13 +166,13 @@ class DataFetcherRequest {
                 if (done)
                     break;
 
+                arrayBuffer = totalBytesReceived === 0 ? (value!.buffer as ArrayBuffer) : null;
+
                 totalBytesReceived += value!.byteLength;
                 this.progress = Math.min(totalBytesReceived / contentLength, 1);
-    
+
                 if (this.onprogress !== null)
                     this.onprogress();
-    
-                chunks.push(value!);
             } catch(e) {
                 break;
             }
@@ -178,25 +181,13 @@ class DataFetcherRequest {
         if (this.resolveError())
             return;
 
-        assert(chunks.length >= 1);
+        if (arrayBuffer === null)
+            arrayBuffer = await responseClone.clone().arrayBuffer();
 
-        let bigBuffer: Uint8Array;
-        if (chunks.length === 1) {
-            bigBuffer = chunks[0];
-        } else {
-            // Merge together buffers
-            bigBuffer = new Uint8Array(totalBytesReceived);
-            let idx = 0;
-            for (let i = 0; i < chunks.length; i++) {
-                bigBuffer.set(chunks[i], idx);
-                idx += chunks[i].byteLength;
-            }
-        }
-
-        this.resolveArrayBuffer(bigBuffer.buffer);
+        this.resolveArrayBuffer(arrayBuffer);
 
         if (this.cache !== null)
-            await this.cache.put(this.request, responseClone!);
+            await this.cache.put(this.request, responseClone);
 
         this.response = null;
     }
@@ -211,6 +202,8 @@ class DataFetcherRequest {
 
     public destroy(): void {
         this.response = null;
+        this.onprogress = null;
+        this.ondone = null;
     }
 
     public abort(): void {
@@ -222,6 +215,7 @@ class DataFetcherRequest {
 }
 
 interface DataFetcherOptions {
+    debugName?: string;
     allow404?: boolean;
     abortedCallback?: AbortedCallback;
     /**
@@ -236,6 +230,50 @@ interface DataFetcherOptions {
     rangeSize?: number;
 }
 
+class DataFetcherMount {
+    constructor(private mount: FileSystemDirectoryHandle) {
+    }
+
+    private async getFileHandle(path: string): Promise<FileSystemFileHandle | null> {
+        let directory: FileSystemDirectoryHandle | undefined = this.mount;
+        const parts = path.split('/');
+        while (parts.length > 1) {
+            try {
+                directory = await directory!.getDirectoryHandle(parts.shift()!);
+            } catch(e) {
+                return null;
+            }
+        }
+
+        try {
+            return await directory!.getFileHandle(parts.shift()!);
+        } catch(e) {
+            return null;
+        }
+    }
+
+    public async fetchData(path: string, options: DataFetcherOptions): Promise<NamedArrayBufferSlice | null> {
+        const fileHandle = await this.getFileHandle(path);
+        if (fileHandle === null)
+            return null;
+
+        let blob: Blob = await fileHandle.getFile();
+        if (options.rangeStart !== undefined && options.rangeSize !== undefined)
+            blob = blob.slice(options.rangeStart, options.rangeSize);
+
+        const arrayBuffer = await blob.arrayBuffer();
+        const arrayBufferSlice = new ArrayBufferSlice(arrayBuffer) as NamedArrayBufferSlice;
+        arrayBufferSlice.name = path;
+        return arrayBufferSlice;
+    }
+}
+
+declare global {
+    interface Window {
+        showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+    }
+}
+
 export class DataFetcher {
     public requests: DataFetcherRequest[] = [];
     public doneRequestCount: number = 0;
@@ -243,6 +281,7 @@ export class DataFetcher {
     public aborted: boolean = false;
     public useDevelopmentStorage: boolean | null = null;
     private cache: Cache | null = null;
+    private mounts: DataFetcherMount[] = [];
 
     constructor(public progressMeter: ProgressMeter) {
     }
@@ -263,6 +302,20 @@ export class DataFetcher {
 
         const REQUEST_CACHE_NAME = `request-cache-v1`;
         this.cache = await caches.open(REQUEST_CACHE_NAME);
+    }
+
+    public async mount() {
+        let directory: FileSystemDirectoryHandle;
+
+        try {
+            directory = await window.showDirectoryPicker();
+        } catch(e) {
+            // AbortError, likely.
+            return;
+        }
+
+        const mount = new DataFetcherMount(directory);
+        this.mounts.push(mount);
     }
 
     private manageCache(): void {
@@ -330,7 +383,14 @@ export class DataFetcher {
         return getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
     }
 
-    public fetchData(path: string, options: DataFetcherOptions = { }): Promise<NamedArrayBufferSlice> {
+    public async fetchData(path: string, options: DataFetcherOptions = { }): Promise<NamedArrayBufferSlice> {
+        for (let i = 0; i < this.mounts.length; i++) {
+            const mount = this.mounts[i];
+            const fileData = await mount.fetchData(path, options);
+            if (fileData !== null)
+                return fileData;
+        }
+
         const url = this.getDataURLForPath(path);
         return this.fetchURL(url, options);
     }

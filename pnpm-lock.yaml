@@ -26,7 +26,7 @@ specifiers:
   thread-loader: ^3.0.4
   ts-loader: ^9.2.6
   ts-node: ^10.5.0
-  typescript: ^4.5.5
+  typescript: ^4.8.3
   wasm-pack: 0.10.1
   webpack: ^5.69.1
   webpack-cli: ^4.9.2
@@ -52,16 +52,16 @@ devDependencies:
   buffer: 6.0.3
   clean-webpack-plugin: 3.0.0_webpack@5.69.1
   copy-webpack-plugin: 7.0.0_webpack@5.69.1
-  fork-ts-checker-webpack-plugin: 6.5.0_typescript@4.5.5+webpack@5.69.1
+  fork-ts-checker-webpack-plugin: 6.5.0_typescript@4.8.3+webpack@5.69.1
   git-revision-webpack-plugin: 3.0.6
   html-webpack-plugin: 5.5.0_webpack@5.69.1
   iconv-lite: 0.6.3
   ignore-loader: 0.1.2
   pngjs: 3.4.0
   thread-loader: 3.0.4_webpack@5.69.1
-  ts-loader: 9.2.6_typescript@4.5.5+webpack@5.69.1
-  ts-node: 10.5.0_e4d0defdfc1f7ef5a0e8d9e34db0be56
-  typescript: 4.5.5
+  ts-loader: 9.2.6_typescript@4.8.3+webpack@5.69.1
+  ts-node: 10.5.0_e6f0ce5970ade86abeee29ad0e54ff3f
+  typescript: 4.8.3
   wasm-pack: 0.10.1
   webpack: 5.69.1_webpack-cli@4.9.2
   webpack-cli: 4.9.2_56d34dfb5427e6df45a27ae34f9e2cba
@@ -1437,7 +1437,7 @@ packages:
         optional: true
     dev: true
 
-  /fork-ts-checker-webpack-plugin/6.5.0_typescript@4.5.5+webpack@5.69.1:
+  /fork-ts-checker-webpack-plugin/6.5.0_typescript@4.8.3+webpack@5.69.1:
     resolution: {integrity: sha512-cS178Y+xxtIjEUorcHddKS7yCMlrDPV31mt47blKKRfMd70Kxu5xruAFE2o9sDY6wVC5deuob/u/alD04YYHnw==}
     engines: {node: '>=10', yarn: '>=1.0.0'}
     peerDependencies:
@@ -1464,7 +1464,7 @@ packages:
       schema-utils: 2.7.0
       semver: 7.3.5
       tapable: 1.1.3
-      typescript: 4.5.5
+      typescript: 4.8.3
       webpack: 5.69.1_webpack-cli@4.9.2
     dev: true
 
@@ -2982,7 +2982,7 @@ packages:
     engines: {node: '>=0.6'}
     dev: true
 
-  /ts-loader/9.2.6_typescript@4.5.5+webpack@5.69.1:
+  /ts-loader/9.2.6_typescript@4.8.3+webpack@5.69.1:
     resolution: {integrity: sha512-QMTC4UFzHmu9wU2VHZEmWWE9cUajjfcdcws+Gh7FhiO+Dy0RnR1bNz0YCHqhI0yRowCE9arVnNxYHqELOy9Hjw==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
@@ -2993,11 +2993,11 @@ packages:
       enhanced-resolve: 5.9.0
       micromatch: 4.0.4
       semver: 7.3.5
-      typescript: 4.5.5
+      typescript: 4.8.3
       webpack: 5.69.1_webpack-cli@4.9.2
     dev: true
 
-  /ts-node/10.5.0_e4d0defdfc1f7ef5a0e8d9e34db0be56:
+  /ts-node/10.5.0_e6f0ce5970ade86abeee29ad0e54ff3f:
     resolution: {integrity: sha512-6kEJKwVxAJ35W4akuiysfKwKmjkbYxwQMTBaAxo9KKAx/Yd26mPUyhGz3ji+EsJoAgrLqVsYHNuuYwQe22lbtw==}
     hasBin: true
     peerDependencies:
@@ -3023,7 +3023,7 @@ packages:
       create-require: 1.1.1
       diff: 4.0.2
       make-error: 1.3.6
-      typescript: 4.5.5
+      typescript: 4.8.3
       v8-compile-cache-lib: 3.0.0
       yn: 3.1.1
     dev: true
@@ -3040,8 +3040,8 @@ packages:
       mime-types: 2.1.34
     dev: true
 
-  /typescript/4.5.5:
-    resolution: {integrity: sha512-TCTIul70LyWe6IJWT8QSYeA54WQe8EjQFU4wY52Fasj5UKx88LNYKCgBEHcOMOrFF1rKGbD8v/xcNWVUq9SymA==}
+  /typescript/4.8.3:
+    resolution: {integrity: sha512-goMHfm00nWPa8UvR/CPSvykqf6dVV8x/dp0c5mFTMTIu0u0FlGWRioyy7Nn0PGAdHxpJZnuO/ut+PpQ8UiHAig==}
     engines: {node: '>=4.2.0'}
     hasBin: true
     dev: true

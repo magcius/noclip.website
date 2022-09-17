@@ -1,6 +1,5 @@
 
 import { vec4 } from "gl-matrix";
-import { IS_DEVELOPMENT } from "../BuildVersion";
 import { Color, colorLerp, colorNewCopy, colorToCSS, Cyan, Green, Red, White } from "../Color";
 import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";

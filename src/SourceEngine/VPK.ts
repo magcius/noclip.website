@@ -113,9 +113,9 @@ export class VPKMount {
     constructor(private basePath: string, private dir: VPKDirectory) {
     }
 
-    private fetchChunk(dataFetcher: DataFetcher, chunk: VPKFileEntryChunk, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
+    private fetchChunk(dataFetcher: DataFetcher, chunk: VPKFileEntryChunk, abortedCallback: AbortedCallback, debugName: string): Promise<ArrayBufferSlice> {
         const packFileIdx = chunk.packFileIdx, rangeStart = chunk.chunkOffset, rangeSize = chunk.chunkSize;
-        return dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`, { rangeStart, rangeSize, abortedCallback });
+        return dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`, { debugName, rangeStart, rangeSize, abortedCallback });
     }
 
     public findEntry(path: string): VPKFileEntry | null {
@@ -131,7 +131,7 @@ export class VPKMount {
 
         for (let i = 0; i < entry.chunks.length; i++) {
             const chunk = entry.chunks[i];
-            promises.push(this.fetchChunk(dataFetcher, chunk, abortedCallback));
+            promises.push(this.fetchChunk(dataFetcher, chunk, abortedCallback, entry.path));
             size += chunk.chunkSize;
         }
 

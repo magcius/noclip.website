@@ -7,7 +7,7 @@ import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/Gf
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgramDescriptorSimple, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -20,10 +20,10 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Asset_Type, Material_Flags, Material_Type, Mesh_Asset, Render_Material, Texture_Asset } from "./Assets";
 import { Entity_World, Lightmap_Table } from "./Entity";
 import { TheWitnessGlobals } from "./Globals";
-import { UberShaderTemplate, UberShaderTemplateBasic } from "../SourceEngine/UberShader";
+import { UberShaderInstance, UberShaderTemplate } from "../SourceEngine/UberShader";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { HashMap, nullHashFunc } from "../HashMap";
+import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap, nullHashFunc } from "../HashMap";
 
 class DepthCopyProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;
@@ -45,22 +45,32 @@ function shader_equals(a: Render_Material, b: Render_Material): boolean {
     return true;
 }
 
+function shader_hash(a: Render_Material): number {
+    let hash = 0;
+    hash = hashCodeNumberUpdate(hash, a.material_type);
+    hash = hashCodeNumberUpdate(hash, a.flags);
+    return hash;
+}
+
 class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
 
     constructor() {
         super();
-        
-        this.cache = new HashMap<Render_Material, GfxProgram>(shader_equals, nullHashFunc);
+        this.cache = new HashMap<Render_Material, GfxProgram>(shader_equals, shader_hash);
     }
 
-    protected createGfxProgram(cache: GfxRenderCache, variantSettings: Render_Material): GfxProgram {
-        // We do our own caching here; no need to use the render cache for this.
-        const programString = this.generateProgramString(variantSettings);
+    protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxProgramDescriptorSimple {
+        const programString = shaderTextOverride !== undefined ? shaderTextOverride : this.generateProgramString(variantSettings);
         const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
         const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
-        return cache.device.createProgramSimple({ preprocessedVert, preprocessedFrag });
+        return { preprocessedVert, preprocessedFrag };
+    }
+
+    protected override createGfxProgram(cache: GfxRenderCache, variantSettings: Render_Material): GfxProgram {
+        // We do our own caching here; no need to use the render cache for this.
+        return cache.device.createProgramSimple(this.createGfxProgramDescriptor(cache, variantSettings));
     }
 
     public generateProgramString(m: Render_Material): string {
@@ -78,10 +88,14 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_FogSunColor;
 };
 
+#define u_WindDirection (vec3(u_CameraPosWorld.w, u_KeyLightDir.w, 0.0))
+#define u_SceneTime (u_KeyLightColor.w)
+
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
     vec4 u_MaterialColorAndEmission;
     vec4 u_FoliageParams;
+    vec4 u_SpecularParams;
     vec4 u_Misc[1];
 
     // Terrain Tint System
@@ -143,6 +157,24 @@ vec3 CalcLightMapColor(in vec2 t_TexCoord) {
     return t_LightMapSample;
 }
 
+float smoothvalue(float t) {
+    return (3.0 - 2.0 * t) * t * t;
+}
+
+// Scale/bias rather than specifying line endpoints
+float smoothstep2(float m, float a, float x) {
+    float t = saturate(m * x + a);
+    return smoothvalue(t);
+}
+
+float TriangleWave(float t) {
+    return abs(fract(t + 0.5) * 2.0 - 1.0);
+}
+
+float SmoothTriangleWave(float t) {
+    return smoothvalue(TriangleWave(t));
+}
+
 varying vec2 v_TexCoord0;
 varying vec3 v_LightMapData;
 varying vec4 v_Color0;
@@ -164,10 +196,39 @@ layout(location = 6) in vec4 a_Color1;
 layout(location = 7) in vec4 a_BlendIndices;
 layout(location = 8) in vec4 a_BlendWeights;
 
+void CalcTrunkWind(inout vec3 t_PositionWorld, in vec4 a_WindParam, in vec3 t_ObjectPosition) {
+    float t_WindFactor = a_WindParam.x;
+    float t_Phase = dot(t_ObjectPosition.xy, u_WindDirection.xy);
+    float t_Wave = ((4.0 * SmoothTriangleWave(t_Phase + u_SceneTime * 0.096)) - 1.0);
+    float t_DistanceFromOrigin = distance(t_PositionWorld, t_ObjectPosition);
+
+    t_PositionWorld -= t_WindFactor * (u_WindDirection * t_Wave);
+
+    // Re-normalize to keep object lengths consistent.
+    t_PositionWorld -= t_ObjectPosition;
+    if (t_DistanceFromOrigin > 0.0)
+        t_PositionWorld = normalize(t_PositionWorld) * t_DistanceFromOrigin;
+    t_PositionWorld += t_ObjectPosition;
+}
+
 void mainVS() {
     v_PositionWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Position.xyz, 1.0)).xyz;
+
+    bool use_wind = ${this.is_flag(m, Material_Flags.Wind_Animation)};
+    if (use_wind) {
+        vec4 t_WindParam = a_Color0.xyzw;
+        vec3 t_ObjectPos = Mat4x3GetCol3(u_ModelMatrix);
+        CalcTrunkWind(v_PositionWorld, a_Color0, t_ObjectPos);
+    }
+
     gl_Position = Mul(u_ViewProjection, vec4(v_PositionWorld, 1.0));
     v_TexCoord0 = a_TexCoord0.xy;
+
+    bool use_scroll_speed = ${this.is_type(m, Material_Type.Refract) || this.is_type(m, Material_Type.Decal)};
+    if (use_scroll_speed) {
+        float t_ScrollSpeed = u_SpecularParams.w;
+        v_TexCoord0.y += t_ScrollSpeed * u_SceneTime;
+    }
 
     vec3 t_NormalWorld = Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal.xyz, 0.0)).xyz;
     vec3 t_TangentSWorld = a_TangentS.xyz;
@@ -448,7 +509,7 @@ void mainPS() {
     t_FinalColor = pow(t_FinalColor, vec3(1.0 / 2.2));
 
     float t_Alpha = 1.0;
-    bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud)};
+    bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud) || this.is_type(m, Material_Type.Grate)};
     if (use_albedo_alpha) {
         t_Alpha *= t_Albedo.a;
     }
@@ -466,7 +527,16 @@ void mainPS() {
         t_Alpha *= t_BlendFactor;
     }
 
-    bool use_alpharef = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Hedge)};
+    bool use_alpha_fade_out = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Cloud)};
+    if (use_alpha_fade_out) {
+        vec2 t_FadeOutParams = u_FoliageParams.zw;
+        vec3 t_NormalP = normalize(cross(dFdx(v_PositionWorld.xyz), dFdy(v_PositionWorld.xyz)));
+        float t_Dot = saturate(abs(dot(t_WorldDirectionToEye, t_NormalP)));
+        t_Alpha += smoothstep2(t_FadeOutParams.x, t_FadeOutParams.y, t_Dot) - 1.0;
+        t_Alpha = saturate(t_Alpha);
+    }
+
+    bool use_alpharef = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Hedge) || this.is_type(m, Material_Type.Grate)};
     if (use_alpharef) {
         if (t_Alpha < 0.5)
             discard;
@@ -487,10 +557,11 @@ void mainPS() {
     }
 }
 
-interface Material_Params {
+interface Mesh_Render_Params {
     lightmap_table: Lightmap_Table | null;
     model_matrix: ReadonlyMat4;
     color: Color | null;
+    mesh_lod: number;
 }
 
 function material_will_dynamically_override_color(type: Material_Type, flags: Material_Flags): boolean {
@@ -533,14 +604,13 @@ function load_texture(globals: TheWitnessGlobals, m: TextureMapping, texture_nam
     return texture;
 }
 
+type TheWitnessShaderInstance = UberShaderInstance<Render_Material>;
+
 export class Render_Material_Cache {
     private template = new TheWitnessShaderTemplate();
 
-    constructor(private cache: GfxRenderCache) {
-    }
-
-    public create_program(render_material: Render_Material): GfxProgram {
-        return this.template.getGfxProgram(this.cache, render_material);
+    public create_shader_instance(render_material: Render_Material): TheWitnessShaderInstance {
+        return new UberShaderInstance<Render_Material>(this.template, render_material);
     }
 }
 
@@ -550,6 +620,7 @@ const scratchVec3a = vec3.create();
 class Device_Material {
     public visible: boolean = true;
 
+    private shader_instance: TheWitnessShaderInstance;
     private gfx_program: GfxProgram;
     private texture_map: (Texture_Asset | null)[] = nArray(3, () => null);
     private texture_mapping_array: TextureMapping[] = nArray(12, () => new TextureMapping());
@@ -593,7 +664,8 @@ class Device_Material {
         this.load_texture(globals, 9, 'white', clamp_sampler);
         this.load_texture(globals, 10, 'white', clamp_sampler);
 
-        this.gfx_program = globals.device_material_cache.create_program(this.render_material);
+        this.shader_instance = globals.device_material_cache.create_shader_instance(this.render_material);
+        this.gfx_program = this.shader_instance.getGfxProgram(globals.cache);
 
         // Disable invisible material types.
         if (material_type === Material_Type.Collision_Only || material_type === Material_Type.Occluder)
@@ -603,11 +675,7 @@ class Device_Material {
         if (material_type === Material_Type.Foam_Decal)
             this.visible = false;
 
-        let translucent = false;
-        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud)
-            translucent = true;
-
-        if (translucent) {
+        if (material_type === Material_Type.Translucent || material_type === Material_Type.Decal || material_type === Material_Type.Cloud) {
             this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.gfx_program.ResourceUniqueId);
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
@@ -615,6 +683,13 @@ class Device_Material {
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             });
             this.megaStateFlags.depthWrite = false;
+        } else if (material_type === Material_Type.Refract || material_type === Material_Type.Underwater) {
+            this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.gfx_program.ResourceUniqueId);
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+            });
         } else {
             this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE, this.gfx_program.ResourceUniqueId);
         }
@@ -629,8 +704,8 @@ class Device_Material {
         return load_texture(globals, this.texture_mapping_array[i], texture_name, gfxSampler);
     }
 
-    public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Material_Params): void {
-        let offs = renderInst.allocateUniformBuffer(TheWitnessShaderTemplate.ub_ObjectParams, 4*4+4*8);
+    public fillMaterialParams(globals: TheWitnessGlobals, renderInst: GfxRenderInst, params: Mesh_Render_Params): void {
+        let offs = renderInst.allocateUniformBuffer(TheWitnessShaderTemplate.ub_ObjectParams, 4*4+4*9);
         const d = renderInst.mapUniformBufferF32(TheWitnessShaderTemplate.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, params.model_matrix);
 
@@ -661,6 +736,7 @@ class Device_Material {
         }
 
         offs += fillVec4v(d, offs, this.render_material.foliage_parameters);
+        offs += fillVec4v(d, offs, this.render_material.specular_parameters);
 
         const blendFactor = 1.0 / this.render_material.blend_ranges[0];
         offs += fillVec4(d, offs, blendFactor, lightmap0Blend, lightmap1Blend);
@@ -689,7 +765,7 @@ class Device_Material {
         }
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, params: Material_Params): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, params: Mesh_Render_Params): void {
         if (params.lightmap_table !== null && params.lightmap_table.current_page !== null) {
             params.lightmap_table.current_page.fillTextureMapping(this.texture_mapping_array[9]);
             if (params.lightmap_table.next_page !== null)
@@ -711,9 +787,9 @@ export class Mesh_Instance {
             this.device_material_array.push(new Device_Material(globals, this.mesh_asset.material_array[i]));
     }
 
-    public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager, params: Material_Params, depth: number): void {
+    public prepareToRender(globals: TheWitnessGlobals, renderInstManager: GfxRenderInstManager, params: Mesh_Render_Params, depth: number): void {
         // Choose LOD level.
-        const detail_level = 0;
+        const detail_level = params.mesh_lod;
 
         scratchAABB.transform(this.mesh_asset.box, params.model_matrix);
         if (!globals.viewpoint.frustum.contains(scratchAABB))
@@ -746,6 +822,7 @@ class Skydome {
     public lightmap_table: Lightmap_Table | null = null;
     public color: Color = colorNewFromRGBA(0.213740, 0.404580, 0.519084);
     public model_matrix = mat4.create();
+    public mesh_lod = 0;
 
     private mesh_instance: Mesh_Instance;
 
@@ -806,19 +883,20 @@ export class TheWitnessRenderer implements SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         const globals = this.globals;
+        globals.scene_time = viewerInput.time / 1000;
         const viewpoint = globals.viewpoint;
+        const misc = globals.all_variables.misc;
 
         viewpoint.setupFromCamera(viewerInput.camera);
-        let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 40);
+        let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 44);
         const d = template.mapUniformBufferF32(TheWitnessShaderTemplate.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewpoint.clipFromWorldMatrix);
-        offs += fillVec3v(d, offs, viewpoint.cameraPos);
+        offs += fillVec3v(d, offs, viewpoint.cameraPos, misc.wind_x as number);
 
-        const misc = globals.all_variables.misc;
         vec3.set(scratchVec3a, misc.sun_x as number, misc.sun_y as number, misc.sun_z as number);
         vec3.normalize(scratchVec3a, scratchVec3a);
-        offs += fillVec3v(d, offs, scratchVec3a);
-        offs += fillVec4(d, offs, 32, 32, 32);
+        offs += fillVec3v(d, offs, scratchVec3a, misc.wind_y as number);
+        offs += fillVec4(d, offs, 32, 32, 32, globals.scene_time);
 
         const render_sky = globals.sky_variables['render/sky'];
         offs += fillVec4(d, offs, render_sky.fog_color_x as number, render_sky.fog_color_y as number, render_sky.fog_color_z as number, render_sky.fog_sky_blend as number);
@@ -860,16 +938,16 @@ export class TheWitnessRenderer implements SceneGfx {
                 const renderInst = renderHelper.renderInstManager.newRenderInst();
                 renderInst.setUniformBuffer(renderHelper.uniformBuffer);
                 renderInst.setAllowSkippingIfPipelineNotReady(false);
-        
+
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
                 renderInst.drawPrimitives(3);
-        
+
                 const copyProgram = new DepthCopyProgram();
                 const gfxProgram = renderHelper.renderCache.createProgram(copyProgram);
-        
+
                 renderInst.setGfxProgram(gfxProgram);
-        
+
                 pass.exec((passRenderer) => {
                     renderInst.setSamplerBindingsFromTextureMappings(this.cached_shadow_map!.texture_mapping);
                     renderInst.drawOnPass(renderHelper.renderCache, passRenderer);

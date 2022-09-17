@@ -67,7 +67,21 @@ class ShaderTextEditor {
 
 export abstract class UberShaderTemplate<T> {
     protected cache: HashMap<T, GfxProgram>;
-    protected abstract createGfxProgram(cache: GfxRenderCache, variantSettings: T): GfxProgram;
+
+    protected createGfxProgram(cache: GfxRenderCache, variantSettings: T): GfxProgram {
+        const descriptor = this.createGfxProgramDescriptor(cache, variantSettings);
+        return cache.createProgramSimple(descriptor);
+    }
+
+    public patchGfxProgram(cache: GfxRenderCache, program: GfxProgram, variantSettings: T, shaderText: string): void {
+        // TODO(jstpierre): This device API is pretty awful.
+        const descriptor = this.createGfxProgramDescriptor(cache, variantSettings, shaderText);
+        cache.device.programPatched(program, descriptor);
+    }
+
+    protected abstract createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: T, shaderTextOverride?: string): GfxProgramDescriptorSimple;
+
+    public abstract generateProgramString(variantSettings: T): string | null;
 
     public getGfxProgram(cache: GfxRenderCache, variantSettings: T): GfxProgram {
         let program = this.cache.get(variantSettings);
@@ -128,10 +142,14 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         return this.program;
     }
 
-    protected createGfxProgram(cache: GfxRenderCache, variantSettings: DefinesMap): GfxProgram {
+    protected createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: DefinesMap, shaderTextOverride?: string): GfxProgramDescriptorSimple {
+        const programString = shaderTextOverride !== undefined ? shaderTextOverride : this.generateProgramString(variantSettings);
+        return getGfxProgramDescriptorBasic(cache, programString, variantSettings);
+    }
+
+    protected override createGfxProgram(cache: GfxRenderCache, variantSettings: DefinesMap): GfxProgram {
         // We do our own caching here; no need to use the render cache for this.
-        const programString = this.generateProgramString(variantSettings);
-        return cache.device.createProgramSimple(getGfxProgramDescriptorBasic(cache, programString, variantSettings));
+        return cache.device.createProgramSimple(this.createGfxProgramDescriptor(cache, variantSettings));
     }
 
     public override destroy(device: GfxDevice): void {
@@ -142,35 +160,47 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
 
 export class UberShaderInstance<T> {
     protected gfxProgram: GfxProgram | null = null;
-    protected variantSettings: T;
 
-    constructor(protected template: UberShaderTemplate<T>) {
+    // Ugliness for the shader editor
+    private shaderTextEditor: ShaderTextEditor | null = null;
+    protected gfxRenderCache: GfxRenderCache | null = null;
+
+    constructor(protected template: UberShaderTemplate<T>, protected variantSettings: T) {
     }
 
     public invalidate(): void {
         this.gfxProgram = null;
+        this.gfxRenderCache = null;
     }
 
     public getGfxProgram(cache: GfxRenderCache): GfxProgram {
+        this.gfxRenderCache = cache;
+
         if (this.gfxProgram === null)
             this.gfxProgram = this.template.getGfxProgram(cache, this.variantSettings);
 
         return this.gfxProgram;
     }
+
+    public edit(): void {
+        const template = this.template;
+        const programString = template.generateProgramString(this.variantSettings)!;
+        this.shaderTextEditor = new ShaderTextEditor(this.template.constructor.name, programString);
+        this.shaderTextEditor.onchanged = (newText: string) => {
+            if (this.gfxRenderCache === null)
+                return;
+            if (this.gfxProgram === null)
+                return;
+            this.template.patchGfxProgram(this.gfxRenderCache, this.gfxProgram, this.variantSettings, newText);
+        };
+        this.shaderTextEditor.open();
+    }
 }
 
 export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
-    private shaderTextEditor: ShaderTextEditor | null = null;
-    private gfxRenderCache: GfxRenderCache | null = null;
-
     constructor(template: UberShaderTemplateBasic) {
-        super(template);
-        this.variantSettings = new Map<string, string>();
-    }
-
-    public override getGfxProgram(cache: GfxRenderCache): GfxProgram {
-        this.gfxRenderCache = cache;
-        return super.getGfxProgram(cache);
+        const variantSettings = new Map<string, string>();
+        super(template, variantSettings);
     }
 
     public setDefineString(name: string, v: string | null): boolean {
@@ -190,25 +220,5 @@ export class UberShaderInstanceBasic extends UberShaderInstance<DefinesMap> {
 
     public setDefineBool(name: string, v: boolean): boolean {
         return this.setDefineString(name, v ? '1' : null);
-    }
-
-    private patchProgram(newText: string): void {
-        if (this.gfxRenderCache === null)
-            return;
-
-        if (this.gfxProgram === null)
-            return;
-
-        this.gfxRenderCache.device.programPatched(this.gfxProgram, getGfxProgramDescriptorBasic(this.gfxRenderCache, newText, this.variantSettings));
-    }
-
-    public edit(): void {
-        const template = this.template as UberShaderTemplateBasic;
-        const programString = template.generateProgramString(this.variantSettings);
-        this.shaderTextEditor = new ShaderTextEditor(this.template.constructor.name, programString);
-        this.shaderTextEditor.onchanged = (newText: string) => {
-            this.patchProgram(newText);
-        };
-        this.shaderTextEditor.open();
     }
 }
