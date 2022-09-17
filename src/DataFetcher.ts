@@ -392,6 +392,6 @@ export class DataFetcher {
         }
 
         const url = this.getDataURLForPath(path);
-        return this.fetchURL(url, options);
+        return await this.fetchURL(url, options);
     }
 }
