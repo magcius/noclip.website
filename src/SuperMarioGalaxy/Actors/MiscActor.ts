@@ -29,7 +29,7 @@ import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '..
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye, addHitSensorAtJoint } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
@@ -39,7 +39,7 @@ import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
 import { addShadowVolumeCylinder, addShadowVolumeLine, getShadowProjectionLength, getShadowProjectionNormal, getShadowProjectionPos, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, isShadowProjected, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, onShadowVolumeCutDropLength, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr, setShadowVolumeBoxSize, setShadowVolumeEndDropOffset } from '../Shadow';
-import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
+import { calcNerveRate, isCrossedStep, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
@@ -8156,15 +8156,13 @@ class Button {
     public offset = vec3.create();
     public valid: boolean = true;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private actor: LiveActor, offset: vec3, private radius: number, private maxDistance: number = -1) {
-        vec3.copy(this.offset, offset);
-
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private sensor: HitSensor, private maxDistance: number = -1) {
         this.elem = document.createElement('div');
         this.elem.style.position = 'absolute';
         this.elem.style.pointerEvents = 'auto';
         this.elem.style.cursor = 'pointer';
         this.elem.onclick = () => {
-            this.actor.receiveMessage(sceneObjHolder, MessageType.NoclipButton_Click, null, null);
+            sendArbitraryMsg(sceneObjHolder, MessageType.NoclipButton_Click, this.sensor, this.sensor);
         };
         sceneObjHolder.uiContainer.appendChild(this.elem);
     }
@@ -8178,10 +8176,10 @@ class Button {
     }
 
     public move(sceneObjHolder: SceneObjHolder): void {
-        let visible = this.valid && isValidDraw(this.actor);
+        let visible = this.valid && isValidDraw(this.sensor.actor);
 
         if (visible && this.maxDistance >= 0) {
-            if (calcDistToCamera(this.actor, sceneObjHolder.viewerInput.camera) >= this.maxDistance)
+            if (calcDistToCamera(this.sensor.actor, sceneObjHolder.viewerInput.camera) >= this.maxDistance)
                 visible = false;
         }
 
@@ -8190,8 +8188,7 @@ class Button {
             const camera = sceneObjHolder.viewerInput.camera;
 
             // View-space point
-            vec3.add(scratchVec3, this.actor.translation, this.offset);
-            transformVec3Mat4w1(scratchVec3b, camera.viewMatrix, scratchVec3);
+            transformVec3Mat4w1(scratchVec3b, camera.viewMatrix, this.sensor.center);
 
             vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
             screenX = (scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth;
@@ -8200,7 +8197,7 @@ class Button {
                 visible = false;
 
             if (visible) {
-                scratchVec3b[0] += this.radius;
+                scratchVec3b[0] += this.sensor.radius;
                 vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
                 screenRadius = ((scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth) - screenX;
             }
@@ -8258,7 +8255,8 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.makeActorAppeared(sceneObjHolder);
 
         vec3.set(scratchVec3, 0, 100, 0);
-        this.button = new Button(zoneAndLayer, sceneObjHolder, this, scratchVec3, 120.0, 5000.0);
+        const buttonSensor = addHitSensor(sceneObjHolder, this, 'button', HitSensorType.MapObj, 0, 120.0, scratchVec3)
+        this.button = new Button(zoneAndLayer, sceneObjHolder, buttonSensor, 5000.0);
     }
 
     public override movement(sceneObjHolder: SceneObjHolder): void {
@@ -8287,6 +8285,88 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
                 this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
                 this.makeActorDead(sceneObjHolder);
             }
+        }
+    }
+}
+
+const enum SpinLeverSwitchNrv { Wait, SwitchOn, End }
+export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
+    private button: Button;
+    private mapObjConnector: MapObjConnector;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'SpinLeverSwitch');
+
+        this.mapObjConnector = new MapObjConnector(this);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "SpinLeverSwitch");
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        const spinSensor = addHitSensorAtJoint(sceneObjHolder, this, 'spin', 'Spin', HitSensorType.MapObj, 4, 50.0, Vec3Zero);
+        initCollisionParts(sceneObjHolder, this, 'SpinLeverSwitch', bodySensor);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        if (useStageSwitchWriteA(sceneObjHolder, this, infoIter)) {
+            this.initNerve(SpinLeverSwitchNrv.Wait);
+        } else {
+            startBck(this, 'On');
+            setBckFrameAndStop(this, getBckFrameMax(this));
+            startBrk(this, 'On');
+            setBrkFrameAndStop(this, getBrkFrameMax(this));
+            this.initNerve(SpinLeverSwitchNrv.End);
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
+
+        this.button = new Button(zoneAndLayer, sceneObjHolder, spinSensor, 5000.0);
+    }
+
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        this.mapObjConnector.attachToUnder(sceneObjHolder);
+    }
+
+    public override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        super.calcAndSetBaseMtx(sceneObjHolder);
+        this.mapObjConnector.connect();
+    }
+
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+
+        this.button.move(sceneObjHolder);
+    }
+
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.NoclipButton_Click) {
+            this.setNerve(SpinLeverSwitchNrv.SwitchOn);
+            return true;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SpinLeverSwitchNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === SpinLeverSwitchNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Wait');
+                startBrk(this, 'On');
+                setBrkFrameAndStop(this, 0);
+            }
+        } else if (currentNerve === SpinLeverSwitchNrv.SwitchOn) {
+            if (isFirstStep(this)) {
+                startBck(this, 'On');
+                startBrk(this, 'On');
+            }
+
+            if (isCrossedStep(this, 15))
+                this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+
+            if (isBckStopped(this))
+                this.setNerve(SpinLeverSwitchNrv.End);
         }
     }
 }

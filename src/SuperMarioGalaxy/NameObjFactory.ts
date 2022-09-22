@@ -7,8 +7,8 @@ import { createLensFlareArea, requestArchivesLensFlareArea } from './Actors/Lens
 import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
-import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud, LavaProminenceTriple, FallingSmallRock, MorphItemObjNeo } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller, SwingLight, BigFan, Banekiti } from './Actors/MapObj';
+import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud, LavaProminenceTriple, FallingSmallRock, MorphItemObjNeo, SpinLeverSwitch } from "./Actors/MiscActor";
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller, SwingLight, BigFan, Banekiti, RailDemoMoveObj, PhantomShipBridge } from './Actors/MapObj';
 import { Butler, Caretaker, CollectTico, HoneyBee, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, RosettaChair, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
 import { createDeathCube, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
@@ -248,6 +248,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("PalmIsland",                     PalmIsland),
     _("PhantomBonfire",                 PhantomTorch),
     _("PhantomTorch",                   PhantomTorch),
+    _("PhantomShipBridge",              PhantomShipBridge),
+    _("NutShipFleetBridge",             PhantomShipBridge),
     _("PowerStarHalo",                  PowerStarHalo),
     _("PunchBox",                       PunchBox),
     _("RainCloud",                      RainCloud),
@@ -262,6 +264,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("ShellfishCoin",                  Shellfish),
     _("ShellfishYellowChip",            Shellfish),
     _("ShootingStar",                   ShootingStar),
+    _("SpinLeverSwitch",                SpinLeverSwitch),
     _("StarPiece",                      StarPiece),
     _("StarPieceFlow",                  StarPieceGroup),
     _("StarPieceGroup",                 StarPieceGroup),
@@ -624,6 +627,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("OceanRingRuinsMove",             RailMoveObj),
     _("GhostShipCaveMoveGroundA",       RailMoveObj),
     _("GhostShipCaveMoveGroundB",       RailMoveObj),
+    _("SeaBottomBigDoorA",              RailDemoMoveObj),
+    _("SeaBottomBigDoorB",              RailDemoMoveObj),
+    _("SeaBottomBigDoorC",              RailDemoMoveObj),
     _("KoopaVS2PartsSquareMoveClipA",   SimpleClipPartsObj),
     _("KoopaVS2PartsSquareMoveClipB",   SimpleClipPartsObj),
     _("KoopaVS2PartsJoinedMoveClip",    SimpleClipPartsObj),
