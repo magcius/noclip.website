@@ -417,6 +417,8 @@ class Main {
             this.ui.togglePlayPause(false);
             this.isFrameStep = true;
         }
+        if (inputManager.isKeyDownEventTriggered('F9'))
+            this._loadSceneDesc(this.currentSceneGroup!, this.currentSceneDesc!, this._getSceneSaveState(), true);
     }
 
     private async _onWebXRStateRequested(state: boolean) {
@@ -717,9 +719,9 @@ class Main {
 
     private loadSceneDelta = 1;
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
-        if (this.currentSceneDesc === sceneDesc) {
-            this._loadSceneSaveState(sceneStateStr);
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null, force: boolean = false): void {
+        if (this.currentSceneDesc === sceneDesc && !force) {
+            this._loadSceneSaveState(sceneStateStr)
             return;
         }
 

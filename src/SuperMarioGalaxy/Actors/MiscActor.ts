@@ -29,7 +29,7 @@ import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '..
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye, addHitSensorAtJoint } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye, addHitSensorAtJoint, invalidateHitSensor } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
@@ -8151,12 +8151,15 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
     }
 }
 
-class Button {
+class Button extends NameObj {
     private elem: HTMLElement;
     public offset = vec3.create();
-    public valid: boolean = true;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private sensor: HitSensor, private maxDistance: number = -1) {
+        super(sceneObjHolder, 'Button');
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+
         this.elem = document.createElement('div');
         this.elem.style.position = 'absolute';
         this.elem.style.pointerEvents = 'auto';
@@ -8167,16 +8170,8 @@ class Button {
         sceneObjHolder.uiContainer.appendChild(this.elem);
     }
 
-    public validate(): void {
-        this.valid = true;
-    }
-
-    public invalidate(): void {
-        this.valid = false;
-    }
-
-    public move(sceneObjHolder: SceneObjHolder): void {
-        let visible = this.valid && isValidDraw(this.sensor.actor);
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        let visible = isValidDraw(this.sensor.actor) && this.sensor.isValid();
 
         if (visible && this.maxDistance >= 0) {
             if (calcDistToCamera(this.sensor.actor, sceneObjHolder.viewerInput.camera) >= this.maxDistance)
@@ -8259,12 +8254,6 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.button = new Button(zoneAndLayer, sceneObjHolder, buttonSensor, 5000.0);
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder): void {
-        super.movement(sceneObjHolder);
-
-        this.button.move(sceneObjHolder);
-    }
-
     public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.NoclipButton_Click) {
             this.setNerve(ScrewSwitchReverseNrv.Screw);
@@ -8278,7 +8267,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         if (currentNerve === ScrewSwitchReverseNrv.Screw) {
             if (isFirstStep(this)) {
                 startBck(this, 'ScrewSwitchReverseOn');
-                this.button.invalidate();
+                invalidateHitSensor(this, 'button');
             }
 
             if (isBckStopped(this)) {
@@ -8332,12 +8321,6 @@ export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
         this.mapObjConnector.connect();
     }
 
-    public override movement(sceneObjHolder: SceneObjHolder): void {
-        super.movement(sceneObjHolder);
-
-        this.button.move(sceneObjHolder);
-    }
-
     public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.NoclipButton_Click) {
             this.setNerve(SpinLeverSwitchNrv.SwitchOn);
@@ -8358,6 +8341,7 @@ export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
             }
         } else if (currentNerve === SpinLeverSwitchNrv.SwitchOn) {
             if (isFirstStep(this)) {
+                invalidateHitSensor(this, 'spin');
                 startBck(this, 'On');
                 startBrk(this, 'On');
             }

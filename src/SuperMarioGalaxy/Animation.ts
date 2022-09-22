@@ -311,6 +311,8 @@ export class XanimePlayer {
         this.frameCtrl.loopMode = res.loopMode;
         this.frameCtrl.interpoleFrame = 1;
         this.interpoleRatio = 0.0;
+        this.oldTimeInFrames = 0.0;
+        this.updatedFrameCtrl = false;
     }
 
     public calcAnm(): void {

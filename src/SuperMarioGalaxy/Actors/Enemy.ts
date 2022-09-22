@@ -8398,7 +8398,14 @@ export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
     }
 
     private tryForceFall(sceneObjHolder: SceneObjHolder): boolean {
-        // TODO(jstpierre)
+        if (isValidSwitchA(this) && isOnSwitchA(sceneObjHolder, this)) {
+            if (this.isNerve(StinkBugSmallNrv.ForceFall))
+                return false;
+
+            this.setNerve(StinkBugSmallNrv.ForceFall);
+            return true;
+        }
+
         return false;
     }
 
@@ -8482,6 +8489,14 @@ export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
                 if (this.isPlayerInTerritory(sceneObjHolder, 400.0, 600.0, 200.0, 200.0))
                     this.setNerve(StinkBugSmallNrv.DashSign);
             }
+        } else if (currentNerve === StinkBugSmallNrv.ForceFall) {
+            if (isFirstStep(this)) {
+                vec3.zero(this.velocity);
+                this.calcGravityFlag = true;
+                this.calcBinderFlag = true;
+            }
+
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, 2.0 * deltaTimeFrames);
         }
     }
 }
