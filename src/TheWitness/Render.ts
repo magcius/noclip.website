@@ -535,7 +535,7 @@ void mainPS() {
     t_FinalColor = pow(t_FinalColor, vec3(1.0 / 2.2));
 
     float t_Alpha = 1.0;
-    bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud) || this.is_type(m, Material_Type.Grate)};
+    bool use_albedo_alpha = ${this.is_type(m, Material_Type.Vegetation) || this.is_type(m, Material_Type.Foliage) || this.is_type(m, Material_Type.Translucent) || this.is_type(m, Material_Type.Cloud)};
     if (use_albedo_alpha) {
         t_Alpha *= t_Albedo.a;
     }
@@ -547,6 +547,12 @@ void mainPS() {
         t_Alpha = smoothstep(t_Thresh - 0.1, t_Thresh + 0.1, t_Albedo.a);
         if (t_Thresh <= 0.01)
             t_Alpha = 1.0;
+    }
+
+    bool use_blend_map_alpha = ${this.is_type(m, Material_Type.Grate)};
+    if (use_blend_map_alpha) {
+        float t_Blend0 = texture(SAMPLER_2D(u_BlendMap0), t_TexCoord0.xy).x;
+        t_Alpha *= t_Blend0;
     }
 
     bool use_decal_alpha = ${this.is_type(m, Material_Type.Decal)};
