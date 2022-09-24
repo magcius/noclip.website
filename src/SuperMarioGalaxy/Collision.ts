@@ -1018,7 +1018,7 @@ export class Binder {
     public wallHitInfo = new HitInfo();
     public ceilingHitInfo = new HitInfo();
 
-    constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, private radius: number, hitInfoCapacity: number) {
+    constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, public radius: number, hitInfoCapacity: number) {
         if (hitInfoCapacity === 0) {
             // Use global scratch space.
             this.hitInfos = scratchHitInfo;
@@ -1332,6 +1332,10 @@ export function setBinderExceptActor(actor: LiveActor, except: LiveActor): void 
 
 export function setBinderOffsetVec(actor: LiveActor, offsetVec: ReadonlyVec3): void {
     actor.binder!.hostOffsetVec = offsetVec;
+}
+
+export function setBinderRadius(actor: LiveActor, radius: number): void {
+    actor.binder!.radius = radius;
 }
 
 export function setBinderIgnoreMovingCollision(actor: LiveActor): void {

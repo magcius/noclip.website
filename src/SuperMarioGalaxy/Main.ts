@@ -55,7 +55,7 @@ import { MapPartsRailGuideHolder } from './MapParts';
 import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { NPCDirector } from './Actors/NPC';
 import { GalaxyMapController } from './Actors/GalaxyMap';
-import { TakoHeiInkHolder } from './Actors/Enemy';
+import { KameckBeamHolder, KameckBeamTurtleHolder, KameckFireBallHolder, TakoHeiInkHolder } from './Actors/Enemy';
 import { dfLabel, dfShow } from '../DebugFloaters';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 
@@ -1115,6 +1115,9 @@ export class SceneObjHolder {
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public starPieceDirector: StarPieceDirector | null = null;
+    public kameckBeamHolder: KameckBeamHolder | null = null;
+    public kameckFireBallHolder: KameckFireBallHolder | null = null;
+    public kameckBeamTurtleHolder: KameckBeamTurtleHolder | null = null;
     public takoHeiInkHolder: TakoHeiInkHolder | null = null;
     public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
@@ -1205,6 +1208,12 @@ export class SceneObjHolder {
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.StarPieceDirector)
             return this.starPieceDirector;
+        else if (sceneObj === SceneObj.KameckBeamHolder)
+            return this.kameckBeamHolder;
+        else if (sceneObj === SceneObj.KameckFireBallHolder)
+            return this.kameckFireBallHolder;
+        else if (sceneObj === SceneObj.KameckBeamTurtleHolder)
+            return this.kameckBeamTurtleHolder;
         else if (sceneObj === SceneObj.TakoHeiInkHolder)
             return this.takoHeiInkHolder;
         else if (sceneObj === SceneObj.ShadowControllerHolder)
@@ -1291,6 +1300,12 @@ export class SceneObjHolder {
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.StarPieceDirector)
             this.starPieceDirector = new StarPieceDirector(this);
+        else if (sceneObj === SceneObj.KameckBeamHolder)
+            this.kameckBeamHolder = new KameckBeamHolder(this);
+        else if (sceneObj === SceneObj.KameckFireBallHolder)
+            this.kameckFireBallHolder = new KameckFireBallHolder(this);
+        else if (sceneObj === SceneObj.KameckBeamTurtleHolder)
+            this.kameckBeamTurtleHolder = new KameckBeamTurtleHolder(this);
         else if (sceneObj === SceneObj.TakoHeiInkHolder)
             this.takoHeiInkHolder = new TakoHeiInkHolder(this);
         else if (sceneObj === SceneObj.ShadowControllerHolder)

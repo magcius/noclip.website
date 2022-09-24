@@ -4,12 +4,12 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixT, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, lerpAngle, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped, clampVecAngleRad } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped, clampVecAngleRad, connectToSceneEnemyDecorationMovementCalcAnim, isExistRail, getRailPointArg0, getRailPointCoord } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
-import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision, isExistMoveLimitCollision, getFirstPolyOnLineToMap, setBinderOffsetVec, setBinderExceptActor, setBinderIgnoreMovingCollision } from '../Collision';
-import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitMtx, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
+import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision, isExistMoveLimitCollision, getFirstPolyOnLineToMap, setBinderOffsetVec, setBinderExceptActor, setBinderIgnoreMovingCollision, setBinderRadius } from '../Collision';
+import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitMtx, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy, calcSensorDirectionNormalize } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy, calcSensorDirectionNormalize, setSensorRadius } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, resetPosition, ZoneAndLayer } from '../LiveActor';
@@ -8498,5 +8498,621 @@ export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
 
             vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, 2.0 * deltaTimeFrames);
         }
+    }
+}
+
+const enum KameckFireBallNrv { Wait, }
+class KameckFireBall extends LiveActor<KameckFireBallNrv> {
+    private poseQuat = quat.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, name: string) {
+        super(zoneAndLayer, sceneObjHolder, name);
+        this.initModelManagerWithAnm(sceneObjHolder, 'BossKameckFireBall');
+        connectToSceneEnemy(sceneObjHolder, this);
+        this.initNerve(KameckFireBallNrv.Wait);
+        this.initHitSensor();
+        addHitSensorEnemyAttack(sceneObjHolder, this, 'attack', 8, 58.0, Vec3Zero);
+        // initStarPointerTarget
+        this.initBinder(58.0, 0.0, 0);
+        // setKameckBeamCollisionFilter
+        initShadowVolumeSphere(sceneObjHolder, this, 58.0);
+        onCalcShadow(this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public appearDirection(sceneObjHolder: SceneObjHolder, dir: ReadonlyVec3): void {
+        this.makeActorAppeared(sceneObjHolder);
+        this.calcGravityFlag = true;
+        calcGravity(sceneObjHolder, this);
+
+        vec3.scale(this.velocity, this.gravityVector, 15.0);
+        vec3.scaleAndAdd(this.velocity, this.velocity, dir, 15.0);
+    }
+
+    public disappear(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'BeamFireVanish');
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    public override makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        showModel(this);
+        super.makeActorAppeared(sceneObjHolder);
+        this.setNerve(KameckFireBallNrv.Wait);
+    }
+
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        // this.eventListener = null;
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KameckFireBallNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KameckFireBallNrv.Wait) {
+            if (isFirstStep(this))
+                startAction(this, 'BossKameckFireBall');
+
+            vec3.negate(scratchVec3a, this.gravityVector);
+            rotateQuatRollBall(this.poseQuat, this.velocity, scratchVec3a, 58.0);
+            addVelocityToGravity(this, 0.5 * deltaTimeFrames);
+            attenuateVelocity(this, 0.995 ** deltaTimeFrames);
+            reboundVelocityFromCollision(this, 1.0, 0.0, 1.0);
+
+            if (isGreaterStep(this, 180) || isInWater(sceneObjHolder, this.translation))
+                this.disappear(sceneObjHolder);
+        }
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('BossKameckFireBall');
+    }
+}
+
+export class KameckFireBallHolder extends LiveActorGroup<KameckFireBall> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'KameckFireBallHolder', 0x10);
+
+        for (let i = 0; i < 0x10; i++) {
+            const kameckFireBall = new KameckFireBall(dynamicSpawnZoneAndLayer, sceneObjHolder, 'KameckFireBall');
+            kameckFireBall.makeActorDead(sceneObjHolder);
+            this.registerActor(kameckFireBall);
+        }
+    }
+}
+
+const enum KameckTurtleNrv { }
+class KameckTurtle extends LiveActor<KameckTurtleNrv> {
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('Koura');
+    }
+}
+
+export class KameckBeamTurtleHolder extends LiveActorGroup<KameckTurtle> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'KameckBeamTurtleHolder', 0x10);
+
+        for (let i = 0; i < 0x10; i++) {
+            const kameckBeamTurtle = new KameckTurtle(dynamicSpawnZoneAndLayer, sceneObjHolder, 'KameckBeamTurtle');
+            kameckBeamTurtle.makeActorDead(sceneObjHolder);
+            this.registerActor(kameckBeamTurtle);
+        }
+    }
+}
+
+const enum KameckBeamNrv { FollowWand, Shoot, Explosion, Fire, JetTurtle }
+const enum KameckBeamKind { Turtle, FireBall1, FireBall2, FireBall3, }
+class KameckBeam extends LiveActor<KameckBeamNrv> {
+    private wandMtx: ReadonlyMat4 | null = null;
+    private wandLocalPosition = vec3.create();
+    private beamKind: KameckBeamKind;
+    private shootDir = vec3.create();
+    private fireball: KameckFireBall[] = [];
+    private turtle: KameckTurtle | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, name: string) {
+        super(zoneAndLayer, sceneObjHolder, name);
+
+        connectToSceneEnemyDecorationMovementCalcAnim(sceneObjHolder, this);
+        this.initNerve(KameckBeamNrv.FollowWand);
+        this.initBinder(80.0, 0.0, 0);
+        // setBinderCollisionPartsFilter
+        this.initEffectKeeper(sceneObjHolder, 'BossKameckBeam');
+        setEffectHostSRT(this, 'BeamTurtleReady', this.translation, null, null);
+        setEffectHostSRT(this, 'BeamFireReady', this.translation, null, null);
+        setEffectHostSRT(this, 'BeamTurtle', this.translation, null, null);
+        setEffectHostSRT(this, 'BeamFire', this.translation, null, null);
+        this.initHitSensor();
+        addHitSensorEnemyAttack(sceneObjHolder, this, 'attack', 8, 80.0, Vec3Zero);
+        initShadowVolumeSphere(sceneObjHolder, this, 80.0);
+        onCalcShadow(this);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public override calcAnim(sceneObjHolder: SceneObjHolder): void {
+        if (this.wandMtx === null)
+            return;
+
+        transformVec3Mat4w1(this.translation, this.wandMtx, this.wandLocalPosition);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KameckBeamNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KameckBeamNrv.Shoot) {
+            if (this.tryShootEnd(sceneObjHolder))
+                return;
+
+            if (isInWater(sceneObjHolder, this.translation)) {
+                this.emitBeamBreakEffect(sceneObjHolder);
+                this.makeActorDead(sceneObjHolder);
+            }
+        } else if (currentNerve === KameckBeamNrv.Explosion) {
+            if (this.beamKind === KameckBeamKind.Turtle) {
+                if (this.tryChangeTurtle(sceneObjHolder)) {
+                    this.emitBeamBreakEffect(sceneObjHolder);
+                    return;
+                }
+            } else {
+                if (this.tryChangeFire(sceneObjHolder)) {
+                    this.emitBeamBreakEffect(sceneObjHolder);
+                    return;
+                }
+            }
+
+            this.makeActorDead(sceneObjHolder);
+        } else if (currentNerve === KameckBeamNrv.Fire) {
+            if (isFirstStep(this))
+                emitEffect(sceneObjHolder, this, 'BeamFireBurn');
+
+            if (isCrossedStep(this, 40))
+                emitEffect(sceneObjHolder, this, 'BeamFireBurn');
+
+            let isAnyAlive = false;
+            for (let i = 0; i < this.fireball.length; i++) {
+                if (!isDead(this.fireball[i]!)) {
+                    isAnyAlive = true;
+                    break;
+                }
+            }
+
+            if (!isAnyAlive)
+                this.makeActorDead(sceneObjHolder);
+        } else if (currentNerve === KameckBeamNrv.JetTurtle) {
+            if (isDead(this.turtle!))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public resetBeam(sceneObjHolder: SceneObjHolder): void {
+        if (this.turtle !== null) {
+            if (!isDead(this.turtle))
+                this.turtle.makeActorDead(sceneObjHolder);
+            this.turtle = null;
+        }
+
+        for (let i = 0; i < this.fireball.length; i++) {
+            if (!isDead(this.fireball[i]))
+                this.fireball[i].disappear(sceneObjHolder);
+        }
+
+        this.fireball.length = 0;
+        // this.eventListener = null;
+    }
+
+    public override makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        this.resetBeam(sceneObjHolder);
+    }
+
+    public setBeamKind(beamKind: KameckBeamKind): void {
+        this.beamKind = beamKind;
+    }
+
+    public requestFollowWand(sceneObjHolder: SceneObjHolder, mtx: ReadonlyMat4, scale: number): void {
+        vec3SetAll(this.scale, scale);
+        const radius = scale * 80.0;
+        setShadowVolumeSphereRadius(this, null, radius);
+        setBinderRadius(this, radius);
+        setSensorRadius(this, 'attack', radius);
+        this.emitBeamReadyEffect(sceneObjHolder);
+        this.wandMtx = mtx;
+        this.makeActorAppeared(sceneObjHolder);
+        this.setNerve(KameckBeamNrv.FollowWand);
+        this.calcBinderFlag = false;
+        invalidateHitSensors(this);
+        invalidateShadowAll(this);
+    }
+
+    private requestShoot(sceneObjHolder: SceneObjHolder, dir: ReadonlyVec3, speed: number): void {
+        this.emitBeamEffect(sceneObjHolder);
+        this.calcBinderFlag = true;
+        validateHitSensors(this);
+        validateShadowAll(this);
+        this.wandMtx = null;
+        this.setNerve(KameckBeamNrv.Shoot);
+        vec3.copy(this.shootDir, dir);
+        vec3.scale(this.velocity, this.shootDir, speed);
+    }
+
+    public requestShootToPlayerCenter(sceneObjHolder: SceneObjHolder, speed: number): void {
+        getPlayerPos(scratchVec3a, sceneObjHolder); // getPlayerCenterPos
+
+        vec3.sub(scratchVec3a, scratchVec3a, this.translation);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        this.requestShoot(sceneObjHolder, scratchVec3a, speed);
+    }
+
+    public setWandLocalPosition(pos: ReadonlyVec3): void {
+        vec3.copy(this.wandLocalPosition, pos);
+    }
+
+    public setEventListener(beamEventListener: null): void {
+        //
+    }
+
+    private emitBeamReadyEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.beamKind === KameckBeamKind.Turtle) {
+            emitEffect(sceneObjHolder, this, 'BeamTurtleReady');
+        } else {
+            emitEffect(sceneObjHolder, this, 'BeamFireReady');
+        }
+    }
+
+    private emitBeamEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.beamKind === KameckBeamKind.Turtle) {
+            emitEffect(sceneObjHolder, this, 'BeamTurtle');
+        } else {
+            emitEffect(sceneObjHolder, this, 'BeamFire');
+        }
+    }
+
+    private emitBeamBreakEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.beamKind === KameckBeamKind.Turtle) {
+            emitEffect(sceneObjHolder, this, 'BeamTurtleBreak');
+        } else {
+            emitEffect(sceneObjHolder, this, 'BeamFireBreak');
+        }
+    }
+
+    private tryShootEnd(sceneObjHolder: SceneObjHolder): boolean {
+        if (isBinded(this)) {
+            // const attackSensor = this.getSensor('attack')!;
+            // sendMsgEnemyAttackExplosionToBindedSensor(sceneObjHolder, attackSensor)
+            invalidateHitSensors(this);
+            vec3.zero(this.velocity);
+            this.setNerve(KameckBeamNrv.Explosion);
+            return true;
+        } else if (isGreaterStep(this, 360)) {
+            this.makeActorDead(sceneObjHolder);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private static readonly FIRE_DEGREES: number[][] = [
+        [ 0.0 ],
+        [ -30.0, 30.0 ],
+        [ 0.0, -120.0, 120.0 ],
+    ];
+
+    private tryChangeFire(sceneObjHolder: SceneObjHolder): boolean {
+        vecKillElement(scratchVec3a, this.shootDir, this.gravityVector);
+
+        const count0 = (this.beamKind - KameckBeamKind.FireBall1);
+        assert(count0 < KameckBeam.FIRE_DEGREES.length);
+        const count = count0 + 1;
+        assert(this.fireball.length === 0);
+
+        for (let i = 0; i < count; i++) {
+            const kameckFireBall = sceneObjHolder.kameckFireBallHolder!.getDeadActor();
+            if (kameckFireBall === null)
+                break;
+
+            vec3.copy(kameckFireBall.translation, this.translation);
+            vec3.copy(scratchVec3b, scratchVec3a);
+            rotateVecDegree(scratchVec3b, this.gravityVector, KameckBeam.FIRE_DEGREES[count0][i]);
+            kameckFireBall.appearDirection(sceneObjHolder, scratchVec3b);
+            this.fireball.push(kameckFireBall);
+        }
+
+        if (this.fireball.length > 0) {
+            this.calcBinderFlag = false;
+            invalidateShadowAll(this);
+            invalidateHitSensors(this);
+            forceDeleteEffectAll(sceneObjHolder, this);
+            this.setNerve(KameckBeamNrv.Fire);
+            return true;
+        }
+
+        return false;
+    }
+
+    private tryChangeTurtle(sceneObjHolder: SceneObjHolder): boolean {
+        // TODO(jstpierre): KameckBeamTurtle
+        if (this.turtle !== null) {
+            this.calcBinderFlag = false;
+            invalidateShadowAll(this);
+            invalidateHitSensors(this);
+            forceDeleteEffectAll(sceneObjHolder, this);
+            // vec3.copy(this.turtle.translation, this.translation);
+            // this.turtle.appearDirection(sceneObjHolder, this.shootDir);
+            this.setNerve(KameckBeamNrv.JetTurtle);
+            return true;
+        }
+
+        return false;
+    }
+}
+
+export class KameckBeamHolder extends LiveActorGroup<KameckBeam> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'KameckBeamHolder', 0x10);
+
+        for (let i = 0; i < 0x10; i++) {
+            const kameckBeam = new KameckBeam(dynamicSpawnZoneAndLayer, sceneObjHolder, 'KameckBeam');
+            kameckBeam.makeActorDead(sceneObjHolder);
+            this.registerActor(kameckBeam);
+        }
+    }
+}
+
+function startFollowKameckBeam(sceneObjHolder: SceneObjHolder, beamKind: KameckBeamKind, mtx: ReadonlyMat4, scale: number, pos: ReadonlyVec3, beamEventListener: null): KameckBeam | null {
+    const beam = sceneObjHolder.kameckBeamHolder!.getDeadActor();
+    if (beam === null)
+        return null;
+
+    beam.setBeamKind(beamKind);
+    beam.requestFollowWand(sceneObjHolder, mtx, scale);
+    beam.setWandLocalPosition(pos);
+    beam.setEventListener(beamEventListener);
+    return beam;
+}
+
+class ActiveActorList<T extends LiveActor> {
+    private actors: T[] = [];
+
+    constructor(private maxCount: number) {
+    }
+
+    public isFull(): boolean {
+        return this.actors.length >= this.maxCount;
+    }
+
+    public addActor(actor: T): void {
+        assert(!this.isFull());
+        this.actors.push(actor);
+    }
+
+    public clear(): void {
+        this.actors.length = 0;
+    }
+
+    public removeDeadActor(): void {
+        for (let i = 0; i < this.actors.length; i++)
+            if (isDead(this.actors[i]))
+                this.actors.splice(i--, 1);
+    }
+}
+
+const enum KameckNrv { Wait, AttackWait, Attack, MoveHide, Move, Appear }
+export class Kameck extends LiveActor<KameckNrv> {
+    private beamKind: KameckBeamKind;
+    private nonActiveDistance: number;
+    private poseQuat = quat.create();
+    private axisZ = vec3.create();
+    private activeBeams = new ActiveActorList<KameckBeam>(8);
+    private beamTemp: KameckBeam | null = null;
+    private beamEventListener: null = null;
+    private moveRailCoord0: number;
+    private moveRailCoord1: number;
+    private moveDuration: number = 240;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.nonActiveDistance = fallback(getJMapInfoArg3(infoIter), 3000.0);
+
+        if (this.name === 'FireBallBeamKameck') {
+            const arg0 = getJMapInfoArg0(infoIter);
+            if (arg0 === 2)
+                this.beamKind = KameckBeamKind.FireBall2;
+            else if (arg0 === 3)
+                this.beamKind = KameckBeamKind.FireBall3;
+            else    
+                this.beamKind = KameckBeamKind.FireBall1;
+        } else if (this.name === 'TurtleBeamKameck') {
+            this.beamKind = KameckBeamKind.Turtle;
+        }
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'Kameck');
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        this.calcGravityFlag = true;
+        initShadowVolumeSphere(sceneObjHolder, this, 70.0);
+        makeQuatAndFrontFromRotate(this.poseQuat, this.axisZ, this);
+        this.initHitSensor();
+        addHitSensorEnemy(sceneObjHolder, this, 'body', 8, 120.0, vec3.set(scratchVec3a, 0.0, 40.0, 0.0));
+        addHitSensorEnemyAttack(sceneObjHolder, this, 'attack', 8, 80.0, Vec3Zero);
+        this.initBinder(70.0, 0.0, 0);
+        this.calcBinderFlag = false;
+        this.initBeam(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (isConnectedWithRail(infoIter)) {
+            this.initRailRider(sceneObjHolder, infoIter);
+            moveCoordToStartPos(this);
+            moveTransToCurrentRailPos(this);
+        }
+
+        this.initNerve(KameckNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+        declareCoin(sceneObjHolder, this, 1);
+    }
+
+    private initBeam(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.create(SceneObj.KameckBeamHolder);
+
+        if (this.beamKind === KameckBeamKind.Turtle) {
+            sceneObjHolder.create(SceneObj.KameckBeamTurtleHolder);
+        } else {
+            sceneObjHolder.create(SceneObj.KameckFireBallHolder);
+        }
+    }
+
+    protected override calcAndSetBaseMtx(): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected override control(sceneObjHolder: SceneObjHolder): void {
+        super.control(sceneObjHolder);
+        vec3.negate(scratchVec3a, this.gravityVector);
+        blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.04, 0.2);
+        this.activeBeams.removeDeadActor();
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KameckNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KameckNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Wait');
+                validateHitSensors(this);
+            }
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (this.tryOpeningDemo(sceneObjHolder))
+                return;
+
+            this.tryAttackWait(sceneObjHolder);
+        } else if (currentNerve === KameckNrv.AttackWait) {
+            if (isFirstStep(this))
+                startBck(this, 'AttackWait');
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTarget(this.axisZ, this, scratchVec3a, 0.98 * deltaTimeFrames);
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (isGreaterStep(this, 60))
+                this.setNerve(KameckNrv.Attack);
+        } else if (currentNerve === KameckNrv.Attack) {
+            if (isFirstStep(this))
+                startBck(this, 'Attack');
+
+            if (isCrossedStep(this, 9)) {
+                const beam = assertExists(this.beamTemp);
+                beam.requestShootToPlayerCenter(sceneObjHolder, 12.0);
+                this.activeBeams.addActor(beam);
+                this.beamTemp = null;
+            }
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (isGreaterStep(this, 15))
+                this.setNerve(KameckNrv.MoveHide);
+        } else if (currentNerve === KameckNrv.MoveHide) {
+            if (isFirstStep(this))
+                startBck(this, 'Hide');
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTarget(this.axisZ, this, scratchVec3a, 0.98 * deltaTimeFrames);
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (isBckStopped(this))
+                this.setNerve(KameckNrv.Move);
+        } else if (currentNerve === KameckNrv.Move) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Move');
+
+                hideModel(this);
+                invalidateHitSensors(this);
+                if (isExistRail(this)) {
+                    if (isRailReachedGoal(this))
+                        reverseRailDirection(this);
+
+                    this.moveRailCoord0 = getRailCoord(this);
+                    const nextPt = getNextRailPointNo(this);
+                    this.moveRailCoord1 = getRailPointCoord(this, nextPt);
+                    this.moveDuration = Math.abs(this.moveRailCoord1 - this.moveRailCoord0) / 20.0;
+                }
+            }
+
+            if (isExistRail(this)) {
+                const t = saturate(this.getNerveStep() / this.moveDuration);
+                const coord = getEaseInOutValue(t, this.moveRailCoord0, this.moveRailCoord1);
+                setRailCoord(this, coord);
+                moveTransToCurrentRailPos(this);
+            }
+
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTarget(this.axisZ, this, scratchVec3a, 0.98 * deltaTimeFrames);
+
+            if (isGreaterStep(this, this.moveDuration))
+                this.setNerve(KameckNrv.Appear);
+        } else if (currentNerve === KameckNrv.Appear) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Appear');
+                showModel(this);
+                validateHitSensors(this);
+            }
+
+            if (isNearPlayer(sceneObjHolder, this, 2000.0)) {
+                getPlayerPos(scratchVec3a, sceneObjHolder);
+                turnDirectionToTarget(this.axisZ, this, scratchVec3a, 0.98 * deltaTimeFrames);
+            }
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (isBckStopped(this)) {
+                if (this.tryAttackWait(sceneObjHolder))
+                    return;
+
+                this.setNerve(KameckNrv.Wait);
+            }
+        }
+    }
+
+    private tryPointBind(sceneObjHolder: SceneObjHolder): boolean {
+        return false;
+    }
+
+    private tryOpeningDemo(sceneObjHolder: SceneObjHolder): boolean {
+        return false;
+    }
+
+    private tryAttackWait(sceneObjHolder: SceneObjHolder): boolean {
+        if (isNearPlayer(sceneObjHolder, this, 2000.0) && !this.activeBeams.isFull()) {
+            vec3.set(scratchVec3a, 0.0, 110.0, 0.0);
+            const wandMtx = getJointMtxByName(this, 'Wand')!;
+            this.beamTemp = startFollowKameckBeam(sceneObjHolder, this.beamKind, wandMtx, 0.6, scratchVec3a, this.beamEventListener);
+            if (this.beamTemp !== null) {
+                this.setNerve(KameckNrv.AttackWait);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Kameck');
+        const name = getObjectName(infoIter);
+        if (name === 'FireBallBeamKameck')
+            KameckFireBall.requestArchives(sceneObjHolder);
+        else
+            KameckTurtle.requestArchives(sceneObjHolder);
     }
 }

@@ -543,12 +543,12 @@ export class RailRider {
 
     public getNextPointNo(): number {
         const delta = (this.direction === RailDirection.TowardsEnd) ? 1 : -1;
-        const numParts = this.bezierRail.railParts.length;
+        const numPoints = this.bezierRail.pointRecordCount;
         const nextPointNo = this.currentPointId + delta;
         if (this.bezierRail.isClosed) {
-            return (nextPointNo + numParts) % numParts;
+            return (nextPointNo + numPoints) % numPoints;
         } else {
-            return clamp(nextPointNo, 0, numParts - 1);
+            return clamp(nextPointNo, 0, numPoints - 1);
         }
     }
 

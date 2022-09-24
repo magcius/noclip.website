@@ -173,6 +173,10 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, CalcAnimType.None, DrawBufferType.None, DrawType.None);
 }
 
+export function connectToSceneEnemyDecorationMovementCalcAnim(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.EnemyDecoration, CalcAnimType.MapObjDecoration, DrawBufferType.None, DrawType.None);
+}
+
 export function connectToSceneIndirectEnemy(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, CalcAnimType.Enemy, DrawBufferType.IndirectEnemy, DrawType.None);
 }
@@ -743,6 +747,10 @@ export function moveTransToCurrentRailPos(actor: LiveActor): void {
 
 export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
+}
+
+export function getRailPointCoord(actor: LiveActor, idx: number): number {
+    return actor.railRider!.getPointCoord(idx);
 }
 
 export function getRailPointArg0(actor: LiveActor, idx: number): number | null {

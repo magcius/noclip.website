@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, JumpBeamer, Kanina, Karon, KillerGunnerSingle, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, StinkBugSmall, Takobo, TakoHei, Unizo } from './Actors/Enemy';
+import { BallBeamer, Birikyu, BirikyuWithFace, DinoPackun, Dossun, ExterminationChecker, EyeBeamer, Gesso, Hanachan, HomingKillerLauncher, Jellyfish, JumpBeamer, Kameck, Kanina, Karon, KillerGunnerSingle, KoteBug, Kuribo, KuriboMini, Meramera, Metbo, Mogu, Mogucchi, NokonokoLand, OnimasuJump, OnimasuPivot, Petari, Pukupuku, RingBeamer, Snakehead, StinkBugSmall, Takobo, TakoHei, Unizo } from './Actors/Enemy';
 import { ClipAreaDropLaser, createClipAreaBottomBox, createClipAreaCenterBox, createClipAreaSphere, createFallOutFieldDraw, requestArchivesClipAreaBox, requestArchivesClipAreaSphere } from './ClipArea';
 import { createMessageAreaCube, createMessageAreaCylinder } from './Talk';
 
@@ -143,6 +143,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Meramera",                       Meramera),
     _("IceMeramera",                    Meramera),
     _("StinkBugSmall",                  StinkBugSmall),
+    _("FireBallBeamKameck",             Kameck),
+    _("TurtleBeamKameck",               Kameck),
 
     // TODO(jstpierre): Figure out what to do with this
     N("Petari"),

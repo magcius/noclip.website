@@ -4418,12 +4418,15 @@ export class SimpleClipPartsObj extends MapObjActor {
     protected override control(sceneObjHolder: SceneObjHolder): void {
         super.control(sceneObjHolder);
 
+        // no ClipFieldSwitch
+        /*
         if (isValidSwitchA(this)) {
             if (isOnSwitchA(sceneObjHolder, this))
                 validateCollisionPartsForActor(sceneObjHolder, this);
             else
                 invalidateCollisionPartsForActor(sceneObjHolder, this);
         }
+        */
     }
 
     protected override initCaseNoUseSwitchA(): void {
