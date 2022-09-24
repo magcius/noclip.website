@@ -1751,6 +1751,9 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         calcUpVec(this.axisY, this);
 
         startBpk(this, 'ShootingStar');
+
+        hideModel(this);
+        this.initWaitPhase = getRandomInt(0, this.delay);
     }
 
     private appearPreShooting(sceneObjHolder: SceneObjHolder): void {

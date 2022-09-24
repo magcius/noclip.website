@@ -1029,7 +1029,7 @@ export class Binder {
         this.clear();
     }
 
-    public bind(sceneObjHolder: SceneObjHolder, dstVel: vec3, velOrig: ReadonlyVec3): void {
+    public bind(sceneObjHolder: SceneObjHolder, dstVel: vec3, velOrig: ReadonlyVec3, deltaTimeFrames: number): void {
         this.clear();
 
         if (sceneObjHolder.collisionDirector === null)
@@ -1069,7 +1069,7 @@ export class Binder {
         // If we hit something in one of the other ray steps, ret is MoveAlongHittedPlanes,
         // indicating we need to take some of our velocity and project it onto the hit
         // surfaces.
-        const velCurr = vec3.copy(scratchVec3f, velOrig);
+        const velCurr = vec3.scale(scratchVec3f, velOrig, deltaTimeFrames);
         let ret = this.findBindedPos(sceneObjHolder, posCurr, velCurr, false, stopped);
 
         if (ret === BinderFindBindedPositionRet.NoCollide) {
