@@ -7,7 +7,7 @@ import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
 import { vecKillElement } from "./ActorUtil";
-import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener } from "./Switch";
+import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForAreaObj } from "./Switch";
 import { drawWorldSpaceAABB, drawWorldSpaceCylinder, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 interface AreaFormBase {
@@ -218,8 +218,7 @@ export class AreaObj extends NameObj {
         const areaObjMgr = sceneObjHolder.areaObjContainer!.getManager(this.getManagerName());
         areaObjMgr.entry(this);
 
-        // TODO(jstpierre): addSleepControl
-        // addSleepControlForLiveActor
+        addSleepControlForAreaObj(sceneObjHolder, this, infoIter);
 
         this.postCreate(sceneObjHolder);
     }

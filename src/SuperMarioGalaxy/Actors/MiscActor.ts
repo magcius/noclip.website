@@ -1,14 +1,15 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyMat3, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
 import { Camera } from '../../Camera';
-import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
+import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, Magenta, OpaqueBlack, Red, White, Yellow } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
 import { dfRange, dfShow } from '../../DebugFloaters';
 import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { AABB } from '../../Geometry';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -300,6 +301,8 @@ const enum BlackHoleNrv { Wait }
 export class BlackHole extends LiveActor<BlackHoleNrv> {
     private blackHoleModel: ModelObj;
     private effectHostMtx = mat4.create();
+    private cubeBoxMtxInv: mat4 | null = null;
+    private cubeBox: AABB | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -309,6 +312,15 @@ export class BlackHole extends LiveActor<BlackHoleNrv> {
         let sensorRadius: number;
         if (this.name === 'BlackHoleCube') {
             // TODO(jstpierre): CubeBox
+            this.cubeBoxMtxInv = mat4.create();
+            computeModelMatrixR(this.cubeBoxMtxInv, this.rotation[0], this.rotation[1], this.rotation[2]);
+            setMatrixTranslation(this.cubeBoxMtxInv, this.translation);
+            mat4.invert(this.cubeBoxMtxInv, this.cubeBoxMtxInv);
+            this.cubeBox = new AABB(
+                -this.scale[0] * 500.0, -this.scale[1] * 500.0, -this.scale[2] * 500.0,
+                this.scale[0] * 500.0, this.scale[1] * 500.0, this.scale[2] * 500.0,
+            );
+
             sensorRadius = vec3.length(this.scale) * 500.0;
         } else {
             sensorRadius = this.scale[0] * 500.0;
@@ -340,13 +352,19 @@ export class BlackHole extends LiveActor<BlackHoleNrv> {
         this.initNerve(BlackHoleNrv.Wait);
     }
 
+    private isInCubeBox(pos: ReadonlyVec3): boolean {
+        if (this.cubeBox === null)
+            return true;
+
+        transformVec3Mat4w1(scratchVec3, this.cubeBoxMtxInv!, pos);
+        return this.cubeBox.containsPoint(scratchVec3);
+    }
+
     public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
 
-        if (this.isNerve(BlackHoleNrv.Wait)) {
-            // TODO(jstpierre): Extra cube box check
+        if (this.isNerve(BlackHoleNrv.Wait) && this.isInCubeBox(otherSensor.center))
             sendArbitraryMsg(sceneObjHolder, MessageType.InhaleBlackHole, otherSensor, thisSensor);
-        }
     }
 
     protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: BlackHoleNrv, deltaTimeFrames: number): void {
@@ -972,8 +990,6 @@ export function createDirectSetPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHo
 
 export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
-    coin.initialize(sceneObjHolder, infoIter);
-    // TODO(jstpierre): PurpleCoinHolder
     return coin;
 }
 
