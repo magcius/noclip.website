@@ -7,7 +7,7 @@ import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderInstManager";
 import { assertExists, hexzero, assert, mod } from "../util";
 import { SceneContext } from "../SceneBase";
@@ -90,7 +90,7 @@ class BasicEffectSystem {
         return this.resourceDatas.get(userIndex)!;
     }
 
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
+    public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
     }

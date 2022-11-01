@@ -259,6 +259,10 @@ export class AreaObj extends NameObj {
     public getManagerName(): string {
         return this.name;
     }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder): void {
+        this.form.debugDraw(sceneObjHolder);
+    }
 }
 
 export class AreaObjMgr<T extends AreaObj> extends NameObj {

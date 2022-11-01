@@ -48,7 +48,7 @@ import { getLayoutMessageDirect, MessageHolder } from './MessageData';
 import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, DepthOfFieldBlur, ImageEffectAreaMgr } from './ImageEffect';
 import { ClipAreaDropHolder, ClipAreaHolder, FallOutFieldDraw } from './ClipArea';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
-import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit, GalaxyCometScreenFilter } from './Actors/MiscActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { MapPartsRailGuideHolder } from './MapParts';
@@ -674,6 +674,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 // exceuteDrawList2DNormal()
                 this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
+                this.execute(passRenderer, DrawType.CometScreenFilter);
                 this.execute(passRenderer, DrawType.Layout);
             });
         });
@@ -1071,6 +1072,7 @@ export const enum SceneObj {
 
     // Noclip additions
     GalaxyNameSortTable            = 0xA0,
+    GalaxyCometScreenFilter        = 0xA1, // technically part of EventDirector, punting on that for now
 }
 
 class DebugUtils {
@@ -1138,6 +1140,7 @@ export class SceneObjHolder {
 
     // noclip additions -- some of these are singletons in the original game.
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
+    public galaxyCometScreenFilter: GalaxyCometScreenFilter | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
@@ -1250,6 +1253,8 @@ export class SceneObjHolder {
             return this.galaxyMapController;
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             return this.galaxyNameSortTable;
+        else if (sceneObj === SceneObj.GalaxyCometScreenFilter)
+            return this.galaxyCometScreenFilter;
         return null;
     }
 
@@ -1342,6 +1347,8 @@ export class SceneObjHolder {
             this.galaxyMapController = new GalaxyMapController(this);
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             this.galaxyNameSortTable = new GalaxyNameSortTable(this);
+        else if (sceneObj === SceneObj.GalaxyCometScreenFilter)
+            this.galaxyCometScreenFilter = new GalaxyCometScreenFilter(this);
     }
 
     public requestArchives(): void {
@@ -1349,6 +1356,7 @@ export class SceneObjHolder {
         StarPieceDirector.requestArchives(this);
         CoinHolder.requestArchives(this);
         TalkDirector.requestArchives(this);
+        GalaxyCometScreenFilter.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1800,6 +1808,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         sceneObjHolder.create(SceneObj.EffectSystem);
         sceneObjHolder.create(SceneObj.StarPieceDirector);
+        sceneObjHolder.create(SceneObj.GalaxyCometScreenFilter);
 
         const spawner = new SMGSpawner(sceneObjHolder);
         sceneObjHolder.spawner = spawner;

@@ -1087,7 +1087,7 @@ export class EffectSystem extends NameObj {
         this.emitterManager.calc(deltaTime);
     }
 
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null, frustum: Frustum): void {
+    public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
         this.drawInfo.frustum = frustum;

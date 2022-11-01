@@ -8439,7 +8439,7 @@ export class StinkBugSmall extends StinkBugBase<StinkBugSmallNrv> {
                 startBck(this, `RushStart`);
 
             this.fixInitPos();
-            this.tryTurnDashSign(sceneObjHolder, 3.0);
+            this.tryTurnDashSign(sceneObjHolder, 3.0 * deltaTimeFrames);
             if (isBckStopped(this))
                 this.setNerve(StinkBugSmallNrv.DashSignEnd);
         } else if (currentNerve === StinkBugSmallNrv.DashSignEnd) {

@@ -31,6 +31,7 @@ import { addBaseMatrixFollowTarget } from '../Follow';
 import { initFurPlanet } from '../Fur';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg, addHitSensorCallbackMapObj, addHitSensorCallbackMapObjSimple, addHitSensorEye, addHitSensorAtJoint, invalidateHitSensor } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
+import { LayoutActor } from '../Layout';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
 import { getObjectName, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
@@ -9329,5 +9330,60 @@ export class MorphItemObjNeo extends LiveActor<MorphItemObjNeoNrv> {
             sceneObjHolder.modelCache.requestObjectData('CrystalBox');
             sceneObjHolder.modelCache.requestObjectData('CrystalBoxBreak');
         }
+    }
+}
+
+export class GalaxyCometScreenFilter extends LayoutActor {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'GalaxyCometScreenFilter');
+        connectToScene(sceneObjHolder, this, MovementType.Layout, CalcAnimType.Layout, DrawBufferType.None, DrawType.CometScreenFilter);
+        this.initLayoutManager(sceneObjHolder, 'CometScreenFilter', 1);
+    }
+
+    private getCometNameIdFromString(name: string | null): number | null {
+        if (name === null || name === '')
+            return null;
+
+        const cometNames = ['Red', 'Dark', 'Ghost', 'Quick', 'Purple', 'Black'];
+        const id = cometNames.indexOf(name);
+        assert(id >= 0);
+        return id;
+    }
+
+    private getCometColorAnimFrameFromId(id: number): number {
+        const ids = [0.0, 4.0, 1.0, 2.0, 3.0, 0.0];
+        return ids[id];
+    }
+
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        const cometName = sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet');
+        const cometNameId = this.getCometNameIdFromString(cometName);
+        if (cometNameId !== null) {
+            this.startAnim('Color', 0);
+            const frame = this.getCometColorAnimFrameFromId(cometNameId);
+            this.setAnimFrameAndStop(frame, 0);
+            this.makeActorAppeared(sceneObjHolder);
+        } else {
+            this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public override movement(sceneObjHolder: SceneObjHolder): void {
+        super.movement(sceneObjHolder);
+
+        // Adjust position/scale for our modified projection matrix
+        // TODO(jstpierre): Make this work automatically in LayoutActor?
+        const pane = this.layoutManager!.getRootPane();
+        const w = sceneObjHolder.viewerInput.backbufferWidth;
+        const h = sceneObjHolder.viewerInput.backbufferHeight;
+        pane.translation[0] = w / 2;
+        pane.translation[1] = h / 2;
+
+        pane.scale[0] = w / 608;
+        pane.scale[1] = h / 456;
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestLayoutData('CometScreenFilter');
     }
 }

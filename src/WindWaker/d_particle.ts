@@ -1,7 +1,7 @@
 
 // particle
 
-import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, colorCopy } from "../Color";
 import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA";
 import { Frustum } from "../Geometry";
@@ -61,7 +61,7 @@ export class dPa_control_c {
         }
     }
 
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null, frustum: Frustum): void {
+    public setDrawInfo(posCamMtx: ReadonlyMat4, prjMtx: ReadonlyMat4, texPrjMtx: ReadonlyMat4 | null, frustum: Frustum): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
         this.drawInfo.frustum = frustum;

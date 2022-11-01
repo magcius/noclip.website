@@ -972,8 +972,8 @@ export class JPAEmitterWorkData {
 }
 
 export class JPADrawInfo {
-    public posCamMtx: mat4;
-    public texPrjMtx: mat4 | null = null;
+    public posCamMtx: ReadonlyMat4;
+    public texPrjMtx: ReadonlyMat4 | null = null;
     public frustum: Frustum | null = null;
 }
 
