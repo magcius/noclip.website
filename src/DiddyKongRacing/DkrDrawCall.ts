@@ -29,17 +29,17 @@ const mirrorMatrix = mat4.fromValues(
     -1, 0, 0, 0,
      0, 1, 0, 0,
      0, 0, 1, 0,
-     0, 0, 0, 1
+     0, 0, 0, 1,
 );
 
 export interface DkrDrawCallParams {
-    modelMatrices: mat4[],
-    overrideAlpha: number | null,
-    usesNormals: boolean,
-    isSkydome: boolean,
-    textureFrame: number,
-    objAnim: DkrObjectAnimation | null,
-    objAnimIndex: number,
+    modelMatrices: mat4[];
+    overrideAlpha: number | null;
+    usesNormals: boolean;
+    isSkydome: boolean;
+    textureFrame: number;
+    objAnim: DkrObjectAnimation | null;
+    objAnimIndex: number;
 }
 
 export class DkrDrawCall {
@@ -274,31 +274,44 @@ export class DkrDrawCall {
             offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
     
             // Set draw parameters
-            let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, (4 * 4) + 16 + (12 * MAX_NUM_OF_INSTANCES));
+            let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
             const d2 = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
-            // Boolean variables
-            d2[offs2] = !!this.texture && DkrControlGlobals.ENABLE_TEXTURES.on ? 1 : 0;
-            d2[offs2 + 1] = DkrControlGlobals.ENABLE_VERTEX_COLORS.on ? 1 : 0;
-            d2[offs2 + 2] = params.usesNormals ? 1 : 0;
-            d2[offs2 + 3] = !!params.objAnim ? 1 : 0;
-            offs2 += 4;
-            if(!!params.objAnim) {
-                d2[offs2] = params.objAnim.getProgressInCurrentFrame();
-            }
-            offs2 += 4;
+
             // Color
-            d2[offs2]     = 1.0;
+            d2[offs2 + 0] = 1.0;
             d2[offs2 + 1] = 1.0;
             d2[offs2 + 2] = 1.0;
             d2[offs2 + 3] = (params.overrideAlpha !== null) ? params.overrideAlpha : 1.0;
             offs2 += 4;
-            if(!!this.texture) {
+
+            // Misc[0] -- TexCoordOffset
+            if (!!this.texture) {
                 const texCoordOffset = this.texture!.getTexCoordOffset();
-                d2[offs2] = texCoordOffset[0] + this.scrollU;
-                d2[offs2+1] = texCoordOffset[1] + this.scrollV;
+                d2[offs2 + 0] = texCoordOffset[0] + this.scrollU;
+                d2[offs2 + 1] = texCoordOffset[1] + this.scrollV;
             }
-            offs2 += 4;
-    
+            offs2 += 2;
+
+            // Misc[0] -- AnimProgress
+            if (!!params.objAnim) {
+                d2[offs2] = params.objAnim.getProgressInCurrentFrame();
+            }
+            offs2++;
+
+            // Misc[0] -- Options
+            let options = 0;
+            if (!!this.texture && DkrControlGlobals.ENABLE_TEXTURES.on)
+                options |= 0b0001;
+            if (DkrControlGlobals.ENABLE_VERTEX_COLORS.on)
+                options |= 0b0010;
+            if (params.usesNormals)
+                options |= 0b0100;
+            if (params.objAnim)
+                options |= 0b1000;
+
+            d2[offs2] = options;
+            offs2++;
+
             if(!!this.texture) {
                 // Use the texture.
                 this.texture!.bind(renderInst, params.textureFrame);

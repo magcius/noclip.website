@@ -334,9 +334,15 @@ function translateColorState(attachmentState: GfxAttachmentState, format: GfxFor
     };
 }
 
-function translateTargets(colorAttachmentFormats: (GfxFormat | null)[], megaStateDescriptor: GfxMegaStateDescriptor): GPUColorTargetState[] {
-    return megaStateDescriptor.attachmentsState!.map((attachmentState, i) => {
-        return translateColorState(attachmentState, colorAttachmentFormats[i]!);
+function translateTargets(colorAttachmentFormats: (GfxFormat | null)[], megaStateDescriptor: GfxMegaStateDescriptor): (GPUColorTargetState | null)[] {
+    return colorAttachmentFormats.map((format, i) => {
+        if (format === null)
+            return null;
+
+        let attachmentState = megaStateDescriptor.attachmentsState[i];
+        if (attachmentState === undefined)
+            attachmentState = megaStateDescriptor.attachmentsState[0];
+        return translateColorState(attachmentState, format);
     });
 }
 
@@ -766,61 +772,6 @@ function translateImageLayout(size: GPUExtent3DDictStrict, layout: GPUImageDataL
     layout.rowsPerImage = numBlocksY;
 }
 
-const fullscreenVS = `
-struct VertexOutput {
-    @builtin(position) pos: vec4<f32>,
-};
-
-@stage(vertex)
-fn vs(@builtin(vertex_index) index: u32) -> VertexOutput {
-    var out: VertexOutput;
-    out.pos.x = select(-1.0, 3.0, index == 1u);
-    out.pos.y = select(-1.0, 3.0, index == 2u);
-    out.pos.z = 1.0;
-    out.pos.w = 1.0;
-    return out;
-}
-`;
-
-// Hack for now until browsers implement compositingAlphaMode
-// https://bugs.chromium.org/p/chromium/issues/detail?id=1241373
-class FullscreenAlphaClear {
-    private shaderModule: GPUShaderModule;
-    private pipeline: GPURenderPipeline;
-
-    private shaderText = `
-${fullscreenVS}
-
-struct FragmentOutput { @location(0) color: vec4<f32>, };
-
-@stage(fragment)
-fn fs() -> FragmentOutput {
-    return FragmentOutput(vec4<f32>(1.0, 0.0, 1.0, 1.0));
-}
-`;
-
-    constructor(device: GPUDevice, format: GPUTextureFormat) {
-        this.shaderModule = device.createShaderModule({ code: this.shaderText });
-        this.pipeline = device.createRenderPipeline({
-            layout: 'auto',
-            vertex: { module: this.shaderModule, entryPoint: 'vs', },
-            fragment: { module: this.shaderModule, entryPoint: 'fs', targets: [{ format, writeMask: 0x08, }] },
-        });
-    }
-
-    public render(encoder: GPUCommandEncoder, onscreenTexture: GPUTextureView): void {
-        const renderPass = encoder.beginRenderPass({
-            colorAttachments: [{ view: onscreenTexture, loadOp: 'load', storeOp: 'store', }],
-        });
-        renderPass.setPipeline(this.pipeline);
-        renderPass.draw(3);
-        renderPass.end();
-    }
-
-    public destroy(device: GPUDevice): void {
-    }
-}
-
 class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _swapChainWidth = 0;
     private _swapChainHeight = 0;
@@ -841,7 +792,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
 
-    private _fullscreenAlphaClear: FullscreenAlphaClear;
     private _frameCommandEncoder: GPUCommandEncoder | null = null;
     private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
 
@@ -883,9 +833,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         };
 
         this._swapChainFormat = navigator.gpu.getPreferredCanvasFormat();
-        this._fullscreenAlphaClear = new FullscreenAlphaClear(this.device, this._swapChainFormat);
 
-        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, compositingAlphaMode: 'opaque' });
+        this.canvasContext.configure({ device: this.device, format: this._swapChainFormat, usage: this._swapChainTextureUsage, alphaMode: 'opaque' });
     }
 
     private createFallbackTexture(dimension: GfxTextureDimension, formatKind: GfxSamplerFormatKind): GfxTextureP_WebGPU {
@@ -1059,9 +1008,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             });
         }
 
-        // Workaround for https://bugs.chromium.org/p/tint/issues/detail?id=1503
-        code = code.replace('@vertex', '@stage(vertex)');
-        code = code.replace('@fragment', '@stage(fragment)');
+        // Workaround for unreported Naga bug
+        code = code.replace('vec2<i32> = textureDimensions(', 'vec2<u32> = textureDimensions(');
 
         const shaderModule = this.device.createShaderModule({ code });
         return { module: shaderModule, entryPoint: 'main' };
@@ -1381,7 +1329,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public endFrame(): void {
         assert(this._frameCommandEncoder !== null);
 
-        this._fullscreenAlphaClear.render(this._frameCommandEncoder, this.canvasContext.getCurrentTexture().createView());
         this.device.queue.submit([this._frameCommandEncoder.finish()]);
         this._frameCommandEncoder = null;
 
@@ -1481,8 +1428,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public queryLimits(): GfxDeviceLimits {
         // TODO(jstpierre): GPULimits
         return {
-            uniformBufferMaxPageWordSize: 0x1000,
-            uniformBufferWordAlignment: 0x40,
+            uniformBufferMaxPageWordSize: 0x10000,
+            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment * 4,
             supportedSampleCounts: [1],
             occlusionQueriesRecommended: false,
         };

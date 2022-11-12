@@ -45,7 +45,7 @@ layout(location = ${F3DDKR_Sprite_Program.a_Position}) in vec2 a_Position;
 
 void main() {
     SpriteInstance instance = u_Instances[gl_InstanceID];
-    
+
     int mainIndex = int(instance.info.x);
     int index = int(instance.info.x + mod(u_SpritesInfo.x, instance.info.y));
 
@@ -70,7 +70,7 @@ void main() {
     } else if(gl_VertexID == 3) {
         v_TexCoord = vec2(x + w, y + h);
     }
-    
+
     v_AlphaTest = instance.info.z;
 }
 `;

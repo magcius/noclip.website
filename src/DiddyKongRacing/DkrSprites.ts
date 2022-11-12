@@ -228,7 +228,7 @@ export class DkrSprites {
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
         // Set draw parameters
-        let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_DrawParams, 4 + 16 + (20 * MAX_NUM_OF_SPRITE_INSTANCES));
+        let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_DrawParams, 4 + (20 * MAX_NUM_OF_SPRITE_INSTANCES));
         const d2 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_DrawParams);
         d2[offs2] = this.currentFrame;
         offs2 += 4;
@@ -243,13 +243,13 @@ export class DkrSprites {
         for(let i = 0; i < this.spriteInstances[layer].length; i++) {
             const instanceObject: DkrObject = this.spriteInstances[layer][i];
             const spriteIndex = instanceObject.getSpriteIndex();
-            d2[offs2]     = this.spriteIndexOffsets[spriteIndex];
+            d2[offs2 + 0] = this.spriteIndexOffsets[spriteIndex];
             d2[offs2 + 1] = this.spritesInfo[spriteIndex].length;
             d2[offs2 + 2] = instanceObject.getSpriteAlphaTest();
             d2[offs2 + 3] = instanceObject.isSpriteCentered() ? 0.0 : 500.0;
             offs2 += 4;
             const color = instanceObject.getSpriteColor();
-            d2[offs2]     = color[0];
+            d2[offs2 + 0] = color[0];
             d2[offs2 + 1] = color[1];
             d2[offs2 + 2] = color[2];
             d2[offs2 + 3] = color[3];
@@ -268,19 +268,13 @@ export class DkrSprites {
         let offs3 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_TexParams, 4 * MAX_NUM_OF_SPRITE_FRAMES);
         const d3 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_TexParams);
 
-        for(let i = 0; i < this.spriteData.length; i++) {
-            d3[offs3++] = this.spriteData[i];
-        }
+        d3.set(this.spriteData, offs3);
+
         renderInst.setGfxProgram(this.gfxProgram);
-        
+
         if(this.spriteInstances[layer].length > 0) {
             renderInst.drawIndexesInstanced(6, this.spriteInstances[layer].length);
         }
-        /*
-        renderInst.setMegaStateFlags({
-            cullMode: GfxCullMode.BACK
-        });
-        */
 
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();

@@ -22,21 +22,33 @@ layout(std140) uniform ub_SceneParams {
 };
 
 layout(std140) uniform ub_DrawParams {
-    // u_Options.x = Use texture
-    // u_Options.y = Use vertex colors
-    // u_Options.z = Use vertex normals
-    // u_Options.w = Use object animation
-    bvec4 u_Options;
-    float u_AnimProgress; // Interpolation between animations.
     vec4 u_Color;
-    vec4 u_TexCoordOffset;
+    vec4 u_Misc[1];
     Mat4x3 u_ViewMatrix[${MAX_NUM_OF_INSTANCES}];
 };
+
+#define u_TexCoordOffset (u_Misc[0].xy)
+#define u_AnimProgress   (u_Misc[0].z)
 
 uniform sampler2D u_Texture;
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord;
+
+bvec4 DecodeOptions() {
+    // u_Options.x = Use texture
+    // u_Options.y = Use vertex colors
+    // u_Options.z = Use vertex normals
+    // u_Options.w = Use object animation
+
+    int t_Options = int(u_Misc[0].w);
+    bvec4 t_OptionsRet = bvec4(false);
+    t_OptionsRet.x = (t_Options & 1) != 0;
+    t_OptionsRet.y = (t_Options & 2) != 0;
+    t_OptionsRet.z = (t_Options & 4) != 0;
+    t_OptionsRet.w = (t_Options & 8) != 0;
+    return t_OptionsRet;
+}
 `;
 
     public override vert = `
@@ -47,15 +59,16 @@ layout(location = ${F3DDKR_Program.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
     vec3 pos;
-    
-    if(u_Options.w) { // u_Options.w = Use object animation
+    bvec4 t_Options = DecodeOptions();
+
+    if(t_Options.w) { // t_Options.w = Use object animation
         pos = mix(a_Position, a_Position_2, u_AnimProgress); // lerp between the keyframes.
     } else {
         pos = a_Position; // Just use the default position.
     }
-    
+
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix[gl_InstanceID]), vec4(pos, 1.0)));
-    if(u_Options.z) {
+    if(t_Options.z) {
         v_Color = vec4(1.0, 1.0, 1.0, 1.0);
     } else {
         v_Color = vec4(a_Color.xyz, a_Color.w * u_Color.w);
@@ -78,14 +91,16 @@ vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
 }
 
 void main() { 
-
     vec4 textureColor = vec4(1.0, 1.0, 1.0, 1.0);
     vec4 vertexColor = vec4(1.0, 1.0, 1.0, 1.0);
 
-    if(u_Options.x) {
+    bvec4 t_Options = DecodeOptions();
+
+    if(t_Options.x) {
         textureColor = Texture2D_N64_Bilerp(PP_SAMPLER_2D(u_Texture), v_TexCoord);
     }
-    if(u_Options.y) {
+
+    if(t_Options.y) {
         vertexColor = v_Color;
     }
 

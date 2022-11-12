@@ -27,7 +27,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class DKRRenderer implements Viewer.SceneGfx {
-    public program: F3DDKR_Program;
     public renderHelper: GfxRenderHelper;
     private hasStarted = false;
 
@@ -37,7 +36,6 @@ class DKRRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private camStart: Array<number>) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.program = new F3DDKR_Program();
     }
 
     public adjustCameraController(c: CameraController) {
