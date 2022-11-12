@@ -4412,7 +4412,7 @@ export class ChooChooTrain extends LiveActor {
 
 class SwingRopePoint {
     public position = vec3.create();
-    public accel = vec3.create();
+    public vel = vec3.create();
     public axisX = vec3.fromValues(1, 0, 0);
     public axisY = vec3.fromValues(0, 1, 0);
     public axisZ = vec3.fromValues(0, 0, 1);
@@ -4422,14 +4422,14 @@ class SwingRopePoint {
     }
 
     public addAccel(v: vec3): void {
-        vec3.add(this.accel, this.accel, v);
+        vec3.add(this.vel, this.vel, v);
     }
 
-    public restrict(pos: vec3, limit: number, accel: vec3 | null): void {
-        vec3.add(scratchVec3a, this.position, this.accel);
+    public restrict(pos: vec3, limit: number, vel: vec3 | null): void {
+        vec3.add(scratchVec3a, this.position, this.vel);
         vec3.sub(scratchVec3a, scratchVec3a, pos);
-        if (accel !== null)
-            vec3.sub(scratchVec3a, scratchVec3a, accel);
+        if (vel !== null)
+            vec3.sub(scratchVec3a, scratchVec3a, vel);
 
         const mag = vec3.squaredLength(scratchVec3a);
 
@@ -4439,13 +4439,13 @@ class SwingRopePoint {
         if (mag >= limit*limit) {
             vec3.scale(scratchVec3b, scratchVec3b, limit);
             vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
-            vec3.sub(this.accel, this.accel, scratchVec3a);
+            vec3.sub(this.vel, this.vel, scratchVec3a);
         }
     }
 
     public updatePos(drag: number): void {
-        vec3.add(this.position, this.position, this.accel);
-        vec3.scale(this.accel, this.accel, drag);
+        vec3.add(this.position, this.position, this.vel);
+        vec3.scale(this.vel, this.vel, drag);
     }
 
     public updateAxis(axisZ: vec3): void {
@@ -6113,7 +6113,7 @@ export class Flag extends LiveActor {
         for (let i = 0; i < this.swingPointCount; i++) {
             for (let j = 1; j < this.fixPoints.length; j++) {
                 const p0 = this.fixPoints[j - 1].points[i], p1 = this.fixPoints[j].points[i];
-                p1.restrict(p0.position, this.hoistPerPoint, p0.accel);
+                p1.restrict(p0.position, this.hoistPerPoint, p0.vel);
             }
         }
 
