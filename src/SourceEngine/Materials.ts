@@ -27,7 +27,7 @@ import { ParticleSystemCache } from "./ParticleSystem";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
-const textureMappings = nArray(14, () => new TextureMapping());
+const textureMappings = nArray(15, () => new TextureMapping());
 
 const RGBM_SCALE = 6.0;
 
@@ -105,6 +105,10 @@ export class MaterialShaderTemplateBase extends UberShaderTemplateBasic {
     public static MaxSkinningParamsBoneMatrix = 53;
 
     public static Common = `
+// Debug utilities.
+// #define DEBUG_DIFFUSEONLY 1
+// #define DEBUG_FULLBRIGHT 1
+    
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_SceneMisc[3];
@@ -192,6 +196,22 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 
     t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
 #endif
+}
+
+vec4 DebugColorTexture(in vec4 t_TextureSample) {
+#if defined DEBUG_DIFFUSEONLY
+    t_TextureSample.rgb = vec3(0.5);
+#endif
+
+    return t_TextureSample;
+}
+
+vec3 SampleLightmapTexture(in vec4 t_TextureSample) {
+#if defined DEBUG_FULLBRIGHT
+    return vec3(1.0);
+#endif
+
+    return t_TextureSample.rgb * t_TextureSample.a * ${glslGenerateFloat(RGBM_SCALE)};
 }
 
 #if defined VERT
@@ -1254,9 +1274,6 @@ layout(binding = 11) uniform samplerCube u_TextureEnvmap;
 layout(binding = 12) uniform sampler2DShadow u_TextureProjectedLightDepth;
 layout(binding = 13) uniform sampler2D u_TextureProjectedLight;
 
-// #define DEBUG_DIFFUSEONLY 1
-// #define DEBUG_FULLBRIGHT 1
-
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
     return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }
@@ -1592,22 +1609,6 @@ SpecularLightResult WorldLightCalcAllSpecular(in SpecularLightInput t_Input) {
         SpecularLightResult_Sum(t_FinalLight, WorldLightCalcSpecular(t_Input, u_WorldLights[i]));
 #endif
     return t_FinalLight;
-}
-
-vec4 DebugColorTexture(in vec4 t_TextureSample) {
-#if defined DEBUG_DIFFUSEONLY
-    t_TextureSample.rgb = vec3(0.5);
-#endif
-
-    return t_TextureSample;
-}
-
-vec3 SampleLightmapTexture(in vec4 t_TextureSample) {
-#if defined DEBUG_FULLBRIGHT
-    return vec3(1.0);
-#endif
-
-    return t_TextureSample.rgb * t_TextureSample.a * ${glslGenerateFloat(RGBM_SCALE)};
 }
 
 vec4 UnpackNormalMap(vec4 t_Sample) {
@@ -2842,7 +2843,7 @@ layout(binding = 5) uniform sampler2D u_TextureFlowNoise;
 
 layout(binding = 10) uniform sampler2DArray u_TextureLightmap;
 layout(binding = 11) uniform samplerCube u_TextureEnvmap;
-layout(binding = 12) uniform sampler2D u_TextureFramebufferDepth;
+layout(binding = 14) uniform sampler2D u_TextureFramebufferDepth;
 
 #if defined VERT
 void mainVS() {
@@ -2985,7 +2986,7 @@ void mainPS() {
 
     bool use_lightmap_water_fog = ${getDefineBool(m, `USE_LIGHTMAP_WATER_FOG`)};
     if (use_lightmap_water_fog) {
-        vec3 t_LightmapColor = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)).rgb);
+        vec3 t_LightmapColor = SampleLightmapTexture(texture(SAMPLER_2DArray(u_TextureLightmap), vec3(v_TexCoord1.zw, 0.0)));
         t_DiffuseLighting.rgb *= t_LightmapColor;
     }
     vec3 t_WaterFogColor = u_WaterFogColor.rgb * t_DiffuseLighting.rgb;
@@ -3209,7 +3210,7 @@ class Material_Water extends BaseMaterial {
 
         renderContext.lightmapManager.fillTextureMapping(textureMappings[10], lightmapPageIndex);
         this.paramGetTexture('$envmap').fillTextureMapping(textureMappings[11], this.paramGetInt('$envmapframe'));
-        this.paramGetTexture('$depthtexture').fillTextureMapping(textureMappings[12], 0);
+        this.paramGetTexture('$depthtexture').fillTextureMapping(textureMappings[14], 0);
 
         let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Water.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Water.ub_ObjectParams);
@@ -3283,6 +3284,7 @@ class Material_Water extends BaseMaterial {
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.debug = true;
         renderInst.sortKey = this.sortKeyBase;
     }
 
