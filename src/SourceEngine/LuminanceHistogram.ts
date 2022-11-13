@@ -556,7 +556,7 @@ export class LuminanceHistogram {
     private toneMapScaleHistory: number[] = [];
     private toneMapScaleHistoryCount = 10;
 
-    private impl: (ImplConservativeOccl | ImplCompute)[] = [];
+    private impl: ImplConservativeOccl | ImplCompute;
 
     public debugDrawHistogram: boolean = false;
 
@@ -565,9 +565,9 @@ export class LuminanceHistogram {
         this.bucketArea.fill(-1);
 
         if (cache.device.queryLimits().computeShadersSupported)
-            this.impl.push(new ImplCompute(cache, this));
-
-        this.impl.push(new ImplConservativeOccl(cache, this));
+            this.impl = new ImplCompute(cache, this);
+        else
+            this.impl = new ImplConservativeOccl(cache, this);
     }
 
     public getBucketMinLuminance(i: number): number {
@@ -672,7 +672,7 @@ export class LuminanceHistogram {
             ctx.restore();
         }
 
-        this.impl[0].debugDraw(ctx);
+        this.impl.debugDraw(ctx);
     }
 
     // For details on the algorithm, see https://cdn.cloudflare.steamstatic.com/apps/valve/2008/GDC2008_PostProcessingInTheOrangeBox.pdf#page=26
@@ -771,18 +771,11 @@ export class LuminanceHistogram {
     }
 
     public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {
-        for (let i = 0; i < this.impl.length; i++)
-            this.impl[i].pushPasses(renderInstManager, builder, colorTargetID);
-
-        this.impl[0].updateHistogramBuckets(this.bucketArea);
+        this.impl.pushPasses(renderInstManager, builder, colorTargetID);
+        this.impl.updateHistogramBuckets(this.bucketArea);
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.impl.length; i++)
-            this.impl[i].destroy(device);
-    }
-
-    public swapImpl(): void {
-        this.impl.push(this.impl.shift()!);
+        this.impl.destroy(device);
     }
 }
