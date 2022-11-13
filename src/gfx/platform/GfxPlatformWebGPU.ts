@@ -1009,7 +1009,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
 
         // Workaround for unreported Naga bug
-        code = code.replace('vec2<i32> = textureDimensions(', 'vec2<u32> = textureDimensions(');
+        code = code.replace('<i32> = textureDimensions(', '<u32> = textureDimensions(');
 
         const shaderModule = this.device.createShaderModule({ code });
         return { module: shaderModule, entryPoint: 'main' };
