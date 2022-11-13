@@ -161,7 +161,7 @@ export class Occlusion_Manager {
 
                     passRenderer.beginOcclusionQuery(index);
                     cluster.renderInstList.drawOnPassRenderer(cache, passRenderer);
-                    passRenderer.endOcclusionQuery(index);
+                    passRenderer.endOcclusionQuery();
                 }
             });
         });

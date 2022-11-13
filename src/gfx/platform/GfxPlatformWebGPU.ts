@@ -79,12 +79,15 @@ interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
 }
 
 interface GfxReadbackP_WebGPU extends GfxReadback {
-    gpuResultBuffer: GPUBuffer;
+    cpuBuffer: GPUBuffer;
     done: boolean;
 }
 
 interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
     querySet: GPUQuerySet;
+    resolveBuffer: GPUBuffer;
+    cpuBuffer: GPUBuffer;
+    results: BigUint64Array | null;
 }
 
 function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
@@ -455,6 +458,7 @@ function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescri
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor!: GfxRenderPassDescriptor;
+    public occlusionQueryPool: GfxQueryPoolP_WebGPU | null = null;
     private gpuRenderPassEncoder: GPURenderPassEncoder | null = null;
     private gpuRenderPassDescriptor: GPURenderPassDescriptor;
     private gpuColorAttachments: GPURenderPassColorAttachment[];
@@ -583,7 +587,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
 
-        this.gpuRenderPassDescriptor.occlusionQuerySet = descriptor.occlusionQueryPool !== null ? getPlatformQuerySet(descriptor.occlusionQueryPool) : undefined;
+        this.occlusionQueryPool = descriptor.occlusionQueryPool as GfxQueryPoolP_WebGPU;
+        if (this.occlusionQueryPool !== null) {
+            this.occlusionQueryPool.cpuBuffer.unmap();
+            this.occlusionQueryPool.results = null;
+        }
+        this.gpuRenderPassDescriptor.occlusionQuerySet = this.occlusionQueryPool !== null ? this.occlusionQueryPool.querySet : undefined;
     }
 
     public beginRenderPass(commandEncoder: GPUCommandEncoder, renderPassDescriptor: GfxRenderPassDescriptor): void {
@@ -652,7 +661,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.beginOcclusionQuery(dstOffs);
     }
 
-    public endOcclusionQuery(dstOffs: number): void {
+    public endOcclusionQuery(): void {
         this.gpuRenderPassEncoder!.endOcclusionQuery();
     }
 
@@ -701,6 +710,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             } else {
                 this.copyAttachment(this.gfxDepthStencilResolveTo, this.gfxDepthStencilAttachment);
             }
+        }
+
+        const queryPool = this.occlusionQueryPool;
+        if (queryPool !== null) {
+            this.frameCommandEncoder!.resolveQuerySet(queryPool.querySet, 0, queryPool.querySet.count, queryPool.resolveBuffer, 0);
+            this.frameCommandEncoder!.copyBufferToBuffer(queryPool.resolveBuffer, 0, queryPool.cpuBuffer, 0, 8 * queryPool.querySet.count);
         }
 
         this.frameCommandEncoder = null;
@@ -794,6 +809,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _frameCommandEncoder: GPUCommandEncoder | null = null;
     private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
+    private _queryPoolsSubmitted: GfxQueryPoolP_WebGPU[] = [];
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
@@ -1230,7 +1246,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public createReadback(byteCount: number): GfxReadback {
         const o: GfxReadbackP_WebGPU = {
             _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(),
-            gpuResultBuffer: this.device.createBuffer({ size: byteCount, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+            cpuBuffer: this.device.createBuffer({ size: byteCount, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
             done: false,
         };
         return o;
@@ -1244,6 +1260,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const o: GfxQueryPoolP_WebGPU = {
             _T: _T.QueryPool, ResourceUniqueId: this.getNextUniqueId(),
             querySet,
+            resolveBuffer: this.device.createBuffer({ size: elemCount * 8, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }),
+            cpuBuffer: this.device.createBuffer({ size: elemCount * 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+            results: null,
         };
         return o;
     }
@@ -1288,11 +1307,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public destroyReadback(o: GfxReadback): void {
         const readback = o as GfxReadbackP_WebGPU;
-        readback.gpuResultBuffer.destroy();
+        readback.cpuBuffer.destroy();
     }
 
     public destroyQueryPool(o: GfxQueryPool): void {
-        getPlatformQuerySet(o).destroy();
+        const queryPool = o as GfxQueryPoolP_WebGPU;
+        queryPool.querySet.destroy();
+        queryPool.resolveBuffer.destroy();
+        queryPool.cpuBuffer.destroy();
     }
 
     public pipelineQueryReady(o: GfxRenderPipeline): boolean {
@@ -1318,6 +1340,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const pass = o as GfxRenderPassP_WebGPU;
             pass.finish();
             this._renderPassPool.push(pass);
+
+            if (pass.occlusionQueryPool !== null)
+                this._queryPoolsSubmitted.push(pass.occlusionQueryPool);
         }
     }
 
@@ -1333,13 +1358,22 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._frameCommandEncoder = null;
 
         // Do any post-command-submit scheduling work
+
         for (let i = 0; i < this._readbacksSubmitted.length; i++) {
             const readback = this._readbacksSubmitted[i];
-            readback.gpuResultBuffer.mapAsync(GPUMapMode.READ).then(() => {
+            readback.cpuBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 readback.done = true;
             });
         }
         this._readbacksSubmitted.length = 0;
+
+        for (let i = 0; i < this._queryPoolsSubmitted.length; i++) {
+            const queryPool = this._queryPoolsSubmitted[i];
+            queryPool.cpuBuffer.mapAsync(GPUMapMode.READ).then(() => {
+                queryPool.results = new BigUint64Array(queryPool.cpuBuffer.getMappedRange());
+            });
+        }
+        this._queryPoolsSubmitted.length = 0;
     }
 
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
@@ -1395,7 +1429,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const texture = (texture_ as GfxTextureP_WebGPU);
         const formatByteSize = getFormatByteSize(texture.pixelFormat);
         const copySrc: GPUImageCopyTexture = { texture: texture.gpuTexture, origin: [x, y, 0] };
-        const copyDst: GPUImageCopyBuffer = { buffer: readback.gpuResultBuffer, offset: dstOffset * formatByteSize };
+        const copyDst: GPUImageCopyBuffer = { buffer: readback.cpuBuffer, offset: dstOffset * formatByteSize };
         this._frameCommandEncoder!.copyTextureToBuffer(copySrc, copyDst, [1, 1, 1]);
     }
 
@@ -1408,11 +1442,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
         const readback = o as GfxReadbackP_WebGPU;
         if (readback.done) {
-            const src = new Uint32Array(readback.gpuResultBuffer.getMappedRange());
+            const src = new Uint32Array(readback.cpuBuffer.getMappedRange());
             dst.set(src, dstOffs);
 
             // Reset the readback object.
-            readback.gpuResultBuffer.unmap();
+            readback.cpuBuffer.unmap();
             readback.done = false;
 
             return true;
@@ -1422,7 +1456,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public queryPoolResultOcclusion(o: GfxQueryPool, dstOffs: number): boolean | null {
-        return true;
+        const queryPool = o as GfxQueryPoolP_WebGPU;
+        if (queryPool.results === null)
+            return null;
+        return queryPool.results[dstOffs] !== BigInt(0);
     }
 
     public queryLimits(): GfxDeviceLimits {
@@ -1431,7 +1468,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             uniformBufferMaxPageWordSize: 0x10000,
             uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment * 4,
             supportedSampleCounts: [1],
-            occlusionQueriesRecommended: false,
+            occlusionQueriesRecommended: true,
         };
     }
 
@@ -1494,6 +1531,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const r = o as GfxRenderPipelineP_WebGPU;
             if (r.gpuRenderPipeline !== null)
                 r.gpuRenderPipeline.label = s;
+        } else if (o._T === _T.QueryPool) {
+            const r = o as GfxQueryPoolP_WebGPU;
+            r.querySet.label = `${s} QuerySet`;
+            r.resolveBuffer.label = `${s} Resolve Buffer`;
+            r.cpuBuffer.label = `${s} CPU Buffer`;
         }
     }
 

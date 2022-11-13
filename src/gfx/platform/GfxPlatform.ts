@@ -335,7 +335,7 @@ export interface GfxRenderPass {
 
     // Query system.
     beginOcclusionQuery(dstOffs: number): void;
-    endOcclusionQuery(dstOffs: number): void;
+    endOcclusionQuery(): void;
 
     // Debug.
     beginDebugGroup(name: string): void;

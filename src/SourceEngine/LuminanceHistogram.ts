@@ -500,7 +500,7 @@ export class LuminanceHistogram {
 
                     passRenderer.beginOcclusionQuery(j);
                     renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
-                    passRenderer.endOcclusionQuery(j);
+                    passRenderer.endOcclusionQuery();
                 }
             });
         });

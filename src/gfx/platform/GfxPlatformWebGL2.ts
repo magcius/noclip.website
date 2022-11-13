@@ -2223,7 +2223,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.beginQuery(queryPool.gl_query_type, queryPool.gl_query[dstOffs]);
     }
 
-    public endOcclusionQuery(dstOffs: number): void {
+    public endOcclusionQuery(): void {
         const gl = this.gl;
         const queryPool = this._currentRenderPassDescriptor!.occlusionQueryPool! as GfxQueryPoolP_GL;
         gl.endQuery(queryPool.gl_query_type);
