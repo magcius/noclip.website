@@ -5,8 +5,8 @@ import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform";
-import { GfxProgram, GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";
+import { GfxComputeProgramDescriptor, GfxDevice, GfxFormat, GfxQueryPoolType, GfxShadingLanguage } from "../gfx/platform/GfxPlatform";
+import { GfxComputePipeline, GfxProgram, GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -18,20 +18,6 @@ import { SourceRenderContext } from "./Main";
 import { ToneMapParams } from "./Materials";
 
 const scratchVec4 = vec4.create();
-
-// General strategy: Use a large number of conservative occlusion queries to emulate a test for the amount of pixels
-// in each bucket, each one on a small square piece of the framebuffer (known as a "quad"). This lets us know which
-// buckets a quad can be in. We then use the rest of the Valve HDR algorithm, except we operate such that each "quad"
-// is a pixel.
-//
-// Tweakables:
-//
-//   * queriesPerFrame is the number of occlusion queries that should be submitted per frame. In my testing,
-//     increasing this did not substantially hurt performance, but it could be lowered at the cost of making the
-//     latency of the algorithm more extreme.
-//
-//   * The grid layout of squares. You can visualize the squares by turning on debugDrawSquares, and the grid
-//     layout is decided in updateLayout().
 
 class LuminanceThreshProgram extends DeviceProgram {
     public override both = `
@@ -66,23 +52,6 @@ void main() {
 `;
 }
 
-const queriesPerFrame = 256;
-
-class LuminanceFrame {
-    public bucket: number = 0;
-    public locationStart: number = 0;
-    public entryStart: number = 0;
-    public pool: GfxQueryPool;
-
-    constructor(device: GfxDevice) {
-        this.pool = device.createQueryPool(GfxQueryPoolType.OcclusionConservative, queriesPerFrame);
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyQueryPool(this.pool);
-    }
-}
-
 class LuminanceBucket {
     public minLuminance: number = 0.0;
     public maxLuminance: number = 0.0;
@@ -94,55 +63,63 @@ class LuminanceBucket {
             sum += this.entries[i];
         return sum;
     }
+}
 
-    public calcPctOfSingleBin(): number {
-        return this.calcSum() / (this.entries.length * queriesPerFrame);
+// General strategy: Use a large number of conservative occlusion queries to emulate a test for the amount of pixels
+// in each bucket, each one on a small square piece of the framebuffer (known as a "quad"). This lets us know which
+// buckets a quad can be in. We then use the rest of the Valve HDR algorithm, except we operate such that each "quad"
+// is a pixel.
+//
+// Tweakables:
+//
+//   * queriesPerFrame is the number of occlusion queries that should be submitted per frame. In my testing,
+//     increasing this did not substantially hurt performance, but it could be lowered at the cost of making the
+//     latency of the algorithm more extreme.
+//
+//   * The grid layout of squares. You can visualize the squares by turning on debugDrawSquares, and the grid
+//     layout is decided in updateLayout().
+
+class ImplConservativeOcclFrame {
+    public bucket: number = 0;
+    public locationStart: number = 0;
+    public entryStart: number = 0;
+    public pool: GfxQueryPool;
+
+    constructor(device: GfxDevice, num: number) {
+        this.pool = device.createQueryPool(GfxQueryPoolType.OcclusionConservative, num);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyQueryPool(this.pool);
     }
 }
 
-export class LuminanceHistogram {
-    private framePool: LuminanceFrame[] = [];
-    private submittedFrames: LuminanceFrame[] = [];
+class ImplConservativeOccl {
+    private queriesPerFrame = 256;
+
+    private framePool: ImplConservativeOcclFrame[] = [];
+    private submittedFrames: ImplConservativeOcclFrame[] = [];
 
     private dummyTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
     private gfxProgram: GfxProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
+    private baseScaleBias = vec4.create();
 
-    // Bucket configuration.
-    private buckets: LuminanceBucket[] = [];
     private counter = 0;
     private numLocationsX = 0;
     private numLocationsY = 0;
     private numLocationsPerBucket = 0;
-    private baseScaleBias = vec4.create();
 
-    // Attenuation & easing
-    private toneMapScaleHistory: number[] = [];
-    private toneMapScaleHistoryCount = 10;
-
-    public debugDrawHistogram: boolean = false;
     public debugDrawSquares: boolean = false;
 
-    constructor(cache: GfxRenderCache) {
-        this.setupBuckets();
+    constructor(cache: GfxRenderCache, private buckets: LuminanceBucket[]) {
         this.gfxProgram = cache.createProgram(new LuminanceThreshProgram());
         this.dummyTargetDesc.colorClearColor = White;
     }
 
-    private setupBuckets(): void {
-        const numBuckets = 16;
-
-        for (let i = 0; i < numBuckets; i++) {
-            const bucket = new LuminanceBucket();
-            bucket.minLuminance = Math.pow((i + 0) / numBuckets, 1.5);
-            bucket.maxLuminance = Math.pow((i + 1) / numBuckets, 1.5);
-            this.buckets.push(bucket);
-        }
-    }
-
-    private peekFrame(device: GfxDevice, frame: LuminanceFrame): number | null {
+    private peekFrame(device: GfxDevice, frame: ImplConservativeOcclFrame): number | null {
         let numQuads = 0;
-        for (let i = 0; i < queriesPerFrame; i++) {
+        for (let i = 0; i < this.queriesPerFrame; i++) {
             const visible = device.queryPoolResultOcclusion(frame.pool, i);
             if (visible === null)
                 return null;
@@ -168,11 +145,11 @@ export class LuminanceHistogram {
         }
     }
 
-    private newFrame(device: GfxDevice): LuminanceFrame {
+    private newFrame(device: GfxDevice): ImplConservativeOcclFrame {
         if (this.framePool.length > 0)
             return this.framePool.pop()!;
         else
-            return new LuminanceFrame(device);
+            return new ImplConservativeOcclFrame(device, this.queriesPerFrame);
     }
 
     private updateLayout(desc: GfxrRenderTargetDescription): void {
@@ -217,7 +194,7 @@ export class LuminanceHistogram {
     }
 
     private debugBucket = -1;
-    private chooseBucketAndLocationSet(dst: LuminanceFrame): void {
+    private chooseBucketAndLocationSet(dst: ImplConservativeOcclFrame): void {
         const counter = this.counter++;
         const numBuckets = this.buckets.length;
         dst.bucket = counter % numBuckets;
@@ -225,8 +202,179 @@ export class LuminanceHistogram {
         if (this.debugBucket >= 0)
             dst.bucket = this.debugBucket;
 
-        dst.locationStart = (((counter / numBuckets) | 0) * queriesPerFrame) % this.numLocationsPerBucket;
-        dst.entryStart = (dst.locationStart / queriesPerFrame) | 0;
+        dst.locationStart = (((counter / numBuckets) | 0) * this.queriesPerFrame) % this.numLocationsPerBucket;
+        dst.entryStart = (dst.locationStart / this.queriesPerFrame) | 0;
+    }
+
+    public debugDraw(): void {
+        const ctx = getDebugOverlayCanvas2D();
+
+        if (this.debugDrawSquares) {
+            ctx.save();
+            for (let i = 0; i < this.submittedFrames.length; i++) {
+                const frame = this.submittedFrames[i];
+                const color = colorNewCopy(White);
+                colorLerp(color, Red, Green, frame.bucket / (this.buckets.length - 1));
+                color.a = 0.1;
+
+                ctx.beginPath();
+                ctx.fillStyle = colorToCSS(color);
+                for (let j = 0; j < this.queriesPerFrame; j++) {
+                    this.calcLocationScaleBias(scratchVec4, frame.locationStart + j);
+                    // Location scale-bias takes us from 0...1 and gives us normalized screen coordinates (0...1 in viewport space)
+                    const x1 = ((0 * scratchVec4[0]) + scratchVec4[2]) * ctx.canvas.width;
+                    const y1 = ((0 * scratchVec4[1]) + scratchVec4[3]) * ctx.canvas.height;
+                    const x2 = ((1 * scratchVec4[0]) + scratchVec4[2]) * ctx.canvas.width;
+                    const y2 = ((1 * scratchVec4[1]) + scratchVec4[3]) * ctx.canvas.height;
+                    ctx.rect(x1, y1, x2-x1, y2-y1);
+                }
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {
+        this.updateFromFinishedFrames(renderInstManager.gfxRenderCache.device);
+
+        const colorTargetDesc = builder.getRenderTargetDescription(colorTargetID);
+        this.updateLayout(colorTargetDesc);
+
+        const device = renderInstManager.gfxRenderCache.device;
+
+        // We, unfortunately, have to render to a target for the occlusion query to function, so make a dummy one.
+        const dummyTargetID = builder.createRenderTargetID(this.dummyTargetDesc, 'LuminanceHistogram Dummy');
+
+        const resolvedColorTextureID = builder.resolveRenderTarget(colorTargetID);
+
+        const frame = this.newFrame(device);
+
+        const renderInsts: GfxRenderInst[] = [];
+
+        this.chooseBucketAndLocationSet(frame);
+        const bucket = this.buckets[frame.bucket];
+
+        device.setResourceName(frame.pool, `Bucket ${frame.bucket}`);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('LuminanceHistogram');
+            pass.attachOcclusionQueryPool(frame.pool);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, dummyTargetID);
+
+            pass.attachResolveTexture(resolvedColorTextureID);
+
+            for (let j = 0; j < this.queriesPerFrame; j++) {
+                const renderInst = renderInstManager.newRenderInst();
+                renderInst.setGfxProgram(this.gfxProgram);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
+                renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 1 }]);
+                renderInst.drawPrimitives(3);
+
+                let offs = renderInst.allocateUniformBuffer(0, 8);
+                const d = renderInst.mapUniformBufferF32(0);
+                this.calcLocationScaleBias(scratchVec4, frame.locationStart + j);
+                offs += fillVec4v(d, offs, scratchVec4);
+                offs += fillVec4(d, offs, bucket.minLuminance, bucket.maxLuminance, frame.bucket);
+
+                renderInsts.push(renderInst);
+            }
+
+            pass.exec((passRenderer, scope) => {
+                for (let j = 0; j < this.queriesPerFrame; j++) {
+                    const renderInst = renderInsts[j];
+
+                    const resolvedColorTexture = scope.getResolveTextureForID(resolvedColorTextureID);
+                    this.textureMapping[0].gfxTexture = resolvedColorTexture;
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+                    passRenderer.beginOcclusionQuery(j);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                    passRenderer.endOcclusionQuery();
+                }
+            });
+        });
+
+        this.submittedFrames.push(frame);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.framePool.length; i++)
+            this.framePool[i].destroy(device);
+        for (let i = 0; i < this.submittedFrames.length; i++)
+            this.submittedFrames[i].destroy(device);
+    }
+}
+
+const histogramProgram = `
+struct Params {
+    f32 bucketCount;
+    f32 bucketExp;
+};
+
+@binding(0) @group(0) var<uniform> params : Params;
+@binding(1) @group(0) var<storage, read_write> buckets : array<f32>;
+@binding(0) @group(1) var framebuffer_texture: texture_2d<f32>;
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) thread_id: vec3<u32>) {
+    vec2<u32> tex_size = textureDimensions(framebuffer_texture);
+    if (thread_id.x > tex_size.x || thread_id.y > tex_size.y) { return; }
+
+    vec4<f32> sample = textureLoad(framebuffer_texture, thread_id.xy, 0);
+
+    // Inlined version of GfxShaderLibrary.MonochromeNTSCLinear
+    // NTSC primaries. Note that this is designed for linear-space values.
+    f32 luminance = dot(sample.rgb, vec3(0.2125, 0.7154, 0.0721));
+
+    u32 bucket_idx = u32(log(luminance) / log(params.bucketCount));
+    atomicAdd(&buckets[bucket_idx], 1u);
+}
+`;
+
+class ImplCompute {
+    private computePipeline: GfxComputePipeline;
+
+    constructor(cache: GfxRenderCache, private buckets: LuminanceBucket[]) {
+        const program = cache.device.createComputeProgram({ shadingLanguage: GfxShadingLanguage.WGSL, preprocessedComp: histogramProgram });
+        this.computePipeline = cache.device.createComputePipeline({ program });
+    }
+
+    public debugDraw(): void {
+    }
+
+    public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+export class LuminanceHistogram {
+    // Bucket configuration.
+    private buckets: LuminanceBucket[] = [];
+
+    // Attenuation & easing
+    private toneMapScaleHistory: number[] = [];
+    private toneMapScaleHistoryCount = 10;
+
+    private impl: ImplConservativeOccl | ImplCompute;
+
+    public debugDrawHistogram: boolean = false;
+
+    constructor(cache: GfxRenderCache) {
+        this.setupBuckets();
+        this.impl = new ImplConservativeOccl(cache, this.buckets);
+    }
+
+    private setupBuckets(): void {
+        const numBuckets = 16;
+
+        for (let i = 0; i < numBuckets; i++) {
+            const bucket = new LuminanceBucket();
+            bucket.minLuminance = Math.pow((i + 0) / numBuckets, 1.5);
+            bucket.maxLuminance = Math.pow((i + 1) / numBuckets, 1.5);
+            this.buckets.push(bucket);
+        }
     }
 
     public debugDraw(renderContext: SourceRenderContext, toneMapParams: ToneMapParams): void {
@@ -253,12 +401,12 @@ export class LuminanceHistogram {
 
             let max = 0;
             for (let i = 0; i < this.buckets.length; i++)
-                max = Math.max(max, this.buckets[i].calcPctOfSingleBin());
+                max = Math.max(max, this.buckets[i].calcSum());
 
             const spacing = 2;
             for (let i = 0; i < this.buckets.length; i++) {
                 const bucket = this.buckets[i];
-                const barHeightPct = bucket.calcPctOfSingleBin() / max;
+                const barHeightPct = bucket.calcSum() / max;
                 const barHeight = height * barHeightPct;
                 const barY = y + height - barHeight;
 
@@ -327,66 +475,44 @@ export class LuminanceHistogram {
             ctx.restore();
         }
 
-        if (this.debugDrawSquares) {
-            ctx.save();
-            for (let i = 0; i < this.submittedFrames.length; i++) {
-                const frame = this.submittedFrames[i];
-                const color = colorNewCopy(White);
-                colorLerp(color, Red, Green, frame.bucket / (this.buckets.length - 1));
-                color.a = 0.1;
-
-                ctx.beginPath();
-                ctx.fillStyle = colorToCSS(color);
-                for (let j = 0; j < queriesPerFrame; j++) {
-                    this.calcLocationScaleBias(scratchVec4, frame.locationStart + j);
-                    // Location scale-bias takes us from 0...1 and gives us normalized screen coordinates (0...1 in viewport space)
-                    const x1 = ((0 * scratchVec4[0]) + scratchVec4[2]) * ctx.canvas.width;
-                    const y1 = ((0 * scratchVec4[1]) + scratchVec4[3]) * ctx.canvas.height;
-                    const x2 = ((1 * scratchVec4[0]) + scratchVec4[2]) * ctx.canvas.width;
-                    const y2 = ((1 * scratchVec4[1]) + scratchVec4[3]) * ctx.canvas.height;
-                    ctx.rect(x1, y1, x2-x1, y2-y1);
-                }
-                ctx.fill();
-            }
-            ctx.restore();
-        }
+        this.impl.debugDraw();
     }
 
     // For details on the algorithm, see https://cdn.cloudflare.steamstatic.com/apps/valve/2008/GDC2008_PostProcessingInTheOrangeBox.pdf#page=26
     // The numbers have since been tweaked: Source seems to use settings now to keep 2% of the pixels above the 60% threshold target.
 
     private findLocationOfPercentBrightPixels(threshold: number, stickyBin: number | null): number | null {
-        let totalQuads = 0;
+        let totalArea = 0;
         for (let i = 0; i < this.buckets.length; i++)
-            totalQuads += this.buckets[i].calcSum();
+            totalArea += this.buckets[i].calcSum();
 
         // Start at the bright end, and keep scanning down until we find a bucket we like.
-        let quadsTestedPct = 0;
+        let areaTestedPct = 0;
         let rangeTestedPct = 0;
         for (let i = this.buckets.length - 1; i >= 0; i--) {
             const bucket = this.buckets[i];
             if (bucket.entries.length === 0)
                 return null;
 
-            const bucketQuadsPct = bucket.calcSum() / totalQuads;
-            if (bucketQuadsPct <= 0)
+            const bucketAreaPct = bucket.calcSum() / totalArea;
+            if (bucketAreaPct <= 0)
                 continue;
 
-            const bucketQuadsThreshold = threshold - quadsTestedPct;
+            const bucketAreaThreshold = threshold - areaTestedPct;
             const bucketLuminanceRange = bucket.maxLuminance - bucket.minLuminance;
 
-            if (bucketQuadsPct >= bucketQuadsThreshold) {
+            if (bucketAreaPct >= bucketAreaThreshold) {
                 if (stickyBin !== null && bucket.minLuminance <= stickyBin && bucket.maxLuminance >= stickyBin) {
                     // "Sticky" bin -- prevents us from oscillating small amounts of lights.
                     return stickyBin;
                 }
 
-                const thresholdRatio = bucketQuadsThreshold / bucketQuadsPct;
+                const thresholdRatio = bucketAreaThreshold / bucketAreaPct;
                 const border = clamp(1.0 - (rangeTestedPct + (bucketLuminanceRange * thresholdRatio)), bucket.minLuminance, bucket.maxLuminance);
                 return border;
             }
 
-            quadsTestedPct += bucketQuadsPct;
+            areaTestedPct += bucketAreaPct;
             rangeTestedPct += bucketLuminanceRange;
         }
 
@@ -446,72 +572,10 @@ export class LuminanceHistogram {
     }
 
     public pushPasses(renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, colorTargetID: GfxrRenderTargetID): void {
-        this.updateFromFinishedFrames(renderInstManager.gfxRenderCache.device);
-
-        const colorTargetDesc = builder.getRenderTargetDescription(colorTargetID);
-        this.updateLayout(colorTargetDesc);
-
-        const device = renderInstManager.gfxRenderCache.device;
-
-        // We, unfortunately, have to render to a target for the occlusion query to function, so make a dummy one.
-        const dummyTargetID = builder.createRenderTargetID(this.dummyTargetDesc, 'LuminanceHistogram Dummy');
-
-        const resolvedColorTextureID = builder.resolveRenderTarget(colorTargetID);
-
-        const frame = this.newFrame(device);
-
-        const renderInsts: GfxRenderInst[] = [];
-
-        this.chooseBucketAndLocationSet(frame);
-        const bucket = this.buckets[frame.bucket];
-
-        device.setResourceName(frame.pool, `Bucket ${frame.bucket}`);
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('LuminanceHistogram');
-            pass.attachOcclusionQueryPool(frame.pool);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, dummyTargetID);
-
-            pass.attachResolveTexture(resolvedColorTextureID);
-
-            for (let j = 0; j < queriesPerFrame; j++) {
-                const renderInst = renderInstManager.newRenderInst();
-                renderInst.setGfxProgram(this.gfxProgram);
-                renderInst.setMegaStateFlags(fullscreenMegaState);
-                renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 1 }]);
-                renderInst.drawPrimitives(3);
-
-                let offs = renderInst.allocateUniformBuffer(0, 8);
-                const d = renderInst.mapUniformBufferF32(0);
-                this.calcLocationScaleBias(scratchVec4, frame.locationStart + j);
-                offs += fillVec4v(d, offs, scratchVec4);
-                offs += fillVec4(d, offs, bucket.minLuminance, bucket.maxLuminance, frame.bucket);
-
-                renderInsts.push(renderInst);
-            }
-
-            pass.exec((passRenderer, scope) => {
-                for (let j = 0; j < queriesPerFrame; j++) {
-                    const renderInst = renderInsts[j];
-
-                    const resolvedColorTexture = scope.getResolveTextureForID(resolvedColorTextureID);
-                    this.textureMapping[0].gfxTexture = resolvedColorTexture;
-                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-
-                    passRenderer.beginOcclusionQuery(j);
-                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
-                    passRenderer.endOcclusionQuery();
-                }
-            });
-        });
-
-        this.submittedFrames.push(frame);
+        this.impl.pushPasses(renderInstManager, builder, colorTargetID);
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.framePool.length; i++)
-            this.framePool[i].destroy(device);
-        for (let i = 0; i < this.submittedFrames.length; i++)
-            this.submittedFrames[i].destroy(device);
+        this.impl.destroy(device);
     }
 }

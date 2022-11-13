@@ -18,6 +18,7 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
     let naga_stage = match stage {
         "vertex" => Ok(naga::ShaderStage::Vertex),
         "fragment" => Ok(naga::ShaderStage::Fragment),
+        "compute" => Ok(naga::ShaderStage::Compute),
         _ => Err("unknown shader stage")
     }.unwrap();
 

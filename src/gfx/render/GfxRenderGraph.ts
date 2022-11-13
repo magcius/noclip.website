@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage } from "../platform/GfxPlatform";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxComputePass } from "../platform/GfxPlatform";
 import { GfxQueryPool } from "../platform/GfxPlatformImpl";
 import { assert, assertExists } from "../platform/GfxPlatformUtil";
 
@@ -56,6 +56,7 @@ export const enum GfxrAttachmentSlot {
 }
 
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
+type ComputePassExecFunc = (pass: GfxComputePass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;
 
 declare const isRenderTargetID: unique symbol;
@@ -64,12 +65,29 @@ export type GfxrRenderTargetID = number & { [isRenderTargetID]: true };
 declare const isResolveTextureID: unique symbol;
 export type GfxrResolveTextureID = number & { [isResolveTextureID]: true };
 
-export interface GfxrPass {
+interface GfxrPassBase {
     /**
      * Set the debug name of a given pass. Strongly encouraged.
      */
-    setDebugName(debugName: string): void;
+     setDebugName(debugName: string): void;
 
+    /**
+     * Attach the resolve texture ID to the given pass. All resolve textures used within the pass
+     * must be attached before-hand in order for the scheduler to properly allocate our resolve texture.
+     */
+    attachResolveTexture(resolveTextureID: GfxrResolveTextureID): void;
+
+    /**
+     * Set the pass's post callback. This will be immediately right after the pass is submitted,
+     * allowing you to do additional custom work once the pass has been done. This is expected to be
+     * seldomly used.
+     */
+    post(func: PassPostFunc): void;
+
+    addExtraRef(renderTargetID: GfxrAttachmentSlot): void;
+}
+
+export interface GfxrPass extends GfxrPassBase {
     /**
      * Set the viewport for the given render pass in *normalized* coordinates (0..1).
      * Not required; defaults to full viewport.
@@ -94,25 +112,18 @@ export interface GfxrPass {
     attachOcclusionQueryPool(queryPool: GfxQueryPool): void;
 
     /**
-     * Attach the resolve texture ID to the given pass. All resolve textures used within the pass
-     * must be attached before-hand in order for the scheduler to properly allocate our resolve texture.
-     */
-    attachResolveTexture(resolveTextureID: GfxrResolveTextureID): void;
-
-    /**
      * Set the pass's execution callback. This will be called with the {@see GfxRenderPass} for the
      * pass, along with the {@see GfxrPassScope} to access any resources that the system has allocated.
      */
     exec(func: PassExecFunc): void;
+}
 
+export interface GfxrComputePass extends GfxrPassBase {
     /**
-     * Set the pass's post callback. This will be immediately right after the pass is submitted,
-     * allowing you to do additional custom work once the pass has been done. This is expected to be
-     * seldomly used.
+     * Set the pass's execution callback. This will be called with the {@see GfxRenderPass} for the
+     * pass, along with the {@see GfxrPassScope} to access any resources that the system has allocated.
      */
-    post(func: PassPostFunc): void;
-
-    addExtraRef(renderTargetID: GfxrAttachmentSlot): void;
+    exec(func: ComputePassExecFunc): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -155,11 +166,14 @@ class PassImpl implements GfxrPass {
     public viewportH: number = 1;
 
     // Execution callback from user.
-    public execFunc: PassExecFunc | null = null;
+    public execFunc: PassExecFunc | ComputePassExecFunc | null = null;
     public postFunc: PassPostFunc | null = null;
 
     // Misc. state.
     public debugThumbnails: boolean[] = [];
+
+    constructor(public passType: 'render' | 'compute') {
+    }
 
     public setDebugName(debugName: string): void {
         this.debugName = debugName;
@@ -228,7 +242,7 @@ export interface GfxrPassScope {
      * Retrieve the underlying texture resource for a given attachment slot {@param slot}. This is not
      * guaranteed to be a single-sampled texture; to resolve the resource, see {@see getResolveTextureForID}.
      */
-     getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
+    getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
 
 // These classes might go away...
@@ -245,7 +259,8 @@ class GraphImpl {
     public renderTargetDebugNames: string[] = [];
 }
 
-type PassSetupFunc = (renderPass: GfxrPass) => void;
+type PassSetupFunc = (pass: GfxrPass) => void;
+type ComputePassSetupFunc = (pass: GfxrComputePass) => void;
 
 export interface GfxrGraphBuilder {
     /**
@@ -255,6 +270,7 @@ export interface GfxrGraphBuilder {
      * by closures.
      */
     pushPass(setupFunc: PassSetupFunc): void;
+    pushComputePass(setupFunc: PassSetupFunc): void;
 
     /**
      * Tell the system about a render target with the given descriptions. Render targets
@@ -543,7 +559,13 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     }
 
     public pushPass(setupFunc: PassSetupFunc): void {
-        const pass = new PassImpl();
+        const pass = new PassImpl('render');
+        setupFunc(pass);
+        this.currentGraph!.passes.push(pass);
+    }
+
+    public pushComputePass(setupFunc: PassSetupFunc): void {
+        const pass = new PassImpl('compute');
         setupFunc(pass);
         this.currentGraph!.passes.push(pass);
     }
@@ -893,23 +915,46 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     //#endregion
 
     //#region Execution
-    private execPass(pass: PassImpl): void {
-        assert(this.currentPass === null);
-        this.currentPass = pass;
-
+    private execRenderPass(pass: PassImpl): void {
         const renderPass = this.device.createRenderPass(pass.descriptor);
+
         renderPass.beginDebugGroup(pass.debugName);
 
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
         if (pass.execFunc !== null)
-            pass.execFunc(renderPass, this);
+            (pass.execFunc as PassExecFunc)(renderPass, this);
 
         renderPass.endDebugGroup();
         this.device.submitPass(renderPass);
 
         if (pass.postFunc !== null)
             pass.postFunc(this);
+    }
+
+    private execComputePass(pass: PassImpl): void {
+        const computePass = this.device.createComputePass();
+
+        computePass.beginDebugGroup(pass.debugName);
+
+        if (pass.execFunc !== null)
+            (pass.execFunc as ComputePassExecFunc)(computePass, this);
+
+        computePass.endDebugGroup();
+        this.device.submitPass(computePass);
+
+        if (pass.postFunc !== null)
+            pass.postFunc(this);
+    }
+
+    private execPass(pass: PassImpl): void {
+        assert(this.currentPass === null);
+        this.currentPass = pass;
+
+        if (pass.passType === 'render')
+            this.execRenderPass(pass);
+        else if (pass.passType === 'compute')
+            this.execComputePass(pass);
 
         this.currentPass = null;
     }

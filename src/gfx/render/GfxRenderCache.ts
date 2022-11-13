@@ -1,5 +1,5 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxColor, GfxAttachmentState, GfxChannelBlendState } from "../platform/GfxPlatform";
+import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxColor, GfxAttachmentState, GfxChannelBlendState, GfxComputeProgramDescriptor } from "../platform/GfxPlatform";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformUtil';
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { assert } from "../platform/GfxPlatformUtil";

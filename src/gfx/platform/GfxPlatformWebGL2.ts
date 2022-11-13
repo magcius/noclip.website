@@ -1,6 +1,6 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage, GfxComputeProgramDescriptor, GfxComputePipelineDescriptor, GfxComputePass } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
@@ -110,7 +110,8 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
 }
 
 interface GfxReadbackP_GL extends GfxReadback {
-    gl_pbo: WebGLBuffer;
+    byteSize: number;
+    gl_buffer: WebGLBuffer;
     gl_sync: WebGLSync | null;
 }
 
@@ -220,6 +221,8 @@ function translateBufferUsageToTarget(usage: GfxBufferUsage): GLenum {
         return WebGL2RenderingContext.ARRAY_BUFFER;
     case GfxBufferUsage.Uniform:
         return WebGL2RenderingContext.UNIFORM_BUFFER;
+    case GfxBufferUsage.Storage:
+        return WebGL2RenderingContext.COPY_WRITE_BUFFER;
     }
 }
 
@@ -489,10 +492,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxLimits
     private _uniformBufferMaxPageByteSize: number;
-    public uniformBufferWordAlignment!: number;
-    public uniformBufferMaxPageWordSize!: number;
-    public supportedSampleCounts!: number[];
-    public occlusionQueriesRecommended!: boolean;
+    public uniformBufferWordAlignment: number;
+    public uniformBufferMaxPageWordSize: number;
+    public supportedSampleCounts: number[];
+    public occlusionQueriesRecommended: boolean;
+    public computeShadersSupported: boolean = false;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());
@@ -1000,16 +1004,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program;
     }
 
+    public createComputeProgram(program: GfxComputeProgramDescriptor): GfxProgram {
+        throw "whoops";
+    }
+
     public createProgramSimple(descriptor: GfxProgramDescriptor): GfxProgramP_GL {
         const program = this._createProgram(descriptor);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(program);
         return program;
-    }
-
-    public createProgram(descriptor: GfxProgramDescriptor): GfxProgram {
-        descriptor.ensurePreprocessed(this.queryVendorInfo());
-        return this.createProgramSimple(descriptor);
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
@@ -1110,13 +1113,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return pipeline;
     }
 
-    public createReadback(byteCount: number): GfxReadback {
+    public createComputePipeline(descriptor: GfxComputePipelineDescriptor): GfxComputePipeline {
+        throw "whoops";
+    }
+
+    public createReadback(byteSize: number): GfxReadback {
         const gl = this.gl;
-        const gl_pbo = this.ensureResourceExists(gl.createBuffer());
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, gl_pbo);
-        gl.bufferData(gl.PIXEL_PACK_BUFFER, byteCount, gl.STREAM_READ);
+        const gl_buffer = this.ensureResourceExists(gl.createBuffer());
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, gl_buffer);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, byteSize, gl.STREAM_READ);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        const readback: GfxReadbackP_GL = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(), gl_pbo, gl_sync: null };
+        const readback: GfxReadbackP_GL = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(), byteSize, gl_buffer, gl_sync: null };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(readback);
         return readback;
@@ -1208,8 +1215,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const readback = o as GfxReadbackP_GL;
         if (readback.gl_sync !== null)
             this.gl.deleteSync(readback.gl_sync);
-        if (readback.gl_pbo !== null)
-            this.gl.deleteBuffer(readback.gl_pbo);
+        if (readback.gl_buffer !== null)
+            this.gl.deleteBuffer(readback.gl_buffer);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1249,6 +1256,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
         this._setRenderPassParametersClearDepthStencil(depthClearValue, stencilClearValue);
         return this;
+    }
+
+    public createComputePass(): GfxComputePass {
+        throw "whoops";
     }
 
     public submitPass(o: GfxPass): void {
@@ -1388,13 +1399,40 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    public readBuffer(o: GfxReadback, dstOffset: number, buffer_: GfxBuffer, srcOffset: number, byteSize: number): void {
+        const gl = this.gl;
+        const readback = o as GfxReadbackP_GL;
+        const buffer = buffer_ as GfxBufferP_GL;
+
+        const end = srcOffset + byteSize;
+        assert(end <= buffer.byteSize);
+        assert((dstOffset + byteSize) <= readback.byteSize);
+
+        while (srcOffset < end) {
+            const pageIdx = (srcOffset / buffer.pageByteSize) | 0;
+            const pageOffset = pageIdx * buffer.pageByteSize;
+            const pageSrcOffset = srcOffset - pageOffset;
+            const pageSize = buffer.pageByteSize - pageSrcOffset;
+
+            gl.bindBuffer(gl.COPY_READ_BUFFER, buffer.gl_buffer_pages[pageIdx]);
+            gl.bindBuffer(gl.COPY_WRITE_BUFFER, readback.gl_buffer);
+            gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, pageSrcOffset, dstOffset, pageSize);
+
+            srcOffset += pageSize;
+            dstOffset += pageSize;
+        }
+
+        gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+        gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+    }
+
     public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
         const gl = this.gl;
         const readback = o as GfxReadbackP_GL;
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._readbackFramebuffer);
         const texture = a as GfxTextureP_GL;
         gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture.gl_texture, 0);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.gl_pbo);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.gl_buffer);
 
         const gl_format = this.translateTextureFormat(texture.pixelFormat);
         const gl_type = this.translateTextureType(texture.pixelFormat);
@@ -1419,7 +1457,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const readback = o as GfxReadbackP_GL;
         const gl_sync = assertExists(readback.gl_sync);
         if (gl.getSyncParameter(gl_sync, gl.SYNC_STATUS) === gl.SIGNALED) {
-            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, readback.gl_pbo);
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, readback.gl_buffer);
             gl.getBufferSubData(gl.PIXEL_UNPACK_BUFFER, 0, dst, dstOffs);
             gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
             return true;
