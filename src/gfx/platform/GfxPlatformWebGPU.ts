@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat";
@@ -108,6 +108,8 @@ function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
         return GPUBufferUsage.VERTEX;
     else if (usage === GfxBufferUsage.Uniform)
         return GPUBufferUsage.UNIFORM;
+    else if (usage === GfxBufferUsage.Storage)
+        return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC;
     else
         throw "whoops";
 }
@@ -467,6 +469,15 @@ function translateBindGroupTextureBinding(sampler: GfxBindingLayoutSamplerDescri
     };
 }
 
+function translateBindGroupSamplerBinding(sampler: GfxBindingLayoutSamplerDescriptor): GPUSamplerBindingLayout {
+    if (sampler.formatKind === GfxSamplerFormatKind.Depth && sampler.comparison)
+        return { type: "comparison" };
+    else if (sampler.formatKind === GfxSamplerFormatKind.Float)
+        return { type: "filtering" };
+    else
+        return { type: "non-filtering" };
+}
+
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public descriptor!: GfxRenderPassDescriptor;
     public occlusionQueryPool: GfxQueryPoolP_WebGPU | null = null;
@@ -750,10 +761,9 @@ class GfxComputePassP_WebGPU implements GfxComputePass {
         this.gpuComputePassEncoder!.setPipeline(gpuComputePipeline);
     }
 
-    public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
-        const bindings = bindings_ as GfxBindingsP_WebGPU;
-        this.gpuComputePassEncoder!.setBindGroup(bindingLayoutIndex + 0, bindings.gpuBindGroup[0], dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
-        this.gpuComputePassEncoder!.setBindGroup(bindingLayoutIndex + 1, bindings.gpuBindGroup[1]);
+    public setBindings(bindingLayoutIndex: number, bindings_: any, dynamicByteOffsets: number[]): void {
+        // TODO(jstpierre): Better bindings API
+        this.gpuComputePassEncoder!.setBindGroup(bindingLayoutIndex + 0, bindings_, dynamicByteOffsets);
     }
 
     public dispatch(x: number, y: number, z: number): void {
@@ -862,7 +872,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _fallbackTexture2DArray: GfxTextureP_WebGPU;
     private _fallbackTexture3D: GfxTextureP_WebGPU;
     private _fallbackTextureCube: GfxTextureP_WebGPU;
-    private _fallbackSampler: GfxSampler;
+    private _fallbackSamplerFiltering: GfxSampler;
+    private _fallbackSamplerComparison: GfxSampler;
 
     private _renderPassPool: GfxRenderPassP_WebGPU[] = [];
     private _computePassPool: GfxComputePassP_WebGPU[] = [];
@@ -887,20 +898,31 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         'texture-compression-bc',
     ];
 
-    constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
+    constructor(public adapter: GPUAdapter, public device: GPUDevice, private canvas: HTMLCanvasElement | OffscreenCanvas, private canvasContext: GPUCanvasContext, private glsl_compile: typeof glsl_compile_) {
         this._fallbackTexture2D = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Float);
         this._fallbackTexture2DDepth = this.createFallbackTexture(GfxTextureDimension.n2D, GfxSamplerFormatKind.Depth);
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
 
-        this._fallbackSampler = this.createSampler({
+        this._fallbackSamplerFiltering = this.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
             mipFilter: GfxMipFilterMode.NoMip,
         });
+        this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Filtering');
+
+        this._fallbackSamplerComparison = this.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.NoMip,
+            compareMode: GfxCompareMode.Always,
+        });
+        this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Comparison');
 
         // FIREFOX MISSING
         if (this.device.features)
@@ -1033,6 +1055,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             minFilter: translateMinMagFilter(descriptor.minFilter),
             magFilter: translateMinMagFilter(descriptor.magFilter),
             mipmapFilter: translateMipFilter(descriptor.mipFilter),
+            compare: descriptor.compareMode !== undefined ? translateCompareMode(descriptor.compareMode) : undefined,
             maxAnisotropy,
         });
 
@@ -1127,7 +1150,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         for (let i = 0; i < bindingLayout.numSamplers; i++) {
             const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
             entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: translateBindGroupTextureBinding(samplerEntry), });
-            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } });
+            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: translateBindGroupSamplerBinding(samplerEntry), });
         }
 
         const gpuBindGroupLayout = entries.map((entries) => this.device.createBindGroupLayout({ entries }));
@@ -1146,7 +1169,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _getFallbackTexture(samplerEntry: GfxBindingLayoutSamplerDescriptor): GfxTexture {
         const dimension = samplerEntry.dimension, formatKind = samplerEntry.formatKind;
         if (dimension === GfxTextureDimension.n2D)
-            return formatKind === GfxSamplerFormatKind.Depth ? this._fallbackTexture2DDepth : this._fallbackTexture2D;
+            return (formatKind === GfxSamplerFormatKind.Depth) ? this._fallbackTexture2DDepth : this._fallbackTexture2D;
         else if (dimension === GfxTextureDimension.n2DArray)
             return this._fallbackTexture2DArray;
         else if (dimension === GfxTextureDimension.n3D)
@@ -1155,6 +1178,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             return this._fallbackTextureCube;
         else
             throw "whoops";
+    }
+
+    private _getFallbackSampler(samplerEntry: GfxBindingLayoutSamplerDescriptor): GfxSampler {
+        const formatKind = samplerEntry.formatKind;
+        if (formatKind === GfxSamplerFormatKind.Depth && samplerEntry.comparison)
+            return this._fallbackSamplerComparison;
+        else
+            return this._fallbackSamplerFiltering;
     }
 
     public createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings {
@@ -1179,13 +1210,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
 
             const gfxBinding = bindingsDescriptor.samplerBindings[i];
-            const gfxTexture = gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry);
-            assert(samplerEntry.dimension === (gfxTexture as GfxTextureP_WebGPU).dimension);
-            assert(samplerEntry.formatKind === getFormatSamplerKind((gfxTexture as GfxTextureP_WebGPU).pixelFormat));
+            const gfxTexture = (gfxBinding.gfxTexture !== null ? gfxBinding.gfxTexture : this._getFallbackTexture(samplerEntry)) as GfxTextureP_WebGPU;
+            assert(samplerEntry.dimension === gfxTexture.dimension);
+            assert(samplerEntry.formatKind === getFormatSamplerKind(gfxTexture.pixelFormat));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
             gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuTextureView });
 
-            const gfxSampler = gfxBinding.gfxSampler !== null ? gfxBinding.gfxSampler : this._fallbackSampler;
+            const gfxSampler = gfxBinding.gfxSampler !== null ? gfxBinding.gfxSampler : this._getFallbackSampler(samplerEntry);
             const gpuSampler = getPlatformSampler(gfxSampler);
             gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuSampler });
         }
@@ -1344,7 +1375,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const descriptor = computePipeline.descriptor;
         const program = descriptor.program as GfxComputeProgramP_WebGPU;
         
-        const layout = 'auto';
+        const layout = descriptor.pipelineLayout as GPUPipelineLayout;
         const compute = program.computeStage!;
 
         computePipeline.isCreatingAsync = true;
@@ -1431,6 +1462,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyRenderPipeline(o: GfxRenderPipeline): void {
+    }
+
+    public destroyComputePipeline(o: GfxComputePipeline): void {
     }
 
     public destroyReadback(o: GfxReadback): void {
@@ -1615,7 +1649,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment * 4,
             supportedSampleCounts: [1],
             occlusionQueriesRecommended: true,
-            computeShadersSupported: false,
+            computeShadersSupported: true,
         };
     }
 
@@ -1723,4 +1757,8 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
 
     const { glsl_compile } = await import('../../../rust/pkg/index');
     return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
+}
+
+export function gfxDeviceGetImpl_WebGPU(gfxDevice: GfxDevice): GfxImplP_WebGPU {
+    return gfxDevice as GfxImplP_WebGPU;
 }

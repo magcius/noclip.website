@@ -21,7 +21,7 @@ export interface GfxReadback extends GfxResourceBase { _T: _T.Readback };
 export interface GfxQueryPool extends GfxResourceBase { _T: _T.QueryPool };
 
 export type GfxResource =
-    GfxBuffer | GfxTexture | GfxRenderTarget | GfxSampler | GfxProgram | GfxBindings | GfxInputLayout | GfxInputState | GfxRenderPipeline | GfxReadback | GfxQueryPool;
+    GfxBuffer | GfxTexture | GfxRenderTarget | GfxSampler | GfxProgram | GfxBindings | GfxInputLayout | GfxInputState | GfxRenderPipeline | GfxComputePipeline | GfxReadback | GfxQueryPool;
 
 export const defaultBindingLayoutSamplerDescriptor: GfxBindingLayoutSamplerDescriptor = {
     formatKind: GfxSamplerFormatKind.Float,

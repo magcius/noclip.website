@@ -179,6 +179,7 @@ export const enum GfxSamplerFormatKind {
 export interface GfxBindingLayoutSamplerDescriptor {
     dimension: GfxTextureDimension;
     formatKind: GfxSamplerFormatKind;
+    comparison?: boolean;
 };
 
 export interface GfxBindingLayoutDescriptor {
@@ -260,6 +261,7 @@ export interface GfxRenderPipelineDescriptor {
 
 export interface GfxComputePipelineDescriptor {
     program: GfxProgram;
+    pipelineLayout: any;
 }
 
 export interface GfxColor {
@@ -361,7 +363,7 @@ export interface GfxRenderPass {
 export interface GfxComputePass {
     // State management.
     setPipeline(pipeline: GfxComputePipeline): void;
-    setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
+    setBindings(bindingLayoutIndex: number, bindings: any, dynamicByteOffsets: number[]): void;
 
     // Dispatch commands.
     dispatch(x: number, y: number, z: number): void;
@@ -415,6 +417,7 @@ export interface GfxDevice {
     destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
+    destroyComputePipeline(o: GfxComputePipeline): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
     destroyQueryPool(o: GfxQueryPool): void;

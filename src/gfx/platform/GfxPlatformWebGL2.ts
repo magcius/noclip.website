@@ -1206,6 +1206,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
+    public destroyComputePipeline(o: GfxComputePipeline): void {
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.trackResourceDestroyed(o);
+    }
+
     public destroyRenderPipeline(o: GfxRenderPipeline): void {
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
@@ -1950,7 +1955,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
                     // Validate sampler entry.
 
-                    // TODO(webgpu): Turn this on at some point in the future when we've ported all of the code over.
                     assert(samplerEntry.gl_target === gl_target);
                     assert(samplerEntry.formatKind === formatKind);
                 } else {

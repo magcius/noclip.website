@@ -1653,16 +1653,16 @@ float CalcShadowPCF9(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
 
 float CalcShadowPCF5(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
     float t_Res = 0.0f;
-    t_Res += texture(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz) * (1.0 / 5.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0,  1)) * (1.0 / 5.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0, -1)) * (1.0 / 5.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 1,  0)) * (1.0 / 5.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2(-1,  0)) * (1.0 / 5.0);
+    t_Res += textureLod(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0) * (1.0 / 5.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0,  1)) * (1.0 / 5.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0, -1)) * (1.0 / 5.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 1,  0)) * (1.0 / 5.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2(-1,  0)) * (1.0 / 5.0);
     return t_Res;
 }
 
 float CalcShadowPCF1(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
-    return texture(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz);
+    return textureLod(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0);
 }
 
 float CalcShadowPCF(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord, in float t_Bias) {
@@ -1950,12 +1950,16 @@ void mainPS() {
     t_ProjectedLightCoord.z = t_ProjectedLightCoord.z * 0.5 + 0.5;
 #endif
 
+    vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedLightCoord.xy);
     if (all(greaterThan(t_ProjectedLightCoord.xyz, vec3(0.0))) && all(lessThan(t_ProjectedLightCoord.xyz, vec3(1.0)))) {
         vec2 t_ProjectedGoboTexCoord = t_ProjectedLightCoord.xy;
-#if !defined GFX_VIEWPORT_ORIGIN_TL
+
+#if defined GFX_VIEWPORT_ORIGIN_TL
+        t_ProjectedLightCoord.y = 1.0 - t_ProjectedLightCoord.y;
+#else
         t_ProjectedGoboTexCoord.y = 1.0 - t_ProjectedGoboTexCoord.y;
 #endif
-        vec4 t_ProjectedLightSample = texture(SAMPLER_2D(u_TextureProjectedLight), t_ProjectedLightCoord.xy);
+
         vec3 t_ProjectedLightColor = (t_ProjectedLightSample.rgb * u_ProjectedLightColor.rgb);
 
         vec3 t_WorldToProjectedLight = u_ProjectedLightOrigin.xyz - v_PositionWorld.xyz;

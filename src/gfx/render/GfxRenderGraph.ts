@@ -207,7 +207,7 @@ class PassImpl implements GfxrPass {
         this.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
     }
 
-    public exec(func: PassExecFunc): void {
+    public exec(func: any): void {
         assert(this.execFunc === null);
         this.execFunc = func;
     }
@@ -270,7 +270,7 @@ export interface GfxrGraphBuilder {
      * by closures.
      */
     pushPass(setupFunc: PassSetupFunc): void;
-    pushComputePass(setupFunc: PassSetupFunc): void;
+    pushComputePass(setupFunc: ComputePassSetupFunc): void;
 
     /**
      * Tell the system about a render target with the given descriptions. Render targets
@@ -564,9 +564,9 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         this.currentGraph!.passes.push(pass);
     }
 
-    public pushComputePass(setupFunc: PassSetupFunc): void {
+    public pushComputePass(setupFunc: ComputePassSetupFunc): void {
         const pass = new PassImpl('compute');
-        setupFunc(pass);
+        setupFunc(pass as GfxrComputePass);
         this.currentGraph!.passes.push(pass);
     }
 

@@ -44,8 +44,8 @@ export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): G
 }
 
 function gfxBindingLayoutSamplerDescriptorCopy(a: Readonly<GfxBindingLayoutSamplerDescriptor>): GfxBindingLayoutSamplerDescriptor {
-    const dimension = a.dimension, formatKind = a.formatKind;
-    return { dimension, formatKind };
+    const dimension = a.dimension, formatKind = a.formatKind, comparison = a.comparison === true;
+    return { dimension, formatKind, comparison };
 }
 
 export function gfxBindingLayoutDescriptorCopy(a: Readonly<GfxBindingLayoutDescriptor>): GfxBindingLayoutDescriptor {

@@ -405,6 +405,15 @@ export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldM
     drawScreenSpaceText(ctx, x, y, text, color, options);
 }
 
+export function drawScreenSpaceBox(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: Color = Magenta, lineWidth: number = 2): void {
+    ctx.beginPath();
+    ctx.rect(x1, y1, x2 - x1, y2 - y1);
+    ctx.closePath();
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = colorToCSS(color);
+    ctx.stroke();
+}
+
 export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
@@ -414,12 +423,7 @@ export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: S
     const y1 = (-proj.projectedMinY + 1) * ch / 2;
     const y2 = (-proj.projectedMaxY + 1) * ch / 2;
 
-    ctx.beginPath();
-    ctx.rect(x1, y1, x2 - x1, y2 - y1);
-    ctx.closePath();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = colorToCSS(color);
-    ctx.stroke();
+    drawScreenSpaceBox(ctx, x1, y1, x2, y2, color);
 }
 
 function flashItem(item: any, fieldName: string, step: number = 0) {
