@@ -900,14 +900,20 @@ export class ModelCache {
 class ScenarioData {
     public zoneNames: string[];
     public scenarioDataIter: JMapInfoIter;
+    public hasCometData: boolean;
 
-    constructor(private scenarioArc: RARC.JKRArchive) {
+    constructor(sceneDesc: SMGSceneDescBase, scenarioArc: RARC.JKRArchive) {
         const zoneListIter = createCsvParser(scenarioArc.findFileData('ZoneList.bcsv')!);
         this.zoneNames = zoneListIter.mapRecords((iter) => {
             return assertExists(iter.getValueString(`ZoneName`));
         });
 
         this.scenarioDataIter = createCsvParser(scenarioArc.findFileData('ScenarioData.bcsv')!);
+
+        const hasCometData = sceneDesc.gameBit === GameBits.SMG1
+        this.hasCometData = hasCometData && this.scenarioDataIter.findRecord((iter) => {
+            return iter.getValueString('Comet') !== null;
+        });
     }
 
     public getMasterZoneFilename(): string {
@@ -1356,7 +1362,6 @@ export class SceneObjHolder {
         StarPieceDirector.requestArchives(this);
         CoinHolder.requestArchives(this);
         TalkDirector.requestArchives(this);
-        GalaxyCometScreenFilter.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1789,12 +1794,14 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
 
-        const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename)!);
-        for (let i = 0; i < scenarioData.zoneNames.length; i++) {
-            const zoneName = scenarioData.zoneNames[i];
+        sceneObjHolder.scenarioData = new ScenarioData(this, modelCache.getArchive(scenarioDataFilename)!);
+        for (let i = 0; i < sceneObjHolder.scenarioData.zoneNames.length; i++) {
+            const zoneName = sceneObjHolder.scenarioData.zoneNames[i];
             this.requestZoneArchives(modelCache, zoneName);
         }
-        sceneObjHolder.scenarioData = scenarioData;
+
+        if (sceneObjHolder.scenarioData.hasCometData)
+            GalaxyCometScreenFilter.requestArchives(sceneObjHolder);
 
         await modelCache.waitForLoad();
 
@@ -1808,7 +1815,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         sceneObjHolder.create(SceneObj.EffectSystem);
         sceneObjHolder.create(SceneObj.StarPieceDirector);
-        sceneObjHolder.create(SceneObj.GalaxyCometScreenFilter);
+
+        if (sceneObjHolder.scenarioData.hasCometData)
+            sceneObjHolder.create(SceneObj.GalaxyCometScreenFilter);
 
         const spawner = new SMGSpawner(sceneObjHolder);
         sceneObjHolder.spawner = spawner;

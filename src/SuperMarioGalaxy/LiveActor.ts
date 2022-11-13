@@ -302,7 +302,7 @@ export function initEachResTable<T>(arc: JKRArchive, table: ResTable<T>, extensi
             const ext = extensions[j];
             if (file.name.endsWith(ext)) {
                 const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
-                const key = includeExtension ? file.name : filenameWithoutExtension;
+                const key = includeExtension ? file.name.toLowerCase() : filenameWithoutExtension;
                 table.set(key, constructor(file, ext, filenameWithoutExtension));
             }
         }
