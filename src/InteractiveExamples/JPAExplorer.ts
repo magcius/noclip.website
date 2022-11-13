@@ -225,7 +225,7 @@ export class Explorer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.effectSystem = new BasicEffectSystem(device, this.jpac);
 
-        this.gridPlane = new GridPlane(device);
+        this.gridPlane = new GridPlane(device, this.renderHelper.renderCache);
 
         this.createUI();
 

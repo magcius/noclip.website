@@ -21,6 +21,7 @@ import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {
@@ -65,18 +66,14 @@ class ModelCache {
 
 export class PlatinumMapRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
-    public textureHolder: FakeTextureHolder;
+    public objectRenderers: MDL0Renderer[] = [];
 
-    constructor(device: GfxDevice, public objectRenderers: MDL0Renderer[]) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
 
-        const viewerTextures: Viewer.Texture[] = [];
-        for (let i = 0; i < this.objectRenderers.length; i++) {
-            const element = this.objectRenderers[i];
-            for (let j = 0; j < element.viewerTextures.length; j++)
-                viewerTextures.push(element.viewerTextures[j]);
-        }
-        this.textureHolder = new FakeTextureHolder(viewerTextures);
+    public getCache() {
+        return this.renderHelper.getCache();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -148,9 +145,9 @@ export function checkTEX0Compatible(mdl0: MDL0Model, tex0: TEX0): boolean {
     return true;
 }
 
-export function tryMDL0(device: GfxDevice, mdl0: MDL0Model, tex0: TEX0): MDL0Renderer | null {
+export function tryMDL0(device: GfxDevice, cache: GfxRenderCache, mdl0: MDL0Model, tex0: TEX0): MDL0Renderer | null {
     if (checkTEX0Compatible(mdl0, tex0))
-        return new MDL0Renderer(device, mdl0, tex0);
+        return new MDL0Renderer(device, cache, mdl0, tex0);
     else
         return null;
 }
@@ -170,8 +167,10 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
 
         //Spacecats: TODO - General cleaning and organization. Fix issues with a few map chunks.
 
+        const renderer = new PlatinumMapRenderer(device);
+        const cache = renderer.getCache();
+
         const tilesets = new Map<number, BTX0>();
-        const renderers: MDL0Renderer[] = [];
         const map_matrix_headers: number[][] = [];
         const map_matrix_height: number[][] = [];
         const map_matrix_files: number[][] = [];
@@ -255,9 +254,9 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                 let mapRenderer: MDL0Renderer | null = null;
 
                 if (mapRenderer === null)
-                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
+                    mapRenderer = tryMDL0(device, cache, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
                 if (mapRenderer === null)
-                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
+                    mapRenderer = tryMDL0(device, cache, embeddedModelBMD.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
                 if (mapRenderer === null)
                     continue;
 
@@ -267,7 +266,7 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                 bbox.transform(bbox, mapRenderer.modelMatrix);
                 mapRenderer.bbox = bbox;
 
-                renderers.push(mapRenderer);
+                renderer.objectRenderers.push(mapRenderer);
 
                 const objectCount = (modelOffset - objectOffset) / 0x30;
                 for (let objIndex = 0; objIndex < objectCount; objIndex++) {
@@ -281,17 +280,17 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                     const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
                     const objBmd = parseNSBMD(modelFile);
 
-                    const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
-                    renderer.bbox = bbox;
-                    mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
-                    renderers.push(renderer);
+                    const obj = new MDL0Renderer(device, cache, objBmd.models[0], assertExists(objBmd.tex0));
+                    obj.bbox = bbox;
+                    mat4.translate(obj.modelMatrix, obj.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
+                    renderer.objectRenderers.push(obj);
                 }
             }
         }
 
-        return new PlatinumMapRenderer(device, renderers);
+        return renderer;
     }
-    
+   
 }
 
 const id = 'pkmnpl';

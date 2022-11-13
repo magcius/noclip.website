@@ -17,6 +17,7 @@ import { MPHbin } from "./mph_binModel";
 import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), bmdTex.width, bmdTex.height);
@@ -247,11 +248,11 @@ export class MPHRenderer {
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, public mphModel: MPHbin, private tex0: TEX0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mphModel: MPHbin, private tex0: TEX0) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
-        this.gfxProgram = device.createProgram(program);
+        this.gfxProgram = cache.createProgram(program);
         let posScale;
         if (mphModel.mtx_shmat <= 0) {
             posScale = 4;

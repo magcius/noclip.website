@@ -22,6 +22,7 @@ import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { NITRO_Program } from '../SuperMario64DS/render';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `mkds`;
 class ModelCache {
@@ -67,12 +68,16 @@ class ModelCache {
 export class MKDSRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
 
-    public textureHolder: FakeTextureHolder;
+    public courseRenderer: MDL0Renderer;
+    public skyboxRenderer: MDL0Renderer | null = null;
     public objectRenderers: MDL0Renderer[] = [];
 
-    constructor(device: GfxDevice, public courseRenderer: MDL0Renderer, public skyboxRenderer: MDL0Renderer | null) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.textureHolder = new FakeTextureHolder(this.courseRenderer.viewerTextures);
+    }
+
+    public getCache() {
+        return this.renderHelper.getCache();
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -210,7 +215,9 @@ const scratchMatrix = mat4.create();
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private spawnObjectFromNKM(device: GfxDevice, modelCache: ModelCache, renderer: MKDSRenderer, obji: OBJI): void {
+    private spawnObjectFromNKM(cache: GfxRenderCache, modelCache: ModelCache, renderer: MKDSRenderer, obji: OBJI): void {
+        const device = cache.device;
+
         function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
             const rotationY = bby ? 0 : obji.rotationY;
             computeModelMatrixSRT(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
@@ -223,7 +230,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const buffer = assertExists(modelCache.getFileData(filePath));
             const bmd = parseNSBMD(buffer);
             assert(bmd.models.length === 1);
-            const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
+            const mdl0Renderer = new MDL0Renderer(device, cache, bmd.models[0], assertExists(bmd.tex0));
             setModelMtx(mdl0Renderer);
             renderer.objectRenderers.push(mdl0Renderer);
             return mdl0Renderer;
@@ -500,38 +507,35 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         const courseBmd = parseNSBMD(assertExists(modelCache.getFileData(`/course_model.nsbmd`)));
         assert(courseBmd.models.length === 1);
 
+        const renderer = new MKDSRenderer(device);
+        const cache = renderer.getCache();
+
         const courseBtxFile = modelCache.getFileData(`/course_model.nsbtx`);
         const courseBtx = courseBtxFile !== null ? parseNSBTX(courseBtxFile) : null;
-        const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
+        renderer.courseRenderer = new MDL0Renderer(device, cache, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
 
-        let skyboxRenderer: MDL0Renderer | null = null;
         const skyboxBmdFile = modelCache.getFileData(`/course_model_V.nsbmd`);
         if (skyboxBmdFile !== null) {
             const skyboxBmd = parseNSBMD(skyboxBmdFile);
             const skyboxBtxFile = modelCache.getFileData(`/course_model_V.nsbtx`);
             const skyboxBtx = skyboxBtxFile !== null ? parseNSBTX(skyboxBtxFile) : null;
             assert(skyboxBmd.models.length === 1);
-            skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
-            //skyboxRenderer.modelMatrix[13] -= 1500;
-            //skyboxRenderer.isSkybox = true;
-            skyboxRenderer.isSkybox = false;
-            
+            renderer.skyboxRenderer = new MDL0Renderer(device, cache, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
+
             const skyboxBtaFile = modelCache.getFileData(`/course_model_V.nsbta`);
             if (skyboxBtaFile !== null)
-                skyboxRenderer.bindSRT0(parseNSBTA(skyboxBtaFile).srt0);
+                renderer.skyboxRenderer.bindSRT0(parseNSBTA(skyboxBtaFile).srt0);
         }
-
-        const renderer = new MKDSRenderer(device, courseRenderer, skyboxRenderer);
 
         const courseBtaFile = modelCache.getFileData(`/course_model.nsbta`);
         if (courseBtaFile !== null)
-            courseRenderer.bindSRT0(parseNSBTA(courseBtaFile).srt0);
+            renderer.courseRenderer.bindSRT0(parseNSBTA(courseBtaFile).srt0);
 
         const courseBtpFile = modelCache.getFileData(`/course_model.nsbtp`);
         if (courseBtpFile !== null) {
             const courseBtp = parseNSBTP(courseBtpFile);
             assert(courseBtp.pat0.length === 1);
-            courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
+            renderer.courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
         }
 
         // Now spawn objects
@@ -540,7 +544,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const nkm = parseNKM(courseNKM);
             (renderer as any).nkm = nkm;
             for (let i = 0; i < nkm.obji.length; i++)
-                this.spawnObjectFromNKM(device, modelCache, renderer, nkm.obji[i]);
+                this.spawnObjectFromNKM(cache, modelCache, renderer, nkm.obji[i]);
         }
 
         return renderer;

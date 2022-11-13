@@ -19,21 +19,18 @@ import { NITRO_Program } from '../SuperMario64DS/render';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
-    public textureHolder: FakeTextureHolder;
+    public objectRenderers: MDL0Renderer[] = [];
 
-    constructor(device: GfxDevice, public objectRenderers: MDL0Renderer[]) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
 
-        const viewerTextures: Viewer.Texture[] = [];
-        for (let i = 0; i < this.objectRenderers.length; i++) {
-            const element = this.objectRenderers[i];
-            for (let j = 0; j < element.viewerTextures.length; j++)
-                viewerTextures.push(element.viewerTextures[j]);
-        }
-        this.textureHolder = new FakeTextureHolder(viewerTextures);
+    public getCache() {
+        return this.renderHelper.getCache();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -154,9 +151,10 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         return new ObjectData(bmd, btx, bta, btp);
     }
 
-    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: vec3 | null = null): MDL0Renderer {
+    private createRendererFromData(cache: GfxRenderCache, objectData: ObjectData, position: vec3 | null = null): MDL0Renderer {
+        const device = cache.device;
         const scaleFactor = 1/16;
-        const renderer = new MDL0Renderer(device, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
+        const renderer = new MDL0Renderer(device, cache, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
         if (position !== null)
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
@@ -191,35 +189,38 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             mat4.fromTranslation(towerObjData!.bmd.models[0].nodes[2].jointMatrix, [0, 88, 0]);
             mat4.fromTranslation(towerObjData!.bmd.models[0].nodes[3].jointMatrix, [12, 88, 0]);
 
+            const renderer = new WorldMapRenderer(device);
+            const cache = renderer.getCache();
+
             const objects = worldMapDescs[this.worldNumber - 1];
 
             const renderers: MDL0Renderer[] = [];
 
-            const mainObj = this.createRendererFromData(device, assertExists(mainObjData));
+            const mainObj = this.createRendererFromData(cache, assertExists(mainObjData));
             renderers.push(mainObj);
 
             let treeObj: MDL0Renderer | null = null;
             if (treeObjData !== null) {
-                treeObj = this.createRendererFromData(device, treeObjData);
+                treeObj = this.createRendererFromData(cache, treeObjData);
                 renderers.push(treeObj);
             }
 
             for (let i = 0; i < objects.length; i++) {
                 const element = objects[i];
                 if (element.type == WorldMapObjType.ROUTE_POINT) {
-                    const obj = this.createRendererFromData(device, mapPointObjData!, element.position);
+                    const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[3]);
                     renderers.push(obj);
                 } else if (element.type == WorldMapObjType.START_POINT) {
-                    const obj = this.createRendererFromData(device, mapPointObjData!, element.position);
+                    const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[2]);
                     renderers.push(obj);
                 } else if (element.type == WorldMapObjType.TOWER) {
-                    renderers.push(this.createRendererFromData(device, towerObjData!, element.position));
+                    renderers.push(this.createRendererFromData(cache, towerObjData!, element.position));
                 } else if (element.type == WorldMapObjType.CASTLE) {
-                    renderers.push(this.createRendererFromData(device, castleObjData!, element.position));
+                    renderers.push(this.createRendererFromData(cache, castleObjData!, element.position));
                 } else if (element.type == WorldMapObjType.BIG_CASTLE) {
-                    renderers.push(this.createRendererFromData(device, bigCastleObjData!, element.position));
+                    renderers.push(this.createRendererFromData(cache, bigCastleObjData!, element.position));
                 }
             }
 
@@ -230,7 +231,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
                 mat4.translate(assertExists(treeObj).modelMatrix, treeObj!.modelMatrix, [-4, 0, 0]);
             }
 
-            return new WorldMapRenderer(device, renderers);
+            return renderer;
         });
     }
 }

@@ -10,6 +10,7 @@ import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -79,9 +80,9 @@ export class GridPlane {
     public cellCount: number = 4;
     public lineWidth: number = 4;
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         const program = new GridPlaneProgram();
-        this.gfxProgram = device.createProgram(program);
+        this.gfxProgram = cache.createProgram(program);
 
         this.setSize(500);
 

@@ -459,7 +459,7 @@ class FMATInstance {
             this.textureMapping[i].gfxSampler = gfxSampler;
         }
 
-        this.gfxProgram = device.createProgram(this.program);
+        this.gfxProgram = cache.createProgram(this.program);
 
         // Render flags.
         const isTranslucent = this.program.isTranslucent;

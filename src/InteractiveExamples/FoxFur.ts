@@ -22,6 +22,7 @@ import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
 import { dfRange, dfShow } from '../DebugFloaters';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `FoxFur`;
 
@@ -291,7 +292,7 @@ class FurObj {
     @dfShow()
     public tipColor = colorNewFromRGBA(1.0, 1.0, 1.0, 0.2);
 
-    constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, objText: string, bodyImgData: ImageData) {
         this.bodyTex = makeTextureFromImageData(device, bodyImgData);
         device.setResourceName(this.bodyTex, "Body");
 
@@ -326,7 +327,7 @@ class FurObj {
             { buffer: this.vertexBuffer, byteOffset: 0x00, },
         ], { buffer: this.indexBuffer, byteOffset: 0x00 });
 
-        this.gfxProgram = device.createProgram(new FurProgram());
+        this.gfxProgram = cache.createProgram(new FurProgram());
 
         const s = 10;
         computeModelMatrixSRT(this.modelMatrix, s, s, s, 0, 0, 0, 0, 0, 0);
@@ -404,8 +405,12 @@ class SceneRenderer implements SceneGfx {
     public obj: GraphObjBase[] = [];
 
     constructor(device: GfxDevice) {
-        this.obj.push(new GridPlane(device));
         this.renderHelper = new GfxRenderHelper(device);
+        this.obj.push(new GridPlane(device, this.getCache()));
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.getCache();
     }
 
     public createCameraController() {
@@ -488,7 +493,7 @@ export class FoxFur implements SceneDesc {
         const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer as ArrayBuffer);
         const bodyTex = await fetchPNG(context.dataFetcher, `${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
-        const o = new FurObj(device, foxFurObjText, bodyTex);
+        const o = new FurObj(device, r.getCache(), foxFurObjText, bodyTex);
         window.main.ui.debugFloaterHolder.bindPanel(o);
         r.fur = o;
         r.obj.push(o);

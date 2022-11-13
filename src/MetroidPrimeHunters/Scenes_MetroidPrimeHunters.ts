@@ -17,6 +17,7 @@ import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `MetroidPrimeHunters`;
 
@@ -68,12 +69,15 @@ class ModelCache {
 export class MPHSceneRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
 
-    public textureHolder: FakeTextureHolder;
+    public stageRenderer: MPHRenderer;
     public objectRenderers: MPHRenderer[] = [];
 
-    constructor(device: GfxDevice, public stageRenderer: MPHRenderer) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.textureHolder = new FakeTextureHolder(this.stageRenderer.viewerTextures);
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.getCache();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -165,12 +169,11 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
         const stageBin = parseMPH_Model(assertExists(bin_Model));
 
         assert(stageBin.models.length === 1);
+        const renderer = new MPHSceneRenderer(device);
 
         const textureFile = modelCache.getFileData(`levels/textures/${this.texName}.bin`);
         const stageTex = textureFile !== null ? parseTEX0Texture(textureFile, stageBin.mphTex) : parseTEX0Texture(assertExists(bin_Model), stageBin.mphTex);
-        const stageRenderer = new MPHRenderer(device, stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex));
-
-        const renderer = new MPHSceneRenderer(device, stageRenderer);
+        renderer.stageRenderer = new MPHRenderer(device, renderer.getCache(), stageBin, stageBin.tex0 !== null ? stageBin.tex0 : assertExists(stageTex));
 
         return renderer;
     }

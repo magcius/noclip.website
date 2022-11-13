@@ -186,8 +186,6 @@ export class Scene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
-        this.program = device.createProgram(new IVProgram());
-
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
@@ -204,6 +202,7 @@ export class Scene implements Viewer.SceneGfx {
         });
 
         this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
     }
 
     public adjustCameraController(c: CameraController) {

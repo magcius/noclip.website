@@ -70,10 +70,12 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchNARC(`bm_room.narc`, 'bm_room');
         await modelCache.waitForLoad();
 
+        const renderer = new PlatinumMapRenderer(device);
+        const cache = renderer.getCache();
+
         //Spacecats: TODO - General cleaning and organization. Fix issues with a few map chunks.
 
         const tilesets = new Map<number, BTX0>();
-        const renderers: MDL0Renderer[] = [];
         const map_matrix_headers: number[][] = []
         const map_matrix_height: number[][] = [];
         const map_matrix_files: number[][] = [];
@@ -157,9 +159,9 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
                 let mapRenderer: MDL0Renderer | null = null;
 
                 if (mapRenderer === null && tilesets.has(tilesetIndex))
-                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
+                    mapRenderer = tryMDL0(device, cache, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
                 if (mapRenderer === null)
-                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
+                    mapRenderer = tryMDL0(device, cache, embeddedModelBMD.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
                 if (mapRenderer === null)
                     continue;
 
@@ -168,7 +170,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
                 const bbox = new AABB(-256, -256, -256, 256, 256, 256);
                 bbox.transform(bbox, mapRenderer.modelMatrix);
                 mapRenderer.bbox = bbox;
-                renderers.push(mapRenderer);
+                renderer.objectRenderers.push(mapRenderer);
 
                 const objectCount = (modelOffset - objectOffset) / 0x30;
                 for (let objIndex = 0; objIndex <  objectCount; objIndex++) {
@@ -189,24 +191,23 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
                     }
 
                     const objBmd = parseNSBMD(modelFile);
-                    let renderer: MDL0Renderer | null = null;
-                    if(renderer === null)
-                        renderer = tryMDL0(device, objBmd.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
-                    if (renderer === null)
-                        renderer = tryMDL0(device, objBmd.models[0], assertExists(objBmd.tex0));
-                    if (renderer === null)
+                    let obj: MDL0Renderer | null = null;
+                    if(obj === null)
+                        obj = tryMDL0(device, cache, objBmd.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
+                    if (obj === null)
+                        obj = tryMDL0(device, cache, objBmd.models[0], assertExists(objBmd.tex0));
+                    if (obj === null)
                         continue;
 
-                    renderer.bbox = bbox;
-                    mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
-                    renderers.push(renderer);
+                    obj.bbox = bbox;
+                    mat4.translate(obj.modelMatrix, obj.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
+                    renderer.objectRenderers.push(obj);
                 }
             }
         }
 
-        return new PlatinumMapRenderer(device, renderers);
+        return renderer;
     }
-    
 }
 
 const id = 'pkmnsslvr';

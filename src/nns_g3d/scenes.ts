@@ -11,6 +11,7 @@ import { NITRO_Program } from "../SuperMario64DS/render";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 class BasicNSBMDRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
@@ -19,6 +20,10 @@ class BasicNSBMDRenderer implements SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: FakeTextureHolder) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.getCache();
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -77,7 +82,7 @@ export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: Arr
     const bmd = parseNSBMD(buffer);
     for (let i = 0; i < bmd.models.length; i++) {
         const mdl0 = bmd.models[0];
-        const mdl0Renderer = new MDL0Renderer(device, mdl0, assertExists(bmd.tex0));
+        const mdl0Renderer = new MDL0Renderer(device, renderer.getCache(), mdl0, assertExists(bmd.tex0));
         for (let j = 0; j < mdl0Renderer.viewerTextures.length; j++)
             textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[j]);
         renderer.mdl0Renderers.push(mdl0Renderer);
