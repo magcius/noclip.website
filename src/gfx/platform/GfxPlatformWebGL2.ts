@@ -214,16 +214,16 @@ function translateBufferHint(hint: GfxBufferFrequencyHint): GLenum {
 }
 
 function translateBufferUsageToTarget(usage: GfxBufferUsage): GLenum {
-    switch (usage) {
-    case GfxBufferUsage.Index:
+    if (usage & GfxBufferUsage.Index)
         return WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER;
-    case GfxBufferUsage.Vertex:
+    else if (usage & GfxBufferUsage.Vertex)
         return WebGL2RenderingContext.ARRAY_BUFFER;
-    case GfxBufferUsage.Uniform:
+    else if (usage & GfxBufferUsage.Uniform)
         return WebGL2RenderingContext.UNIFORM_BUFFER;
-    case GfxBufferUsage.Storage:
+    else if (usage & (GfxBufferUsage.Storage | GfxBufferUsage.CopySrc))
         return WebGL2RenderingContext.COPY_WRITE_BUFFER;
-    }
+    else
+        throw "whoops";
 }
 
 function translateWrapMode(wrapMode: GfxWrapMode): GLenum {

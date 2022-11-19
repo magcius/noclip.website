@@ -5,7 +5,7 @@ import { drawScreenSpaceBox, drawScreenSpaceText, getDebugOverlayCanvas2D } from
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBufferFrequencyHint, GfxBufferUsage, GfxComputeProgramDescriptor, GfxDevice, GfxFormat, GfxQueryPoolType, GfxShadingLanguage } from "../gfx/platform/GfxPlatform";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxQueryPoolType, GfxShadingLanguage } from "../gfx/platform/GfxPlatform";
 import { GfxBuffer, GfxComputePipeline, GfxProgram, GfxQueryPool, GfxReadback } from "../gfx/platform/GfxPlatformImpl";
 import { gfxDeviceGetImpl_WebGPU } from "../gfx/platform/GfxPlatformWebGPU";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -397,13 +397,13 @@ class ImplCompute {
         });
         const pipelineLayout = deviceWebGPU.createPipelineLayout({ 
             bindGroupLayouts: [this.bindGroupLayout],
-        })
+        });
 
         const program = device.createComputeProgram({ shadingLanguage: GfxShadingLanguage.WGSL, preprocessedComp: histogramProgram });
         this.computePipeline = device.createComputePipeline({ program, pipelineLayout });
 
         const bucketCount = this.histogram.bucketCount;
-        this.bucketBuffer = device.createBuffer(bucketCount, GfxBufferUsage.Storage, GfxBufferFrequencyHint.Dynamic);
+        this.bucketBuffer = device.createBuffer(bucketCount, GfxBufferUsage.Storage | GfxBufferUsage.CopySrc, GfxBufferFrequencyHint.Dynamic);
 
         this.results = new Uint32Array(bucketCount);
     }

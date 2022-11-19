@@ -55,10 +55,12 @@ export const enum GfxMipFilterMode { NoMip, Nearest, Linear }
 export const enum GfxPrimitiveTopology { Triangles }
 
 export const enum GfxBufferUsage {
-    Index   = 0x01,
-    Vertex  = 0x02,
-    Uniform = 0x03,
-    Storage = 0x04,
+    Index   = 0b00001,
+    Vertex  = 0b00010,
+    Uniform = 0b00100,
+    Storage = 0b01000,
+    CopySrc = 0b10000,
+    // All buffers are implicitly CopyDst so they can be filled by the CPU... maybe they shouldn't be...
 }
 
 export const enum GfxBufferFrequencyHint {
@@ -180,7 +182,7 @@ export interface GfxBindingLayoutSamplerDescriptor {
     dimension: GfxTextureDimension;
     formatKind: GfxSamplerFormatKind;
     comparison?: boolean;
-};
+}
 
 export interface GfxBindingLayoutDescriptor {
     numUniformBuffers: number;
@@ -193,6 +195,32 @@ export interface GfxBindingsDescriptor {
     bindingLayout: GfxBindingLayoutDescriptor;
     uniformBufferBindings: GfxBufferBinding[];
     samplerBindings: GfxSamplerBinding[];
+}
+
+export const enum GfxBindingLayoutEntryType {
+    UniformBuffer,
+    Sampler,
+    StorageBuffer,
+    StorageTexture,
+}
+
+interface GfxBindingLayoutEntrySampler extends GfxBindingLayoutSamplerDescriptor {
+    type: GfxBindingLayoutEntryType.Sampler;
+}
+
+interface GfxBindingLayoutEntryBase {
+    type: GfxBindingLayoutEntryType;
+}
+
+type GfxBindingLayoutEntry = GfxBindingLayoutEntryBase | GfxBindingLayoutEntrySampler;
+
+export interface GfxBindingLayoutDescriptor2 {
+    entries: GfxBindingLayoutEntry[];
+}
+
+export interface GfxBindingsDescriptor2 {
+    bindingLayout: GfxBindingLayoutDescriptor2;
+    entries: (GfxBufferBinding | GfxSamplerBinding)[];
 }
 
 export interface GfxProgramDescriptorSimple {

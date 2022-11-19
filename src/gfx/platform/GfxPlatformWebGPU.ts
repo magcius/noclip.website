@@ -101,17 +101,20 @@ interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
     results: BigUint64Array | null;
 }
 
-function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsageFlags {
-    if (usage === GfxBufferUsage.Index)
-        return GPUBufferUsage.INDEX;
-    else if (usage === GfxBufferUsage.Vertex)
-        return GPUBufferUsage.VERTEX;
-    else if (usage === GfxBufferUsage.Uniform)
-        return GPUBufferUsage.UNIFORM;
-    else if (usage === GfxBufferUsage.Storage)
-        return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC;
-    else
-        throw "whoops";
+function translateBufferUsage(usage_: GfxBufferUsage): GPUBufferUsageFlags {
+    let usage = 0;
+    if (usage_ & GfxBufferUsage.Index)
+        usage |= GPUBufferUsage.INDEX;
+    if (usage_ & GfxBufferUsage.Vertex)
+        usage |= GPUBufferUsage.VERTEX;
+    if (usage_ & GfxBufferUsage.Uniform)
+        usage |= GPUBufferUsage.UNIFORM;
+    if (usage_ & GfxBufferUsage.Storage)
+        usage |= GPUBufferUsage.STORAGE;
+    if (usage_ & GfxBufferUsage.CopySrc)
+        usage |= GPUBufferUsage.COPY_SRC;
+    usage |= GPUBufferUsage.COPY_DST;
+    return usage;
 }
 
 function translateWrapMode(wrapMode: GfxWrapMode): GPUAddressMode {
@@ -987,7 +990,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createBuffer(wordCount: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
         let usage = translateBufferUsage(usage_);
-        usage |= GPUBufferUsage.COPY_DST;
         const size = wordCount * 4;
         const gpuBuffer = this.device.createBuffer({ usage, size });
         const buffer: GfxBufferP_WebGPU = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gpuBuffer, size };
