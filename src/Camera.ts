@@ -426,7 +426,7 @@ export class FPSCameraController implements CameraController {
         if (this.useViewUp) {
             getMatrixAxisY(viewUp, camera.viewMatrix);
         } else {
-            vec3.set(viewUp, 0, 1, 0);
+            vec3.copy(viewUp, Vec3UnitY);
         }
 
         const viewRight = scratchVec3c;

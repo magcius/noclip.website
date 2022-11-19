@@ -1,7 +1,6 @@
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { getMatrixTranslation } from "../../MathHelpers";
-import { ViewerRenderInput } from "../../viewer";
 import { connectToScene, FixedPosition, getJointMtxByName, isHiddenModel } from "../ActorUtil";
 import { isDead, LiveActor } from "../LiveActor";
 import { SceneObjHolder } from "../Main";

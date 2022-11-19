@@ -812,8 +812,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // disconnectToDrawTemporarily
     }
 
-    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
-        const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+    protected setVisibleScenario(sceneObjHolder: SceneObjHolder, newVisibleScenario: boolean): void {
         if (this.visibleScenario === newVisibleScenario)
             return;
 
@@ -822,6 +821,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.onScenario(sceneObjHolder);
         else
             this.offScenario(sceneObjHolder);
+    }
+
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        this.setVisibleScenario(sceneObjHolder, sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer));
     }
 
     // noclip hook for scenario changing.

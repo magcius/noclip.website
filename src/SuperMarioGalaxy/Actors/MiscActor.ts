@@ -1,10 +1,10 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec2, vec3, vec4 } from 'gl-matrix';
 import { Camera } from '../../Camera';
 import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, Magenta, OpaqueBlack, Red, White, Yellow } from '../../Color';
-import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
+import { buildEnvMtx, J3DModelInstance } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
 import { dfRange, dfShow } from '../../DebugFloaters';
@@ -40,7 +40,7 @@ import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType }
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail, RailRider } from '../RailRider';
-import { addShadowVolumeCylinder, addShadowVolumeLine, getShadowProjectionLength, getShadowProjectionNormal, getShadowProjectionPos, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, isShadowProjected, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, onShadowVolumeCutDropLength, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr, setShadowVolumeBoxSize, setShadowVolumeEndDropOffset } from '../Shadow';
+import { addShadowVolumeCylinder, addShadowVolumeLine, getShadowProjectionLength, getShadowProjectionNormal, getShadowProjectionPos, initShadowController, initShadowFromCSV, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, isShadowProjected, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, onShadowVolumeCutDropLength, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr, setShadowVolumeBoxSize, setShadowVolumeEndDropOffset } from '../Shadow';
 import { calcNerveRate, isCrossedStep, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
@@ -86,6 +86,10 @@ function setClippingFar(f: number): number {
     if (f === 600)
         return 1;
     throw "whoops";
+}
+
+function isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder): boolean {
+    return sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet') === 'Dark';
 }
 
 export function isEqualStageName(sceneObjHolder: SceneObjHolder, stageName: string): boolean {
@@ -959,6 +963,15 @@ class Coin extends LiveActor<CoinNrv> {
 
     public setHostInfo(hostInfo: CoinHostInfo): void {
         this.hostInfo = hostInfo;
+    }
+
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        if (!this.isPurpleCoin) {
+            const visible = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer) && isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder);
+            this.setVisibleScenario(sceneObjHolder, visible);
+        } else {
+            super.scenarioChanged(sceneObjHolder);
+        }
     }
 }
 
@@ -2010,6 +2023,154 @@ export class YellowChip extends ChipBase {
     }
 }
 
+// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+function popCount(v: number) {
+    v = v - ((v >>> 1) & 0x55555555);
+    v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+    return ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >>> 24;
+}
+
+function getLightNumMax(model: J3DModelInstance): number {
+    let num = 0;
+    for (let i = 0; i < model.materialInstances.length; i++) {
+        const gxMaterial = model.materialInstances[i].materialData.material.gxMaterial;
+        for (let j = 0; j < gxMaterial.lightChannels.length; j++) {
+            num += popCount(gxMaterial.lightChannels[j].colorChannel.litMask);
+            num += popCount(gxMaterial.lightChannels[j].alphaChannel.litMask);
+        }
+    }
+    return num;
+}
+
+interface DummyDisplayModelInfo {
+    name: string;
+    offset: ReadonlyVec3;
+    drawBufferType: DrawBufferType;
+    bck: string | null;
+    colorChange: boolean;
+}
+
+export class DummyDisplayModel extends PartsModel {
+    private isCrystalItem: boolean;
+
+    public static InfoTable: DummyDisplayModelInfo[] = [
+        { name: "Coin", offset: vec3.fromValues(0.0, 70.0, 0.0), drawBufferType: DrawBufferType.NoSilhouettedMapObjStrongLight, bck: null, colorChange: false },
+        { name: "Kinopio", offset: vec3.fromValues(0.0, 50.0, 0.0), drawBufferType: DrawBufferType.Npc, bck: "Freeze", colorChange: true },
+        { name: "SpinDriver", offset: Vec3Zero, drawBufferType: DrawBufferType.NoShadowedMapObj, bck: null, colorChange: false },
+        { name: "SuperSpinDriver", offset: Vec3Zero, drawBufferType: DrawBufferType.NoShadowedMapObj, bck: "Freeze", colorChange: false },
+        { name: "StarPieceDummy", offset: vec3.fromValues(-30.0, 100.0, -30.0), drawBufferType: DrawBufferType.NoSilhouettedMapObj, bck: "Freeze", colorChange: false },
+        { name: "Tico", offset: vec3.fromValues(0.0, 50.0, 0.0), drawBufferType: DrawBufferType.Npc, bck: null, colorChange: true },
+        { name: "KeySwitch", offset: Vec3Zero, drawBufferType: DrawBufferType.MapObjStrongLight, bck: "InRotation", colorChange: false },
+        { name: "PowerStar", offset: Vec3Zero, drawBufferType: DrawBufferType.NoSilhouettedMapObj, bck: null, colorChange: false },
+        { name: "KinokoOneUp", offset: vec3.fromValues(0.0, 40.0, 0.0), drawBufferType: DrawBufferType.NoSilhouettedMapObj, bck: null, colorChange: false },
+        { name: "Kuribo", offset: vec3.fromValues(0.0, 80.0, 0.0), drawBufferType: DrawBufferType.Enemy, bck: null, colorChange: false },
+        { name: "BlueChip", offset: Vec3Zero, drawBufferType: DrawBufferType.NoShadowedMapObj, bck: null, colorChange: false },
+        { name: "YellowChip", offset: Vec3Zero, drawBufferType: DrawBufferType.NoShadowedMapObj, bck: null, colorChange: false },
+        { name: "StrayTico", offset: vec3.fromValues(0.0, 50.0, 0.0), drawBufferType: DrawBufferType.Npc, bck: null, colorChange: false },
+        { name: "GrandStar", offset: Vec3Zero, drawBufferType: DrawBufferType.NoSilhouettedMapObj, bck: null, colorChange: false },
+        { name: "KinokoLifeUp", offset: vec3.fromValues(0.0, 40.0, 0.0), drawBufferType: DrawBufferType.NoSilhouettedMapObj, bck: null, colorChange: false },
+    ];
+
+    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, public info: DummyDisplayModelInfo, drawBufferType: DrawBufferType, colorChangeFrame: number) {
+        super(sceneObjHolder, info.name, info.name, parentActor, drawBufferType);
+        this.isCrystalItem = (drawBufferType === DrawBufferType.CrystalItem);
+
+        if (this.info.name === "Coin" && !this.isCrystalItem)
+            sceneObjHolder.create(SceneObj.CoinRotater);
+
+        if (this.info.bck !== null)
+            startBck(this, this.info.bck);
+
+        if (this.info.colorChange) {
+            startBrk(this, "ColorChange");
+            setBrkFrameAndStop(this, colorChangeFrame);
+        }
+
+        if (this.info.name !== "GrandStar" && getLightNumMax(this.modelInstance!) > 0)
+            initLightCtrl(sceneObjHolder, this);
+
+        if (this.info.name === "Kinopio") {
+            // LodCtrl
+        } else if (this.info.name === "StarPieceDummy") {
+            if (!this.isCrystalItem)
+                initShadowFromCSV(sceneObjHolder, this);
+        } else if (this.info.name === "PowerStar") {
+            // if (!this.isCrystalItem)
+            //     PowerStar.initShadowPowerStar(...);
+        } else if (this.info.name === "GrandStar") {
+            // PowerStar.setupColor();
+            // emitEffect(sceneObjHolder, this, "Light");
+        }
+
+        // registerDemoSimpleCastAll
+    }
+
+    protected override calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        super.calcAndSetBaseMtx(sceneObjHolder);
+        const baseMtx = this.getBaseMtx()!;
+        vec3.negate(scratchVec3, this.info.offset);
+        transformVec3Mat4w1(this.translation, baseMtx, scratchVec3);
+        setMatrixTranslation(baseMtx, this.translation);
+
+        if (this.info.name === 'Coin') {
+            if (!this.isCrystalItem)
+                mat4.mul(baseMtx, sceneObjHolder.coinRotater!.coinRotateMtx, baseMtx);
+        } else if (this.info.name === 'GrandStar') {
+            // TODO(jstpierre): Some matrix math here
+        }
+    }
+
+    public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        if (this.info.name === 'Coin') {
+            const visible = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer) && isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder);
+            this.setVisibleScenario(sceneObjHolder, visible);
+        } else {
+            super.scenarioChanged(sceneObjHolder);
+        }
+    }
+
+    public static requestArchivesForInfo(sceneObjHolder: SceneObjHolder, info: DummyDisplayModelInfo): void {
+        sceneObjHolder.modelCache.requestObjectData(info.name);
+    }
+}
+
+function getDummyDisplayModelId(infoIter: JMapInfoIter | null, fallbackModelID: number | null): number | null {
+    if (infoIter === null)
+        return fallbackModelID;
+
+    return fallback(getJMapInfoArg7(infoIter), fallbackModelID);
+}
+
+function getDummyDisplayModelInfo(infoIter: JMapInfoIter | null, fallbackModelID: number | null): DummyDisplayModelInfo | null {
+    const modelID = getDummyDisplayModelId(infoIter, fallbackModelID);
+    if (modelID === null)
+        return null;
+
+    return DummyDisplayModel.InfoTable[modelID]!;
+}
+
+function tryCreateDummyModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, infoIter: JMapInfoIter | null, fallbackModelID: number | null, drawBufferType: DrawBufferType): DummyDisplayModel | null {
+    const info = getDummyDisplayModelInfo(infoIter, fallbackModelID);
+    if (info === null)
+        return null;
+
+    let colorChangeFrame: number = 0;
+    if (infoIter !== null)
+        colorChangeFrame = fallback(getJMapInfoArg7(infoIter), colorChangeFrame);
+
+    if (drawBufferType < 0)
+        drawBufferType = info.drawBufferType;
+        
+    return new DummyDisplayModel(sceneObjHolder, parentActor, info, drawBufferType, colorChangeFrame);
+}
+
+function createDummyModelCrystalItem(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, fallbackModelID: number | null, infoIter: JMapInfoIter, offset: ReadonlyVec3): DummyDisplayModel | null {
+    const dummyModel = tryCreateDummyModel(sceneObjHolder, parentActor, infoIter, fallbackModelID, DrawBufferType.CrystalItem);
+    if (dummyModel !== null)
+        dummyModel.initFixedPositionRelative(offset);
+    return dummyModel;
+}
+
 const enum CrystalCageSize { S, M, L }
 const enum CrystalCageNrv { Wait, Break, BreakAfter }
 export class CrystalCage extends LiveActor<CrystalCageNrv> {
@@ -2018,7 +2179,7 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
     private breakModel: ModelObj;
     private sensorPos = vec3.create();
     private binderOffsetVec = vec3.create();
-    private dummyDisplayModel: PartsModel | null = null;
+    private dummyDisplayModel: DummyDisplayModel | null = null;
     private hasBinder = false;
     private breakImmediately = false;
     private powerStarId: number;
@@ -2073,7 +2234,26 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
         // setClippingTypeSphere
         // initSound
 
-        // dummyDisplayModel
+        if (this.size === CrystalCageSize.L) {
+            vec3.set(scratchVec3, 0.0, this.scale[0] * 250.0, 0.0);
+            const fallbackModelID = 7; // PowerStar
+            this.dummyDisplayModel = createDummyModelCrystalItem(sceneObjHolder, this, fallbackModelID, infoIter, scratchVec3);
+        } else {
+            if (this.size === CrystalCageSize.M) {
+                vec3.set(scratchVec3, 0.0, 200.0, 0.0);
+            } else {
+                vec3.set(scratchVec3, -30.0, 100.0, -30.0);
+            }
+            this.dummyDisplayModel = createDummyModelCrystalItem(sceneObjHolder, this, null, infoIter, scratchVec3);
+        }
+
+        if (this.dummyDisplayModel !== null) {
+            if (this.dummyDisplayModel.info.name === "StarPieceDummy") {
+                startBva(this.dummyDisplayModel, "Freeze");
+            } else if (this.dummyDisplayModel.info.name === "Coin") {
+                declareCoin(sceneObjHolder, this, 1);
+            }
+        }
 
         startBva(this, this.name);
         setBvaFrameAndStop(this, 0.0);
@@ -2213,10 +2393,17 @@ export class CrystalCage extends LiveActor<CrystalCageNrv> {
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         const size = CrystalCage.getSize(infoIter);
-        if (size === CrystalCageSize.L)
+        if (size === CrystalCageSize.L) {
+            const dummyDisplayModelInfo = getDummyDisplayModelInfo(infoIter, 7); // GrandStar
+            if (dummyDisplayModelInfo !== null)
+                DummyDisplayModel.requestArchivesForInfo(sceneObjHolder, dummyDisplayModelInfo);
             sceneObjHolder.modelCache.requestObjectData('CrystalCageLBreak');
-        else
+        } else {
+            const dummyDisplayModelInfo = getDummyDisplayModelInfo(infoIter, null);
+            if (dummyDisplayModelInfo !== null)
+                DummyDisplayModel.requestArchivesForInfo(sceneObjHolder, dummyDisplayModelInfo);
             sceneObjHolder.modelCache.requestObjectData('CrystalCageSBreak');
+        }
     }
 }
 
@@ -2233,8 +2420,6 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         setEffectHostSRT(this, 'Sign', this.translation, this.rotation, this.effectScale);
 
         this.initNerve(LavaSteamNrv.Wait);
-
-        this.initWaitPhase = getRandomInt(0, 50);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
@@ -9372,6 +9557,8 @@ export class GalaxyCometScreenFilter extends LayoutActor {
     }
 
     public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        super.scenarioChanged(sceneObjHolder);
+
         const cometName = sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet');
         const cometNameId = this.getCometNameIdFromString(cometName);
         if (cometNameId !== null) {

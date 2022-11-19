@@ -8,9 +8,9 @@ import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
 import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator, RainCloud, LavaProminenceTriple, FallingSmallRock, MorphItemObjNeo, SpinLeverSwitch } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller, SwingLight, BigFan, Banekiti, RailDemoMoveObj, PhantomShipBridge } from './Actors/MapObj';
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar, FlipPanel, SmallStone, SpaceMine, IronCannonLauncherPoint, AstroMapBoard, SimpleClipPartsObj, DashRing, SeaBottomTriplePropeller, SwingLight, BigFan, Banekiti, RailDemoMoveObj, PhantomShipBridge, LavaFloater } from './Actors/MapObj';
 import { Butler, Caretaker, CollectTico, HoneyBee, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, RosettaChair, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
-import { createDeathCube, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
+import { createDeathCube, createDeathCylinder, createDeathSphere, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
 import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
@@ -234,6 +234,14 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("ItemBubble",                     ItemBubble),
     _("LargeChain",                     LargeChain),
     _("LavaGeyser",                     LavaGeyser),
+    _("LavaHomeFloaterB",               LavaFloater),
+    _("LavaFloatingStepA",              LavaFloater),
+    _("LavaFloatingStepB",              LavaFloater),
+    _("LavaFloatingStepC",              LavaFloater),
+    _("LavaFloatingStepD",              LavaFloater),
+    _("FloaterOtakingFloaterA",         LavaFloater),
+    _("IceVolcanoFloaterA",             LavaFloater),
+    _("IceVolcanoFloaterB",             LavaFloater),
     _("LavaProminence",                 LavaProminence),
     _("LavaProminenceWithoutShadow",    LavaProminence),
     _("LavaProminenceTriple",           LavaProminenceTriple),
@@ -854,6 +862,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("SimpleBloomCube",              createSimpleBloomCube),
     E("DepthOfFieldCube",             createDepthOfFieldCube),
     E("DeathCube",                    createDeathCube),
+    E("DeathSphere",                  createDeathSphere),
+    E("DeathCylinder",                createDeathCylinder),
     E("LensFlareArea",                createLensFlareArea, requestArchivesLensFlareArea),
     E("LightCtrlCube",                createLightCtrlCube),
     E("LightCtrlCylinder",            createLightCtrlCylinder),

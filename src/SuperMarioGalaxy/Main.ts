@@ -441,7 +441,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
+                // TODO(jstpierre): The game puts this in the Skybox pass? Verify that we're doing this correctly here...
                 sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.mainColorTemporalTexture.getTextureForSampling());
+                this.drawOpa(passRenderer, DrawBufferType.CrystalItem);
+                this.drawXlu(passRenderer, DrawBufferType.CrystalItem);
                 this.drawOpa(passRenderer, DrawBufferType.Crystal);
                 this.drawXlu(passRenderer, DrawBufferType.Crystal);
 

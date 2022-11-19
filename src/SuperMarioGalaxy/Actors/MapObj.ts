@@ -885,6 +885,45 @@ export class OceanWaveFloater extends MapObjActor {
     }
 }
 
+const enum LavaFloaterNrv { Float, Sink, }
+export class LavaFloater extends LiveActor<LavaFloaterNrv> {
+    private groundPos = vec3.create();
+    private distanceToGround: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostSRT(this, 'LavaBubble', this.groundPos, this.rotation, null);
+
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, this.name, bodySensor);
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+        this.initNerve(LavaFloaterNrv.Float);
+        this.calcGravityFlag = true;
+
+        // FloaterFloatingForceTypeNormal
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        vec3.scale(scratchVec3a, this.gravityVector, 1000.0);
+        if (!getFirstPolyOnLineToMap(sceneObjHolder, this.groundPos, null, this.translation, scratchVec3a)) {
+            // calcMapGroundUpper
+        }
+
+        vec3.sub(scratchVec3a, this.translation, this.groundPos);
+        this.distanceToGround = vec3.len(scratchVec3a);
+        if (vec3.dot(scratchVec3a, this.gravityVector) < 0.0)
+            this.distanceToGround *= -1.0;
+
+        this.calcGravityFlag = false;
+    }
+}
+
 const enum TsukidashikunNrv { Relax, WaitForward, SignForward, MoveForward, WaitBack, SignBack, MoveBack }
 export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
     private speed: number;
