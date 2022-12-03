@@ -28,6 +28,7 @@ const id = 'CounterStrikeGO';
 const name = 'Counter-Strike: Global Offensive';
 const sceneDescs = [
     new CounterStrikeGOSceneDesc('de_dust2'),
+    new CounterStrikeGOSceneDesc('de_prime'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

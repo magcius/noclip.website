@@ -172,19 +172,19 @@ export class J3DFrameCtrl {
 }
 
 export function VAF1_getVisibility(vaf1: VAF1, shapeIndex: number, animFrame: number): boolean {
-    const entry = assertExists(vaf1.visibilityAnimationTracks[shapeIndex]);
+    const bitmap = assertExists(vaf1.shapeVisibility[shapeIndex]);
 
     // animFrame can return a partial keyframe, but visibility information is frame-specific.
     // Resolve this by treating this as a stepped track, rounded. e.g. 15.9 is keyframe 16.
     const animFrameInt = (animFrame + 0.5) | 0;
 
     if (animFrameInt < 0) {
-        return entry.shapeVisibility.getBit(0);
-    } else if (animFrameInt >= entry.shapeVisibility.numBits) {
+        return bitmap.getBit(0);
+    } else if (animFrameInt >= bitmap.numBits) {
         // If we're past the end, use the last frame.
-        return entry.shapeVisibility.getBit(entry.shapeVisibility.numBits - 1);
+        return bitmap.getBit(bitmap.numBits - 1);
     } else {
-        return entry.shapeVisibility.getBit(animFrameInt);
+        return bitmap.getBit(animFrameInt);
     }
 }
 

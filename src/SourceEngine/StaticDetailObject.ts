@@ -190,11 +190,11 @@ export class DetailPropLeafRenderer {
         const device = renderContext.device, cache = renderContext.renderCache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: MaterialShaderTemplateBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: MaterialShaderTemplateBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
-            { location: MaterialShaderTemplateBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_TangentS, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Position,   bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_TexCoord01, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialShaderTemplateBase.a_Color,      bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_Normal,     bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -570,8 +570,12 @@ export class StaticPropRenderer {
         const spPrefix = this.bspRenderer.bsp.usingHDR ? `sp_hdr` : `sp`;
         const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
         if (staticLightingData !== null) {
-            this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
-            this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
+            const colorMeshData = new HardwareVertData(renderContext, staticLightingData);
+            if (colorMeshData.vertexSize === 4) {
+                // Only support static lighting 1 right now, not static lighting 3 (HL2 basis)
+                this.colorMeshData = colorMeshData;
+                this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
+            }
         }
     }
 
@@ -605,7 +609,6 @@ export class StaticPropRenderer {
         if ((this as any).debug)
             this.materialParams.lightCache!.debugDrawLights(renderContext.currentView);
 
-        computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
     }

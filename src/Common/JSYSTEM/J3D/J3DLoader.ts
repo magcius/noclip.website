@@ -1869,12 +1869,8 @@ export class BTP {
 //#endregion
 
 //#region J3DAnmVisibilityFull
-export interface ShapeVisibilityEntry {
-    shapeVisibility: BitMap;
-}
-
 export interface VAF1 extends AnimationBase {
-    visibilityAnimationTracks: ShapeVisibilityEntry[];
+    shapeVisibility: BitMap[];
 }
 
 function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
@@ -1888,23 +1884,23 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
 
     let animationTableIdx = visibilityAnimationTableOffs;
 
-    const shapeVisibilityEntries: ShapeVisibilityEntry[] = [];
+    const shapeVisibility: BitMap[] = [];
     for (let i = 0; i < visibilityAnimationTableCount; i++) {
         const showCount = view.getUint16(animationTableIdx + 0x00);
         const showFirstIndex = view.getUint16(animationTableIdx + 0x02);
 
         assert(showCount > 0);
-        const shapeVisibility = new BitMap(showCount);
+        const bitmap = new BitMap(showCount);
         for (let j = 0; j < showCount; j++) {
             const show = !!view.getUint8(showTableOffs + showFirstIndex + j);
-            shapeVisibility.setBit(j, show);
+            bitmap.setBit(j, show);
         }
 
-        shapeVisibilityEntries.push({ shapeVisibility });
+        shapeVisibility.push(bitmap);
         animationTableIdx += 0x04;
     }
 
-    return { loopMode, duration, visibilityAnimationTracks: shapeVisibilityEntries };
+    return { loopMode, duration, shapeVisibility };
 }
 
 export class BVA {
