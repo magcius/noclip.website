@@ -571,11 +571,9 @@ export class StaticPropRenderer {
         const staticLightingData = await renderContext.filesystem.fetchFileData(`${spPrefix}_${this.staticProp.index}.vhv`);
         if (staticLightingData !== null) {
             const colorMeshData = new HardwareVertData(renderContext, staticLightingData);
-            if (colorMeshData.vertexSize === 4) {
-                // Only support static lighting 1 right now, not static lighting 3 (HL2 basis)
-                this.colorMeshData = colorMeshData;
-                this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
-            }
+            // Only support static lighting 1 right now, not static lighting 3 (HL2 basis)
+            this.colorMeshData = colorMeshData;
+            this.studioModelInstance.setColorMeshData(renderContext.renderCache, this.colorMeshData);
         }
     }
 

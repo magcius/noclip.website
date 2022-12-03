@@ -39,6 +39,7 @@ function resetTextureMappings(m: TextureMapping[]): void {
 export const enum StaticLightingMode {
     None,
     StudioVertexLighting,
+    StudioVertexLighting3,
     StudioAmbientCube,
 }
 
@@ -95,9 +96,9 @@ export class MaterialShaderTemplateBase extends UberShaderTemplateBasic {
     public static a_TangentS = 2;
     public static a_TexCoord01 = 4;
     public static a_Color = 5;
-    public static a_StaticVertexLighting1 = 6;
-    public static a_StaticVertexLighting2 = 7;
-    public static a_StaticVertexLighting3 = 8;
+    public static a_StaticVertexLighting0 = 6;
+    public static a_StaticVertexLighting1 = 7;
+    public static a_StaticVertexLighting2 = 8;
     public static a_BoneWeights = 9;
     public static a_BoneIDs = 10;
 
@@ -225,7 +226,11 @@ layout(location = ${MaterialShaderTemplateBase.a_TexCoord01}) in vec4 a_TexCoord
 layout(location = ${MaterialShaderTemplateBase.a_Color}) in vec4 a_Color;
 #endif
 #if defined USE_STATIC_VERTEX_LIGHTING
+layout(location = ${MaterialShaderTemplateBase.a_StaticVertexLighting0}) in vec3 a_StaticVertexLighting0;
+#if defined USE_STATIC_VERTEX_LIGHTING_3
 layout(location = ${MaterialShaderTemplateBase.a_StaticVertexLighting1}) in vec3 a_StaticVertexLighting1;
+layout(location = ${MaterialShaderTemplateBase.a_StaticVertexLighting2}) in vec3 a_StaticVertexLighting2;
+#endif
 #endif
 #if SKINNING_MODE == ${SkinningMode.Smooth}
 layout(location = ${MaterialShaderTemplateBase.a_BoneWeights}) in vec4 a_BoneWeights;
@@ -1222,7 +1227,8 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_SelfIllumFresnel;
 #endif
 #if defined USE_PHONG
-    vec4 u_FresnelRangeSpecBoost;
+    vec4 u_FresnelRangeSpecAlbedoBoost;
+    vec4 u_SpecTintBoost;
 #endif
 #if defined USE_PROJECTED_LIGHT
     Mat4x4 u_ProjectedLightFromWorldMatrix;
@@ -1248,7 +1254,12 @@ varying vec2 v_TexCoord1;
 // w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
 varying vec4 v_Color;
-varying vec3 v_DiffuseLighting;
+varying vec3 v_DiffuseLighting0;
+
+#if defined USE_STATIC_VERTEX_LIGHTING_3
+varying vec3 v_DiffuseLighting1;
+varying vec3 v_DiffuseLighting2;
+#endif
 
 #if defined HAS_FULL_TANGENTSPACE
 // 3x3 matrix for our tangent space basis.
@@ -1404,11 +1415,11 @@ void mainVS() {
     v_Color = vec4(1.0);
 #endif
 
-    v_DiffuseLighting.rgb = vec3(0.0);
+    v_DiffuseLighting0.rgb = vec3(0.0);
 
 #if !defined USE_DYNAMIC_LIGHTING && !defined USE_STATIC_VERTEX_LIGHTING
     // If we don't have any lighting, it's fullbright.
-    v_DiffuseLighting.rgb = vec3(1.0);
+    v_DiffuseLighting0.rgb = vec3(1.0);
 #endif
 
 #if defined USE_DYNAMIC_LIGHTING
@@ -1418,12 +1429,17 @@ void mainVS() {
 #if defined USE_STATIC_VERTEX_LIGHTING
     // Static vertex lighting should already include ambient lighting.
     // 2.0 here is overbright.
-    v_DiffuseLighting.rgb += GammaToLinear(a_StaticVertexLighting1 * 2.0);
+    v_DiffuseLighting0.rgb = GammaToLinear(a_StaticVertexLighting0 * 2.0);
+
+#if defined USE_STATIC_VERTEX_LIGHTING_3
+    v_DiffuseLighting1.rgb = GammaToLinear(a_StaticVertexLighting1 * 2.0);
+    v_DiffuseLighting2.rgb = GammaToLinear(a_StaticVertexLighting2 * 2.0);
+#endif
 #endif
 
 #if defined USE_DYNAMIC_VERTEX_LIGHTING
 #if defined USE_AMBIENT_CUBE
-    v_DiffuseLighting.rgb += AmbientLight(t_NormalWorld);
+    v_DiffuseLighting0.rgb += AmbientLight(t_NormalWorld);
 #endif
 
     bool t_HalfLambert = false;
@@ -1437,7 +1453,7 @@ void mainVS() {
     t_DiffuseLightInput.LightAttenuation = t_LightAtten.xyzw;
     t_DiffuseLightInput.HalfLambert = t_HalfLambert;
     vec3 t_DiffuseLighting = WorldLightCalcAllDiffuse(t_DiffuseLightInput);
-    v_DiffuseLighting.rgb += t_DiffuseLighting;
+    v_DiffuseLighting0.rgb += t_DiffuseLighting;
 #endif
 
 #if defined USE_DYNAMIC_PIXEL_LIGHTING
@@ -1660,7 +1676,7 @@ vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
 }
 
 float CalcShadowPCF9(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
-    float t_Res = 0.0f;
+    float t_Res = 0.0;
     t_Res += texture(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz) * (1.0 / 9.0);
     t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0,  1)) * (1.0 / 9.0);
     t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0, -1)) * (1.0 / 9.0);
@@ -1674,7 +1690,7 @@ float CalcShadowPCF9(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
 }
 
 float CalcShadowPCF5(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
-    float t_Res = 0.0f;
+    float t_Res = 0.0;
     t_Res += textureLod(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0) * (1.0 / 5.0);
     t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0,  1)) * (1.0 / 5.0);
     t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0, -1)) * (1.0 / 5.0);
@@ -1721,7 +1737,7 @@ void mainPS() {
     vec4 t_DetailTexture = vec4(0.0);
 
 #if defined USE_DETAIL
-    vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.xy, 1.0, 1.0));
+    vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.zw, 1.0, 1.0));
     t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
     t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
 #endif
@@ -1782,6 +1798,7 @@ void mainPS() {
 
     vec3 t_DiffuseLighting = vec3(0.0);
     vec3 t_SpecularLighting = vec3(0.0);
+    vec3 t_SpecularLightingEnvMap = vec3(0.0);
 
     bool use_lightmap = ${getDefineBool(m, `USE_LIGHTMAP`)};
     bool use_diffuse_bumpmap = ${getDefineBool(m, `USE_DIFFUSE_BUMPMAP`)};
@@ -1811,9 +1828,9 @@ void mainPS() {
                 bool use_ssbump_normalize = ${getDefineBool(m, `USE_SSBUMP_NORMALIZE`)};
                 t_NormalizeInfluence = use_ssbump_normalize;
             } else {
-                t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
-                t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
-                t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
+                t_Influence.x = saturate(dot(t_BumpmapNormal, g_RNBasis0));
+                t_Influence.y = saturate(dot(t_BumpmapNormal, g_RNBasis1));
+                t_Influence.z = saturate(dot(t_BumpmapNormal, g_RNBasis2));
 
                 if (DETAIL_BLEND_MODE == DETAIL_BLEND_MODE_SSBUMP_BUMP) {
                     t_Influence.xyz *= t_DetailTexture.rgb * 2.0;
@@ -1834,8 +1851,29 @@ void mainPS() {
             t_DiffuseLighting.rgb = t_LightmapColor0;
         }
     } else {
-        // When not using a lightmap, diffuse lighting comes from vertex shader.
-        t_DiffuseLighting.rgb = v_DiffuseLighting.rgb;
+        bool use_static_vertex_lighting_3 = ${getDefineBool(m, `USE_STATIC_VERTEX_LIGHTING_3`)};
+        if (use_static_vertex_lighting_3) {
+#if defined USE_STATIC_VERTEX_LIGHTING_3
+            vec3 t_Influence;
+
+            if (false && use_bumpmap) {
+                t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
+                t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
+                t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
+                t_Influence.xyz = normalize(t_Influence.xyz);
+            } else {
+                // No bumpmap, equal diffuse influence
+                t_Influence.xyz = vec3(1.0 / 3.0);
+            }
+
+            t_DiffuseLighting = vec3(0.0);
+            t_DiffuseLighting += v_DiffuseLighting0.rgb * t_Influence.x;
+            t_DiffuseLighting += v_DiffuseLighting1.rgb * t_Influence.y;
+            t_DiffuseLighting += v_DiffuseLighting2.rgb * t_Influence.z;
+#endif
+        } else {
+            t_DiffuseLighting.rgb = v_DiffuseLighting0.rgb;
+        }
     }
 
     t_Albedo *= v_Color;
@@ -1876,7 +1914,7 @@ void mainPS() {
 
     float t_Fresnel;
 #if defined USE_PHONG
-    t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecBoost.xyz);
+    t_Fresnel = CalcFresnelTerm2Ranges(t_FresnelDot, u_FresnelRangeSpecAlbedoBoost.xyz);
 #else
     t_Fresnel = CalcFresnelTerm2(t_FresnelDot);
 #endif
@@ -1909,7 +1947,7 @@ void mainPS() {
     t_EnvmapColor = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_EnvmapColor)), t_EnvmapColor, u_EnvmapContrastSaturationFresnelLightScale.y);
     t_EnvmapColor *= mix(t_Fresnel, 1.0, u_EnvmapContrastSaturationFresnelLightScale.z);
 
-    t_SpecularLighting.rgb += t_EnvmapColor.rgb;
+    t_SpecularLightingEnvMap.rgb += t_EnvmapColor.rgb;
 #endif
 
     // World Specular
@@ -1934,28 +1972,8 @@ void mainPS() {
 
 #if defined USE_DYNAMIC_PIXEL_LIGHTING
     if (use_phong) {
-        // Specular mask is either in base map or normal map alpha.
-        float t_SpecularMask;
-        bool use_base_alpha_phong_mask = ${getDefineBool(m, `USE_BASE_ALPHA_PHONG_MASK`)};
-        if (use_base_alpha_phong_mask) {
-            t_SpecularMask = t_BaseTexture.a;
-        } else if (use_bumpmap) {
-            t_SpecularMask = t_BumpmapSample.a;
-        } else {
-            t_SpecularMask = 1.0;
-        }
-
-        bool use_phong_mask_invert = ${getDefineBool(m, `USE_PHONG_MASK_INVERT`)};
-        if (use_phong_mask_invert)
-            t_SpecularMask = 1.0 - t_SpecularMask;
-
         SpecularLightResult t_SpecularLightResult = WorldLightCalcAllSpecular(t_SpecularLightInput);
         t_SpecularLighting.rgb += t_SpecularLightResult.SpecularLight;
-
-        // TODO(jstpierre): $phongtint, $phongalbedotint
-        t_SpecularLighting.rgb *= t_SpecularMask * u_FresnelRangeSpecBoost.w;
-
-        // TODO(jstpierre): $rimlight, $rimlightexponent, $rimlightboost, $rimmask
     }
 #endif // USE_DYNAMIC_PIXEL_LIGHTING
 
@@ -2008,6 +2026,38 @@ void mainPS() {
     }
 #endif
 
+    // Compute final specular
+#if defined USE_DYNAMIC_PIXEL_LIGHTING
+    if (use_phong) {
+        // Specular mask is either in base map or normal map alpha.
+        float t_SpecularMask;
+        bool use_base_alpha_phong_mask = ${getDefineBool(m, `USE_BASE_ALPHA_PHONG_MASK`)};
+        if (use_base_alpha_phong_mask) {
+            t_SpecularMask = t_BaseTexture.a;
+        } else if (use_bumpmap) {
+            t_SpecularMask = t_BumpmapSample.a;
+        } else {
+            t_SpecularMask = 1.0;
+        }
+
+        bool use_phong_mask_invert = ${getDefineBool(m, `USE_PHONG_MASK_INVERT`)};
+        if (use_phong_mask_invert)
+            t_SpecularMask = 1.0 - t_SpecularMask;
+
+        vec3 t_SpecularTint = vec3(u_SpecTintBoost.w);
+        bool use_phong_albedo_tint = ${getDefineBool(m, `USE_PHONG_ALBEDO_TINT`)};
+        if (use_phong_albedo_tint) {
+            t_SpecularTint.rgb = mix(t_SpecularTint.rgb, t_Albedo.rgb * u_FresnelRangeSpecAlbedoBoost.www, t_SpecularMapSample.ggg);
+        } else {
+            t_SpecularTint.rgb *= u_SpecTintBoost.rgb;
+        }
+
+        t_SpecularLighting.rgb *= t_SpecularTint.rgb * t_SpecularMask;
+
+        // TODO(jstpierre): $rimlight, $rimlightexponent, $rimlightboost, $rimmask
+    }
+#endif
+
     vec3 t_DecalLighting = t_DiffuseLighting;
 
     vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
@@ -2052,6 +2102,7 @@ void mainPS() {
 
 #if !defined DEBUG_DIFFUSEONLY
     t_FinalColor.rgb += t_SpecularLighting.rgb;
+    t_FinalColor.rgb += t_SpecularLightingEnvMap.rgb;
 #endif
 
     t_FinalColor.a = t_Albedo.a;
@@ -2083,7 +2134,6 @@ class Material_Generic extends BaseMaterial {
     private wantsBlendModulate = false;
     private wantsPhong = false;
     private wantsPhongExponentTexture = false;
-    private wantsStaticVertexLighting = false;
     private wantsDynamicLighting = false;
     private wantsAmbientCube = false;
     private wantsProjectedTexture = false;
@@ -2096,21 +2146,26 @@ class Material_Generic extends BaseMaterial {
     private projectedLight: ProjectedLight | null = null;
 
     public override setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
+        let wantsStaticVertexLighting: boolean;
         let wantsDynamicVertexLighting: boolean;
         let wantsDynamicPixelLighting: boolean;
 
+        const isStudioVertexLighting = (staticLightingMode === StaticLightingMode.StudioVertexLighting || staticLightingMode === StaticLightingMode.StudioVertexLighting3);
+        const isStudioVertexLighting3 = (staticLightingMode === StaticLightingMode.StudioVertexLighting3);
+        const isStudioAmbientCube = (staticLightingMode === StaticLightingMode.StudioAmbientCube);
+
         if (this.shaderType === GenericShaderType.VertexLitGeneric) {
-            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
-            this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
-            wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            wantsStaticVertexLighting = isStudioVertexLighting;
+            this.wantsAmbientCube = isStudioAmbientCube;
+            wantsDynamicVertexLighting = isStudioAmbientCube;
             wantsDynamicPixelLighting = false;
         } else if (this.shaderType === GenericShaderType.Skin) {
-            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
-            this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            wantsStaticVertexLighting = isStudioVertexLighting;
+            this.wantsAmbientCube = isStudioAmbientCube;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = true;
         } else {
-            this.wantsStaticVertexLighting = false;
+            wantsStaticVertexLighting = false;
             this.wantsAmbientCube = false;
             wantsDynamicVertexLighting = false;
             wantsDynamicPixelLighting = false;
@@ -2119,12 +2174,13 @@ class Material_Generic extends BaseMaterial {
         this.wantsDynamicLighting = wantsDynamicVertexLighting || wantsDynamicPixelLighting;
 
         // Ensure that we never have a lightmap at the same time as "studio model" lighting, as they're exclusive...
-        if (this.wantsStaticVertexLighting || this.wantsDynamicLighting || this.wantsAmbientCube) {
+        if (wantsStaticVertexLighting || this.wantsDynamicLighting || this.wantsAmbientCube) {
             assert(!this.wantsLightmap);
         }
 
         let changed = false;
-        changed = this.shaderInstance.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_STATIC_VERTEX_LIGHTING', wantsStaticVertexLighting) || changed;
+        changed = this.shaderInstance.setDefineBool('USE_STATIC_VERTEX_LIGHTING_3', isStudioVertexLighting3) || changed;
         changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', wantsDynamicVertexLighting) || changed;
         changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_PIXEL_LIGHTING', wantsDynamicPixelLighting) || changed;
         changed = this.shaderInstance.setDefineBool('USE_DYNAMIC_LIGHTING', this.wantsDynamicLighting) || changed;
@@ -2185,6 +2241,9 @@ class Material_Generic extends BaseMaterial {
         // Phong (Skin)
         p['$phong']                        = new ParameterBoolean(false, false);
         p['$phongboost']                   = new ParameterNumber(1.0);
+        p['$phongtint']                    = new ParameterColor(1, 1, 1);
+        p['$phongalbedoboost']             = new ParameterNumber(1.0);
+        p['$phongalbedotint']              = new ParameterBoolean(false, false);
         p['$phongexponent']                = new ParameterNumber(5.0);
         p['$phongexponenttexture']         = new ParameterTexture(false);       // Phong
         p['$phongexponentfactor']          = new ParameterNumber(149.0);
@@ -2271,6 +2330,7 @@ class Material_Generic extends BaseMaterial {
             if (this.paramGetVTF('$phongexponenttexture') !== null) {
                 this.wantsPhongExponentTexture = true;
                 this.shaderInstance.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
+                this.shaderInstance.setDefineBool('USE_PHONG_ALBEDO_TINT', this.paramGetBoolean('$phongalbedotint'));
             }
         }
 
@@ -2540,7 +2600,8 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsPhong) {
             const fresnelRanges = this.paramGetVector('$phongfresnelranges');
             const r0 = fresnelRanges.get(0), r1 = fresnelRanges.get(1), r2 = fresnelRanges.get(2);
-            offs += fillVec4(d, offs, r0, r1, r2, this.paramGetNumber('$phongboost'));
+            offs += fillVec4(d, offs, r0, r1, r2, this.paramGetNumber('$phongalbedoboost'));
+            offs += this.paramFillColor(d, offs, '$phongtint', this.paramGetNumber('$phongboost'));
         }
 
         if (this.wantsProjectedTexture) {

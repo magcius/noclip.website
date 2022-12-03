@@ -107,9 +107,6 @@ class StudioModelStripData {
 
 class StudioModelStripGroupData {
     public stripData: StudioModelStripData[] = [];
-
-    constructor() {
-    }
 }
 
 const enum StudioModelMeshDataFlags {
@@ -120,17 +117,21 @@ const enum StudioModelMeshDataFlags {
 class StudioModelMeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
-    public inputLayoutWithoutColorMesh: GfxInputLayout;
-    public inputStateWithoutColorMesh: GfxInputState;
-    public inputLayoutWithColorMesh: GfxInputLayout;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(cache: GfxRenderCache, public materialNames: string[], flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike) {
+    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
         const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
+        // Create our base input state.
+        [this.inputLayout, this.inputState] = this.createInputState(cache, StaticLightingMode.None);
+    }
+
+    public createInputState(cache: GfxRenderCache, staticLightingMode: StaticLightingMode, colorBufferDescriptor: GfxVertexBufferDescriptor | null = null): [GfxInputLayout, GfxInputState] {
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -144,41 +145,50 @@ class StudioModelMeshData {
             { byteStride: (3+4+4+4+4+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        if (!!(flags & StudioModelMeshDataFlags.HasTexCoord1)) {
+        if (!!(this.flags & StudioModelMeshDataFlags.HasTexCoord1)) {
             const lastSlot = vertexAttributeDescriptors[vertexAttributeDescriptors.length - 1];
             lastSlot.format = GfxFormat.F32_RGBA;
             vertexBufferDescriptors[0].byteStride += 2*0x04;
         }
 
+        const bufferDescriptors: GfxVertexBufferDescriptor[] = [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+        ];
+
+        if (staticLightingMode === StaticLightingMode.StudioVertexLighting) {
+            assert(colorBufferDescriptor !== null);
+            vertexAttributeDescriptors.push(
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+            );
+            vertexBufferDescriptors.push(
+                { byteStride: 1*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            );
+            bufferDescriptors.push(colorBufferDescriptor);
+        } else if (staticLightingMode === StaticLightingMode.StudioVertexLighting3) {
+            assert(colorBufferDescriptor !== null);
+            vertexAttributeDescriptors.push(
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting1, bufferIndex: 1, bufferByteOffset: 1*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting2, bufferIndex: 1, bufferByteOffset: 2*0x04, format: GfxFormat.U8_RGBA_NORM, },
+            );
+            vertexBufferDescriptors.push(
+                { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            );
+            bufferDescriptors.push(colorBufferDescriptor);
+        } else {
+            assert(colorBufferDescriptor === null);
+        }
+
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayoutWithoutColorMesh = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-
-        // Tack on the color mesh.
-        vertexAttributeDescriptors.push(
-            { location: MaterialShaderTemplateBase.a_StaticVertexLighting1, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
-        );
-        vertexBufferDescriptors.push(
-            { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PerVertex, },
-        );
-        this.inputLayoutWithColorMesh = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-
-        // Create our base input state.
-        this.inputStateWithoutColorMesh = device.createInputState(this.inputLayoutWithoutColorMesh, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
-    }
-
-    public createInputStateWithColorMesh(device: GfxDevice, meshBufferDescriptor: GfxVertexBufferDescriptor): GfxInputState {
-        return device.createInputState(this.inputLayoutWithColorMesh, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-            meshBufferDescriptor,
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        const inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        const inputState = cache.device.createInputState(inputLayout, bufferDescriptors, { buffer: this.indexBuffer, byteOffset: 0, });
+        return [inputLayout, inputState];
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputStateWithoutColorMesh);
+        device.destroyInputState(this.inputState);
     }
 }
 
@@ -582,6 +592,7 @@ export class StudioModelData {
     public includemodel: string[] = [];
     public animBlockName: string | null = null;
     public animblocks: AnimBlock[] = [];
+    public numLOD: number;
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice | null, vtxBuffer: ArrayBufferSlice | null) {
         const mdlView = mdlBuffer.createDataView();
@@ -1007,6 +1018,7 @@ export class StudioModelData {
         const vvdChecksum = vvdView.getUint32(0x08, true);
         assert(vvdChecksum === this.checksum);
         const vvdNumLODs = vvdView.getUint32(0x0C, true);
+        this.numLOD = vvdNumLODs;
         const vvdNumLODVertexes = nArray(8, (i) => vvdView.getUint32(0x10 + i * 0x04, true));
         const vvdNumFixups = vvdView.getUint32(0x30, true);
         const vvdFixupTableStart = vvdView.getUint32(0x34, true);
@@ -1186,7 +1198,8 @@ export class StudioModelData {
                     submodelData.lodData.push(lodData);
                     let mdlMeshIdx = mdlSubmodelIdx + mdlSubmodelMeshindex;
                     let vtxMeshIdx = vtxLODIdx + vtxMeshOffset;
-                    for (let m = 0; m < mdlSubmodelNumMeshes; m++) {
+
+                    for (let m = 0; m < mdlSubmodelNumMeshes; m++, mdlMeshIdx += 0x74, vtxMeshIdx += 0x09) {
                         // MDL data is not LOD-specific, we reparse this for each LOD.
 
                         const skinrefIndex = mdlView.getUint32(mdlMeshIdx + 0x00, true);
@@ -1252,6 +1265,11 @@ export class StudioModelData {
                             meshNumVertices += numVerts;
                             meshNumIndices += numIndices;
                         }
+
+                        // Ignore any meshes with 0 vertices.
+                        // TODO(jstpierre): Where is this in the original engine? It's required for .vhv to match correctly.
+                        if (meshNumVertices === 0)
+                            continue;
 
                         // 3 pos, 4 normal, 4 tangent, 4 bone weight, 4 bone id, 2 uv
                         let vertexSize = (3+4+4+4+4+2);
@@ -1478,13 +1496,10 @@ export class StudioModelData {
                         }
 
                         const cache = renderContext.renderCache;
-                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer);
+                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);
                         lodData.meshData.push(meshData);
-
-                        mdlMeshIdx += 0x74;
-                        vtxMeshIdx += 0x09;
                     }
 
                     vtxLODIdx += 0x0C;
@@ -1509,7 +1524,6 @@ export class StudioModelData {
 
 interface HardwareVertDataMesh {
     lod: number;
-    indexInsideLOD: number;
     vertexCount: number;
     byteOffset: number;
     byteSize: number;
@@ -1537,38 +1551,31 @@ export class HardwareVertData {
 
         this.vertexSize = view.getUint32(0x0C, true);
         if (vertexFlags === VertexFlags.COLOR)
-            assert(this.vertexSize === 4);
+            assert(this.vertexSize === 1*0x04);
         else if (vertexFlags === VertexFlags.NORMAL)
-            assert(this.vertexSize === 12);
+            assert(this.vertexSize === 3*0x04);
 
         const vertexCount = view.getUint32(0x10, true);
 
         const numMeshes = view.getUint32(0x14, true);
 
         // 0x10 bytes of padding.
-        const vertexData = new Uint8Array(vertexCount * 4);
+        const vertexData = new Uint8Array(vertexCount * this.vertexSize);
         let vertexOffs = 0;
-
-        let lastLOD = -1;
-        let indexInsideLOD = 0;
 
         let meshHeaderIdx = 0x28;
         for (let i = 0; i < numMeshes; i++) {
             const lod = view.getUint32(meshHeaderIdx + 0x00, true);
-            if (lastLOD !== lod) {
-                indexInsideLOD = 0;
-                lastLOD = lod;
-            }
-
             const meshVertexCount = view.getUint32(meshHeaderIdx + 0x04, true);
             const offset = view.getUint32(meshHeaderIdx + 0x08, true);
 
             const meshByteSize = meshVertexCount * this.vertexSize;
 
-            this.mesh.push({ lod, indexInsideLOD, vertexCount: meshVertexCount, byteOffset: vertexOffs, byteSize: meshByteSize });
+            this.mesh.push({ lod, vertexCount: meshVertexCount, byteOffset: vertexOffs, byteSize: meshByteSize });
 
             // Input and output data are both RGBA
             // Input is BGRA, we need RGBA
+            // TODO(jstpierre): Do this in the shader?
             let dataOffs = offset;
             for (let i = 0; i < meshByteSize; i += 4) {
                 const b = view.getUint8(dataOffs++);
@@ -1583,7 +1590,6 @@ export class HardwareVertData {
 
             // 0x10 bytes of padding.
             meshHeaderIdx += 0x1C;
-            indexInsideLOD++;
         }
 
         this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.Vertex, vertexData.buffer);
@@ -1695,19 +1701,17 @@ export class StudioModelCache {
 class StudioModelMeshInstance {
     private visible = true;
     private materialInstance: BaseMaterial | null = null;
-    private inputStateWithColorMesh: GfxInputState | null = null;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private staticLightingMode: StaticLightingMode;
     private skinningMode: SkinningMode;
     private currentSkin: number;
 
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
         this.skinningMode = this.calcSkinningMode();
-    }
-
-    private syncMaterialInstanceStaticLightingMode(): void {
-        if (this.materialInstance !== null) {
-            const staticLightingMode = (this.inputStateWithColorMesh !== null) ? StaticLightingMode.StudioVertexLighting : StaticLightingMode.StudioAmbientCube;
-            this.materialInstance.setStaticLightingMode(staticLightingMode);
-        }
+        this.inputLayout = this.meshData.inputLayout;
+        this.inputState = this.meshData.inputState;
+        this.staticLightingMode = StaticLightingMode.StudioAmbientCube;
     }
 
     private calcSkinningMode(): SkinningMode {
@@ -1740,16 +1744,25 @@ class StudioModelMeshInstance {
             return;
 
         this.materialInstance = materialInstance;
-        this.syncMaterialInstanceStaticLightingMode();
+        this.materialInstance.setStaticLightingMode(this.staticLightingMode);
     }
 
-    public bindColorMeshData(device: GfxDevice, data: HardwareVertData, mesh: HardwareVertDataMesh): void {
-        assert(this.inputStateWithColorMesh === null);
+    public bindColorMeshData(cache: GfxRenderCache, data: HardwareVertData, mesh: HardwareVertDataMesh): void {
+        assert(this.inputState === this.meshData.inputState);
+        assert(mesh.vertexCount === this.meshData.vertexCount);
+
+        if (data.vertexSize === 1*0x04)
+            this.staticLightingMode = StaticLightingMode.StudioVertexLighting;
+        else if (data.vertexSize === 3*0x04)
+            this.staticLightingMode = StaticLightingMode.StudioVertexLighting3;
+        else
+            throw "whoops";
 
         const colorDescriptor: GfxVertexBufferDescriptor = { buffer: data.buffer, byteOffset: mesh.byteOffset };
-        this.inputStateWithColorMesh = this.meshData.createInputStateWithColorMesh(device, colorDescriptor);
+        [this.inputLayout, this.inputState] = this.meshData.createInputState(cache, this.staticLightingMode, colorDescriptor);
 
-        this.syncMaterialInstanceStaticLightingMode();
+        if (this.materialInstance !== null)
+            this.materialInstance.setStaticLightingMode(this.staticLightingMode);
     }
 
     public setSkin(renderContext: SourceRenderContext, skin: number): void {
@@ -1780,11 +1793,7 @@ class StudioModelMeshInstance {
         this.materialInstance.setOnRenderInst(renderContext, template);
         this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
-        // Bind color mesh if we have a per-instance version.
-        if (this.inputStateWithColorMesh !== null)
-            template.setInputLayoutAndState(this.meshData.inputLayoutWithColorMesh, this.inputStateWithColorMesh);
-        else
-            template.setInputLayoutAndState(this.meshData.inputLayoutWithoutColorMesh, this.meshData.inputStateWithoutColorMesh);
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
         for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
             const stripGroupData = this.meshData.stripGroupData[i];
@@ -1804,8 +1813,8 @@ class StudioModelMeshInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputStateWithColorMesh !== null)
-            device.destroyInputState(this.inputStateWithColorMesh);
+        if (this.inputState !== this.meshData.inputState)
+            device.destroyInputState(this.inputState);
     }
 }
 
@@ -1915,22 +1924,6 @@ class StudioModelBodyPartInstance {
             this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, materialParams));
         }
     }
-    
-    public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
-        for (let i = 0; i < this.lodInstance.length; i++) {
-            const lodInstance = this.lodInstance[i];
-            for (let j = 0; j < lodInstance.meshInstance.length; j++) {
-                const meshInstance = lodInstance.meshInstance[j];
-
-                // Find proper color mesh.
-                const colorMesh = data.mesh.find((mesh) => mesh.lod === i && mesh.indexInsideLOD === j);
-                if (colorMesh === undefined)
-                    continue;
-
-                meshInstance.bindColorMeshData(device, data, colorMesh);
-            }
-        }
-    }
 
     public setSkin(renderContext: SourceRenderContext, skin: number): void {
         for (let i = 0; i < this.lodInstance.length; i++) {
@@ -1978,7 +1971,7 @@ export class StudioModelInstance {
         this.viewBB = this.modelData.viewBB;
     }
 
-    public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
+    public setColorMeshData(cache: GfxRenderCache, data: HardwareVertData): void {
         // In some TF2 games, checksums don't match. For now, apply the static lighting anyway,
         // as it won't look as bad as unlit models. If/when we do proper lighting for light probes,
         // then this can go away.
@@ -1986,8 +1979,23 @@ export class StudioModelInstance {
         // if (data.checksum !== this.modelData.checksum)
         //     return;
 
-        for (let i = 0; i < this.bodyPartInstance.length; i++)
-            this.bodyPartInstance[i].setColorMeshData(device, data);
+        let hwi = 0;
+        for (let lod = 0; lod < this.modelData.numLOD; lod++) {
+            for (let i = 0; i < this.bodyPartInstance.length; i++) {
+                const bodyPartInstance = this.bodyPartInstance[i];
+                const lodInstance = bodyPartInstance.getLODInstance(lod);
+
+                for (let j = 0; j < lodInstance.meshInstance.length; j++) {
+                    const meshInstance = lodInstance.meshInstance[j];
+
+                    // Find proper color mesh.
+                    const colorMesh = data.mesh[hwi++];
+                    assert(colorMesh.lod === lod);
+
+                    meshInstance.bindColorMeshData(cache, data, colorMesh);
+                }
+            }
+        }
     }
 
     public setSkin(renderContext: SourceRenderContext, skin: number): void {
