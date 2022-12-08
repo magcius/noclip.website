@@ -10,10 +10,11 @@ class NfsSceneDesc implements SceneDesc {
         const mapFile = await sceneContext.dataFetcher.fetchData(`${dataPath}/${this.baseFile}`);
         const globalIngameFile = await sceneContext.dataFetcher.fetchData(`${dataPath}/GLOBAL/InGameA.bun`);
         const globalIngameFileB = await sceneContext.dataFetcher.fetchData(`${dataPath}/GLOBAL/InGameB.bun`);
+        const globalB = await sceneContext.dataFetcher.fetchData(`${dataPath}/GLOBAL/GLOBALB.bun`, { allow404: true });
         const renderHelper = new GfxRenderHelper(device);
 
         const map: NfsMap = new NfsMap(sceneContext.dataFetcher, `${dataPath}/${this.streamFile}`);
-        await map.parse(device, renderHelper, mapFile, globalIngameFile, globalIngameFileB);
+        await map.parse(device, renderHelper, mapFile, globalIngameFile, globalIngameFileB, globalB);
 
         return new NfsRenderer(map, device, renderHelper);
     }
