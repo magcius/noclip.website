@@ -14,8 +14,18 @@ export class NfsMap {
     public textureCache: {[id: number]: NfsTexture} = { };
     public ingameStreamingMode: boolean = false;
     private pathVertices: PathVertex[];
+    private regionsToRender: Set<NfsRegion> = new Set<NfsRegion>();
+    private regionOverridesIn: {[id: number]: RegionRenderOverride} = { };
+    private regionOverridesVisible: {[id: number]: RegionRenderOverride} = { };
 
-    public constructor(public dataFetcher: DataFetcher, public streamingFilePath: string) { }
+    private viewDistance: number = 500;
+
+    public constructor(public dataFetcher: DataFetcher, public streamingFilePath: string) {
+        regionOverrides.forEach(override => {
+            override.regionsIn?.forEach(r => this.regionOverridesIn[r] = override);
+            override.regionsVisible?.forEach(r => this.regionOverridesVisible[r] = override);
+        });
+    }
 
     public async parse(device: GfxDevice, renderHelper: GfxRenderHelper, baseFile: ArrayBufferSlice, ...otherFiles: ArrayBufferSlice[]) {
         const baseFileNode = new NfsNode(baseFile);
@@ -111,7 +121,7 @@ export class NfsMap {
             const regionId = toBaseRegionId(rdnDataView.getInt16(offset, true));
             const depCount = rdnDataView.getInt16(offset + 4, true);
             const region = regionMap[regionId];
-            assert(region != undefined);
+            assert(region !== undefined);
             const dependentRegions: number[] = [];
             offset += 6;
             for(let i = 0; i < depCount; i++) {
@@ -148,23 +158,28 @@ export class NfsMap {
         if(this.ingameStreamingMode)
             return activeRegion.connections!;
 
-        const regionsToRender: NfsRegion[] = [];
-        const markedRegions: boolean[] = [];
-        activeRegion.connections!.forEach(r => {
-            regionsToRender.push(r.region);
-            markedRegions[r.region.id] = true;
-        });
+        this.regionsToRender.clear();
+        activeRegion.connections!.forEach((r => this.regionsToRender.add(r.region)));
         for(const regionId in this.regions) {
-            if(markedRegions[regionId])
-                continue;
             const r = this.regions[regionId];
-            if(r.regionType != RegionType.Regular)
-                continue;
-            if(isCloseToRegion(r, pos, 500)) {
-                regionsToRender.push(r);
-            }
+            if(r.regionType == RegionType.Regular && isCloseToRegion(r, pos, this.viewDistance))
+            this.regionsToRender.add(r);
         }
-        return regionsToRender.map(r => {return {region: r, upperPartOnly: false}});
+
+        const thisRegionOverride = this.regionOverridesIn[activeRegion.id];
+        if(thisRegionOverride !== undefined) {
+            thisRegionOverride.forceHide?.forEach(r => this.regionsToRender.delete(this.regions[r]));
+            thisRegionOverride.forceShow?.forEach(r => this.regionsToRender.add(this.regions[r]));
+        }
+        this.regionsToRender.forEach(r => {
+            const overrides = this.regionOverridesVisible[r.id];
+            if(overrides === undefined)
+                return;
+            overrides.forceHide?.forEach(r => this.regionsToRender.delete(this.regions[r]));
+            overrides.forceShow?.forEach(r => this.regionsToRender.add(this.regions[r]));
+        });
+
+        return Array.from(this.regionsToRender).map(r => {return {region: r, upperPartOnly: false}});
     }
 
     public getClosestPathVertex(pos: vec2): PathVertex {
@@ -241,6 +256,33 @@ export type RegionConnections = {
     region: NfsRegion,
     upperPartOnly: boolean
 }
+
+interface RegionRenderOverride {
+    regionsIn?: number[];
+    regionsVisible?: number[];
+    forceShow?: number[];
+    forceHide?: number[];
+}
+
+// My custom streaming method looks a bit ugly in some parts of the map so here are a few tweaks where certain regions
+// are forced to be shown/hidden based on either the region you're in or other regions that are currently visible.
+const regionOverrides: RegionRenderOverride[] = [
+    // Oceans
+    { regionsVisible: [ 416, 1814, 1813, 1836, 1637, 1709, 1625, 1915 ], forceShow: [1888, 1889, 1891]},
+    { regionsVisible: [ 1888, 1889, 1891 ], forceShow: [1888, 1889, 1891]},
+
+    // Shipyard
+    { regionsIn: [416, 1815], forceHide: [ 1896 ], forceShow: [ 1913, 1813, 1620, 1830, 1920, 1537, 1911 ] },
+    { regionsVisible: [ 1627 ], forceShow: [ 1599 ] },
+    { regionsVisible: [ 1510 ], forceShow: [ 1882 ] },
+
+    // Lighthouse Island
+    { regionsIn: [ 1630 ], forceHide: [ 1892 ], forceShow: [ 1584 ] },
+    { regionsVisible: [ 1583 ], forceHide: [ 1895 ], forceShow: [ 1629, 1630, 1920 ]},
+
+    // Refinery
+    { regionsIn: [1704], forceHide: [1594]},
+]
 
 function toBaseRegionId(id: number) {
     if(id < 2200 && id % 100 > 40 && id % 100 < 80)

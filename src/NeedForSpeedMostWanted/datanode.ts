@@ -76,6 +76,11 @@ export enum NodeType {
     CollisionData                       = 0x0003B801,
     DestructiblesList                   = 0x00034027,
     TextureAnimation                    = 0xB0300100,
+    ParticleEmitter                     = 0x0003BC00,
+    // Unknown                          = 0x00036003
+    // Unknown                          = 0x00036001
+    // Unknown                          = 0x00036002
+    // Unknown                          = 0x00034159    
 
     RegionDefinitions                   = 0x80034150,
     DataSectionDefinitions              = 0x00034110,

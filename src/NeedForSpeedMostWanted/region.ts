@@ -2,13 +2,14 @@ import { mat4, vec2 } from 'gl-matrix';
 import { AABB, Frustum, IntersectionState } from '../Geometry';
 import { makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxTexture } from '../gfx/platform/GfxPlatformImpl';
+import { GfxBuffer, GfxTexture } from '../gfx/platform/GfxPlatformImpl';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { TextureMapping } from '../TextureHolder';
 import { assert } from '../util';
 import { NfsNode, NodeType } from './datanode';
 import { NfsMap, RegionConnections } from './map';
+import { NfsParticleEmitterGroup } from './particles';
 import { VertexInfo } from './render';
 
 export type DataSection = {
@@ -35,6 +36,7 @@ export class NfsRegion {
     public id: number;
     public regionType: RegionType;
     public rootBoundingVolumes: NfsBoundingVolume[];
+    public emitterGroups: NfsParticleEmitterGroup[] = [];
     public dataSections: DataSection[] = [];
     public boundingBox?: AABB;
     public areaVertices?: vec2[];
@@ -43,6 +45,10 @@ export class NfsRegion {
     public loadStatus: LoadStatus = LoadStatus.NotLoaded;
     public upperPartOffset: number = 0;
     private instanceCounter: number = 0;
+
+    // Instances marked as animation objects should be visible unless they're in one of these regions
+    private static hiddenAnimObjectRegions: number[] = [ 811, 919, 1632, 2600 ];
+    public static emitterTypes: number[] = [];
 
     constructor(id: number) {
         this.id = id;
@@ -84,6 +90,7 @@ export class NfsRegion {
                 this.parseTextures(device, renderHelper, map);
                 this.parseModels(device, map);
                 this.parseInstances(map);
+                this.parseParticleEmitterGroups(map);
                 this.loadStatus = LoadStatus.Loaded;
                 return true;
             case LoadStatus.Loading:
@@ -152,7 +159,6 @@ export class NfsRegion {
 
         const dataView = instanceNode.children[1].dataView;
         const instanceCount = dataView.byteLength / 0x40;
-        const otherHiddenObjects: number[] = additionalHiddenObjects[this.id];
 
         const instances: NfsInstance[] = [];
         for(let i = 0; i < instanceCount; i++, this.instanceCounter++) {
@@ -167,6 +173,7 @@ export class NfsRegion {
 
             // A bit messy but I haven't found a better way to determine object type
             const flags = dataView.getUint32(i * 0x40 + 0x18, true);
+            newInstance.invertedFaces = (flags & 0x400000) != 0;
             if(this.id == 2600 && i == 0)
                 newInstance.type = InstanceType.Sky;
             else if(((flags >> 16) & 0xff) == 4) {
@@ -177,11 +184,10 @@ export class NfsRegion {
             }
             else if((flags & 0xff0fffff) == 0x2008070)
                 newInstance.type = InstanceType.TrackBarrier;
-            else if((flags & 0xff) == 0x42)
+            else if((flags & 0xf) == 0x2)
                 newInstance.type = InstanceType.Hidden;
-            else if((otherHiddenObjects != undefined && otherHiddenObjects.includes(this.instanceCounter))) {
+            else if((flags & 0x10) == 0x10 && NfsRegion.hiddenAnimObjectRegions.includes(this.id))
                 newInstance.type = InstanceType.Hidden;
-            }
 
             const worldMat: mat4 = mat4.create();
             worldMat[12] = dataView.getFloat32(i * 0x40 + 0x20, true);
@@ -192,10 +198,14 @@ export class NfsRegion {
                 worldMat[Math.floor(j / 3) * 4 + (j % 3)] = dataView.getInt16(offset, true) / 8192.0;
                 offset += 2;
             }
+            transformToViewerCoordinateSystem(worldMat);
             newInstance.worldMatrix = worldMat;
 
             const modelIndex = dataView.getUint16(offset, true);
             newInstance.model = models[modelIndex];
+
+            if(newInstance.model !== undefined && (flags & 0x100010) != 0 && newInstance.model.isHiddenModel)
+                newInstance.type = InstanceType.Hidden;
         }
 
         return this.parseBvhTree(instanceNode.children.filter(n => n.type == NodeType.InstanceListBvh)[0], instances);
@@ -247,6 +257,7 @@ export class NfsRegion {
             const transparencyInfo = textureInfoDataView.getUint16(offset + 0x55, true);
             const alphaTest = (transparencyInfo & 0xFF) == 1 || ((transparencyInfo & 0xFF) == 2 && transparencyInfo != 2);
             const transparencyType = transparencyInfo >> 8;
+            const cullMode = textureInfoDataView.getUint8(offset + 0x57);
             const scrollAnimationType = textureInfoDataView.getUint16(offset + 0x52, true);
 
             const texDescriptor: GfxTextureDescriptor = {
@@ -283,6 +294,7 @@ export class NfsRegion {
             texture.gfxSampler = sampler;
             texture.alphaTest = alphaTest;
             texture.transparencyType = transparencyType;
+            texture.faceCulling = cullMode < 2 && !alphaTest;
             if(scrollAnimationType != 0) {
                 texture.scrollAnimation = {
                     interval: scrollAnimationType == 2 ? textureInfoDataView.getInt16(offset + 0x58, true) / 256 : -1,
@@ -357,6 +369,34 @@ export class NfsRegion {
         texture.cycleAnimation = { frequency, frames };
     }
 
+    private parseParticleEmitterGroups(map: NfsMap) {
+        const emitterCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.ParticleEmitter));
+        emitterCollections.forEach(n => this.parseParticleEmitterGroup(n, map));
+    }
+
+    private parseParticleEmitterGroup(node: NfsNode, map: NfsMap) {
+        const dataView = node.dataView;
+        const count = dataView.getUint32(0x8, true);
+        let offset = 0x10;
+        for(let i = 0; i < count; i++) {
+            while(dataView.getUint32(offset + 0x8, true) == 0) {
+                offset += 0x30;
+            }
+            const type = dataView.getUint32(offset, true);
+            offset += 0x10;
+            const matrix: mat4 = mat4.create();
+            for(let j = 0; j < 16; j++) {
+                matrix[j] = dataView.getFloat32(offset, true);
+                offset += 4;
+            }
+            transformToViewerCoordinateSystem(matrix);
+
+            this.emitterGroups.push(new NfsParticleEmitterGroup(matrix, type, map));
+
+            if(!NfsRegion.emitterTypes.includes(type))
+                NfsRegion.emitterTypes.push(type);
+        }
+    }
 }
 
 export enum InstanceType {
@@ -394,6 +434,7 @@ export class NfsInstance {
     public model: NfsModel;
     public worldMatrix: mat4;
     public type: InstanceType = InstanceType.Regular;
+    public invertedFaces: boolean;
 
     public collectInstancesToRender(collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) {
         if(!fullyInside && frustum.intersect(this.boundingBox) == IntersectionState.FULLY_OUTSIDE)
@@ -405,10 +446,10 @@ export class NfsInstance {
 
 export class NfsModel {
     public vertInfos: VertexInfo[];
-    public inputStates: GfxInputState[];
-    public inputLayout: GfxInputLayout;
+    public isHiddenModel: boolean = false;
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffer: GfxBuffer;
+    private static textDecoder: TextDecoder = new TextDecoder();
 
     constructor(device: GfxDevice, map: NfsMap, modelNode: NfsNode) {
         this.vertInfos = [];
@@ -419,6 +460,10 @@ export class NfsModel {
         const dataView = meshHeaderNode.dataView;
         const submeshCount = dataView.getInt32(0x10, true);
         const indexCount = dataView.getInt32(0x2C, true);
+
+        const nameStartBytes = modelNode.children[0].dataBuffer.subarray(0xA0, 6).createTypedArray(Uint8Array);
+        const nameStart = NfsModel.textDecoder.decode(nameStartBytes).toUpperCase();
+        this.isHiddenModel = nameStart == "SHADOW" || nameStart.startsWith("ANM");
 
         this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, meshDataNode.children[2].dataBuffer.slice(0, indexCount * 2));
 
@@ -485,7 +530,7 @@ export class NfsModel {
             ];
             const inputState = device.createInputState(inputLayout, vertexBufDesc, {buffer: this.indexBuffer, byteOffset: 0});
 
-            this.vertInfos.push({ inputLayout, inputState, drawCall: { indexOffset, indexCount }, textureMappings });
+            this.vertInfos.push({ inputLayout, inputState, drawCall: { indexOffset, indexCount }, textureMappings, shaderType });
         }
 
     }
@@ -503,7 +548,8 @@ export class NfsModel {
 
 export class NfsTexture extends TextureMapping {
     public alphaTest: boolean;
-    public transparencyType: number;        // 0 = Opaque, 1 = Alpha Channel, 2 = RGB Brightness, 3 = ??
+    public transparencyType: number;        // 0 = Opaque, 1 = Translucent, 2 = Additive, 3 = Subtractive
+    public faceCulling: boolean;
     public cycleAnimation?: {
         frequency: number,
         frames: NfsTexture[]
@@ -532,42 +578,20 @@ function readBoundingBox(dataView: DataView, offset: number): AABB {
     );
 }
 
-// There are a bunch of hidden objects in the game where I can't figure out what makes them hidden.
-// So I'll just hardcode those for now.
-const additionalHiddenObjects: {[key: number]: number[]} = {
-    // regionId: [instanceIndices]
-    134: [21],
-    201: [20],
-    202: [32],
-    203: [67, 68, 69],
-    204: [72],
-    205: [37],
-    207: [44],
-    208: [27, 39],
-    209: [29, 30, 31],
-    210: [9, 10],
-    211: [57, 58],
-    212: [13, 32, 35],
-    213: [6, 7, 8, 11],
-    415: [93],
-    416: [738],
-    516: [3],
-    717: [232],
-    902: [358, 360],
-    904: [431, 467],
-    911: [119],
-    929: [43],
-    930: [102],
-    1504: [110, 111],
-    1508: [104, 105],
-    1510: [381],
-    1512: [114, 115],
-    1514: [12],
-    1633: [107],
-    1818: [235],
-    1834: [197],
-    1835: [158],
-    1891: [1],
-    1914: [145],
-    2600: [3, 4, 5, 6]
-};
+function transformToViewerCoordinateSystem(m: mat4) {
+    const temp = [m[1], m[5], m[9], m[13]];
+    m[0] = -m[0];
+    m[4] = -m[4];
+    m[8] = -m[8];
+    m[12] = -m[12];
+
+    m[1] = m[2];
+    m[5] = m[6];
+    m[9] = m[10];
+    m[13] = m[14];
+
+    m[2] = temp[0];
+    m[6] = temp[1];
+    m[10] = temp[2];
+    m[14] = temp[3];
+}
