@@ -11,3 +11,4 @@ pub mod tegra_texture;
 pub mod util;
 pub mod unity;
 pub mod yaz0;
+pub mod halo;
