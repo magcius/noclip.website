@@ -21,3 +21,4 @@ num_enum = "0.5.7"
 naga = { git = "https://github.com/gfx-rs/naga", features = ["glsl-in", "wgsl-out"] }
 web-sys = { version = "0.3.48", features = ["console"] }
 byteorder = "1.4.3"
+inflate = "0.4.5"
