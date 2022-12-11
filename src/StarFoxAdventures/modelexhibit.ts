@@ -46,7 +46,7 @@ class ModelExhibitRenderer extends SFARenderer {
         this.modelSelect = new UI.TextEntry();
         this.modelSelect.ontext = (s: string) => {
             const newNum = Number.parseInt(s);
-            if (newNum !== NaN) {
+            if (!Number.isNaN(newNum)) {
                 this.modelNum = newNum;
                 this.modelInst = undefined;
             }
@@ -58,7 +58,7 @@ class ModelExhibitRenderer extends SFARenderer {
         this.animSelect = new UI.TextEntry();
         this.animSelect.ontext = (s: string) => {
             const newNum = Number.parseInt(s);
-            if (newNum !== NaN) {
+            if (!Number.isNaN(newNum)) {
                 this.modelAnimNum = newNum;
                 this.anim = undefined;
                 this.generatedAmap = null;
