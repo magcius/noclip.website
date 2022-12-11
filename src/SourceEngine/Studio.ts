@@ -2019,6 +2019,8 @@ export class StudioModelInstance {
         if (seq.isLooping())
             return false;
         const anim = this.modelData.anim[seq.anim[0]];
+        if (anim === undefined)
+            return false;
         let frame = time * anim.fps;
         return frame >= anim.numframes;
     }
@@ -2026,10 +2028,11 @@ export class StudioModelInstance {
     public setupPoseFromSequence(seqindex: number, time: number): void {
         const seq = this.modelData.seq[seqindex];
         const anim = this.modelData.anim[seq.anim[0]];
-        let frame = time * anim.fps;
         this.viewBB = seq.viewBB;
         calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
         if (anim !== undefined) {
+            let frame = time * anim.fps;
+
             if (seq.isLooping())
                 frame = frame % anim.numframes;
             else

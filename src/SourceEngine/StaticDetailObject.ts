@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorClampLDR, colorCopy, colorNewFromRGBA } from "../Color";
+import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, BSPRenderer } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
@@ -458,6 +458,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const lightingOriginX = sprp.getFloat32(idx + 0x2C, true);
         const lightingOriginY = sprp.getFloat32(idx + 0x30, true);
         const lightingOriginZ = sprp.getFloat32(idx + 0x34, true);
+        const diffuseModulation = colorNewCopy(White);
         idx += 0x38;
 
         let forcedFadeScale = 1.0;
@@ -491,7 +492,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
             // CS:GO, Portal 2
 
             if (version >= 7) {
-                const diffuseModulation = sprp.getUint32(idx + 0x00, false);
+                colorFromRGBA8(diffuseModulation, sprp.getUint32(idx + 0x00, false));
                 idx += 0x04;
             }
 

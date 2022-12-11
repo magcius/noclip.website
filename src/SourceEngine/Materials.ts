@@ -1655,21 +1655,25 @@ vec4 UnpackNormalMap(vec4 t_Sample) {
     return t_Sample;
 }
 
-vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
-    bool use_seamless = ${getDefineBool(m, `USE_SEAMLESS`)};
-    if (use_seamless) {
-        // Seamless ignores the base texture coordinate, and instead blends three copies
-        // of the same texture based on world position (similar to tri-planar).
+vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in float t_SeamlessScale) {
+    // Seamless ignores the base texture coordinate, and instead blends three copies
+    // of the same texture based on world position (similar to tri-planar).
 
-        vec3 t_BaseTexCoord = v_PositionWorld.xyz * u_SeamlessScale;
+    t_SeamlessScale *= u_SeamlessScale;
+    vec3 t_BaseTexCoord = v_PositionWorld.xyz * t_SeamlessScale;
 
-        // Weights should sum to 1.
-        vec3 t_Weights = v_TangentSpaceBasis2.xyz * v_TangentSpaceBasis2.xyz;
-        vec4 t_Sample = vec4(0.0);
-        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.zy) * t_Weights.x;
-        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.xz) * t_Weights.y;
-        t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.xy) * t_Weights.z;
-        return t_Sample;
+    // Weights should sum to 1.
+    vec3 t_Weights = v_TangentSpaceBasis2.xyz * v_TangentSpaceBasis2.xyz;
+    vec4 t_Sample = vec4(0.0);
+    t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.yz) * t_Weights.x;
+    t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.zx) * t_Weights.y;
+    t_Sample += texture(PU_SAMPLER_2D(t_Texture), t_BaseTexCoord.xy) * t_Weights.z;
+    return t_Sample;
+}
+
+vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in bool t_UseSeamless, in vec2 t_TexCoord) {
+    if (t_UseSeamless) {
+        return SeamlessSampleTex(PU_SAMPLER_2D(t_Texture), 1.0);
     } else {
         return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord.xy);
     }
@@ -1711,7 +1715,8 @@ float CalcShadowPCF(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord, in
 void mainPS() {
     vec4 t_Albedo, t_BlendedAlpha;
 
-    vec4 t_BaseTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), v_TexCoord0.xy));
+    bool use_seamless_base = ${getDefineBool(m, `USE_SEAMLESS_BASE`)};
+    vec4 t_BaseTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase), use_seamless_base, v_TexCoord0.xy));
 
     bool use_basetexture2 = ${getDefineBool(m, `USE_BASETEXTURE2`)};
 
@@ -1728,7 +1733,7 @@ void mainPS() {
 
     if (use_basetexture2) {
         // Blend in BaseTexture2 using blend factor.
-        vec4 t_BaseTexture2 = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase2), v_TexCoord0.xy));
+        vec4 t_BaseTexture2 = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBase2), use_seamless_base, v_TexCoord0.xy));
         t_Albedo = mix(t_BaseTexture, t_BaseTexture2, t_BlendFactorWorld);
     } else {
         t_Albedo = t_BaseTexture;
@@ -1737,8 +1742,14 @@ void mainPS() {
     vec4 t_DetailTexture = vec4(0.0);
 
 #if defined USE_DETAIL
-    vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.zw, 1.0, 1.0));
-    t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
+    bool use_seamless_detail = ${getDefineBool(m, `USE_SEAMLESS_DETAIL`)};
+    if (use_seamless_detail) {
+        float t_SeamlessDetailScale = u_DetailTextureTransform.mx.x;
+        t_DetailTexture = DebugColorTexture(SeamlessSampleTex(SAMPLER_2D(u_TextureDetail), t_SeamlessDetailScale));
+    } else {
+        vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.zw, 1.0, 1.0));
+        t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
+    }
     t_Albedo = CalcDetail(t_Albedo, t_DetailTexture);
 #endif
 
@@ -1756,7 +1767,7 @@ void mainPS() {
     vec3 t_BumpmapNormal;
 
     if (use_bumpmap) {
-        t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), t_BumpmapTexCoord.xy));
+        t_BumpmapSample = UnpackNormalMap(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureBumpmap), use_seamless_base, t_BumpmapTexCoord.xy));
 
         bool use_bumpmap2 = ${getDefineBool(m, `USE_BUMPMAP2`)};
         if (use_bumpmap2) {
@@ -2236,6 +2247,8 @@ class Material_Generic extends BaseMaterial {
         p['$frame2']                       = new ParameterNumber(0.0);
         p['$blendmodulatetexture']         = new ParameterTexture(true);         // WorldVertexTransition
         p['$blendmasktransform']           = new ParameterMatrix();
+        p['$seamless_base']                = new ParameterBoolean(false, false);
+        p['$seamless_detail']              = new ParameterBoolean(false, false);
         p['$seamless_scale']               = new ParameterNumber(0.0);
 
         // Phong (Skin)
@@ -2393,8 +2406,18 @@ class Material_Generic extends BaseMaterial {
             }
         }
 
-        if (this.paramGetNumber('$seamless_scale') > 0.0)
-            this.shaderInstance.setDefineBool('USE_SEAMLESS', true);
+        // LightmappedGeneric uses only $seamless_scale to turn on seamless mode (for base), while the vertex has $seamless_base / $seamless_detail
+        if (this.paramGetBoolean('$seamless_base')) {
+            this.shaderInstance.setDefineBool('USE_SEAMLESS_BASE', true);
+            if (this.paramGetNumber('$seamless_scale') === 0.0)
+                this.paramSetNumber('$seamless_scale', 1.0);
+        } else if (this.paramGetBoolean('$seamless_detail')) {
+            this.shaderInstance.setDefineBool('USE_SEAMLESS_DETAIL', true);
+            if (this.paramGetNumber('$seamless_scale') === 0.0)
+                this.paramSetNumber('$seamless_scale', 1.0);
+        } else if (this.paramGetNumber('$seamless_scale') > 0.0 && this.shaderType === GenericShaderType.LightmappedGeneric) {
+            this.shaderInstance.setDefineBool('USE_SEAMLESS_BASE', true);
+        }
 
         // Modulation color is used differently between lightmapped and non-lightmapped.
         // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).

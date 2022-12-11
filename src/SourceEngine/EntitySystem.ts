@@ -504,11 +504,13 @@ export class BaseEntity {
                 // Handle events.
                 const seq = this.modelStudio.modelData.seq[this.seqindex];
                 const anim = this.modelStudio.modelData.anim[seq.anim[0]];
-                const animcyc = anim.fps / anim.numframes;
-                for (let i = 0; i < seq.events.length; i++) {
-                    const ev = seq.events[i];
-                    if (ev.cycle > (oldSeqTime * animcyc) && ev.cycle <= (this.seqtime * animcyc)) {
-                        this.dispatchAnimEvent(entitySystem, ev.event, ev.options);
+                if (anim !== undefined) {
+                    const animcyc = anim.fps / anim.numframes;
+                    for (let i = 0; i < seq.events.length; i++) {
+                        const ev = seq.events[i];
+                        if (ev.cycle > (oldSeqTime * animcyc) && ev.cycle <= (this.seqtime * animcyc)) {
+                            this.dispatchAnimEvent(entitySystem, ev.event, ev.options);
+                        }
                     }
                 }
             }
