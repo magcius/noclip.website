@@ -24,6 +24,7 @@ import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { ParticleSystemCache } from "./ParticleSystem";
+import { HitInfo } from "../SuperMarioGalaxy/Collision";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);
@@ -111,7 +112,7 @@ export class MaterialShaderTemplateBase extends UberShaderTemplateBasic {
 // Debug utilities.
 // #define DEBUG_DIFFUSEONLY 1
 // #define DEBUG_FULLBRIGHT 1
-    
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_SceneMisc[3];
@@ -1235,14 +1236,41 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_ProjectedLightColor;
     vec4 u_ProjectedLightOrigin;
 #endif
+#if defined USE_TREE_SWAY
+
+#define u_TreeSwayWindDir              (u_TreeSwayParam[0].xy)
+#define u_TreeSwayTime                 (u_TreeSwayParam[0].z)
+#define u_TreeSwaySpeed                (u_TreeSwayParam[0].w)
+
+#define u_TreeSwayHeight               (u_TreeSwayParam[1].x)
+#define u_TreeSwayStartHeight          (u_TreeSwayParam[1].y)
+#define u_TreeSwayRadius               (u_TreeSwayParam[1].z)
+#define u_TreeSwayStartRadius          (u_TreeSwayParam[1].w)
+
+#define u_TreeSwayIntensity            (u_TreeSwayParam[2].x)
+#define u_TreeSwayIntensityPow         (u_TreeSwayParam[2].y)
+#define u_TreeSwayFastScale            (u_TreeSwayParam[2].z)
+
+#define u_TreeSwayScrumbleIntensity    (u_TreeSwayParam[3].x)
+#define u_TreeSwayScrumbleIntensityPow (u_TreeSwayParam[3].y)
+#define u_TreeSwayScrumbleFrequency    (u_TreeSwayParam[3].z)
+#define u_TreeSwayScrumbleSpeed        (u_TreeSwayParam[3].w)
+
+// TODO(jstpierre): If we combine time and speed, I think we can lose a vec4 here...
+#define u_TreeSwaySpeedLerpStart       (u_TreeSwayParam[4].x)
+#define u_TreeSwaySpeedLerpEnd         (u_TreeSwayParam[4].y)
+
+vec4 u_TreeSwayParam[5];
+
+#endif
     vec4 u_ModulationColor;
-    vec4 u_Misc[1];
-};
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
 #define u_SpecExponentFactor (u_Misc[0].z)
 #define u_SeamlessScale      (u_Misc[0].w)
+    vec4 u_Misc[1];
+};
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -1400,10 +1428,51 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
+void CalcTreeSway(inout vec3 t_PositionLocal) {
+#if defined VERT && defined USE_TREE_SWAY
+
+    Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
+    float t_WindIntensity = length(u_TreeSwayWindDir);
+    vec3 t_WindDirLocal = Mul(vec3(u_TreeSwayWindDir, 0.0), t_WorldFromLocalMatrix).xyz;
+
+    vec3 t_PosOffs = vec3(0.0);
+
+    vec3 t_OriginWorld = Mul(t_WorldFromLocalMatrix, vec4(0.0, 0.0, 0.0, 1.0));
+    float t_TimeOffset = dot(t_OriginWorld, vec3(1.0)) * 19.0;
+
+    float t_SwayTime = (u_TreeSwayTime + t_TimeOffset) * u_TreeSwaySpeed;
+    float t_SpeedLerp = smoothstep(u_TreeSwaySpeedLerpStart, u_TreeSwaySpeedLerpEnd, t_WindIntensity);
+
+    float t_ScaleHeight = saturate(invlerp(t_PositionLocal.z, u_TreeSwayHeight * u_TreeSwayStartHeight, u_TreeSwayHeight));
+
+    float t_TrunkSin = mix(sin(t_SwayTime), sin(u_TreeSwayFastScale * t_SwayTime), t_SpeedLerp);
+    float t_TrunkSwayIntensity = (u_TreeSwayIntensity * pow(t_ScaleHeight, u_TreeSwayIntensityPow)) * (t_TrunkSin + 0.1);
+    t_PosOffs.xyz += t_WindDirLocal * t_TrunkSwayIntensity;
+
+    if (t_ScaleHeight > 0.0) {
+        float t_ScaleRadius = saturate(invlerp(length(t_PositionLocal), u_TreeSwayRadius * u_TreeSwayStartRadius, u_TreeSwayRadius));
+
+        float t_BranchScale = 1.0 - abs(dot(normalize(t_WindDirLocal), vec3(normalize(t_PositionLocal.xy), 0.0)));
+        float t_BranchSin = mix(sin(2.31 * t_SwayTime), sin(2.41 * u_TreeSwayFastScale * t_SwayTime), t_SpeedLerp);
+        float t_BranchSwayIntensity = u_TreeSwayIntensity * t_BranchScale * t_ScaleRadius * (t_BranchSin + 0.4);
+        t_PosOffs.xyz += t_WindDirLocal * t_BranchSwayIntensity;
+
+        vec3 t_ScrumblePhase = normalize(t_PositionLocal.yzx) * u_TreeSwayScrumbleFrequency;
+        vec3 t_ScrumbleScale = vec3(u_TreeSwayIntensity * pow(t_ScaleRadius, u_TreeSwayScrumbleIntensityPow));
+        t_PosOffs.xyz += t_WindIntensity * t_ScrumbleScale * sin(u_TreeSwayScrumbleSpeed * u_TreeSwayTime + t_ScrumblePhase + t_TimeOffset);
+    }
+
+    t_PositionLocal.xyz += t_PosOffs.xyz;
+#endif
+}
+
 #if defined VERT
 void mainVS() {
+    vec3 t_PositionLocal = a_Position;
+    CalcTreeSway(t_PositionLocal);
+
     Mat4x3 t_WorldFromLocalMatrix = CalcWorldFromLocalMatrix();
-    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(a_Position, 1.0));
+    vec3 t_PositionWorld = Mul(t_WorldFromLocalMatrix, vec4(t_PositionLocal, 1.0));
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
@@ -2133,6 +2202,7 @@ const enum GenericShaderType {
 };
 
 class Material_Generic extends BaseMaterial {
+    private wantsTreeSway = false;
     private wantsDetail = false;
     private wantsBaseTexture2 = false;
     private wantsDecal = false;
@@ -2149,6 +2219,7 @@ class Material_Generic extends BaseMaterial {
     private wantsAmbientCube = false;
     private wantsProjectedTexture = false;
     private shaderType: GenericShaderType;
+    private objectParamsWordCount: number = 0;
 
     private shaderInstance: UberShaderInstanceBasic;
     private gfxProgram: GfxProgram | null = null;
@@ -2203,6 +2274,24 @@ class Material_Generic extends BaseMaterial {
 
     protected override initParameters(): void {
         super.initParameters();
+
+        const shaderTypeStr = this.vmt._Root.toLowerCase();
+        if (shaderTypeStr === 'lightmappedgeneric')
+            this.shaderType = GenericShaderType.LightmappedGeneric;
+        else if (shaderTypeStr === 'vertexlitgeneric')
+            this.shaderType = GenericShaderType.VertexLitGeneric;
+        else if (shaderTypeStr === 'unlitgeneric')
+            this.shaderType = GenericShaderType.UnlitGeneric;
+        else if (shaderTypeStr === 'worldvertextransition')
+            this.shaderType = GenericShaderType.WorldVertexTransition;
+        else if (shaderTypeStr === 'black')
+            this.shaderType = GenericShaderType.Black;
+        else if (shaderTypeStr === 'decalmodulate')
+            this.shaderType = GenericShaderType.DecalModulate;
+        else if (shaderTypeStr === 'sprite')
+            this.shaderType = GenericShaderType.Sprite;
+        else
+            this.shaderType = GenericShaderType.Unknown;
 
         const p = this.param;
 
@@ -2267,6 +2356,24 @@ class Material_Generic extends BaseMaterial {
         // Sprite
         p['$spriteorientation']            = new ParameterString('parallel_upright');
         p['$spriteorigin']                 = new ParameterVector(2, [0.5, 0.5]);
+
+        // TreeSway (VertexLitGeneric)
+        p['$treesway']                     = new ParameterBoolean(false, false);
+        p['$treeswayheight']               = new ParameterNumber(1000.0);
+        p['$treeswaystartheight']          = new ParameterNumber(0.2);
+        p['$treeswayradius']               = new ParameterNumber(300.0);
+        p['$treeswaystartradius']          = new ParameterNumber(0.1);
+        p['$treeswayspeed']                = new ParameterNumber(1.0);
+        p['$treeswayspeedhighwindmultiplier'] = new ParameterNumber(2.0);
+        p['$treeswayspeedstrength']        = new ParameterNumber(10.0);
+        p['$treeswayspeedscrumblespeed']   = new ParameterNumber(0.1);
+        p['$treeswayspeedscrumblestrength'] = new ParameterNumber(0.1);
+        p['$treeswayspeedscrumblefrequency'] = new ParameterNumber(0.1);
+        p['$treeswayfalloffexp']           = new ParameterNumber(1.5);
+        p['$treeswayscrumblefalloffexp']   = new ParameterNumber(1.0);
+        p['$treeswayspeedlerpstart']       = new ParameterNumber(3.0);
+        p['$treeswayspeedlerpend']         = new ParameterNumber(6.0);
+        p['$treeswaystatic']               = new ParameterBoolean(false, false);
     }
 
     private recacheProgram(cache: GfxRenderCache): void {
@@ -2277,24 +2384,6 @@ class Material_Generic extends BaseMaterial {
     }
 
     protected override initStaticBeforeResourceFetch() {
-        const shaderTypeStr = this.vmt._Root.toLowerCase();
-        if (shaderTypeStr === 'lightmappedgeneric')
-            this.shaderType = GenericShaderType.LightmappedGeneric;
-        else if (shaderTypeStr === 'vertexlitgeneric')
-            this.shaderType = GenericShaderType.VertexLitGeneric;
-        else if (shaderTypeStr === 'unlitgeneric')
-            this.shaderType = GenericShaderType.UnlitGeneric;
-        else if (shaderTypeStr === 'worldvertextransition')
-            this.shaderType = GenericShaderType.WorldVertexTransition;
-        else if (shaderTypeStr === 'black')
-            this.shaderType = GenericShaderType.Black;
-        else if (shaderTypeStr === 'decalmodulate')
-            this.shaderType = GenericShaderType.DecalModulate;
-        else if (shaderTypeStr === 'sprite')
-            this.shaderType = GenericShaderType.Sprite;
-        else
-            this.shaderType = GenericShaderType.Unknown;
-
         // The detailBlendMode parameter determines whether we load an SRGB texture or not.
         const detailBlendMode = this.paramGetNumber('$detailblendmode');
         this.paramGetTexture('$detail').isSRGB = (detailBlendMode === 1);
@@ -2333,7 +2422,7 @@ class Material_Generic extends BaseMaterial {
             this.wantsBlendModulate = true;
             this.shaderInstance.setDefineBool('USE_BLEND_MODULATE', true);
         }
-    
+
         if (this.shaderType === GenericShaderType.VertexLitGeneric && this.paramGetBoolean('$phong')) {
             // $phong on a vertexlitgeneric tells it to use the Skin shader instead.
             this.shaderType = GenericShaderType.Skin;
@@ -2345,6 +2434,11 @@ class Material_Generic extends BaseMaterial {
                 this.shaderInstance.setDefineBool('USE_PHONG_EXPONENT_TEXTURE', true);
                 this.shaderInstance.setDefineBool('USE_PHONG_ALBEDO_TINT', this.paramGetBoolean('$phongalbedotint'));
             }
+        }
+
+        if (this.paramGetBoolean('$treesway')) {
+            this.wantsTreeSway = true;
+            this.shaderInstance.setDefineBool('USE_TREE_SWAY', true);
         }
 
         if (this.paramGetVTF('$detail') !== null) {
@@ -2499,6 +2593,7 @@ class Material_Generic extends BaseMaterial {
         this.sortKeyBase = makeSortKey(sortLayer);
 
         this.recacheProgram(materialCache.cache);
+        this.calcObjectParamsWordCount();
     }
 
     private updateTextureMappings(dst: TextureMapping[], renderContext: SourceRenderContext, lightmapPageIndex: number | null): void {
@@ -2559,6 +2654,41 @@ class Material_Generic extends BaseMaterial {
             this.gfxProgram = null;
     }
 
+    private calcObjectParamsWordCount(): void {
+        let vec4Count = 0;
+
+        if (this.wantsAmbientCube)
+            vec4Count += 6;
+        if (this.wantsDynamicLighting)
+            vec4Count += 4 * ShaderTemplate_Generic.MaxDynamicWorldLights;
+        vec4Count += 2;
+        if (this.wantsBumpmap)
+            vec4Count += 2;
+        if (this.wantsBumpmap2)
+            vec4Count += 2;
+        if (this.wantsDetail)
+            vec4Count += 2;
+        if (this.wantsEnvmapMask)
+            vec4Count += 1;
+        if (this.wantsBlendModulate)
+            vec4Count += 1;
+        if (this.wantsEnvmap)
+            vec4Count += 1;
+        if (this.wantsSelfIllum)
+            vec4Count += 1;
+        if (this.wantsSelfIllumFresnel)
+            vec4Count += 1;
+        if (this.wantsPhong)
+            vec4Count += 1;
+        if (this.wantsProjectedTexture)
+            vec4Count += 4 + 2;
+        if (this.wantsTreeSway)
+            vec4Count += 5;
+        vec4Count += 1; // Color
+        vec4Count += 1; // Misc
+        this.objectParamsWordCount = vec4Count * 4;
+    }
+
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, lightmapPageIndex: number | null = null): void {
         // TODO(jstpierre): Special shader program for depth-only?
 
@@ -2567,8 +2697,10 @@ class Material_Generic extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        // TODO(jstpierre): Carve down this allocation a bit.
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_ObjectParams, 156);
+        if (this.gfxProgram === null)
+            this.calcObjectParamsWordCount();
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Generic.ub_ObjectParams, this.objectParamsWordCount);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_Generic.ub_ObjectParams);
 
         if (this.wantsAmbientCube) {
@@ -2634,6 +2766,37 @@ class Material_Generic extends BaseMaterial {
             colorScale(scratchColor, projectedLight.lightColor, projectedLight.lightColor.a * projectedLight.brightnessScale * 0.25);
             offs += fillColor(d, offs, scratchColor);
             offs += fillVec3v(d, offs, projectedLight.frustumView.cameraPos, projectedLight.farZ);
+        }
+
+        if (this.wantsTreeSway) {
+            const windDirX = 0.5, windDirY = 0.5;
+            const time = renderContext.globalTime;
+            offs += fillVec4(d, offs, windDirX, windDirY, time, this.paramGetNumber('$treeswayspeed'));
+
+            offs += fillVec4(d, offs,
+                this.paramGetNumber('$treeswayheight'),
+                this.paramGetNumber('$treeswaystartheight'),
+                this.paramGetNumber('$treeswayradius'),
+                this.paramGetNumber('$treeswaystartradius'),
+            );
+
+            offs += fillVec4(d, offs,
+                this.paramGetNumber('$treeswaystrength'),
+                this.paramGetNumber('$treeswayfalloffexp'),
+                this.paramGetNumber('$treeswayspeedhighwindmultiplier'),
+            );
+
+            offs += fillVec4(d, offs,
+                this.paramGetNumber('$treeswayscrumblestrength'),
+                this.paramGetNumber('$treeswayscrumblefalloffexp'),
+                this.paramGetNumber('$treeswayscrumblefrequency'),
+                this.paramGetNumber('$treeswayscrumblespeed'),
+            );
+
+            offs += fillVec4(d, offs,
+                this.paramGetNumber('$treeswayspeedlerpstart'),
+                this.paramGetNumber('$treeswayspeedlerpend'),
+            );
         }
 
         // Compute modulation color.
@@ -3417,7 +3580,6 @@ class Material_Water extends BaseMaterial {
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.debug = true;
         renderInst.sortKey = this.sortKeyBase;
     }
 
@@ -3504,7 +3666,7 @@ void mainVS() {
     v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
 
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord01.xy, u_BumpScaleBias);
-    
+
 #if defined USE_VERTEX_MODULATE
     v_Modulate.rgba = a_Color.rgba * u_FakeVertexModulate.rgba;
 #endif
@@ -4234,7 +4396,7 @@ class Material_Sky extends BaseMaterial {
             scratchColor.r *= 8.0;
             scratchColor.g *= 8.0;
             scratchColor.b *= 8.0;
-    
+
             offs += fillColor(d, offs, scratchColor);
         } else if (this.type === Material_Sky_Type.Sky) {
             let offs = renderInst.allocateUniformBuffer(ShaderTemplate_Sky.ub_ObjectParams, 12);
