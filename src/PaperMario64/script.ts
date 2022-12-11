@@ -93,7 +93,7 @@ function scanPastNext(view: DataView, pc: number, needle: number): number {
             pc = scanPastNext(view, pc, 0x23);
 
         if (op === 0x01) // End
-            return -1;
+            return pc;
     }
 }
 
@@ -442,7 +442,7 @@ export class ScriptExecutor {
             default:
                 console.warn(`Unimplemented command: ${hexzero(pc, 4)}: ${hexzero(op, 2)} / ${operCount}`);
                 debugger;
-                break;
+                return;
             }
 
             pc = nextPC;
