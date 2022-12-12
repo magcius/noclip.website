@@ -22,8 +22,6 @@ jobs:
       - restore_cache:
           keys:
             - v4-dependencies-{{ checksum "package.json" }}
-            # fallback to using the latest cache if no exact match is found
-            - v4-dependencies-
 
       - run: sudo npm install -g pnpm
 
