@@ -22,3 +22,5 @@ naga = { git = "https://github.com/gfx-rs/naga", features = ["glsl-in", "wgsl-ou
 web-sys = { version = "0.3.48", features = ["console"] }
 byteorder = "1.4.3"
 inflate = "0.4.5"
+js-sys = "0.3.60"
+console_error_panic_hook = "0.1.7"

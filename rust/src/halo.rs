@@ -1,10 +1,13 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use js_sys::{Array};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::{JsValue, JsCast};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError, FromPrimitive};
 use inflate::inflate_bytes;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum MapReaderError {
     IO(String),
     UnimplementedTag(String),
@@ -25,6 +28,69 @@ impl<T: TryFromPrimitive> From<TryFromPrimitiveError<T>> for MapReaderError {
 type Result<T> = std::result::Result<T, MapReaderError>;
 type Pointer = u32;
 
+#[wasm_bindgen]
+pub struct MapManager {
+    reader: MapReader,
+    header: Header,
+}
+
+#[wasm_bindgen]
+impl MapManager {
+    pub fn new(data: Vec<u8>) -> Self {
+        let mut reader = MapReader::new(data);
+        let header = reader.read_header().unwrap();
+
+        MapManager {
+            reader,
+            header,
+        }
+    }
+
+    pub fn get_bitmaps(&mut self) -> Array {
+        self.reader.read_tag_headers(&self.header)
+            .unwrap().iter()
+            .filter(|header| match header.primary_class {
+                TagClass::Bitmap => true,
+                _ => false,
+            })
+            .flat_map(|header| self.reader.read_tag(header))
+            .map(JsValue::from).collect()
+    }
+}
+
+#[wasm_bindgen]
+pub struct ResourceManager {
+    reader: MapReader,
+    resource_headers: Vec<ResourceHeader>,
+}
+
+#[wasm_bindgen]
+impl ResourceManager {
+    pub fn new(data: Vec<u8>) -> Self {
+        let mut reader = MapReader::new(data);
+        let resource_headers = reader.read_resource_headers().unwrap();
+
+        ResourceManager {
+            reader,
+            resource_headers,
+        }
+    }
+
+    pub fn get_resource_data(&mut self, tag: Tag) -> Option<Vec<u8>> {
+        for resource in &self.resource_headers {
+            if resource.path.as_ref().unwrap().starts_with(&tag.path) {
+                return Some(self.reader.read_resource_data(&resource).unwrap());
+            }
+        }
+        None
+    }
+}
+
+#[wasm_bindgen]
+pub fn init_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
 struct MapReader {
     pub data: Cursor<Vec<u8>>,
 }
@@ -36,6 +102,30 @@ impl MapReader {
 
     fn read_header(&mut self) -> Result<Header> {
         Header::deserialize(&mut self.data)
+    }
+
+    fn read_resource_headers(&mut self) -> Result<Vec<ResourceHeader>> {
+        let header = ResourcesHeader::deserialize(&mut self.data)?;
+        self.data.seek(SeekFrom::Start(header.resources_offset as u64))?;
+        let mut result = Vec::with_capacity(header.resource_count as usize);
+        for _ in 0..header.resource_count {
+            let mut res = ResourceHeader::deserialize(&mut self.data)?;
+            res.path_offset += header.paths_offset;
+            //res.data_offset += header.resources_offset;
+            let bookmark = self.data.position();
+            self.data.seek(SeekFrom::Start(res.path_offset as u64))?;
+            res.path = Some(read_null_terminated_string(&mut self.data)?);
+            self.data.seek(SeekFrom::Start(bookmark))?;
+            result.push(res);
+        }
+        Ok(result)
+    }
+
+    fn read_resource_data(&mut self, resource: &ResourceHeader) -> Result<Vec<u8>> {
+        self.data.seek(SeekFrom::Start(resource.data_offset as u64))?;
+        let mut buf = vec![0; resource.size as usize];
+        self.data.read_exact(&mut buf)?;
+        Ok(buf)
     }
 
     fn read_tag_headers(&mut self, header: &Header) -> Result<Vec<TagHeader>> {
@@ -66,10 +156,25 @@ impl MapReader {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug)]
-struct Tag {
+pub struct Tag {
     path: String,
     data: TagData,
+}
+
+#[wasm_bindgen]
+impl Tag {
+    pub fn get_path(&self) -> String {
+        self.path.clone()
+    }
+
+    pub fn as_bitmap(&self) -> Option<Bitmap> {
+        match &self.data {
+            TagData::Bitmap(b) => Some(b.clone()),
+            _ => None,
+        }
+    }
 }
 
 struct Sky {
@@ -84,7 +189,7 @@ struct Scenario {
     local_north: f32,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 enum ObjectType {
     Biped = 0x0	,
@@ -118,7 +223,7 @@ impl Deserialize for ObjectName {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Point2D {
     x: f32,
     y: f32,
@@ -133,7 +238,7 @@ impl Deserialize for Point2D {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Point2DInt {
     x: i16,
     y: i16,
@@ -148,7 +253,7 @@ impl Deserialize for Point2DInt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Point3D {
     x: f32,
     y: f32,
@@ -253,6 +358,7 @@ trait Deserialize {
             }
         }
         data.seek(SeekFrom::Start(bookmark))?;
+        dbg!(count, ptr);
         Ok(result)
     }
 }
@@ -264,6 +370,56 @@ struct Header {
     pub tag_data_size: u32,
     pub scenario_name: String,
     pub scenario_type: ScenarioType,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum ResourceType {
+    Bitmaps = 0x1,
+    Sounds = 0x2,
+    Localization = 0x3,
+}
+
+#[derive(Debug)]
+struct ResourcesHeader {
+    resource_type: ResourceType,
+    paths_offset: Pointer,
+    resources_offset: Pointer,
+    resource_count: u32,
+}
+
+#[derive(Debug)]
+struct ResourceHeader {
+    path_offset: Pointer,
+    size: u32,
+    data_offset: Pointer,
+    path: Option<String>,
+}
+
+impl Deserialize for ResourceHeader {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        Ok(ResourceHeader {
+            path_offset: data.read_u32::<LittleEndian>()? as Pointer,
+            size: data.read_u32::<LittleEndian>()?,
+            data_offset: data.read_u32::<LittleEndian>()? as Pointer,
+            path: None,
+        })
+    }
+}
+
+impl Deserialize for ResourcesHeader {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        Ok(ResourcesHeader {
+            resource_type: match data.read_u32::<LittleEndian>()? {
+                0x1 => ResourceType::Bitmaps,
+                0x2 => ResourceType::Sounds,
+                0x3 => ResourceType::Localization,
+                x => return Err(MapReaderError::IO(format!("invalid enum {}", x))),
+            },
+            paths_offset: data.read_u32::<LittleEndian>()? as Pointer,
+            resources_offset: data.read_u32::<LittleEndian>()? as Pointer,
+            resource_count: data.read_u32::<LittleEndian>()?,
+        })
+    }
 }
 
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
@@ -291,9 +447,10 @@ fn read_null_terminated_string<T: Read>(data: &mut T) -> Result<String> {
     Ok(res)
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
 #[repr(u16)]
-enum BitmapType {
+pub enum BitmapType {
     Tex2D = 0x0,
     Tex3D = 0x1,
     CubeMaps = 0x2,
@@ -301,9 +458,10 @@ enum BitmapType {
     InterfaceBitmaps = 0x4,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
 #[repr(u16)]
-enum BitmapEncodingFormat {
+pub enum BitmapEncodingFormat {
     Dxt1 = 0x0,
     Dxt3 = 0x1,
     Dxt5 = 0x2,
@@ -312,9 +470,10 @@ enum BitmapEncodingFormat {
     Monochrome = 0x5,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
-enum BitmapUsage {
+pub enum BitmapUsage {
     AlphaBlend = 0x0,
     Default = 0x1,
     Heightmap = 0x2,
@@ -323,7 +482,7 @@ enum BitmapUsage {
     Vectormap = 0x5,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 enum BitmapSpriteBudgetSize {
     Sq32x32 = 0x0,
@@ -335,14 +494,14 @@ enum BitmapSpriteBudgetSize {
     Sq2048x2048 = 0x6,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 enum BitmapSpriteUsage {
     BlendAddSubtractMax = 0x0,
     MultiplyMin = 0x1,
     DoubleMultiply = 0x2,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Sprite {
     bitmap_index: u16,
     left: f32,
@@ -365,7 +524,7 @@ impl Deserialize for Sprite {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct BitmapGroup {
     name: String,
     first_bitmap_index: u16,
@@ -384,7 +543,7 @@ impl Deserialize for BitmapGroup {
     }
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u32)]
 enum BitmapClass {
     None = 0xFFFFFFFF,
@@ -474,7 +633,7 @@ enum BitmapClass {
     WeaponHudInterface = 0x77706869,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 enum BitmapDataType {
     Tex2D = 0x0,
@@ -483,7 +642,7 @@ enum BitmapDataType {
     White = 0x3,
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 enum BitmapFormat {
     A8 = 0x0,
@@ -505,7 +664,7 @@ enum BitmapFormat {
     Dxt5 = 0x10,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct BitmapData {
     bitmap_class: BitmapClass,
     width: u16,
@@ -542,26 +701,25 @@ impl Deserialize for BitmapData {
     }
 }
 
-#[derive(Debug)]
-struct Bitmap {
-    bitmap_type: BitmapType,
-    encoding_format: BitmapEncodingFormat,
-    usage: BitmapUsage,
-    flags: u16,
-    detail_fade_factor: f32,
-    sharpen_amount: f32,
-    bump_height: f32,
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct Bitmap {
+    pub bitmap_type: BitmapType,
+    pub encoding_format: BitmapEncodingFormat,
+    pub usage: BitmapUsage,
+    pub flags: u16,
+    pub detail_fade_factor: f32,
+    pub sharpen_amount: f32,
+    pub bump_height: f32,
     sprite_budget_size: BitmapSpriteBudgetSize,
     sprite_budget_count: u16,
-    color_plate_width: u16,
-    color_plate_height: u16,
-    compressed_color_plate_size: u32,
-    compressed_color_plate_external: u32,
-    compressed_color_plate_file_offset: u32,
+    pub color_plate_width: u16,
+    pub color_plate_height: u16,
     compressed_color_plate_pointer: Pointer,
-    blur_filter_size: f32,
-    alpha_bias: f32,
-    mipmap_count: u16,
+    processed_pixel_data: Pointer,
+    pub blur_filter_size: f32,
+    pub alpha_bias: f32,
+    pub mipmap_count: u16,
     sprite_usage: BitmapSpriteUsage,
     sprite_spacing: u16,
     bitmap_group_sequence: Vec<BitmapGroup>,
@@ -570,7 +728,8 @@ struct Bitmap {
 
 impl Deserialize for Bitmap {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(Bitmap {
+        dbg!(data.position());
+        let mut result = Bitmap {
             bitmap_type: BitmapType::try_from(data.read_u16::<LittleEndian>()?)?,
             encoding_format: BitmapEncodingFormat::try_from(data.read_u16::<LittleEndian>()?)?,
             usage: BitmapUsage::try_from(data.read_u16::<LittleEndian>()?)?,
@@ -582,22 +741,26 @@ impl Deserialize for Bitmap {
             sprite_budget_count: data.read_u16::<LittleEndian>()?,
             color_plate_width: data.read_u16::<LittleEndian>()?,
             color_plate_height: data.read_u16::<LittleEndian>()?,
-            compressed_color_plate_size: data.read_u32::<LittleEndian>()?,
-            compressed_color_plate_external: data.read_u32::<LittleEndian>()?,
-            compressed_color_plate_file_offset: data.read_u32::<LittleEndian>()?,
             compressed_color_plate_pointer: data.read_u32::<LittleEndian>()? as Pointer,
+            processed_pixel_data: data.read_u32::<LittleEndian>()? as Pointer,
             blur_filter_size: data.read_f32::<LittleEndian>()?,
             alpha_bias: data.read_f32::<LittleEndian>()?,
             mipmap_count: data.read_u16::<LittleEndian>()?,
             sprite_usage: BitmapSpriteUsage::try_from(data.read_u16::<LittleEndian>()?)?,
             sprite_spacing: data.read_u16::<LittleEndian>()?,
-            bitmap_group_sequence: BitmapGroup::deserialize_vec(data)?,
-            data: BitmapData::deserialize_vec(data)?,
-        })
+            bitmap_group_sequence: vec![],
+            data: vec![],
+        };
+        data.seek(SeekFrom::Current(0x2))?;
+        dbg!("before group", data.position());
+        result.bitmap_group_sequence = BitmapGroup::deserialize_vec(data)?;
+        dbg!("before bitmapdata", data.position());
+        result.data = BitmapData::deserialize_vec(data)?;
+        Ok(result)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum ScenarioType {
     Singleplayer,
     Multiplayer,
@@ -670,7 +833,7 @@ impl Deserialize for TagIndexHeader {
     }
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u32)]
 enum TagClass {
     Actor = 0x61637472,
@@ -816,27 +979,34 @@ mod tests {
 
     use super::*;
 
-    fn read_test_file() -> MapReader {
+    fn read_bloodgulch() -> MapReader {
         let data = std::fs::read("test_data/bloodgulch.map").unwrap();
+        MapReader::new(data)
+    }
+
+    fn read_bitmaps() -> MapReader {
+        let data = std::fs::read("test_data/bitmaps.map").unwrap();
         MapReader::new(data)
     }
 
     #[test]
     fn test() {
-        let mut reader = read_test_file();
+        let mut reader = read_bloodgulch();
         let header = reader.read_header().unwrap();
         assert_eq!(header.scenario_name, "bloodgulch");
         let tags = reader.read_tag_headers(&header).unwrap();
-        dbg!(tags.len());
-        for (i, tag) in tags.iter().enumerate() {
-            match tag.primary_class {
-                TagClass::Bitmap => {
-                    let tag = reader.read_tag(tag).unwrap();
-                    dbg!(tag);
-                    dbg!(reader.data.position());
-                    break;
-                },
-                _ => {},
+        let bitmap_hdr = tags.iter().filter(|tag| match tag.primary_class {
+            TagClass::Bitmap => true,
+            _ => false,
+        }).next().unwrap();
+        let bitmap = reader.read_tag(bitmap_hdr).unwrap();
+        dbg!(bitmap);
+        return;
+        let mut bitmap_reader = read_bitmaps();
+        let resources = bitmap_reader.read_resource_headers().unwrap();
+        for r in &resources {
+            if r.path.as_ref().unwrap().starts_with("sky\\planets\\threshold clear afternoon") {
+                dbg!(r);
             }
         }
     }
