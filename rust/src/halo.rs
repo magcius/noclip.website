@@ -66,15 +66,23 @@ impl MapManager {
         MapManager::new(map, bitmaps).unwrap()
     }
 
+    fn get_tag_data_offset(&self) -> i64 {
+        self.header.tag_data_offset as i64 - BASE_MEMORY_ADDRESS as i64
+    }
+
     fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
+        let offset = self.get_tag_data_offset();
+        self.reader.data.seek(SeekFrom::Start((offset + tag_header.tag_data as i64) as u64))?;
         let data = match tag_header.primary_class {
             TagClass::Bitmap => {
-                let offset: i64 = self.header.tag_data_offset as i64 - BASE_MEMORY_ADDRESS as i64;
-                self.reader.data.seek(SeekFrom::Start((offset + tag_header.tag_data as i64) as u64))?;
                 let mut bitmap = Bitmap::deserialize(&mut self.reader.data)?;
                 bitmap.bitmap_group_sequence.read_items(&mut self.reader.data, offset)?;
                 bitmap.data.read_items(&mut self.reader.data, offset)?;
                 TagData::Bitmap(bitmap)
+            },
+            TagClass::Scenario => {
+                let mut scenario = Scenario::deserialize(&mut self.reader.data)?;
+                TagData::Scenario(scenario)
             },
             _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
         };
@@ -786,6 +794,12 @@ pub struct Bitmap {
     data: Block<BitmapData>,
 }
 
+impl Bitmap {
+    pub fn get_dimensions(&self) -> (u32, u32) {
+        todo!();
+    }
+}
+
 impl Deserialize for Bitmap {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
@@ -815,11 +829,12 @@ impl Deserialize for Bitmap {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
 pub enum ScenarioType {
-    Singleplayer,
-    Multiplayer,
-    UserInterface,
+    Singleplayer = 0,
+    Multiplayer = 1,
+    UserInterface = 2,
 }
 
 impl Deserialize for Header {
@@ -833,12 +848,7 @@ impl Deserialize for Header {
         data.seek(SeekFrom::Current(0x8))?;
         let scenario_name = read_null_terminated_string_with_size(data, 32)?;
         let _build_version = read_null_terminated_string_with_size(data, 32)?;
-        let scenario_type = match data.read_u16::<LittleEndian>()? {
-            0x0 => ScenarioType::Singleplayer,
-            0x1 => ScenarioType::Multiplayer,
-            0x2 => ScenarioType::UserInterface,
-            _ => return Err(MapReaderError::IO("Invalid scenario type".into())),
-        };
+        let scenario_type = ScenarioType::try_from(data.read_u16::<LittleEndian>()?)?;
         data.seek(SeekFrom::Current(0x2))?;
         let _checksum = data.read_u32::<LittleEndian>()?;
         data.seek(SeekFrom::Current(0x794))?;
