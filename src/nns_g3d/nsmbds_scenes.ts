@@ -194,15 +194,13 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
 
             const objects = worldMapDescs[this.worldNumber - 1];
 
-            const renderers: MDL0Renderer[] = [];
-
             const mainObj = this.createRendererFromData(cache, assertExists(mainObjData));
-            renderers.push(mainObj);
+            renderer.objectRenderers.push(mainObj);
 
             let treeObj: MDL0Renderer | null = null;
             if (treeObjData !== null) {
                 treeObj = this.createRendererFromData(cache, treeObjData);
-                renderers.push(treeObj);
+                renderer.objectRenderers.push(treeObj);
             }
 
             for (let i = 0; i < objects.length; i++) {
@@ -210,17 +208,17 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
                 if (element.type == WorldMapObjType.ROUTE_POINT) {
                     const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[3]);
-                    renderers.push(obj);
+                    renderer.objectRenderers.push(obj);
                 } else if (element.type == WorldMapObjType.START_POINT) {
                     const obj = this.createRendererFromData(cache, mapPointObjData!, element.position);
                     obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[2]);
-                    renderers.push(obj);
+                    renderer.objectRenderers.push(obj);
                 } else if (element.type == WorldMapObjType.TOWER) {
-                    renderers.push(this.createRendererFromData(cache, towerObjData!, element.position));
+                    renderer.objectRenderers.push(this.createRendererFromData(cache, towerObjData!, element.position));
                 } else if (element.type == WorldMapObjType.CASTLE) {
-                    renderers.push(this.createRendererFromData(cache, castleObjData!, element.position));
+                    renderer.objectRenderers.push(this.createRendererFromData(cache, castleObjData!, element.position));
                 } else if (element.type == WorldMapObjType.BIG_CASTLE) {
-                    renderers.push(this.createRendererFromData(cache, bigCastleObjData!, element.position));
+                    renderer.objectRenderers.push(this.createRendererFromData(cache, bigCastleObjData!, element.position));
                 }
             }
 
