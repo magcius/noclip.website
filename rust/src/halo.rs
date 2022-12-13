@@ -2,7 +2,7 @@ use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
 use js_sys::{Array};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsValue, JsCast};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError, FromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 use inflate::inflate_bytes;
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -28,67 +28,121 @@ impl<T: TryFromPrimitive> From<TryFromPrimitiveError<T>> for MapReaderError {
 type Result<T> = std::result::Result<T, MapReaderError>;
 type Pointer = u32;
 
-#[wasm_bindgen]
+const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
+
 pub struct MapManager {
     reader: MapReader,
     header: Header,
+    tag_index_header: TagIndexHeader,
+    bitmaps_reader: ResourceMapReader,
+    bitmaps_header: ResourcesHeader,
+    tag_headers: Vec<TagHeader>,
 }
 
-#[wasm_bindgen]
 impl MapManager {
-    pub fn new(data: Vec<u8>) -> Self {
-        let mut reader = MapReader::new(data);
-        let header = reader.read_header().unwrap();
+    fn new(map: Vec<u8>, bitmaps: Vec<u8>) -> Result<Self> {
+        let mut reader = MapReader::new(map);
+        let header = reader.read_header()?;
+        let mut bitmaps_reader = ResourceMapReader::new(bitmaps);
+        let bitmaps_header = bitmaps_reader.read_header()?;
 
-        MapManager {
+        let tag_index_header = reader.read_tag_index_header(&header)?;
+        let tag_headers = reader.read_tag_headers(&header, &tag_index_header)?;
+
+        Ok(MapManager {
             reader,
             header,
-        }
+            tag_index_header,
+            bitmaps_reader,
+            bitmaps_header,
+            tag_headers,
+        })
     }
 
-    pub fn get_bitmaps(&mut self) -> Array {
-        self.reader.read_tag_headers(&self.header)
-            .unwrap().iter()
+    fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
+        let data = match tag_header.primary_class {
+            TagClass::Bitmap => {
+                let offset: i64 = self.header.tag_data_offset as i64 - BASE_MEMORY_ADDRESS as i64;
+                self.reader.data.seek(SeekFrom::Start((offset + tag_header.tag_data as i64) as u64))?;
+                let mut bitmap = Bitmap::deserialize(&mut self.reader.data)?;
+                bitmap.bitmap_group_sequence.read_items(&mut self.reader.data, offset)?;
+                bitmap.data.read_items(&mut self.reader.data, offset)?;
+                TagData::Bitmap(bitmap)
+            },
+            _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
+        };
+        Ok(Tag { header: tag_header.clone(), data })
+    }
+
+    fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
+        let bitmap_headers: Vec<TagHeader> = self.tag_headers.iter()
             .filter(|header| match header.primary_class {
                 TagClass::Bitmap => true,
                 _ => false,
             })
-            .flat_map(|header| self.reader.read_tag(header))
-            .map(JsValue::from).collect()
-    }
-}
-
-#[wasm_bindgen]
-pub struct ResourceManager {
-    reader: MapReader,
-    resource_headers: Vec<ResourceHeader>,
-}
-
-#[wasm_bindgen]
-impl ResourceManager {
-    pub fn new(data: Vec<u8>) -> Self {
-        let mut reader = MapReader::new(data);
-        let resource_headers = reader.read_resource_headers().unwrap();
-
-        ResourceManager {
-            reader,
-            resource_headers,
-        }
-    }
-
-    pub fn get_resource_data(&mut self, tag: Tag) -> Option<Vec<u8>> {
-        for resource in &self.resource_headers {
-            if resource.path.as_ref().unwrap().starts_with(&tag.path) {
-                return Some(self.reader.read_resource_data(&resource).unwrap());
+            .cloned()
+            .collect();
+        let mut result = Vec::new();
+        for hdr in &bitmap_headers {
+            match self.read_tag(hdr) {
+                Ok(tag) => result.push(tag),
+                Err(err) => { dbg!(hdr, err); },
             }
         }
-        None
+        Ok(result)
     }
 }
 
 #[wasm_bindgen]
 pub fn init_panic_hook() {
     console_error_panic_hook::set_once();
+}
+
+struct ResourceMapReader {
+    pub data: Cursor<Vec<u8>>,
+}
+
+impl ResourceMapReader {
+    fn new(data: Vec<u8>) -> ResourceMapReader {
+        ResourceMapReader { data: Cursor::new(data) }
+    }
+
+    fn read_header(&mut self) -> Result<ResourcesHeader> {
+        ResourcesHeader::deserialize(&mut self.data)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Block<T> {
+    items: Option<Vec<T>>,
+    base_pointer: Pointer,
+    count: usize,
+}
+
+impl<T> Deserialize for Block<T> {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let count = data.read_u32::<LittleEndian>()? as usize;
+        let base_pointer = data.read_u32::<LittleEndian>()? as Pointer;
+        Ok(Block {
+            count, 
+            base_pointer,
+            items: None,
+        })
+    }
+}
+
+impl<T: Deserialize> Block<T> {
+    fn read_items(&mut self, data: &mut Cursor<Vec<u8>>, offset: i64) -> Result<()> {
+        let mut items: Vec<T> = Vec::with_capacity(self.count as usize);
+        if self.count > 0 {
+            data.seek(SeekFrom::Start((self.base_pointer as i64 + offset) as u64))?;
+            for _ in 0..self.count {
+                items.push(T::deserialize(data)?);
+            }
+        }
+        self.items = Some(items);
+        Ok(())
+    }
 }
 
 struct MapReader {
@@ -101,74 +155,40 @@ impl MapReader {
     }
 
     fn read_header(&mut self) -> Result<Header> {
+        self.data.seek(SeekFrom::Start(0))?;
         Header::deserialize(&mut self.data)
     }
 
-    fn read_resource_headers(&mut self) -> Result<Vec<ResourceHeader>> {
-        let header = ResourcesHeader::deserialize(&mut self.data)?;
-        self.data.seek(SeekFrom::Start(header.resources_offset as u64))?;
-        let mut result = Vec::with_capacity(header.resource_count as usize);
-        for _ in 0..header.resource_count {
-            let mut res = ResourceHeader::deserialize(&mut self.data)?;
-            res.path_offset += header.paths_offset;
-            //res.data_offset += header.resources_offset;
-            let bookmark = self.data.position();
-            self.data.seek(SeekFrom::Start(res.path_offset as u64))?;
-            res.path = Some(read_null_terminated_string(&mut self.data)?);
-            self.data.seek(SeekFrom::Start(bookmark))?;
-            result.push(res);
-        }
-        Ok(result)
-    }
-
-    fn read_resource_data(&mut self, resource: &ResourceHeader) -> Result<Vec<u8>> {
-        self.data.seek(SeekFrom::Start(resource.data_offset as u64))?;
-        let mut buf = vec![0; resource.size as usize];
-        self.data.read_exact(&mut buf)?;
-        Ok(buf)
-    }
-
-    fn read_tag_headers(&mut self, header: &Header) -> Result<Vec<TagHeader>> {
+    fn read_tag_index_header(&mut self, header: &Header) -> Result<TagIndexHeader> {
         self.data.seek(SeekFrom::Start(header.tag_data_offset as u64))?;
-        let index_header = TagIndexHeader::deserialize(&mut self.data)?;
-        let mut result = Vec::with_capacity(index_header.tag_count as usize);
-        for _ in 0..index_header.tag_count {
-            let mut tag = TagHeader::deserialize(&mut self.data)?;
-            if tag.tag_data > 0 {
-                tag.tag_data = convert_vpointer(header.tag_data_offset + tag.tag_data);
-            }
-            tag.tag_path = convert_vpointer(header.tag_data_offset + tag.tag_path);
-            result.push(tag);
-        }
-        Ok(result)
+        TagIndexHeader::deserialize(&mut self.data)
     }
 
-    fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
-        self.data.seek(SeekFrom::Start(tag_header.tag_path as u64))?;
-        let path = read_null_terminated_string(&mut self.data)?;
-        self.data.seek(SeekFrom::Start(tag_header.tag_data as u64))?;
-        let data = match tag_header.primary_class {
-            TagClass::Scenario => TagData::Scenario(Scenario::deserialize(&mut self.data)?),
-            TagClass::Bitmap => TagData::Bitmap(Bitmap::deserialize(&mut self.data)?),
-            _ => return Err(MapReaderError::UnimplementedTag(format!("{:?} not yet implemented", tag_header.primary_class))),
-        };
-        Ok(Tag { path, data })
+    fn read_tag_headers(&mut self, header: &Header, tag_index_header: &TagIndexHeader) -> Result<Vec<TagHeader>> {
+        let mut result = Vec::with_capacity(tag_index_header.tag_count as usize);
+        for i in 0..tag_index_header.tag_count {
+            let data_offset = header.tag_data_offset + 40 + (i * 32);
+            self.data.seek(SeekFrom::Start(data_offset as u64))?;
+            let mut tag_header = TagHeader::deserialize(&mut self.data)?;
+            let path_offset = header.tag_data_offset + tag_header.tag_path - BASE_MEMORY_ADDRESS;
+            self.data.seek(SeekFrom::Start(path_offset as u64))?;
+            let path = read_null_terminated_string(&mut self.data)?;
+            tag_header.path = path;
+            result.push(tag_header);
+        }
+        Ok(result)
     }
 }
 
 #[wasm_bindgen]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tag {
-    path: String,
+    header: TagHeader,
     data: TagData,
 }
 
 #[wasm_bindgen]
 impl Tag {
-    pub fn get_path(&self) -> String {
-        self.path.clone()
-    }
-
     pub fn as_bitmap(&self) -> Option<Bitmap> {
         match &self.data {
             TagData::Bitmap(b) => Some(b.clone()),
@@ -180,7 +200,7 @@ impl Tag {
 struct Sky {
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Scenario {
     skies: Vec<TagDependency>,
     scenario_type: ScenarioType,
@@ -317,7 +337,7 @@ impl Deserialize for Scenario {
         let _deprecated = TagDependency::deserialize(data)?;
         let _deprecated = TagDependency::deserialize(data)?;
         let _deprecated = TagDependency::deserialize(data)?;
-        let skies = TagDependency::deserialize_vec(data)?;
+        let skies: Block<TagDependency> = Block::deserialize(data)?;
         let scenario_type = match data.read_u16::<LittleEndian>()? {
             0x0 => ScenarioType::Singleplayer,
             0x1 => ScenarioType::Multiplayer,
@@ -325,19 +345,19 @@ impl Deserialize for Scenario {
             _ => return Err(MapReaderError::IO("Invalid scenario type".into())),
         };
         let flags = data.read_u16::<LittleEndian>()?;
-        let child_scenarios = TagDependency::deserialize_vec(data)?;
+        let child_scenarios: Block<TagDependency> = Block::deserialize(data)?;
         let local_north = data.read_f32::<LittleEndian>()?;
         data.seek(SeekFrom::Current(32 * 2))?; // block of predicted_resources
         data.seek(SeekFrom::Current(32 * 2))?; // block of functions
         let _editor_scenario_data = data.read_u32::<LittleEndian>()? as Pointer;
         data.seek(SeekFrom::Current(32 * 2))?; // block of editor comments
-        let object_names = ObjectName::deserialize_vec(data)?;
-        let scenery = Scenery::deserialize_vec(data)?;
+        let object_names: Block<ObjectName> = Block::deserialize(data)?;
+        let scenery: Block<Scenery> = Block::deserialize(data)?;
         todo!();
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TagData {
     Scenario(Scenario),
     Bitmap(Bitmap),
@@ -345,22 +365,6 @@ enum TagData {
 
 trait Deserialize {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized;
-
-    fn deserialize_vec(data: &mut Cursor<Vec<u8>>) -> Result<Vec<Self>> where Self: Sized {
-        let count = data.read_u32::<LittleEndian>()? as usize;
-        let mut result = Vec::with_capacity(count);
-        let ptr = data.read_u32::<LittleEndian>()? as Pointer;
-        let bookmark = data.position();
-        if count > 0 {
-            data.seek(SeekFrom::Start(ptr as u64))?;
-            for _ in 0..count {
-                result.push(Self::deserialize(data)?);
-            }
-        }
-        data.seek(SeekFrom::Start(bookmark))?;
-        dbg!(count, ptr);
-        Ok(result)
-    }
 }
 
 #[derive(Debug)]
@@ -422,7 +426,6 @@ impl Deserialize for ResourcesHeader {
     }
 }
 
-const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 fn convert_vpointer(pointer: Pointer) -> Pointer {
     pointer - BASE_MEMORY_ADDRESS
 }
@@ -529,7 +532,7 @@ struct BitmapGroup {
     name: String,
     first_bitmap_index: u16,
     bitmap_count: u16,
-    sprites: Vec<Sprite>,
+    sprites: Block<Sprite>,
 }
 
 impl Deserialize for BitmapGroup {
@@ -538,7 +541,7 @@ impl Deserialize for BitmapGroup {
             name: read_null_terminated_string(data)?,
             first_bitmap_index: data.read_u16::<LittleEndian>()?,
             bitmap_count: data.read_u16::<LittleEndian>()?,
-            sprites: Sprite::deserialize_vec(data)?,
+            sprites: Block::deserialize(data)?,
         })
     }
 }
@@ -681,22 +684,42 @@ struct BitmapData {
     pointer: Pointer,
 }
 
+impl BitmapData {
+    fn is_external(&self) -> bool {
+        (self.flags & 0x100) > 0
+    }
+}
+
 impl Deserialize for BitmapData {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let bitmap_class = BitmapClass::try_from(data.read_u32::<LittleEndian>()?)?;
+        let width = data.read_u16::<LittleEndian>()?;
+        let height = data.read_u16::<LittleEndian>()?;
+        let depth = data.read_u16::<LittleEndian>()?;
+        let bitmap_type = BitmapDataType::try_from(data.read_u16::<LittleEndian>()?)?;
+        let format = BitmapFormat::try_from(data.read_u16::<LittleEndian>()?)?;
+        let flags = data.read_u16::<LittleEndian>()?;
+        let registration_point = Point2DInt::deserialize(data)?;
+        let mipmap_count = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(2))?;
+        let pixel_data_offset = data.read_u32::<LittleEndian>()? as Pointer;
+        let pixel_data_size = data.read_u32::<LittleEndian>()?;
+        let bitmap_tag_id = data.read_u32::<LittleEndian>()?;
+        let pointer = data.read_u32::<LittleEndian>()? as Pointer;
         Ok(BitmapData {
-            bitmap_class: BitmapClass::try_from(data.read_u32::<LittleEndian>()?)?,
-            width: data.read_u16::<LittleEndian>()?,
-            height: data.read_u16::<LittleEndian>()?,
-            depth: data.read_u16::<LittleEndian>()?,
-            bitmap_type: BitmapDataType::try_from(data.read_u16::<LittleEndian>()?)?,
-            format: BitmapFormat::try_from(data.read_u16::<LittleEndian>()?)?,
-            flags: data.read_u16::<LittleEndian>()?,
-            registration_point: Point2DInt::deserialize(data)?,
-            mipmap_count: data.read_u16::<LittleEndian>()?,
-            pixel_data_offset: data.read_u32::<LittleEndian>()? as Pointer,
-            pixel_data_size: data.read_u32::<LittleEndian>()?,
-            bitmap_tag_id: data.read_u32::<LittleEndian>()?,
-            pointer: data.read_u32::<LittleEndian>()? as Pointer,
+            bitmap_class,
+            width,
+            height,
+            depth,
+            bitmap_type,
+            format,
+            flags,
+            registration_point,
+            mipmap_count,
+            pixel_data_offset,
+            pixel_data_size,
+            bitmap_tag_id,
+            pointer,
         })
     }
 }
@@ -708,55 +731,52 @@ pub struct Bitmap {
     pub encoding_format: BitmapEncodingFormat,
     pub usage: BitmapUsage,
     pub flags: u16,
+    /*
     pub detail_fade_factor: f32,
     pub sharpen_amount: f32,
     pub bump_height: f32,
     sprite_budget_size: BitmapSpriteBudgetSize,
     sprite_budget_count: u16,
-    pub color_plate_width: u16,
-    pub color_plate_height: u16,
-    compressed_color_plate_pointer: Pointer,
-    processed_pixel_data: Pointer,
+    pub color_plate_width: u16, // non-cached
+    pub color_plate_height: u16, // non-cached
+    compressed_color_plate_pointer: Pointer, // non-cached
+    processed_pixel_data: Pointer, // non-cached
     pub blur_filter_size: f32,
     pub alpha_bias: f32,
+    */
     pub mipmap_count: u16,
     sprite_usage: BitmapSpriteUsage,
     sprite_spacing: u16,
-    bitmap_group_sequence: Vec<BitmapGroup>,
-    data: Vec<BitmapData>,
+    bitmap_group_sequence: Block<BitmapGroup>,
+    data: Block<BitmapData>,
 }
 
 impl Deserialize for Bitmap {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        dbg!(data.position());
-        let mut result = Bitmap {
-            bitmap_type: BitmapType::try_from(data.read_u16::<LittleEndian>()?)?,
-            encoding_format: BitmapEncodingFormat::try_from(data.read_u16::<LittleEndian>()?)?,
-            usage: BitmapUsage::try_from(data.read_u16::<LittleEndian>()?)?,
-            flags: data.read_u16::<LittleEndian>()?,
-            detail_fade_factor: data.read_f32::<LittleEndian>()?,
-            sharpen_amount: data.read_f32::<LittleEndian>()?,
-            bump_height: data.read_f32::<LittleEndian>()?,
-            sprite_budget_size: BitmapSpriteBudgetSize::try_from(data.read_u16::<LittleEndian>()?)?,
-            sprite_budget_count: data.read_u16::<LittleEndian>()?,
-            color_plate_width: data.read_u16::<LittleEndian>()?,
-            color_plate_height: data.read_u16::<LittleEndian>()?,
-            compressed_color_plate_pointer: data.read_u32::<LittleEndian>()? as Pointer,
-            processed_pixel_data: data.read_u32::<LittleEndian>()? as Pointer,
-            blur_filter_size: data.read_f32::<LittleEndian>()?,
-            alpha_bias: data.read_f32::<LittleEndian>()?,
-            mipmap_count: data.read_u16::<LittleEndian>()?,
-            sprite_usage: BitmapSpriteUsage::try_from(data.read_u16::<LittleEndian>()?)?,
-            sprite_spacing: data.read_u16::<LittleEndian>()?,
-            bitmap_group_sequence: vec![],
-            data: vec![],
-        };
-        data.seek(SeekFrom::Current(0x2))?;
-        dbg!("before group", data.position());
-        result.bitmap_group_sequence = BitmapGroup::deserialize_vec(data)?;
-        dbg!("before bitmapdata", data.position());
-        result.data = BitmapData::deserialize_vec(data)?;
-        Ok(result)
+        let start = data.position();
+        let bitmap_type = BitmapType::try_from(data.read_u16::<LittleEndian>()?)?;
+        let encoding_format = BitmapEncodingFormat::try_from(data.read_u16::<LittleEndian>()?)?;
+        let usage = BitmapUsage::try_from(data.read_u16::<LittleEndian>()?)?;
+        let flags = data.read_u16::<LittleEndian>()?;
+        let detail_fade_factor = data.read_f32::<LittleEndian>()?;
+        let sharpen_amount = data.read_f32::<LittleEndian>()?;
+        let bump_height = data.read_f32::<LittleEndian>()?;
+        let sprite_budget_size = BitmapSpriteBudgetSize::try_from(data.read_u16::<LittleEndian>()?)?;
+        let sprite_budget_count = data.read_u16::<LittleEndian>()?;
+        let color_plate_width = data.read_u16::<LittleEndian>()?; // non-cache
+        let color_plate_height = data.read_u16::<LittleEndian>()?; // non-cache
+        let compressed_color_plate_pointer = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
+        let processed_pixel_data = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
+        let blur_filter_size = data.read_f32::<LittleEndian>()?;
+        let alpha_bias = data.read_f32::<LittleEndian>()?;
+        let mipmap_count = data.read_u16::<LittleEndian>()?;
+        let sprite_usage = BitmapSpriteUsage::try_from(data.read_u16::<LittleEndian>()?)?;
+        let sprite_spacing = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 84))?;
+        let bitmap_group_sequence = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 96))?;
+        let data = Block::deserialize(data)?;
+        Ok(Bitmap { bitmap_type, encoding_format, usage, flags, mipmap_count, sprite_usage, sprite_spacing, bitmap_group_sequence, data })
     }
 }
 
@@ -929,7 +949,8 @@ impl Deserialize for TagClass {
     }
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 struct TagHeader {
     primary_class: TagClass,
     secondary_class: TagClass,
@@ -938,6 +959,8 @@ struct TagHeader {
     tag_path: u32,
     tag_data: u32,
     indexed: u32, // seems to always be 0 in bloodgulch
+
+    path: String // read in after deserialization
 }
 
 impl Deserialize for TagHeader {
@@ -950,13 +973,14 @@ impl Deserialize for TagHeader {
             tag_path: data.read_u32::<LittleEndian>()?,
             tag_data: data.read_u32::<LittleEndian>()?,
             indexed: data.read_u32::<LittleEndian>()?,
+            path: String::new(),
         };
         data.seek(SeekFrom::Current(0x4))?;
         Ok(tag)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TagDependency {
     tag_class: TagClass,
     path_pointer: Pointer,
@@ -979,35 +1003,18 @@ mod tests {
 
     use super::*;
 
-    fn read_bloodgulch() -> MapReader {
-        let data = std::fs::read("test_data/bloodgulch.map").unwrap();
-        MapReader::new(data)
+    fn read_bloodgulch() -> Vec<u8> {
+        std::fs::read("test_data/bloodgulch.map").unwrap()
     }
 
-    fn read_bitmaps() -> MapReader {
-        let data = std::fs::read("test_data/bitmaps.map").unwrap();
-        MapReader::new(data)
+    fn read_bitmaps() -> Vec<u8> {
+        std::fs::read("test_data/bitmaps.map").unwrap()
     }
 
     #[test]
     fn test() {
-        let mut reader = read_bloodgulch();
-        let header = reader.read_header().unwrap();
-        assert_eq!(header.scenario_name, "bloodgulch");
-        let tags = reader.read_tag_headers(&header).unwrap();
-        let bitmap_hdr = tags.iter().filter(|tag| match tag.primary_class {
-            TagClass::Bitmap => true,
-            _ => false,
-        }).next().unwrap();
-        let bitmap = reader.read_tag(bitmap_hdr).unwrap();
-        dbg!(bitmap);
-        return;
-        let mut bitmap_reader = read_bitmaps();
-        let resources = bitmap_reader.read_resource_headers().unwrap();
-        for r in &resources {
-            if r.path.as_ref().unwrap().starts_with("sky\\planets\\threshold clear afternoon") {
-                dbg!(r);
-            }
-        }
+        let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
+        let bitmaps = mgr.get_bitmaps().unwrap();
+        dbg!(bitmaps.len());
     }
 }
