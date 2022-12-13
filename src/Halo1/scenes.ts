@@ -39,14 +39,11 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const resourceMapData = await dataFetcher.fetchData("halo/bitmaps.map");
         const mapData = await dataFetcher.fetchData("halo/bloodgulch.map");
 
-        const mapManager = wasm.MapManager.new(mapData.createTypedArray(Uint8Array));
-        const bitmapManager = wasm.ResourceManager.new(resourceMapData.createTypedArray(Uint8Array));
-        const bitmapTag = mapManager.get_bitmaps()[0];
-        const bitmap = bitmapTag.as_bitmap();
-        console.log(bitmapTag.get_path());
-        const bitmapData = bitmapManager.get_resource_data(bitmapTag)!;
-        console.log(bitmap);
-        let texDesc = makeTextureDescriptor2D(GfxFormat.BC2, bitmap.color_plate_height, bitmap.color_plate_width, 1);
+        const mapManager = wasm.MapManager.new_js(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array);
+        const bitmap = mapManager.get_bitmaps_js()[0];
+        const bitmapData = mapManager.read_bitmap_data_js(bitmap, 0);
+        console.log(bitmapData);
+        let texDesc = makeTextureDescriptor2D(GfxFormat.BC2, 512, 512, 1);
         let tex = device.createTexture(texDesc);
         device.uploadTextureData(tex, 0, [bitmapData]);
         const renderer = new HaloScene();

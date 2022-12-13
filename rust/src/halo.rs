@@ -11,6 +11,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 enum MapReaderError {
     IO(String),
     UnimplementedTag(String),
+    InvalidTag(String),
 }
 
 impl From<std::io::Error> for MapReaderError {
@@ -30,6 +31,7 @@ type Pointer = u32;
 
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
+#[wasm_bindgen]
 pub struct MapManager {
     reader: MapReader,
     header: Header,
@@ -39,6 +41,7 @@ pub struct MapManager {
     tag_headers: Vec<TagHeader>,
 }
 
+#[wasm_bindgen]
 impl MapManager {
     fn new(map: Vec<u8>, bitmaps: Vec<u8>) -> Result<Self> {
         let mut reader = MapReader::new(map);
@@ -57,6 +60,10 @@ impl MapManager {
             bitmaps_header,
             tag_headers,
         })
+    }
+
+    pub fn new_js(map: Vec<u8>, bitmaps: Vec<u8>) -> Self {
+        MapManager::new(map, bitmaps).unwrap()
     }
 
     fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
@@ -84,12 +91,33 @@ impl MapManager {
             .collect();
         let mut result = Vec::new();
         for hdr in &bitmap_headers {
-            match self.read_tag(hdr) {
-                Ok(tag) => result.push(tag),
-                Err(err) => { dbg!(hdr, err); },
-            }
+            result.push(self.read_tag(&hdr)?);
         }
         Ok(result)
+    }
+
+    pub fn get_bitmaps_js(&mut self) -> Array {
+        self.get_bitmaps().unwrap().iter().cloned().map(JsValue::from).collect()
+    }
+
+    fn read_bitmap_data(&mut self, tag: &Tag, index: usize) -> Result<Vec<u8>> {
+        match &tag.data {
+            TagData::Bitmap(bitmap) => match &bitmap.data.items {
+                Some(bitmap_data) => {
+                    let data = &bitmap_data[index];
+                    let mut result = vec![0; data.pixel_data_size as usize];
+                    self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
+                    self.bitmaps_reader.data.read_exact(&mut result)?;
+                    Ok(result)
+                },
+                None => return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData"))),
+            },
+            _ => return Err(MapReaderError::InvalidTag(format!("expected bitmap tag, got {:?}", tag.header.primary_class))),
+        }
+    }
+
+    pub fn read_bitmap_data_js(&mut self, tag: &Tag, index: usize) -> Vec<u8> {
+        self.read_bitmap_data(tag, index).unwrap()
     }
 }
 
@@ -665,6 +693,12 @@ enum BitmapFormat {
     Dxt1 = 0xE,
     Dxt3 = 0xF,
     Dxt5 = 0x10,
+    P8Bump = 17,
+    P8 = 18,
+    ARGBFP32 = 19,
+    RGBFP32 = 20,
+    RGBFP16 = 21,
+    U8V8 = 22,
 }
 
 #[derive(Debug, Clone)]
@@ -706,6 +740,7 @@ impl Deserialize for BitmapData {
         let pixel_data_size = data.read_u32::<LittleEndian>()?;
         let bitmap_tag_id = data.read_u32::<LittleEndian>()?;
         let pointer = data.read_u32::<LittleEndian>()? as Pointer;
+        data.seek(SeekFrom::Current(8))?;
         Ok(BitmapData {
             bitmap_class,
             width,
@@ -1015,6 +1050,8 @@ mod tests {
     fn test() {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
         let bitmaps = mgr.get_bitmaps().unwrap();
-        dbg!(bitmaps.len());
+        dbg!(&bitmaps[0]);
+        let data = mgr.read_bitmap_data(&bitmaps[0], 0).unwrap();
+        dbg!(&data[0..10]);
     }
 }
