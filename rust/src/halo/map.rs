@@ -1,4 +1,4 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom, TryInto}};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 
 use crate::halo::common::*;
@@ -72,11 +72,6 @@ impl MapManager {
                 bsp.lightmaps.read_items(&mut self.reader.data, offset)?;
                 for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
                     lightmap.materials.read_items(&mut self.reader.data, offset)?;
-                    for material in lightmap.materials.items.as_mut().unwrap() {
-                        let vert_offset = material.uncompressed_vertices.file_offset as i64;
-                        material.rendered_vertices.read_items(&mut self.reader.data, vert_offset)?;
-                        material.lightmap_vertices.read_items(&mut self.reader.data, vert_offset)?;
-                    }
                 }
                 TagData::BSP(bsp)
             },
@@ -105,9 +100,20 @@ impl MapManager {
                     .collect();
                 let mut result = Vec::new();
                 for (bsp_ref, mut header) in bsp_refs_and_headers {
+                    self.reader.data.seek(SeekFrom::Start(bsp_ref.start as u64))?;
+                    let bsp_header = BSPHeader::deserialize(&mut self.reader.data)?;
                     let offset = bsp_ref.start as i64 - bsp_ref.address as i64;
-                    header.tag_data = bsp_ref.address + 24;
-                    result.push(self.read_tag_at_offset(&header, offset).unwrap());
+                    header.tag_data = bsp_header.bsp_offset;
+                    let mut tag = self.read_tag_at_offset(&header, offset).unwrap();
+                    if let TagData::BSP(bsp) = &mut tag.data {
+                        for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
+                            for material in lightmap.materials.items.as_mut().unwrap() {
+                                material.rendered_vertices.read_items(&mut self.reader.data, bsp_header.rendered_vertices_offset as i64)?;
+                                material.lightmap_vertices.read_items(&mut self.reader.data, bsp_header.rendered_vertices_offset as i64)?;
+                            }
+                        }
+                    }
+                    result.push(tag);
                 }
                 return Ok(result);
             }
@@ -348,9 +354,8 @@ mod tests {
         let scenario = mgr.get_scenario().unwrap();
         let bsps = mgr.get_scenario_bsps(&scenario).unwrap();
         let bsp: &BSP = (&bsps[0].data).try_into().unwrap();
-        dbg!(mgr.resolve_dependency(&bsp.lightmaps_bitmap));
         let lightmap = &bsp.lightmaps.items.as_ref().unwrap()[0];
         let material = &lightmap.materials.items.as_ref().unwrap()[0];
-        dbg!(&material.uncompressed_vertices, &material.rendered_vertices.items.as_ref().unwrap()[0..3]);
+        dbg!(&material.uncompressed_vertices, &material.rendered_vertices.items.as_ref().unwrap()[0]);
     }
 }

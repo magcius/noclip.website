@@ -134,6 +134,29 @@ impl Deserialize for ScenarioStructureBSPReference {
 }
 
 #[derive(Debug, Clone)]
+pub struct BSPHeader {
+    pub bsp_offset: u32,
+    pub rendered_vertices_offset: u32,
+    pub lightmap_vertices_offset: u32,
+}
+
+impl Deserialize for BSPHeader {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let bsp_offset = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(4))?;
+        let rendered_vertices_offset = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(4))?;
+        let lightmap_vertices_offset = data.read_u32::<LittleEndian>()?;
+        assert_eq!(data.read_u32::<LittleEndian>()?, TagClass::ScenarioStructureBsp.into());
+        Ok(BSPHeader {
+            bsp_offset,
+            rendered_vertices_offset,
+            lightmap_vertices_offset,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct BSP {
     pub lightmaps_bitmap: TagDependency,
     pub default_ambient_color: ColorRGB,
@@ -230,7 +253,6 @@ pub struct BSPMaterial {
 impl Deserialize for BSPMaterial {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
-        dbg!(start);
         let shader = TagDependency::deserialize(data).unwrap();
         let shader_permutation = data.read_u16::<LittleEndian>()?;
         let flags = data.read_u16::<LittleEndian>()?;
@@ -257,7 +279,6 @@ impl Deserialize for BSPMaterial {
         data.seek(SeekFrom::Start(start + 200))?;
         let lightmap_vertices: Block<LightmapVertex> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 216))?;
-        dbg!(data.position());
         let uncompressed_vertices = TagDataOffset::deserialize(data)?;
         assert_ne!(uncompressed_vertices.file_offset, 0);
         assert_eq!(rendered_vertices_type, RenderedVerticesType::StructureBSPUncompressedRenderedVertices);
