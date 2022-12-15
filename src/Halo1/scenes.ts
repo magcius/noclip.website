@@ -36,6 +36,7 @@ async function loadWasm() {
 
 class MaterialProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
+    public static ub_ShapeParams = 1;
 
     public override both = `
 precision mediump float;
@@ -45,6 +46,10 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ModelView;
 };
 
+layout(std140) uniform ub_ShapeParams {
+    Mat4x4 u_MaterialModel;
+};
+
 varying vec2 v_LightIntensity;
 
 #ifdef VERT
@@ -52,7 +57,7 @@ layout(location = 0) attribute vec3 a_Position;
 layout(location = 1) attribute vec3 a_Normal;
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(u_MaterialModel, vec4(a_Position, 1.0))));
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
     vec3 normal = normalize(a_Normal);
     float t_LightIntensityF = dot(-normal, t_LightDirection);
@@ -78,7 +83,7 @@ class MaterialRenderer {
     public trisBuf: GfxBuffer;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public material: Material, public inputLayout: GfxInputLayout) {
+    constructor(device: GfxDevice, public material: Material, public inputLayout: GfxInputLayout, public modelMatrix: mat4) {
         this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.get_vertices().buffer);
         this.normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.get_normals().buffer);
         this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.get_indices().buffer);
@@ -108,7 +113,7 @@ class MaterialRenderer {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 1, numSamplers: 0 }, // ub_SceneParams
+    { numUniformBuffers: 2, numSamplers: 0 }, // ub_SceneParams
 ];
 
 class HaloScene implements Viewer.SceneGfx {
@@ -116,11 +121,17 @@ class HaloScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     public program: GfxProgram;
     public inputLayout: GfxInputLayout;
+    public modelMatrix: mat4;
 
     constructor(public device: GfxDevice) {
         this.materialRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new MaterialProgram());
+        this.modelMatrix = mat4.create();
+        const scaling = 200;
+        mat4.rotate(this.modelMatrix, this.modelMatrix, -Math.PI / 2, vec3.fromValues(1, 0, 0));
+        mat4.scale(this.modelMatrix, this.modelMatrix, vec3.fromValues(scaling, scaling, scaling));
+        mat4.translate(this.modelMatrix, this.modelMatrix, vec3.fromValues(-50, 150, -20));
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
         vertexAttributeDescriptors.push({ location: 0, bufferIndex: 0, bufferByteOffset: 0, format: setFormatCompFlags(GfxFormat.F32_RGB, 3)});
@@ -134,7 +145,7 @@ class HaloScene implements Viewer.SceneGfx {
     }
 
     addMaterial(material: Material) {
-        this.materialRenderers.push(new MaterialRenderer(this.device, material, this.inputLayout));
+        this.materialRenderers.push(new MaterialRenderer(this.device, material, this.inputLayout, this.modelMatrix));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -142,10 +153,17 @@ class HaloScene implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
 
-        let offs = template.allocateUniformBuffer(MaterialProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(MaterialProgram.ub_SceneParams);
-        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
+        {
+            let offs = template.allocateUniformBuffer(MaterialProgram.ub_SceneParams, 32);
+            const mapped = template.mapUniformBufferF32(MaterialProgram.ub_SceneParams);
+            offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
+        }
+        {
+            let offs = template.allocateUniformBuffer(MaterialProgram.ub_ShapeParams, 16);
+            const mapped = template.mapUniformBufferF32(MaterialProgram.ub_ShapeParams);
+            offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+        }
 
         for (let i = 0; i < this.materialRenderers.length; i++)
             this.materialRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
