@@ -31,8 +31,8 @@ pub trait Deserialize {
 #[derive(Debug, Clone)]
 pub struct Block<T> {
     pub items: Option<Vec<T>>,
-    base_pointer: Pointer,
-    count: usize,
+    pub base_pointer: Pointer,
+    pub count: usize,
 }
 
 impl<T> Deserialize for Block<T> {
@@ -68,9 +68,9 @@ impl<T: Deserialize> Block<T> {
 
 #[derive(Debug, Clone)]
 pub struct Vector3D {
-    i: f32,
-    j: f32,
-    k: f32,
+    pub i: f32,
+    pub j: f32,
+    pub k: f32,
 }
 
 impl Deserialize for Vector3D {
@@ -83,11 +83,23 @@ impl Deserialize for Vector3D {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TagDataOffset {
-    size: u32,
-    external: u32,
-    file_offset: u32,
-    pointer: u64,
+    pub size: u32,
+    pub external: u32,
+    pub file_offset: u32,
+}
+
+impl Deserialize for TagDataOffset {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let offset = TagDataOffset {
+            size: data.read_u32::<LittleEndian>()?,
+            external: data.read_u32::<LittleEndian>()?,
+            file_offset: data.read_u32::<LittleEndian>()?,
+        };
+        data.seek(SeekFrom::Current(8))?;
+        Ok(offset)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -107,9 +119,9 @@ impl Deserialize for Plane3D {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Tri {
-    v0: u16,
-    v1: u16,
-    v2: u16,
+    pub v0: u16,
+    pub v1: u16,
+    pub v2: u16,
 }
 
 impl Deserialize for Tri {
@@ -123,17 +135,17 @@ impl Deserialize for Tri {
 }
 #[derive(Debug, Clone, Copy)]
 pub struct ColorRGB {
-    r: u8,
-    g: u8,
-    b: u8,
+    r: f32,
+    g: f32,
+    b: f32,
 }
 
 impl Deserialize for ColorRGB {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         Ok(ColorRGB {
-            r: data.read_u8()?,
-            g: data.read_u8()?,
-            b: data.read_u8()?,
+            r: data.read_f32::<LittleEndian>()?,
+            g: data.read_f32::<LittleEndian>()?,
+            b: data.read_f32::<LittleEndian>()?,
         })
     }
 }

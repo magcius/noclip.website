@@ -158,6 +158,39 @@ pub enum TagData {
     BSP(BSP),
 }
 
+impl<'a> TryFrom<&'a TagData> for &'a Scenario {
+    type Error = String;
+
+    fn try_from(data: &'a TagData) -> std::result::Result<Self, Self::Error> {
+        match data {
+            TagData::Scenario(x) => Ok(x),
+            t => Err(format!("invalid tag type: expected Scenario, got {:?}", t))
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a TagData> for &'a Bitmap {
+    type Error = String;
+
+    fn try_from(data: &'a TagData) -> std::result::Result<Self, Self::Error> {
+        match data {
+            TagData::Bitmap(x) => Ok(x),
+            t => Err(format!("invalid tag type: expected Bitmap, got {:?}", t))
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a TagData> for &'a BSP {
+    type Error = String;
+
+    fn try_from(data: &'a TagData) -> std::result::Result<Self, Self::Error> {
+        match data {
+            TagData::BSP(x) => Ok(x),
+            t => Err(format!("invalid tag type: expected BSP, got {:?}", t))
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Tag {
     pub header: TagHeader,

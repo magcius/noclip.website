@@ -164,8 +164,8 @@ impl Deserialize for BSP {
         let default_shadow_vector = Vector3D::deserialize(data)?;
         let default_shadow_color = ColorRGB::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 236))?;
-        let surfaces: Block<Tri> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 248))?;
+        let surfaces: Block<Tri> = Block::deserialize(data)?;
         let lightmaps: Block<BSPLightmap> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 636))?;
         Ok(BSP {
@@ -223,15 +223,15 @@ pub struct BSPMaterial {
     pub rendered_vertices_type: RenderedVerticesType,
     pub rendered_vertices: Block<RenderedVertex>,
     pub lightmap_vertices: Block<LightmapVertex>,
-    pub uncompressed_vertices_offset: u32,
-    pub compressed_vertices_offset: u32,
+    pub uncompressed_vertices: TagDataOffset,
+    pub compressed_vertices: TagDataOffset,
 }
 
 impl Deserialize for BSPMaterial {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
         dbg!(start);
-        let shader = TagDependency::deserialize(data)?;
+        let shader = TagDependency::deserialize(data).unwrap();
         let shader_permutation = data.read_u16::<LittleEndian>()?;
         let flags = data.read_u16::<LittleEndian>()?;
         let surfaces = data.read_i32::<LittleEndian>()?;
@@ -239,8 +239,8 @@ impl Deserialize for BSPMaterial {
         data.seek(SeekFrom::Start(start + 28))?;
         let centroid = Point3D::deserialize(data)?;
         let ambient_color = ColorRGB::deserialize(data)?;
-        data.seek(SeekFrom::Start(start + 56))?;
         let distant_light_count = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 56))?;
         let distant_light0_color = ColorRGB::deserialize(data)?;
         let distant_light0_direction = Vector3D::deserialize(data)?;
         let distant_light1_color = ColorRGB::deserialize(data)?;
@@ -256,9 +256,13 @@ impl Deserialize for BSPMaterial {
         let rendered_vertices: Block<RenderedVertex> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 200))?;
         let lightmap_vertices: Block<LightmapVertex> = Block::deserialize(data)?;
-        let uncompressed_vertices_offset = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 216))?;
+        dbg!(data.position());
+        let uncompressed_vertices = TagDataOffset::deserialize(data)?;
+        assert_ne!(uncompressed_vertices.file_offset, 0);
+        assert_eq!(rendered_vertices_type, RenderedVerticesType::StructureBSPUncompressedRenderedVertices);
         data.seek(SeekFrom::Start(start + 236))?;
-        let compressed_vertices_offset = data.read_u32::<LittleEndian>()?;
+        let compressed_vertices = TagDataOffset::deserialize(data)?;
         Ok(BSPMaterial {
             shader,
             shader_permutation,
@@ -279,30 +283,53 @@ impl Deserialize for BSPMaterial {
             rendered_vertices_type,
             rendered_vertices,
             lightmap_vertices,
-            uncompressed_vertices_offset,
-            compressed_vertices_offset,
+            uncompressed_vertices,
+            compressed_vertices,
         })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RenderedVertex {
-    position: Vector3D,
-    normal: Vector3D,
-    binormal: Vector3D,
-    tangent: Vector3D,
-    u: u32,
-    v: u32,
+    pub position: Vector3D,
+    pub normal: Vector3D,
+    pub binormal: Vector3D,
+    pub tangent: Vector3D,
+    pub u: f32,
+    pub v: f32,
+}
+
+impl Deserialize for RenderedVertex {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        Ok(RenderedVertex {
+            position: Vector3D::deserialize(data)?,
+            normal: Vector3D::deserialize(data)?,
+            binormal: Vector3D::deserialize(data)?,
+            tangent: Vector3D::deserialize(data)?,
+            u: data.read_f32::<LittleEndian>()?,
+            v: data.read_f32::<LittleEndian>()?,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct LightmapVertex {
-    normal: Vector3D,
-    u: u32,
-    v: u32,
+    pub normal: Vector3D,
+    pub u: f32,
+    pub v: f32,
 }
 
-#[derive(Debug, Clone, Copy, TryFromPrimitive)]
+impl Deserialize for LightmapVertex {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        Ok(LightmapVertex {
+            normal: Vector3D::deserialize(data)?,
+            u: data.read_f32::<LittleEndian>()?,
+            v: data.read_f32::<LittleEndian>()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq)]
 #[repr(u16)]
 pub enum RenderedVerticesType {
     StructureBSPUncompressedRenderedVertices = 0,

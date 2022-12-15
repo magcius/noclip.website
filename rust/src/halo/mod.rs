@@ -6,6 +6,7 @@ pub mod util;
 pub mod tag;
 pub mod bitmap;
 pub mod scenario;
+pub mod wasm;
 
 #[wasm_bindgen]
 pub fn init_panic_hook() {

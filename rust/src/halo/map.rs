@@ -1,7 +1,4 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
-use js_sys::{Array};
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::{JsValue, JsCast};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 
 use crate::halo::common::*;
@@ -24,7 +21,7 @@ pub struct MapManager {
 }
 
 impl MapManager {
-    fn new(map: Vec<u8>, bitmaps: Vec<u8>) -> Result<Self> {
+    pub fn new(map: Vec<u8>, bitmaps: Vec<u8>) -> Result<Self> {
         let mut reader = MapReader::new(map);
         let header = reader.read_header()?;
         let mut bitmaps_reader = ResourceMapReader::new(bitmaps);
@@ -47,12 +44,11 @@ impl MapManager {
         self.header.tag_data_offset as i64 - BASE_MEMORY_ADDRESS as i64
     }
 
-    fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
-        self._read_tag_at_offset(tag_header, self.get_tag_data_offset())
+    pub fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
+        self.read_tag_at_offset(tag_header, self.get_tag_data_offset())
     }
 
-    fn _read_tag_at_offset(&mut self, tag_header: &TagHeader, offset: i64) -> Result<Tag> {
-        dbg!(&tag_header);
+    fn read_tag_at_offset(&mut self, tag_header: &TagHeader, offset: i64) -> Result<Tag> {
         let tag_pointer = offset + tag_header.tag_data as i64;
         if tag_pointer < 0 {
             panic!("invalid tag pointer {} for header {:?}", tag_pointer, tag_header)
@@ -72,13 +68,15 @@ impl MapManager {
             },
             TagClass::ScenarioStructureBsp => {
                 let mut bsp = BSP::deserialize(&mut self.reader.data)?;
-                dbg!(&bsp, offset);
                 bsp.surfaces.read_items(&mut self.reader.data, offset)?;
                 bsp.lightmaps.read_items(&mut self.reader.data, offset)?;
-                dbg!(&bsp.lightmaps.items.as_ref().unwrap()[0..5]);
                 for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
-                    dbg!(&lightmap);
                     lightmap.materials.read_items(&mut self.reader.data, offset)?;
+                    for material in lightmap.materials.items.as_mut().unwrap() {
+                        let vert_offset = material.uncompressed_vertices.file_offset as i64;
+                        material.rendered_vertices.read_items(&mut self.reader.data, vert_offset)?;
+                        material.lightmap_vertices.read_items(&mut self.reader.data, vert_offset)?;
+                    }
                 }
                 TagData::BSP(bsp)
             },
@@ -87,7 +85,7 @@ impl MapManager {
         Ok(Tag { header: tag_header.clone(), data })
     }
 
-    fn get_scenario(&mut self) -> Result<Tag> {
+    pub fn get_scenario(&mut self) -> Result<Tag> {
         let header = self.tag_headers.iter().find(|header| match header.primary_class {
             TagClass::Scenario => true,
             _ => false,
@@ -99,7 +97,7 @@ impl MapManager {
         self.tag_headers.iter().find(|header| header.tag_id == dependency.tag_id)
     }
 
-    fn get_scenario_bsps(&mut self, tag: &Tag) -> Result<Vec<Tag>> {
+    pub fn get_scenario_bsps(&mut self, tag: &Tag) -> Result<Vec<Tag>> {
         if let TagData::Scenario(scenario) = &tag.data {
             if let Some(bsp_references) = &scenario.structure_bsp_references.items {
                 let bsp_refs_and_headers: Vec<(&ScenarioStructureBSPReference, TagHeader)> = bsp_references.iter()
@@ -109,7 +107,7 @@ impl MapManager {
                 for (bsp_ref, mut header) in bsp_refs_and_headers {
                     let offset = bsp_ref.start as i64 - bsp_ref.address as i64;
                     header.tag_data = bsp_ref.address + 24;
-                    result.push(self._read_tag_at_offset(&header, offset).unwrap());
+                    result.push(self.read_tag_at_offset(&header, offset).unwrap());
                 }
                 return Ok(result);
             }
@@ -118,7 +116,7 @@ impl MapManager {
         Err(MapReaderError::InvalidTag(format!("expected scenario tag, got {:?}", tag.header.primary_class)))
     }
 
-    fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
+    pub fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
         let bitmap_headers: Vec<TagHeader> = self.tag_headers.iter()
             .filter(|header| match header.primary_class {
                 TagClass::Bitmap => true,
@@ -133,7 +131,7 @@ impl MapManager {
         Ok(result)
     }
 
-    fn read_bitmap_data(&mut self, tag: &Tag, index: usize) -> Result<Vec<u8>> {
+    pub fn read_bitmap_data(&mut self, tag: &Tag, index: usize) -> Result<Vec<u8>> {
         if let TagData::Bitmap(bitmap) = &tag.data {
             if let Some(bitmap_data) = &bitmap.data.items {
                     let data = &bitmap_data[index];
@@ -331,6 +329,8 @@ impl Deserialize for TagIndexHeader {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
     use super::*;
 
     fn read_bloodgulch() -> Vec<u8> {
@@ -346,6 +346,11 @@ mod tests {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
         dbg!(&mgr.tag_index_header);
         let scenario = mgr.get_scenario().unwrap();
-        mgr.get_scenario_bsps(&scenario).unwrap();
+        let bsps = mgr.get_scenario_bsps(&scenario).unwrap();
+        let bsp: &BSP = (&bsps[0].data).try_into().unwrap();
+        dbg!(mgr.resolve_dependency(&bsp.lightmaps_bitmap));
+        let lightmap = &bsp.lightmaps.items.as_ref().unwrap()[0];
+        let material = &lightmap.materials.items.as_ref().unwrap()[0];
+        dbg!(&material.uncompressed_vertices, &material.rendered_vertices.items.as_ref().unwrap()[0..3]);
     }
 }

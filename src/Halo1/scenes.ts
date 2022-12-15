@@ -2,7 +2,6 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { Tag } from '../../rust/pkg/index';
 import { GfxDevice, makeTextureDescriptor2D, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
@@ -32,63 +31,20 @@ async function loadWasm() {
     }
     return _wasm;
 }
-export class Scene implements Viewer.SceneGfx {
-    private program: GfxProgram;
-    private renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice, private texture: GfxTexture) {
-        this.renderHelper = new GfxRenderHelper(device);
-        const blitProgram = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS);
-        this.program = this.renderHelper.renderCache.createProgramSimple(blitProgram);
+class HaloRenderer implements Viewer.SceneGfx {
+    constructor(public device: GfxDevice) {
+
     }
 
-    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        template.setMegaStateFlags(fullscreenMegaState);
-        template.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1}]);
-
-        const renderInst = this.renderHelper.renderInstManager.newRenderInst();
-        renderInst.setGfxProgram(this.program);
-        renderInst.drawPrimitives(3);
-        renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.texture, gfxSampler: null, lateBinding: null }]);
-        this.renderHelper.renderInstManager.submitRenderInst(renderInst);
-
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender();
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
-            });
-        });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
-        this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
+    public render(device: GfxDevice, renderInput: Viewer.ViewerRenderInput): void {
+        
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.program);
-        this.renderHelper.destroy();
+        
     }
 }
-
 
 class HaloSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
@@ -100,18 +56,11 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const resourceMapData = await dataFetcher.fetchData("halo/bitmaps.map");
         const mapData = await dataFetcher.fetchData("halo/bloodgulch.map");
-
-        const mapManager = wasm.MapManager.new_js(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array);
-        const bitmap = mapManager.get_bitmaps_js()[0] as Tag;
-        const bitmapData = mapManager.read_bitmap_data_js(bitmap, 0);
-        const width = 512;
-        const height = 512;
-        const pixels = bitmapData.slice(0, 512 * 512);
-        console.log(bitmapData);
-        let texDesc = makeTextureDescriptor2D(GfxFormat.BC2, 512, 512, 1);
-        let tex = device.createTexture(texDesc);
-        device.uploadTextureData(tex, 0, [pixels]);
-        const renderer = new Scene(device, tex);
+        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array);
+        let materials = mapManager.get_materials();
+        console.log(materials[0].get_vertices());
+        console.log(materials[0].get_indices());
+        const renderer = new HaloRenderer(device);
         return renderer;
     }
 
