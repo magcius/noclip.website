@@ -48,8 +48,16 @@ impl MapManager {
     }
 
     fn read_tag(&mut self, tag_header: &TagHeader) -> Result<Tag> {
-        let offset = self.get_tag_data_offset();
-        self.reader.data.seek(SeekFrom::Start((offset + tag_header.tag_data as i64) as u64))?;
+        self._read_tag_at_offset(tag_header, self.get_tag_data_offset())
+    }
+
+    fn _read_tag_at_offset(&mut self, tag_header: &TagHeader, offset: i64) -> Result<Tag> {
+        dbg!(&tag_header);
+        let tag_pointer = offset + tag_header.tag_data as i64;
+        if tag_pointer < 0 {
+            panic!("invalid tag pointer {} for header {:?}", tag_pointer, tag_header)
+        }
+        self.reader.data.seek(SeekFrom::Start(tag_pointer as u64))?;
         let data = match tag_header.primary_class {
             TagClass::Bitmap => {
                 let mut bitmap = Bitmap::deserialize(&mut self.reader.data)?;
@@ -59,7 +67,20 @@ impl MapManager {
             },
             TagClass::Scenario => {
                 let mut scenario = Scenario::deserialize(&mut self.reader.data)?;
+                scenario.structure_bsp_references.read_items(&mut self.reader.data, offset)?;
                 TagData::Scenario(scenario)
+            },
+            TagClass::ScenarioStructureBsp => {
+                let mut bsp = BSP::deserialize(&mut self.reader.data)?;
+                dbg!(&bsp, offset);
+                bsp.surfaces.read_items(&mut self.reader.data, offset)?;
+                bsp.lightmaps.read_items(&mut self.reader.data, offset)?;
+                dbg!(&bsp.lightmaps.items.as_ref().unwrap()[0..5]);
+                for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
+                    dbg!(&lightmap);
+                    lightmap.materials.read_items(&mut self.reader.data, offset)?;
+                }
+                TagData::BSP(bsp)
             },
             _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
         };
@@ -72,6 +93,29 @@ impl MapManager {
             _ => false,
         }).unwrap().clone();
         self.read_tag(&header)
+    }
+
+    fn resolve_dependency(&self, dependency: &TagDependency) -> Option<&TagHeader> {
+        self.tag_headers.iter().find(|header| header.tag_id == dependency.tag_id)
+    }
+
+    fn get_scenario_bsps(&mut self, tag: &Tag) -> Result<Vec<Tag>> {
+        if let TagData::Scenario(scenario) = &tag.data {
+            if let Some(bsp_references) = &scenario.structure_bsp_references.items {
+                let bsp_refs_and_headers: Vec<(&ScenarioStructureBSPReference, TagHeader)> = bsp_references.iter()
+                    .map(|bsp_ref| (bsp_ref, self.resolve_dependency(&bsp_ref.structure_bsp).unwrap().clone()))
+                    .collect();
+                let mut result = Vec::new();
+                for (bsp_ref, mut header) in bsp_refs_and_headers {
+                    let offset = bsp_ref.start as i64 - bsp_ref.address as i64;
+                    header.tag_data = bsp_ref.address + 24;
+                    result.push(self._read_tag_at_offset(&header, offset).unwrap());
+                }
+                return Ok(result);
+            }
+            return Err(MapReaderError::InvalidTag(format!("scenario has no bsp references")))
+        }
+        Err(MapReaderError::InvalidTag(format!("expected scenario tag, got {:?}", tag.header.primary_class)))
     }
 
     fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
@@ -90,19 +134,17 @@ impl MapManager {
     }
 
     fn read_bitmap_data(&mut self, tag: &Tag, index: usize) -> Result<Vec<u8>> {
-        match &tag.data {
-            TagData::Bitmap(bitmap) => match &bitmap.data.items {
-                Some(bitmap_data) => {
+        if let TagData::Bitmap(bitmap) = &tag.data {
+            if let Some(bitmap_data) = &bitmap.data.items {
                     let data = &bitmap_data[index];
                     let mut result = vec![0; data.pixel_data_size as usize];
                     self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
                     self.bitmaps_reader.data.read_exact(&mut result)?;
-                    Ok(result)
-                },
-                None => return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData"))),
-            },
-            _ => return Err(MapReaderError::InvalidTag(format!("expected bitmap tag, got {:?}", tag.header.primary_class))),
+                    return Ok(result);
+            }
+            return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData")));
         }
+        Err(MapReaderError::InvalidTag(format!("expected bitmap tag, got {:?}", tag.header.primary_class)))
     }
 }
 
@@ -302,6 +344,8 @@ mod tests {
     #[test]
     fn test() {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
-        dbg!(mgr.get_scenario());
+        dbg!(&mgr.tag_index_header);
+        let scenario = mgr.get_scenario().unwrap();
+        mgr.get_scenario_bsps(&scenario).unwrap();
     }
 }

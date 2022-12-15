@@ -10,6 +10,7 @@ use crate::halo::bitmap::*;
 pub struct TagDependency {
     pub tag_class: TagClass,
     pub path_pointer: Pointer,
+    pub global_id: u32,
     pub tag_id: u32,
 }
 
@@ -18,6 +19,7 @@ impl Deserialize for TagDependency {
         Ok(TagDependency {
             tag_class: TagClass::deserialize(data)?,
             path_pointer: data.read_u32::<LittleEndian>()?,
+            global_id: data.read_u32::<LittleEndian>()?,
             tag_id: data.read_u32::<LittleEndian>()?,
         })
     }
@@ -153,6 +155,7 @@ impl Deserialize for TagHeader {
 pub enum TagData {
     Scenario(Scenario),
     Bitmap(Bitmap),
+    BSP(BSP),
 }
 
 #[derive(Debug, Clone)]

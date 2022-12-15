@@ -78,13 +78,12 @@ pub struct Scenario {
     pub decals: Block<ScenarioDecal>,
     pub decal_palette: Block<TagDependency>,
     pub detail_object_collection_palette: Block<TagDependency>,
-    pub structure_bsps: Block<ScenarioStructureBSP>,
+    pub structure_bsp_references: Block<ScenarioStructureBSPReference>,
 }
 
 impl Deserialize for Scenario {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
-        dbg!(start);
         data.seek(SeekFrom::Start(start + 48))?;
         let skies: Block<TagDependency> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 528))?;
@@ -98,7 +97,7 @@ impl Deserialize for Scenario {
         let decal_palette: Block<TagDependency> = Block::deserialize(data)?;
         let detail_object_collection_palette: Block<TagDependency> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 1444))?; // skip to BSPs
-        let structure_bsps: Block<ScenarioStructureBSP> = Block::deserialize(data)?;
+        let structure_bsps: Block<ScenarioStructureBSPReference> = Block::deserialize(data)?;
         Ok(Scenario {
             skies,
             scenery,
@@ -108,30 +107,33 @@ impl Deserialize for Scenario {
             decals,
             decal_palette,
             detail_object_collection_palette,
-            structure_bsps,
+            structure_bsp_references: structure_bsps,
         })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ScenarioStructureBSP {
+pub struct ScenarioStructureBSPReference {
     pub start: u32,
     pub size: u32,
     pub address: u32,
     pub structure_bsp: TagDependency,
 }
 
-impl Deserialize for ScenarioStructureBSP {
+impl Deserialize for ScenarioStructureBSPReference {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(ScenarioStructureBSP {
-            start: data.read_u32::<LittleEndian>()?,
-            size: data.read_u32::<LittleEndian>()?,
-            address: data.read_u32::<LittleEndian>()?,
-            structure_bsp: TagDependency::deserialize(data)?,
+        let start = data.read_u32::<LittleEndian>()?;
+        let size = data.read_u32::<LittleEndian>()?;
+        let address = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(4))?;
+        let structure_bsp = TagDependency::deserialize(data)?;
+        Ok(ScenarioStructureBSPReference {
+            start, size, address, structure_bsp,
         })
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BSP {
     pub lightmaps_bitmap: TagDependency,
     pub default_ambient_color: ColorRGB,
@@ -146,12 +148,62 @@ pub struct BSP {
     pub lightmaps: Block<BSPLightmap>,
 }
 
-pub struct BSPLightmap {
-    pub bitmap: u16,
-    pub materials: Block<BSPLightmapMaterial>,
+impl Deserialize for BSP {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        let lightmaps_bitmap = TagDependency::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 44))?;
+        let default_ambient_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 60))?;
+        let default_distant_light0_color = ColorRGB::deserialize(data)?;
+        let default_distant_light0_direction = Vector3D::deserialize(data)?;
+        let default_distant_light1_color = ColorRGB::deserialize(data)?;
+        let default_distant_light1_direction = Vector3D::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 120))?;
+        let default_reflection_tint = ColorARGB::deserialize(data)?;
+        let default_shadow_vector = Vector3D::deserialize(data)?;
+        let default_shadow_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 236))?;
+        let surfaces: Block<Tri> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 248))?;
+        let lightmaps: Block<BSPLightmap> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 636))?;
+        Ok(BSP {
+            lightmaps_bitmap,
+            default_ambient_color,
+            default_distant_light0_color,
+            default_distant_light0_direction,
+            default_distant_light1_color,
+            default_distant_light1_direction,
+            default_reflection_tint,
+            default_shadow_vector,
+            default_shadow_color,
+            surfaces,
+            lightmaps,
+        })
+    }
 }
 
-pub struct BSPLightmapMaterial {
+#[derive(Debug, Clone)]
+pub struct BSPLightmap {
+    pub bitmap: u16,
+    pub materials: Block<BSPMaterial>,
+}
+
+impl Deserialize for BSPLightmap {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let bitmap = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(18))?;
+        let materials = Block::deserialize(data)?;
+        Ok(BSPLightmap {
+            bitmap,
+            materials,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BSPMaterial {
     pub shader: TagDependency,
     pub shader_permutation: u16,
     pub flags: u16,
@@ -175,6 +227,65 @@ pub struct BSPLightmapMaterial {
     pub compressed_vertices_offset: u32,
 }
 
+impl Deserialize for BSPMaterial {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        dbg!(start);
+        let shader = TagDependency::deserialize(data)?;
+        let shader_permutation = data.read_u16::<LittleEndian>()?;
+        let flags = data.read_u16::<LittleEndian>()?;
+        let surfaces = data.read_i32::<LittleEndian>()?;
+        let surface_count = data.read_i32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 28))?;
+        let centroid = Point3D::deserialize(data)?;
+        let ambient_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 56))?;
+        let distant_light_count = data.read_u16::<LittleEndian>()?;
+        let distant_light0_color = ColorRGB::deserialize(data)?;
+        let distant_light0_direction = Vector3D::deserialize(data)?;
+        let distant_light1_color = ColorRGB::deserialize(data)?;
+        let distant_light1_direction = Vector3D::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 116))?;
+        let reflection_tint = ColorARGB::deserialize(data)?;
+        let shadow_vector = Vector3D::deserialize(data)?;
+        let shadow_color = ColorRGB::deserialize(data)?;
+        let plane = Plane3D::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 176))?;
+        let rendered_vertices_type = RenderedVerticesType::try_from(data.read_u16::<LittleEndian>()?)?;
+        data.seek(SeekFrom::Start(start + 180))?;
+        let rendered_vertices: Block<RenderedVertex> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 200))?;
+        let lightmap_vertices: Block<LightmapVertex> = Block::deserialize(data)?;
+        let uncompressed_vertices_offset = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 236))?;
+        let compressed_vertices_offset = data.read_u32::<LittleEndian>()?;
+        Ok(BSPMaterial {
+            shader,
+            shader_permutation,
+            flags,
+            surfaces,
+            surface_count,
+            centroid,
+            ambient_color,
+            distant_light_count,
+            distant_light0_color,
+            distant_light0_direction,
+            distant_light1_color,
+            distant_light1_direction,
+            reflection_tint,
+            shadow_vector,
+            shadow_color,
+            plane,
+            rendered_vertices_type,
+            rendered_vertices,
+            lightmap_vertices,
+            uncompressed_vertices_offset,
+            compressed_vertices_offset,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RenderedVertex {
     position: Vector3D,
     normal: Vector3D,
@@ -184,6 +295,7 @@ pub struct RenderedVertex {
     v: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct LightmapVertex {
     normal: Vector3D,
     u: u32,

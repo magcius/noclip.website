@@ -51,6 +51,10 @@ impl<T> Deserialize for Block<T> {
 impl<T: Deserialize> Block<T> {
     pub fn read_items(&mut self, data: &mut Cursor<Vec<u8>>, offset: i64) -> Result<()> {
         let mut items: Vec<T> = Vec::with_capacity(self.count as usize);
+        let pointer = offset + self.base_pointer as i64;
+        if pointer < 0 {
+            panic!("pointer underflow for offset {} and pointer {}", offset, self.base_pointer);
+        }
         if self.count > 0 {
             data.seek(SeekFrom::Start((self.base_pointer as i64 + offset) as u64))?;
             for _ in 0..self.count {
@@ -62,6 +66,7 @@ impl<T: Deserialize> Block<T> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Vector3D {
     i: f32,
     j: f32,
@@ -85,11 +90,22 @@ pub struct TagDataOffset {
     pointer: u64,
 }
 
+#[derive(Debug, Clone)]
 pub struct Plane3D {
     norm: Vector3D,
     w: f32, // distance from origin (along normal)
 }
 
+impl Deserialize for Plane3D {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        Ok(Plane3D {
+            norm: Vector3D::deserialize(data)?,
+            w: data.read_f32::<LittleEndian>()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Tri {
     v0: u16,
     v1: u16,
