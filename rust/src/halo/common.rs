@@ -48,14 +48,14 @@ impl<T> Deserialize for Block<T> {
     }
 }
 
-impl<T: Deserialize> Block<T> {
+impl<T: Deserialize + std::fmt::Debug> Block<T> {
     pub fn read_items(&mut self, data: &mut Cursor<Vec<u8>>, offset: i64) -> Result<()> {
         let mut items: Vec<T> = Vec::with_capacity(self.count as usize);
-        let pointer = offset + self.base_pointer as i64;
-        if pointer < 0 {
-            panic!("pointer underflow for offset {} and pointer {}", offset, self.base_pointer);
-        }
         if self.count > 0 {
+            let pointer = offset + self.base_pointer as i64;
+            if pointer < 0 {
+                panic!("pointer underflow for offset {} and pointer {}", offset, self.base_pointer);
+            }
             data.seek(SeekFrom::Start((self.base_pointer as i64 + offset) as u64))?;
             for _ in 0..self.count {
                 items.push(T::deserialize(data)?);

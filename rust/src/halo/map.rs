@@ -9,6 +9,8 @@ use crate::halo::scenario::*;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
+use super::shader::ShaderEnvironment;
+
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
 pub struct MapManager {
@@ -75,6 +77,10 @@ impl MapManager {
                 }
                 TagData::BSP(bsp)
             },
+            TagClass::ShaderEnvironment => {
+                let shader = ShaderEnvironment::deserialize(&mut self.reader.data)?;
+                TagData::ShaderEnvironment(shader)
+            }
             _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
         };
         Ok(Tag { header: tag_header.clone(), data })
@@ -88,7 +94,7 @@ impl MapManager {
         self.read_tag(&header)
     }
 
-    fn resolve_dependency(&self, dependency: &TagDependency) -> Option<&TagHeader> {
+    pub fn resolve_dependency(&self, dependency: &TagDependency) -> Option<&TagHeader> {
         self.tag_headers.iter().find(|header| header.tag_id == dependency.tag_id)
     }
 
@@ -337,10 +343,16 @@ impl Deserialize for TagIndexHeader {
 mod tests {
     use std::convert::TryInto;
 
+    use crate::halo::shader;
+
     use super::*;
 
     fn read_bloodgulch() -> Vec<u8> {
         std::fs::read("test_data/bloodgulch.map").unwrap()
+    }
+
+    fn read_a10() -> Vec<u8> {
+        std::fs::read("test_data/a10.map").unwrap()
     }
 
     fn read_bitmaps() -> Vec<u8> {
@@ -356,6 +368,8 @@ mod tests {
         let bsp: &BSP = (&bsps[0].data).try_into().unwrap();
         let lightmap = &bsp.lightmaps.items.as_ref().unwrap()[0];
         let material = &lightmap.materials.items.as_ref().unwrap()[0];
-        dbg!(&material.uncompressed_vertices, &material.rendered_vertices.items.as_ref().unwrap()[0]);
+        let shader_hdr = mgr.resolve_dependency(&material.shader).unwrap().clone();
+        dbg!(&shader_hdr);
+        dbg!(mgr.read_tag(&shader_hdr));
     }
 }

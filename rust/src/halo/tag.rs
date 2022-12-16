@@ -5,6 +5,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 use crate::halo::common::*;
 use crate::halo::scenario::*;
 use crate::halo::bitmap::*;
+use crate::halo::shader::*;
 
 #[derive(Debug, Clone)]
 pub struct TagDependency {
@@ -156,6 +157,7 @@ pub enum TagData {
     Scenario(Scenario),
     Bitmap(Bitmap),
     BSP(BSP),
+    ShaderEnvironment(ShaderEnvironment),
 }
 
 impl<'a> TryFrom<&'a TagData> for &'a Scenario {
@@ -187,6 +189,16 @@ impl<'a> TryFrom<&'a TagData> for &'a BSP {
         match data {
             TagData::BSP(x) => Ok(x),
             t => Err(format!("invalid tag type: expected BSP, got {:?}", t))
+        }
+    }
+}
+impl<'a> TryFrom<&'a TagData> for &'a ShaderEnvironment {
+    type Error = String;
+
+    fn try_from(data: &'a TagData) -> std::result::Result<Self, Self::Error> {
+        match data {
+            TagData::ShaderEnvironment(x) => Ok(x),
+            t => Err(format!("invalid tag type: expected ShaderEnvironment, got {:?}", t))
         }
     }
 }

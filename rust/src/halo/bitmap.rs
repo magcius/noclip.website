@@ -1,6 +1,7 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use wasm_bindgen::prelude::*;
 
 use crate::halo::common::*;
 use crate::halo::util::*;
@@ -14,6 +15,8 @@ pub enum BitmapType {
     Sprites = 0x3,
     InterfaceBitmaps = 0x4,
 }
+
+#[wasm_bindgen]
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Clone, Copy)]
 #[repr(u16)]
 pub enum BitmapEncodingFormat {
@@ -196,6 +199,7 @@ pub enum BitmapDataType {
     White = 0x3,
 }
 
+#[wasm_bindgen]
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 pub enum BitmapFormat {
