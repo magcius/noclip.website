@@ -139,6 +139,8 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
         case _wasm!.BitmapFormat.Dxt1: return GfxFormat.BC1;
         case _wasm!.BitmapFormat.Dxt3: return GfxFormat.BC2;
         case _wasm!.BitmapFormat.Dxt5: return GfxFormat.BC3;
+        case _wasm!.BitmapFormat.X8r8g8b8: return GfxFormat.U8_RGBA_NORM;
+        case _wasm!.BitmapFormat.A8r8g8b8: return GfxFormat.U8_RGBA_NORM;
         default:
             throw new Error(`couldn't recognize bitmap format ${format}`);
     }
@@ -150,7 +152,15 @@ function makeTexture(device: GfxDevice, material: Material): GfxTexture {
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const texture = device.createTexture(makeTextureDescriptor2D(format, bitmapMetadata.width, bitmapMetadata.height, 1));
     const numPixels = bitmapMetadata.width * bitmapMetadata.height;
-    const length = format === GfxFormat.BC1 ? numPixels/2 : numPixels;
+    let length = 0;
+    switch (format) {
+        case GfxFormat.BC1: length = numPixels/2; break;
+        case GfxFormat.BC2: length = numPixels; break;
+        case GfxFormat.BC3: length = numPixels; break;
+        case GfxFormat.U8_RGBA_NORM: length = numPixels * 4; break;
+        default:
+            throw new Error(`couldn't recognize gfx format ${format}`);
+    }
     device.uploadTextureData(texture, 0, [bitmapData.slice(0, length)]);
     return texture;
 }

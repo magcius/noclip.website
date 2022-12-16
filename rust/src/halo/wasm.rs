@@ -4,6 +4,7 @@ use js_sys::Float32Array;
 use js_sys::Uint16Array;
 use wasm_bindgen::prelude::*;
 use js_sys::{Array, Uint8Array};
+use web_sys::console;
 
 use crate::halo::map::*;
 use crate::halo::scenario::*;
@@ -14,7 +15,7 @@ use crate::halo::tag::*;
 use super::shader::ShaderEnvironment;
 
 #[wasm_bindgen]
-struct HaloSceneManager {
+pub struct HaloSceneManager {
     mgr: MapManager,
     scenario: Scenario,
     bsps: Vec<Tag>,
@@ -97,6 +98,9 @@ impl HaloSceneManager {
                         TagClass::ShaderEnvironment => {
                             let shader_tag = self.mgr.read_tag(&shader_hdr).unwrap();
                             let shader: &ShaderEnvironment = (&shader_tag.data).try_into().unwrap();
+                            if shader.base_bitmap.path_pointer == 0 {
+                                continue;
+                            }
                             let bitmap_hdr = self.mgr.resolve_dependency(&shader.base_bitmap).unwrap().clone();
                             let bitmap_tag = self.mgr.read_tag(&bitmap_hdr).unwrap();
                             bundle.bitmap_data = self.mgr.read_bitmap_data(&bitmap_tag, 0).unwrap();

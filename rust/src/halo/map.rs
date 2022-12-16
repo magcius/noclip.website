@@ -362,7 +362,6 @@ mod tests {
     #[test]
     fn test() {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
-        dbg!(&mgr.tag_index_header);
         let scenario = mgr.get_scenario().unwrap();
         let bsps = mgr.get_scenario_bsps(&scenario).unwrap();
         let bsp: &BSP = (&bsps[0].data).try_into().unwrap();
@@ -371,5 +370,11 @@ mod tests {
         let shader_hdr = mgr.resolve_dependency(&material.shader).unwrap().clone();
         dbg!(&shader_hdr);
         dbg!(mgr.read_tag(&shader_hdr));
+    }
+
+    #[test]
+    fn test2() {
+        let mut mgr = crate::halo::wasm::HaloSceneManager::new(read_a10(), read_bitmaps());
+        mgr.get_materials();
     }
 }
