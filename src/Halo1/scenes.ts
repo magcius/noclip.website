@@ -9,11 +9,8 @@ import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
-import { AABB } from '../Geometry';
-import { Material, BitmapMetadata, BitmapFormat } from '../../rust/pkg/index';
+import { BitmapFormat, HaloSceneManager, HaloBSP, HaloLightmap, HaloMaterial, HaloMaterialShader, HaloBitmap } from '../../rust/pkg/index';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { EmptyScene } from '../Scenes_Test';
 import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
 import { decompressBC } from '../Common/bc_texture';
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
@@ -25,7 +22,6 @@ import { InputLayout } from '../DarkSouls/flver';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 let _wasm: typeof import('../../rust/pkg/index') | null = null;
-type Wasm = typeof _wasm!;
 
 async function loadWasm() {
     if (_wasm === null) {
@@ -37,6 +33,9 @@ async function loadWasm() {
 class MaterialProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
+    public static a_Pos = 0;
+    public static a_Norm = 1;
+    public static a_TexCoord = 2;
 
     public override both = `
 precision mediump float;
@@ -88,26 +87,51 @@ void mainPS() {
 `;
 }
 
-class MaterialRenderer {
-    public normsBuf: GfxBuffer;
-    public vertsBuf: GfxBuffer;
+class BSPRenderer {
     public trisBuf: GfxBuffer;
-    public uvBuf: GfxBuffer;
+    public lightmapsBitmap: HaloBitmap;
+    public lightmaps: HaloLightmap[];
+    public materials: HaloMaterial[];
+    public materialRenderers: MaterialRenderer[];
+
+    constructor(public device: GfxDevice, public bsp: HaloBSP, public inputLayout: GfxInputLayout, public modelMatrix: mat4, public mgr: HaloSceneManager) {
+        this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
+        this.lightmaps = mgr.get_bsp_lightmaps(this.bsp);
+        this.lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
+        this.lightmaps = mgr.get_bsp_lightmaps(this.bsp);
+        this.materials = this.lightmaps.flatMap(lightmap => mgr.get_lightmap_materials(lightmap));
+        this.materialRenderers = this.materials.map(material => new MaterialRenderer(this.device, material, this.inputLayout, this.modelMatrix, this.mgr, this.bsp, this.trisBuf))
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.materialRenderers.forEach(m => m.prepareToRender(renderInstManager, viewerInput));
+    }
+
+    public destroy(device: GfxDevice) {
+        this.materialRenderers.forEach(m => m.destroy(device));
+        device.destroyBuffer(this.trisBuf);
+    }
+}
+
+class MaterialRenderer {
+    public vertsBuf: GfxBuffer;
     public inputState: GfxInputState;
     public textureMapping: TextureMapping;
+    public shader: HaloMaterialShader | undefined;
 
-    constructor(device: GfxDevice, public material: Material, public inputLayout: GfxInputLayout, public modelMatrix: mat4, public tex: GfxTexture) {
-        this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.get_vertices().buffer);
-        this.normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.get_normals().buffer);
-        this.uvBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.get_uvs().buffer);
-        this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.get_indices().buffer);
+    constructor(device: GfxDevice, public material: HaloMaterial, public inputLayout: GfxInputLayout, public modelMatrix: mat4, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer) {
+        this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, this.bsp).buffer);
+        this.shader = mgr.get_material_shader(this.material);
+
         this.textureMapping = new TextureMapping();
-        this.textureMapping.gfxTexture = this.tex;
+        if (this.shader) {
+            this.textureMapping.gfxTexture = makeTexture(device, this.shader.get_base_bitmap(), this.mgr);
+        } else {
+            this.textureMapping.gfxTexture = makeMissingTexture(device);
+        }
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertsBuf, byteOffset: 0 },
-            { buffer: this.normsBuf, byteOffset: 0 },
-            { buffer: this.uvBuf, byteOffset: 0 },
         ], { buffer: this.trisBuf, byteOffset: 0 })
     }
 
@@ -117,15 +141,13 @@ class MaterialRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setSamplerBindingsFromTextureMappings([this.textureMapping])
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.material.num_indices * 3);
+        renderInst.drawIndexes(this.material.get_num_indices(), this.material.get_index_offset());
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.trisBuf);
         device.destroyBuffer(this.vertsBuf);
-        device.destroyBuffer(this.normsBuf);
         device.destroyInputState(this.inputState);
     }
 }
@@ -146,13 +168,13 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
     }
 }
 
-function makeTexture(device: GfxDevice, material: Material): GfxTexture {
-    const bitmapData = material.get_bitmap_data();
-    const bitmapMetadata = material.bitmap_metadata!;
+function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager): GfxTexture {
+    const bitmapData = mgr.get_bitmap_data(bitmap, 0);
+    const bitmapMetadata = bitmap.get_metadata_for_index(0);
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const texture = device.createTexture(makeTextureDescriptor2D(format, bitmapMetadata.width, bitmapMetadata.height, 1));
     const numPixels = bitmapMetadata.width * bitmapMetadata.height;
-    let length = 0;
+    let length;
     switch (format) {
         case GfxFormat.BC1: length = numPixels/2; break;
         case GfxFormat.BC2: length = numPixels; break;
@@ -175,14 +197,14 @@ function makeMissingTexture(device: GfxDevice): GfxTexture {
 }
 
 class HaloScene implements Viewer.SceneGfx {
-    private materialRenderers: MaterialRenderer[];
     private renderHelper: GfxRenderHelper;
     public program: GfxProgram;
     public inputLayout: GfxInputLayout;
     public modelMatrix: mat4;
+    public bspRenderers: BSPRenderer[];
 
-    constructor(public device: GfxDevice) {
-        this.materialRenderers = [];
+    constructor(public device: GfxDevice, public mgr: HaloSceneManager) {
+        this.bspRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new MaterialProgram());
         this.modelMatrix = mat4.create();
@@ -192,26 +214,20 @@ class HaloScene implements Viewer.SceneGfx {
         mat4.translate(this.modelMatrix, this.modelMatrix, vec3.fromValues(-50, 150, -20));
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        vertexAttributeDescriptors.push({ location: 0, bufferIndex: 0, bufferByteOffset: 0, format: setFormatCompFlags(GfxFormat.F32_RGB, 3)});
-        vertexAttributeDescriptors.push({ location: 1, bufferIndex: 1, bufferByteOffset: 0, format: setFormatCompFlags(GfxFormat.F32_RGB, 3)});
-        vertexAttributeDescriptors.push({ location: 2, bufferIndex: 2, bufferByteOffset: 0, format: setFormatCompFlags(GfxFormat.F32_RG, 2)});
+        const vec3fSize = 3 * 4;
+        const vec2fSize = 2 * 4;
+        vertexAttributeDescriptors.push({ location: MaterialProgram.a_Pos, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: MaterialProgram.a_Norm, bufferIndex: 0, bufferByteOffset: 1 * vec3fSize, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: MaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 4 * vec3fSize, format: GfxFormat.F32_RG});
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 3 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 3 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
-            { byteStride: 2 * 4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 4 * vec3fSize + vec2fSize, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         let indexBufferFormat: GfxFormat = GfxFormat.U16_R;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     }
 
-    addMaterial(material: Material) {
-        let tex;
-        if (material.has_bitmap()) {
-            tex = makeTexture(this.device, material);
-        } else {
-            tex = makeMissingTexture(this.device);
-        }
-        this.materialRenderers.push(new MaterialRenderer(this.device, material, this.inputLayout, this.modelMatrix, tex));
+    addBSP(bsp: HaloBSP) {
+        this.bspRenderers.push(new BSPRenderer(this.device, bsp, this.inputLayout, this.modelMatrix, this.mgr));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -231,8 +247,7 @@ class HaloScene implements Viewer.SceneGfx {
             offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
         }
 
-        for (let i = 0; i < this.materialRenderers.length; i++)
-            this.materialRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+        this.bspRenderers.forEach(r => r.prepareToRender(this.renderHelper.renderInstManager, viewerInput))
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -266,7 +281,7 @@ class HaloScene implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice) {
         device.destroyInputLayout(this.inputLayout);
-        this.materialRenderers.forEach((r) => r.destroy(device));
+        this.bspRenderers.forEach(r => r.destroy(device));
         this.renderHelper.destroy();
     }
 }
@@ -281,10 +296,9 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const resourceMapData = await dataFetcher.fetchData("halo/bitmaps.map");
         const mapData = await dataFetcher.fetchData(`halo/${this.id}.map`);
-        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array);
-        const renderer = new HaloScene(device);
-        mapManager.get_materials()
-            .forEach(material => renderer.addMaterial(material));
+        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array));
+        const renderer = new HaloScene(device, mapManager);
+        mapManager.get_bsps().forEach(bsp => renderer.addBSP(bsp));
         return renderer;
     }
 

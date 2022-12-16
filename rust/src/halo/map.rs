@@ -50,6 +50,13 @@ impl MapManager {
         self.read_tag_at_offset(tag_header, self.get_tag_data_offset())
     }
 
+    pub fn read_map_bytes(&mut self, offset: u64, size: usize) -> Result<Vec<u8>> {
+        self.reader.data.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0; size];
+        self.reader.data.read_exact(&mut buf)?;
+        Ok(buf)
+    }
+
     fn read_tag_at_offset(&mut self, tag_header: &TagHeader, offset: i64) -> Result<Tag> {
         let tag_pointer = offset + tag_header.tag_data as i64;
         if tag_pointer < 0 {
@@ -112,12 +119,7 @@ impl MapManager {
                     header.tag_data = bsp_header.bsp_offset;
                     let mut tag = self.read_tag_at_offset(&header, offset).unwrap();
                     if let TagData::BSP(bsp) = &mut tag.data {
-                        for lightmap in bsp.lightmaps.items.as_mut().unwrap() {
-                            for material in lightmap.materials.items.as_mut().unwrap() {
-                                material.rendered_vertices.read_items(&mut self.reader.data, bsp_header.rendered_vertices_offset as i64)?;
-                                material.lightmap_vertices.read_items(&mut self.reader.data, bsp_header.rendered_vertices_offset as i64)?;
-                            }
-                        }
+                        bsp.header = Some(bsp_header);
                     }
                     result.push(tag);
                 }
@@ -143,18 +145,15 @@ impl MapManager {
         Ok(result)
     }
 
-    pub fn read_bitmap_data(&mut self, tag: &Tag, index: usize) -> Result<Vec<u8>> {
-        if let TagData::Bitmap(bitmap) = &tag.data {
-            if let Some(bitmap_data) = &bitmap.data.items {
-                    let data = &bitmap_data[index];
-                    let mut result = vec![0; data.pixel_data_size as usize];
-                    self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
-                    self.bitmaps_reader.data.read_exact(&mut result)?;
-                    return Ok(result);
-            }
-            return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData")));
+    pub fn read_bitmap_data(&mut self, bitmap: &Bitmap, index: usize) -> Result<Vec<u8>> {
+        if let Some(bitmap_data) = &bitmap.data.items {
+                let data = &bitmap_data[index];
+                let mut result = vec![0; data.pixel_data_size as usize];
+                self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
+                self.bitmaps_reader.data.read_exact(&mut result)?;
+                return Ok(result);
         }
-        Err(MapReaderError::InvalidTag(format!("expected bitmap tag, got {:?}", tag.header.primary_class)))
+        return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData")));
     }
 }
 
@@ -362,19 +361,16 @@ mod tests {
     #[test]
     fn test() {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
-        let scenario = mgr.get_scenario().unwrap();
-        let bsps = mgr.get_scenario_bsps(&scenario).unwrap();
-        let bsp: &BSP = (&bsps[0].data).try_into().unwrap();
-        let lightmap = &bsp.lightmaps.items.as_ref().unwrap()[0];
-        let material = &lightmap.materials.items.as_ref().unwrap()[0];
-        let shader_hdr = mgr.resolve_dependency(&material.shader).unwrap().clone();
-        dbg!(&shader_hdr);
-        dbg!(mgr.read_tag(&shader_hdr));
+        for tag in &mgr.tag_headers.clone() {
+            if tag.primary_class == TagClass::Scenery {
+                dbg!(mgr.read_tag(&tag));
+                break;
+            }
+        }
     }
 
     #[test]
     fn test2() {
         let mut mgr = crate::halo::wasm::HaloSceneManager::new(read_a10(), read_bitmaps());
-        mgr.get_materials();
     }
 }

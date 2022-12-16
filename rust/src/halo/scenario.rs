@@ -169,6 +169,8 @@ pub struct BSP {
     pub default_shadow_color: ColorRGB,
     pub surfaces: Block<Tri>,
     pub lightmaps: Block<BSPLightmap>,
+
+    pub header: Option<BSPHeader>,
 }
 
 impl Deserialize for BSP {
@@ -203,6 +205,7 @@ impl Deserialize for BSP {
             default_shadow_color,
             surfaces,
             lightmaps,
+            header: None,
         })
     }
 }

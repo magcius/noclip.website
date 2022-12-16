@@ -26,7 +26,7 @@ impl Deserialize for TagDependency {
     }
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq)]
 #[repr(u32)]
 pub enum TagClass {
     Actor = 0x61637472,
