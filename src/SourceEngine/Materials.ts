@@ -2673,7 +2673,7 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsBlendModulate)
             vec4Count += 1;
         if (this.wantsEnvmap)
-            vec4Count += 1;
+            vec4Count += 2;
         if (this.wantsSelfIllum)
             vec4Count += 1;
         if (this.wantsSelfIllumFresnel)

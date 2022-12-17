@@ -1363,9 +1363,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         for (let i = 0, levelDatasIdx = 0; i < maxMipLevel; i++) {
             if (i >= firstMipLevel) {
-                const levelData = levelDatas[levelDatasIdx++] as ArrayBufferView;
-                const compByteSize = isCompressed ? 1 : getFormatCompByteSize(pixelFormat);
-                const sliceElementSize = (levelData.byteLength / compByteSize) / depth;
+                const levelData = levelDatas[levelDatasIdx++] as Uint8Array;
+                const sliceElementSize = levelData.length / depth;
 
                 if (is3D && isCompressed) {
                     // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511

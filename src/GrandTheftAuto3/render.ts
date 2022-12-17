@@ -13,7 +13,7 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformB
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { assert, mod } from "../util";
+import { align, assert } from "../util";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ItemInstance, ObjectDefinition } from "./item";
@@ -81,8 +81,8 @@ function halve(pixels: Uint8Array, width: number, height: number, bpp: number): 
     const w = Math.max((width / 2) | 0, 1);
     const h = Math.max((height / 2) | 0, 1);
     const UNPACK_ALIGNMENT = 4;
-    const rowSize = bpp * width + mod(-(bpp * width), UNPACK_ALIGNMENT);
-    const halvedRowSize = bpp * w + mod(-(bpp * w), UNPACK_ALIGNMENT);
+    const rowSize = align(bpp * width, UNPACK_ALIGNMENT);
+    const halvedRowSize = align(bpp * w, UNPACK_ALIGNMENT);
     const halved = new Uint8Array(halvedRowSize * h);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
