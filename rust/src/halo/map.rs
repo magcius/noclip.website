@@ -147,11 +147,16 @@ impl MapManager {
 
     pub fn read_bitmap_data(&mut self, bitmap: &Bitmap, index: usize) -> Result<Vec<u8>> {
         if let Some(bitmap_data) = &bitmap.data.items {
-                let data = &bitmap_data[index];
-                let mut result = vec![0; data.pixel_data_size as usize];
+            let data = &bitmap_data[index];
+            let mut result = vec![0; data.pixel_data_size as usize];
+            if data.flags & 0x100 > 0 { // check if it's external
                 self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
                 self.bitmaps_reader.data.read_exact(&mut result)?;
-                return Ok(result);
+            } else {
+                self.reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
+                self.reader.data.read_exact(&mut result)?;
+            }
+            return Ok(result);
         }
         return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData")));
     }

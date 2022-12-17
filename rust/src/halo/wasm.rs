@@ -65,11 +65,16 @@ pub struct HaloLightmap {
     inner: BSPLightmap,
 }
 
+#[wasm_bindgen]
 impl HaloLightmap {
     fn new(lightmap: &BSPLightmap) -> HaloLightmap {
         HaloLightmap {
             inner: lightmap.clone(),
         }
+    }
+
+    pub fn get_bitmap_index(&self) -> u16 {
+        self.inner.bitmap
     }
 }
 
@@ -116,10 +121,11 @@ pub struct HaloBitmapMetadata {
     pub format: BitmapFormat,
 }
 
+#[wasm_bindgen]
 impl HaloBitmapMetadata {
     fn new(data: &BitmapData) -> Self {
         HaloBitmapMetadata {
-            height: data.width,
+            height: data.height,
             width: data.width,
             format: data.format,
         }
