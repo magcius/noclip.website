@@ -353,22 +353,17 @@ interface ViewerOut {
 export const enum InitErrorCode {
     SUCCESS,
     NO_WEBGL2_GENERIC,
-    NO_WEBGL2_SAFARI,
     GARBAGE_WEBGL2_GENERIC,
     GARBAGE_WEBGL2_SWIFTSHADER,
     MISSING_MISC_WEB_APIS,
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
+    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, depth: false, stencil: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
-    if (!gl) {
-        if (navigator.vendor.includes('Apple'))
-            return InitErrorCode.NO_WEBGL2_SAFARI;
-        else
-            return InitErrorCode.NO_WEBGL2_GENERIC;
-    }
+    if (!gl)
+        return InitErrorCode.NO_WEBGL2_GENERIC;
 
     // SwiftShader is slow, and gives a poor experience.
     const WEBGL_debug_renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
@@ -418,11 +413,7 @@ ${message}
 }
 
 export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
-    if (errorCode === InitErrorCode.NO_WEBGL2_SAFARI)
-        return makeErrorMessageUI(`
-<p>This application requires WebGL 2. Unfortunately, that means Safari and iOS are currently not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives.
-`);
-    else if (errorCode === InitErrorCode.NO_WEBGL2_GENERIC)
+    if (errorCode === InitErrorCode.NO_WEBGL2_GENERIC)
         return makeErrorMessageUI(`
 <p>Your browser does not appear to have WebGL 2 support.
 <p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
