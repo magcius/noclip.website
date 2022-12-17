@@ -2,6 +2,7 @@
 // Format enums
 
 import { GfxSamplerFormatKind } from "./GfxPlatform";
+import { assert } from "./GfxPlatformUtil";
 
 export const enum FormatTypeFlags {
     U8 = 0x01,
@@ -24,6 +25,7 @@ export const enum FormatTypeFlags {
 
     // Special-case packed texture formats.
     U16_PACKED_5551 = 0x61,
+    U16_PACKED_565,
 
     // Depth/stencil texture formats.
     D24 = 0x81,
@@ -98,6 +100,7 @@ export enum GfxFormat {
 
     // Packed texture formats.
     U16_RGBA_5551   = makeFormat(FormatTypeFlags.U16_PACKED_5551, FormatCompFlags.RGBA, FormatFlags.Normalized),
+    U16_RGB_565     = makeFormat(FormatTypeFlags.U16_PACKED_565,  FormatCompFlags.RGB,  FormatFlags.Normalized),
 
     // Compressed
     BC1             = makeFormat(FormatTypeFlags.BC1,       FormatCompFlags.RGBA, FormatFlags.Normalized),
@@ -165,10 +168,29 @@ export function getFormatComponentCount(fmt: GfxFormat): number {
     return getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
 }
 
+/**
+ * 
+ */
 export function getFormatByteSize(fmt: GfxFormat): number {
-    const typeByteSize = getFormatTypeFlagsByteSize(getFormatTypeFlags(fmt));
-    const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
-    return typeByteSize * componentCount;
+    const typeFlags = getFormatTypeFlags(fmt);
+
+    switch (typeFlags) {
+    case FormatTypeFlags.U16_PACKED_5551:
+    case FormatTypeFlags.U16_PACKED_565:
+        return 2;
+    case FormatTypeFlags.BC1:
+    case FormatTypeFlags.BC2:
+    case FormatTypeFlags.BC3:
+    case FormatTypeFlags.BC4_UNORM:
+    case FormatTypeFlags.BC4_SNORM:
+    case FormatTypeFlags.BC5_UNORM:
+    case FormatTypeFlags.BC5_SNORM:
+        throw "whoops"; // Not valid to call on compressed texture formats...
+    default:
+        const typeByteSize = getFormatTypeFlagsByteSize(typeFlags);
+        const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
+        return typeByteSize * componentCount;
+    }
 }
 
 export function setFormatCompFlags(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
