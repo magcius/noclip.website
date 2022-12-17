@@ -57,6 +57,21 @@ impl HaloMaterialShader {
     pub fn get_base_bitmap(&self) -> HaloBitmap {
         HaloBitmap::new(self.base_bitmap.clone())
     }
+
+    pub fn get_primary_detail_bitmap(&self) -> Option<HaloBitmap> {
+        self.primary_detail_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_bump_map(&self) -> Option<HaloBitmap> {
+        self.bump_map.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_secondary_detail_bitmap(&self) -> Option<HaloBitmap> {
+        self.secondary_detail_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
 }
 
 #[wasm_bindgen]

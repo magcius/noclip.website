@@ -228,6 +228,18 @@ pub enum BitmapFormat {
     U8V8 = 22,
 }
 
+impl BitmapFormat {
+    // bytes per texel
+    pub fn pitch(&self) -> u32 {
+        use BitmapFormat::*;
+        match self {
+            A8 | Ay8 | P8 | P8Bump | Y8 => 1,
+            A8r8g8b8 | X8r8g8b8 => 4,
+            _ => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BitmapData {
     pub bitmap_class: BitmapClass,

@@ -6,6 +6,7 @@ use crate::halo::common::*;
 use crate::halo::scenario::*;
 use crate::halo::bitmap::*;
 use crate::halo::shader::*;
+use crate::halo::model::*;
 
 #[derive(Debug, Clone)]
 pub struct TagDependency {
@@ -13,6 +14,7 @@ pub struct TagDependency {
     pub path_pointer: Pointer,
     pub global_id: u32,
     pub tag_id: u32,
+    pub header: Option<TagHeader>,
 }
 
 impl Deserialize for TagDependency {
@@ -22,6 +24,7 @@ impl Deserialize for TagDependency {
             path_pointer: data.read_u32::<LittleEndian>()?,
             global_id: data.read_u32::<LittleEndian>()?,
             tag_id: data.read_u32::<LittleEndian>()?,
+            header: None,
         })
     }
 }
@@ -70,7 +73,7 @@ pub enum TagClass {
     Globals = 0x6D617467,
     Meter = 0x6D657472,
     LightVolume = 0x6D677332,
-    Gbxmodel = 0x6D6F6432,
+    GbxModel = 0x6D6F6432,
     Model = 0x6D6F6465,
     MultiplayerScenarioDescription = 0x6D706C79,
     PreferencesNetworkGame = 0x6E677072,
@@ -158,6 +161,8 @@ pub enum TagData {
     Bitmap(Bitmap),
     BSP(BSP),
     ShaderEnvironment(ShaderEnvironment),
+    Scenery(Scenery),
+    Sky(Sky),
 }
 
 impl<'a> TryFrom<&'a TagData> for &'a Scenario {

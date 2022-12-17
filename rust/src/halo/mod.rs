@@ -6,6 +6,7 @@ pub mod util;
 pub mod tag;
 pub mod bitmap;
 pub mod scenario;
+pub mod model;
 pub mod shader;
 pub mod wasm;
 

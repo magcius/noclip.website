@@ -9,7 +9,7 @@ use crate::halo::scenario::*;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use super::shader::ShaderEnvironment;
+use super::{shader::ShaderEnvironment, model::Scenery};
 
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
@@ -87,6 +87,14 @@ impl MapManager {
             TagClass::ShaderEnvironment => {
                 let shader = ShaderEnvironment::deserialize(&mut self.reader.data)?;
                 TagData::ShaderEnvironment(shader)
+            },
+            TagClass::Scenery => {
+                let scenery = Scenery::deserialize(&mut self.reader.data)?;
+                TagData::Scenery(scenery)
+            },
+            TagClass::Sky => {
+                let sky = Sky::deserialize(&mut self.reader.data)?;
+                TagData::Sky(sky)
             }
             _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
         };
@@ -270,10 +278,6 @@ impl Deserialize for ResourcesHeader {
     }
 }
 
-fn convert_vpointer(pointer: Pointer) -> Pointer {
-    pointer - BASE_MEMORY_ADDRESS
-}
-
 #[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum ScenarioType {
@@ -366,16 +370,10 @@ mod tests {
     #[test]
     fn test() {
         let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
-        for tag in &mgr.tag_headers.clone() {
-            if tag.primary_class == TagClass::Scenery {
-                dbg!(mgr.read_tag(&tag));
-                break;
+        for hdr in mgr.tag_headers.clone() {
+            if hdr.primary_class == TagClass::Sky {
+                dbg!(mgr.read_tag(&hdr));
             }
         }
-    }
-
-    #[test]
-    fn test2() {
-        let mut mgr = crate::halo::wasm::HaloSceneManager::new(read_a10(), read_bitmaps());
     }
 }
