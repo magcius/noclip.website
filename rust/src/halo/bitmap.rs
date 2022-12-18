@@ -190,6 +190,7 @@ pub enum BitmapClass {
     WeaponHudInterface = 0x77706869,
 }
 
+#[wasm_bindgen]
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 pub enum BitmapDataType {

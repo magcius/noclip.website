@@ -9,6 +9,7 @@ use web_sys::console;
 use crate::halo::map::*;
 use crate::halo::scenario::*;
 use crate::halo::common::*;
+use crate::halo::shader::*;
 use crate::halo::bitmap::*;
 use crate::halo::tag::*;
 
@@ -50,10 +51,27 @@ pub struct HaloMaterialShader {
     bump_map: Option<Bitmap>,
     primary_detail_bitmap: Option<Bitmap>,
     secondary_detail_bitmap: Option<Bitmap>,
+    micro_detail_bitmap: Option<Bitmap>,
 }
 
 #[wasm_bindgen]
 impl HaloMaterialShader {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn shader_environment_type(&self) -> ShaderEnvironmentType { self.inner.shader_environment_type }
+    #[wasm_bindgen(getter)] pub fn diffuse_flags(&self) -> u16 { self.inner.diffuse_flags }
+    #[wasm_bindgen(getter)] pub fn specular_flags(&self) -> u16 { self.inner.specular_flags }
+    #[wasm_bindgen(getter)] pub fn brightness(&self) -> f32 { self.inner.brightness }
+    #[wasm_bindgen(getter)] pub fn primary_detail_bitmap_scale(&self) -> f32 { self.inner.primary_detail_bitmap_scale }
+    #[wasm_bindgen(getter)] pub fn detail_bitmap_function(&self) -> DetailBitmapFunction { self.inner.detail_bitmap_function }
+    #[wasm_bindgen(getter)] pub fn secondary_detail_bitmap_scale(&self) -> f32 { self.inner.secondary_detail_bitmap_scale }
+    #[wasm_bindgen(getter)] pub fn micro_detail_bitmap_scale(&self) -> f32 { self.inner.micro_detail_scale }
+    #[wasm_bindgen(getter)] pub fn micro_detail_bitmap_function(&self) -> DetailBitmapFunction { self.inner.micro_detail_bitmap_function }
+    #[wasm_bindgen(getter)] pub fn bump_map_scale(&self) -> f32 { self.inner.bump_map_scale }
+    #[wasm_bindgen(getter)] pub fn has_primary_detail_bitmap(&self) -> bool { self.primary_detail_bitmap.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_secondary_detail_bitmap(&self) -> bool { self.secondary_detail_bitmap.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_micro_detail_bitmap(&self) -> bool { self.micro_detail_bitmap.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_bump_map(&self) -> bool { self.bump_map.is_some() }
+
     pub fn get_base_bitmap(&self) -> HaloBitmap {
         HaloBitmap::new(self.base_bitmap.clone())
     }
@@ -70,6 +88,11 @@ impl HaloMaterialShader {
 
     pub fn get_secondary_detail_bitmap(&self) -> Option<HaloBitmap> {
         self.secondary_detail_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_micro_detail_bitmap(&self) -> Option<HaloBitmap> {
+        self.micro_detail_bitmap.as_ref()
             .map(|map| HaloBitmap::new(map.clone()))
     }
 }
@@ -97,17 +120,17 @@ impl HaloLightmap {
 #[derive(Debug, Clone)]
 pub struct HaloBSP {
     inner: BSP,
-    lightmaps_bitmap: Bitmap,
+    lightmaps_bitmap: Option<Bitmap>,
 }
 
 #[wasm_bindgen]
 impl HaloBSP {
-    fn new(bsp: BSP, lightmaps_bitmap: Bitmap) -> HaloBSP {
+    fn new(bsp: BSP, lightmaps_bitmap: Option<Bitmap>) -> HaloBSP {
         HaloBSP { inner: bsp, lightmaps_bitmap }
     }
 
-    pub fn get_lightmaps_bitmap(&self) -> HaloBitmap {
-        HaloBitmap::new(self.lightmaps_bitmap.clone())
+    pub fn get_lightmaps_bitmap(&self) -> Option<HaloBitmap> {
+        self.lightmaps_bitmap.as_ref().map(|bitmap| HaloBitmap::new(bitmap.clone()))
     }
 }
 
@@ -123,28 +146,33 @@ impl HaloBitmap {
         HaloBitmap { inner }
     }
 
+    #[wasm_bindgen(getter)] pub fn mipmap_count(&self) -> u16 { self.inner.mipmap_count }
+
     pub fn get_metadata_for_index(&self, index: usize) -> HaloBitmapMetadata {
         HaloBitmapMetadata::new(&self.inner.data.items.as_ref().unwrap()[index])
     }
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct HaloBitmapMetadata {
-    pub height: u16,
-    pub width: u16,
-    pub format: BitmapFormat,
+    inner: BitmapData
 }
 
 #[wasm_bindgen]
 impl HaloBitmapMetadata {
-    fn new(data: &BitmapData) -> Self {
-        HaloBitmapMetadata {
-            height: data.height,
-            width: data.width,
-            format: data.format,
-        }
+    fn new(inner: &BitmapData) -> Self {
+        HaloBitmapMetadata { inner: inner.clone() }
     }
+
+    #[wasm_bindgen(getter)] pub fn width(&self) -> u16 { self.inner.width }
+    #[wasm_bindgen(getter)] pub fn height(&self) -> u16 { self.inner.height }
+    #[wasm_bindgen(getter)] pub fn depth(&self) -> u16 { self.inner.depth }
+    #[wasm_bindgen(getter)] pub fn bitmap_type(&self) -> BitmapDataType { self.inner.bitmap_type }
+    #[wasm_bindgen(getter)] pub fn bitmap_tag_id(&self) -> u32 { self.inner.bitmap_tag_id }
+    #[wasm_bindgen(getter)] pub fn format(&self) -> BitmapFormat { self.inner.format }
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn mipmap_count(&self) -> u16 { self.inner.mipmap_count }
 }
 
 #[wasm_bindgen]
@@ -163,7 +191,7 @@ impl HaloSceneManager {
             }).collect();
         let result = Array::new();
         for bsp in &bsps {
-            let lightmaps_bitmap = self.resolve_bitmap_dependency(&bsp.lightmaps_bitmap).unwrap();
+            let lightmaps_bitmap = self.resolve_bitmap_dependency(&bsp.lightmaps_bitmap);
             result.push(&JsValue::from(HaloBSP::new(bsp.clone(), lightmaps_bitmap)));
         }
         result
@@ -214,6 +242,7 @@ impl HaloSceneManager {
                     bump_map: self.resolve_bitmap_dependency(&shader.bump_map),
                     primary_detail_bitmap: self.resolve_bitmap_dependency(&shader.primary_detail_bitmap),
                     secondary_detail_bitmap: self.resolve_bitmap_dependency(&shader.secondary_detail_bitmap),
+                    micro_detail_bitmap: self.resolve_bitmap_dependency(&shader.micro_detail_bitmap),
                     inner: shader.clone(),
                 })
             }

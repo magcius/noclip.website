@@ -359,8 +359,8 @@ mod tests {
         std::fs::read("test_data/bloodgulch.map").unwrap()
     }
 
-    fn read_a10() -> Vec<u8> {
-        std::fs::read("test_data/a10.map").unwrap()
+    fn read_map(path: &str) -> Vec<u8> {
+        std::fs::read(&format!("../data/halo/{}.map", path)).unwrap()
     }
 
     fn read_bitmaps() -> Vec<u8> {
@@ -369,11 +369,23 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut mgr = MapManager::new(read_bloodgulch(), read_bitmaps()).unwrap();
-        for hdr in mgr.tag_headers.clone() {
-            if hdr.primary_class == TagClass::Sky {
-                dbg!(mgr.read_tag(&hdr));
-            }
+        let mut mgr = MapManager::new(read_map("b40"), read_bitmaps()).unwrap();
+        let scenario_tag = mgr.get_scenario().unwrap();
+        let bsps: Vec<BSP> = mgr.get_scenario_bsps(&scenario_tag).unwrap().iter()
+            .map(|tag| match &tag.data {
+                TagData::BSP(bsp) => bsp.clone(),
+                _ => unreachable!(),
+            }).collect();
+        for bsp in &bsps {
+            dbg!(&bsp.lightmaps_bitmap);
+            let hdr = match mgr.resolve_dependency(&bsp.lightmaps_bitmap) {
+                Some(hdr) => hdr.clone(),
+                None => panic!(),
+            };
+            let bitmap = match mgr.read_tag(&hdr).unwrap().data {
+                TagData::Bitmap(bitmap) => Some(bitmap),
+                _ => unreachable!(),
+            };
         }
     }
 }

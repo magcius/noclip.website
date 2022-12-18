@@ -1,5 +1,6 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
 
+use wasm_bindgen::prelude::*;
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
 use num_enum::TryFromPrimitive;
@@ -113,6 +114,7 @@ impl Deserialize for ShaderEnvironment {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 pub enum DetailBitmapFunction {
@@ -121,6 +123,7 @@ pub enum DetailBitmapFunction {
     DoubleBiasedAdd = 2,
 }
 
+#[wasm_bindgen]
 #[derive(Debug, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 pub enum ShaderEnvironmentType {
