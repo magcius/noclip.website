@@ -14,7 +14,6 @@ pub struct TagDependency {
     pub path_pointer: Pointer,
     pub global_id: u32,
     pub tag_id: u32,
-    pub header: Option<TagHeader>,
 }
 
 impl Deserialize for TagDependency {
@@ -24,7 +23,6 @@ impl Deserialize for TagDependency {
             path_pointer: data.read_u32::<LittleEndian>()?,
             global_id: data.read_u32::<LittleEndian>()?,
             tag_id: data.read_u32::<LittleEndian>()?,
-            header: None,
         })
     }
 }
@@ -161,6 +159,7 @@ pub enum TagData {
     Bitmap(Bitmap),
     BSP(BSP),
     ShaderEnvironment(ShaderEnvironment),
+    ShaderModel(ShaderModel),
     Scenery(Scenery),
     Sky(Sky),
     GbxModel(GbxModel),

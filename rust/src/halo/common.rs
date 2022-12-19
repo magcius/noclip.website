@@ -170,10 +170,11 @@ impl Deserialize for ColorARGB {
         })
     }
 }
+#[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
 pub struct Point2D {
-    x: f32,
-    y: f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Deserialize for Point2D {
@@ -200,11 +201,12 @@ impl Deserialize for Point2DInt {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
 pub struct Point3D {
-    x: f32,
-    y: f32,
-    z: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Deserialize for Point3D {
@@ -217,11 +219,12 @@ impl Deserialize for Point3D {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
 pub struct Euler3D {
-    yaw: f32,
-    pitch: f32,
-    roll: f32,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub roll: f32,
 }
 
 impl Deserialize for Euler3D {

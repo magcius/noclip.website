@@ -12,8 +12,7 @@ use crate::halo::common::*;
 use crate::halo::shader::*;
 use crate::halo::bitmap::*;
 use crate::halo::tag::*;
-
-use super::shader::ShaderEnvironment;
+use crate::halo::model::*;
 
 #[wasm_bindgen]
 pub struct HaloSceneManager {
@@ -45,7 +44,137 @@ impl HaloMaterial {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
-pub struct HaloMaterialShader {
+pub struct HaloModel {
+    inner: GbxModel
+}
+
+#[wasm_bindgen]
+impl HaloModel {
+    fn new(model: &GbxModel) -> HaloModel {
+        HaloModel { inner: model.clone() }
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloSceneryInstance {
+    inner: ScenarioScenery,
+}
+
+#[wasm_bindgen]
+impl HaloSceneryInstance {
+    #[wasm_bindgen(getter)] pub fn scenery_type(&self) -> u16 { self.inner.scenery_type }
+    #[wasm_bindgen(getter)] pub fn not_placed(&self) -> u16 { self.inner.not_placed }
+    #[wasm_bindgen(getter)] pub fn desired_permutation(&self) -> u16 { self.inner.desired_permutation }
+    #[wasm_bindgen(getter)] pub fn position(&self) -> Point3D { self.inner.position }
+    #[wasm_bindgen(getter)] pub fn rotation(&self) -> Euler3D { self.inner.rotation }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloScenery {
+    inner: Scenery,
+}
+
+#[wasm_bindgen]
+impl HaloScenery {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn bounding_radius(&self) -> f32 { self.inner.bounding_radius }
+    #[wasm_bindgen(getter)] pub fn bounding_offset(&self) -> Point3D { self.inner.bounding_offset }
+    #[wasm_bindgen(getter)] pub fn origin_offset(&self) -> Point3D { self.inner.origin_offset }
+
+    fn new(inner: &Scenery) -> HaloScenery {
+        HaloScenery { inner: inner.clone() }
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloModelPart {
+    inner: GbxModelPart,
+}
+
+#[wasm_bindgen]
+impl HaloModelPart {
+    #[wasm_bindgen(getter)] pub fn shader_index(&self) -> u16 { self.inner.shader_index }
+    #[wasm_bindgen(getter)] pub fn centroid(&self) -> Point3D { self.inner.centroid }
+    #[wasm_bindgen(getter)] pub fn tri_count(&self) -> u32 { self.inner.tri_count }
+    #[wasm_bindgen(getter)] pub fn tri_offset(&self) -> u32 { self.inner.tri_offset }
+    #[wasm_bindgen(getter)] pub fn vert_count(&self) -> u32 { self.inner.vert_count }
+    #[wasm_bindgen(getter)] pub fn vert_offset(&self) -> u32 { self.inner.vert_offset }
+
+    fn new(inner: &GbxModelPart) -> HaloModelPart {
+        HaloModelPart { inner: inner.clone() }
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderModel {
+    inner: ShaderModel,
+    path: String,
+    base_bitmap: Bitmap,
+    multipurpose_map: Option<Bitmap>,
+    detail_bitmap: Option<Bitmap>,
+    reflection_cube_map: Option<Bitmap>,
+}
+
+#[wasm_bindgen]
+impl HaloShaderModel {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn translucency(&self) -> f32 { self.inner.translucency }
+    #[wasm_bindgen(getter)] pub fn animation_function(&self) -> AnimationFunction { self.inner.animation_function }
+    #[wasm_bindgen(getter)] pub fn animation_period(&self) -> f32 { self.inner.animation_period }
+    #[wasm_bindgen(getter)] pub fn animation_color_lower_bound(&self) -> ColorRGB { self.inner.animation_color_lower_bound }
+    #[wasm_bindgen(getter)] pub fn animation_color_upper_bound(&self) -> ColorRGB { self.inner.animation_color_upper_bound }
+    #[wasm_bindgen(getter)] pub fn map_u_scale(&self) -> f32 { self.inner.map_u_scale }
+    #[wasm_bindgen(getter)] pub fn map_v_scale(&self) -> f32 { self.inner.map_v_scale }
+    #[wasm_bindgen(getter)] pub fn detail_function(&self) -> DetailBitmapFunction { self.inner.detail_function }
+    #[wasm_bindgen(getter)] pub fn detail_mask(&self) -> DetailBitmapMask { self.inner.detail_mask }
+    #[wasm_bindgen(getter)] pub fn detail_bitmap_scale(&self) -> f32 { self.inner.detail_map_scale }
+    #[wasm_bindgen(getter)] pub fn detail_bitmap_v_scale(&self) -> f32 { self.inner.detail_map_v_scale }
+    #[wasm_bindgen(getter)] pub fn u_animation_source(&self) -> AnimationSource { self.inner.u_animation_source }
+    #[wasm_bindgen(getter)] pub fn u_animation_function(&self) -> AnimationFunction { self.inner.u_animation_function }
+    #[wasm_bindgen(getter)] pub fn u_animation_period(&self) -> f32 { self.inner.u_animation_period }
+    #[wasm_bindgen(getter)] pub fn u_animation_phase(&self) -> f32 { self.inner.u_animation_phase }
+    #[wasm_bindgen(getter)] pub fn u_animation_scale(&self) -> f32 { self.inner.u_animation_scale }
+    #[wasm_bindgen(getter)] pub fn v_animation_source(&self) -> AnimationSource { self.inner.v_animation_source }
+    #[wasm_bindgen(getter)] pub fn v_animation_function(&self) -> AnimationFunction { self.inner.v_animation_function }
+    #[wasm_bindgen(getter)] pub fn v_animation_period(&self) -> f32 { self.inner.v_animation_period }
+    #[wasm_bindgen(getter)] pub fn v_animation_phase(&self) -> f32 { self.inner.v_animation_phase }
+    #[wasm_bindgen(getter)] pub fn v_animation_scale(&self) -> f32 { self.inner.v_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_source(&self) -> AnimationSource { self.inner.rotation_animation_source }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_function(&self) -> AnimationFunction { self.inner.rotation_animation_function }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_period(&self) -> f32 { self.inner.rotation_animation_period }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_phase(&self) -> f32 { self.inner.rotation_animation_phase }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_scale(&self) -> f32 { self.inner.rotation_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_center(&self) -> Point2D { self.inner.rotation_animation_center }
+    #[wasm_bindgen(getter)] pub fn reflection_falloff_distance(&self) -> f32 { self.inner.reflection_falloff_distance }
+    #[wasm_bindgen(getter)] pub fn reflection_cutoff_distance(&self) -> f32 { self.inner.reflection_cutoff_distance }
+    #[wasm_bindgen(getter)] pub fn perpendicular_brightness(&self) -> f32 { self.inner.perpendicular_brightness }
+    #[wasm_bindgen(getter)] pub fn perpendicular_tint_color(&self) -> ColorRGB { self.inner.perpendicular_tint_color }
+    #[wasm_bindgen(getter)] pub fn parallel_brightness(&self) -> f32 { self.inner.parallel_brightness }
+    #[wasm_bindgen(getter)] pub fn parallel_tint_color(&self) -> ColorRGB { self.inner.parallel_tint_color }
+    #[wasm_bindgen(getter)] pub fn has_detail_bitmap(&self) -> bool { self.detail_bitmap.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_multipurpose_map(&self) -> bool { self.multipurpose_map.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_reflection_cube_map(&self) -> bool { self.reflection_cube_map.is_some() }
+
+    pub fn get_base_bitmap(&self) -> HaloBitmap {
+        HaloBitmap::new(self.base_bitmap.clone())
+    }
+    pub fn get_multipurpose_map(&self) -> Option<HaloBitmap> {
+        self.multipurpose_map.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+    pub fn get_reflection_cube_map(&self) -> Option<HaloBitmap> {
+        self.reflection_cube_map.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderEnvironment {
     inner: ShaderEnvironment,
     path: String,
     base_bitmap: Bitmap,
@@ -57,7 +186,7 @@ pub struct HaloMaterialShader {
 }
 
 #[wasm_bindgen]
-impl HaloMaterialShader {
+impl HaloShaderEnvironment {
     #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
     #[wasm_bindgen(getter)] pub fn shader_environment_type(&self) -> ShaderEnvironmentType { self.inner.shader_environment_type }
     #[wasm_bindgen(getter)] pub fn diffuse_flags(&self) -> u16 { self.inner.diffuse_flags }
@@ -198,6 +327,65 @@ impl HaloSceneManager {
         HaloSceneManager { mgr }
     }
 
+    pub fn get_model_shaders(&mut self, model: &HaloModel) -> Array {
+        let result = Array::new();
+        for model_shader in model.inner.shaders.items.as_ref().unwrap() {
+            // FIXME do we need the permutation value?
+            let shader_header = self.mgr.resolve_dependency(&model_shader.shader).unwrap();
+            let shader_tag = self.mgr.read_tag(&shader_header).unwrap();
+            match shader_tag.data {
+                TagData::ShaderModel(s) => {
+                    result.push(&JsValue::from(HaloShaderModel {
+                        base_bitmap: self.resolve_bitmap_dependency(&s.base_map).unwrap(),
+                        detail_bitmap: self.resolve_bitmap_dependency(&s.detail_map),
+                        multipurpose_map: self.resolve_bitmap_dependency(&s.multipurpose_map),
+                        reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
+                        path: shader_header.path.clone(),
+                        inner: s,
+                    }));
+                },
+                _ => unreachable!(),
+            }
+        }
+        result
+    }
+
+    pub fn get_scenery_model(&mut self, scenery: &HaloScenery) -> Option<HaloModel> {
+        self.resolve_model_dependency(&scenery.inner.model)
+            .map(|model| HaloModel { inner: model })
+    }
+
+    pub fn get_scenery_palette(&mut self) -> Array {
+        let scenario_tag = self.mgr.get_scenario().unwrap();
+        let scenario = match scenario_tag.data {
+            TagData::Scenario(s) => s.clone(),
+            _ => unreachable!(),
+        };
+        let palette = Array::new();
+        for dependency in scenario.scenery_palette.items.as_ref().unwrap() {
+            let scenery_header = self.mgr.resolve_dependency(&dependency).unwrap();
+            let scenery_tag = self.mgr.read_tag(&scenery_header).unwrap();
+            match scenery_tag.data {
+                TagData::Scenery(s) => palette.push(&JsValue::from(HaloScenery::new(&s))),
+                _ => unreachable!(),
+            };
+        }
+        palette
+    }
+
+    pub fn get_scenery_instances(&mut self) -> Array {
+        let scenario_tag = self.mgr.get_scenario().unwrap();
+        let scenario = match scenario_tag.data {
+            TagData::Scenario(s) => s.clone(),
+            _ => unreachable!(),
+        };
+        let instances = Array::new();
+        for scenery in scenario.scenery.items.as_ref().unwrap() {
+            instances.push(&JsValue::from(HaloSceneryInstance { inner: scenery.clone() }));
+        }
+        instances
+    }
+
     pub fn get_bsps(&mut self) -> Array {
         let scenario_tag = self.mgr.get_scenario().unwrap();
         let bsps: Vec<BSP> = self.mgr.get_scenario_bsps(&scenario_tag).unwrap().iter()
@@ -233,9 +421,20 @@ impl HaloSceneManager {
         indices
     }
 
+    fn resolve_model_dependency(&mut self, dependency: &TagDependency) -> Option<GbxModel> {
+        let hdr = match self.mgr.resolve_dependency(dependency) {
+            Some(hdr) => hdr,
+            None => return None,
+        };
+        match self.mgr.read_tag(&hdr).unwrap().data {
+            TagData::GbxModel(model) => Some(model),
+            _ => unreachable!(),
+        }
+    }
+
     fn resolve_bitmap_dependency(&mut self, dependency: &TagDependency) -> Option<Bitmap> {
         let hdr = match self.mgr.resolve_dependency(dependency) {
-            Some(hdr) => hdr.clone(),
+            Some(hdr) => hdr,
             None => return None,
         };
         match self.mgr.read_tag(&hdr).unwrap().data {
@@ -244,8 +443,8 @@ impl HaloSceneManager {
         }
     }
 
-    pub fn get_material_shader(&mut self, material: &HaloMaterial) -> Option<HaloMaterialShader> {
-        let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap().clone();
+    pub fn get_material_shader(&mut self, material: &HaloMaterial) -> Option<HaloShaderEnvironment> {
+        let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap();
         match &shader_hdr.primary_class {
             TagClass::ShaderEnvironment => {
                 let shader_tag = self.mgr.read_tag(&shader_hdr).unwrap();
@@ -253,7 +452,7 @@ impl HaloSceneManager {
                 if shader.base_bitmap.path_pointer == 0 {
                     return None;
                 }
-                Some(HaloMaterialShader {
+                Some(HaloShaderEnvironment {
                     base_bitmap: self.resolve_bitmap_dependency(&shader.base_bitmap).unwrap(),
                     bump_map: self.resolve_bitmap_dependency(&shader.bump_map),
                     primary_detail_bitmap: self.resolve_bitmap_dependency(&shader.primary_detail_bitmap),

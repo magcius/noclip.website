@@ -41,15 +41,19 @@ pub struct GbxModelPart {
 impl Deserialize for GbxModelPart {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
+        dbg!(start);
         data.seek(SeekFrom::Start(start + 4))?;
         let shader_index = data.read_u16::<LittleEndian>()?;
-        data.seek(SeekFrom::Start(start + 62))?;
+        data.seek(SeekFrom::Start(start + 20))?;
         let centroid = Point3D::deserialize(data)?;
-        let vert_count = data.read_u32::<LittleEndian>()?;
-        let vert_offset = data.read_u32::<LittleEndian>()?;
-        data.seek(SeekFrom::Current(8))?;
+        data.seek(SeekFrom::Start(start + 72))?;
         let tri_count = data.read_u32::<LittleEndian>()?;
         let tri_offset = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 88))?;
+        let vert_count = data.read_u32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 100))?;
+        dbg!(data.position());
+        let vert_offset = data.read_u32::<LittleEndian>()?;
         data.seek(SeekFrom::Start(start + 132))?;
         Ok(GbxModelPart {
             shader_index,
@@ -104,9 +108,12 @@ pub struct GbxModelShader {
 
 impl Deserialize for GbxModelShader {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let shader = TagDependency::deserialize(data)?;
+        let permutation = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(14))?;
         Ok(GbxModelShader {
-            shader: TagDependency::deserialize(data)?,
-            permutation: data.read_u16::<LittleEndian>()?,
+            shader,
+            permutation,
         })
     }
 }

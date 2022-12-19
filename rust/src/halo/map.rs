@@ -7,10 +7,9 @@ use crate::halo::tag::*;
 use crate::halo::bitmap::*;
 use crate::halo::model::*;
 use crate::halo::scenario::*;
+use crate::halo::shader::*;
 
 use byteorder::{LittleEndian, ReadBytesExt};
-
-use super::{shader::ShaderEnvironment, model::Scenery};
 
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
@@ -89,6 +88,10 @@ impl MapManager {
                 let shader = ShaderEnvironment::deserialize(&mut self.reader.data)?;
                 TagData::ShaderEnvironment(shader)
             },
+            TagClass::ShaderModel => {
+                let shader = ShaderModel::deserialize(&mut self.reader.data)?;
+                TagData::ShaderModel(shader)
+            },
             TagClass::Scenery => {
                 let scenery = Scenery::deserialize(&mut self.reader.data)?;
                 TagData::Scenery(scenery)
@@ -124,8 +127,10 @@ impl MapManager {
         self.read_tag(&header)
     }
 
-    pub fn resolve_dependency(&self, dependency: &TagDependency) -> Option<&TagHeader> {
-        self.tag_headers.iter().find(|header| header.tag_id == dependency.tag_id)
+    pub fn resolve_dependency(&self, dependency: &TagDependency) -> Option<TagHeader> {
+        self.tag_headers.iter()
+            .find(|header| header.tag_id == dependency.tag_id)
+            .cloned()
     }
 
     pub fn get_scenario_bsps(&mut self, tag: &Tag) -> Result<Vec<Tag>> {
@@ -386,16 +391,20 @@ mod tests {
     fn test() {
         let mut mgr = MapManager::new(read_map("bloodgulch"), read_bitmaps()).unwrap();
         for hdr in mgr.tag_headers.clone() {
-            if hdr.primary_class == TagClass::ShaderEnvironment {
+            if hdr.path == "scenery\\rocks\\boulder\\boulder" {
+                dbg!(&hdr.path);
                 let tag = mgr.read_tag(&hdr).unwrap();
-                if tag.header.path.ends_with("metal flat generic") {
-                    let shader = match tag.data {
-                        TagData::ShaderEnvironment(s) => s.clone(),
-                        _ => unreachable!(),
-                    };
-                    dbg!(shader);
-                    break;
-                }
+                let scenery = match tag.data {
+                    TagData::Scenery(s) => s.clone(),
+                    _ => unreachable!(),
+                };
+                let model_hdr = mgr.resolve_dependency(&scenery.model).unwrap();
+                let model = match mgr.read_tag(&model_hdr).unwrap().data {
+                    TagData::GbxModel(m) => m.clone(),
+                    _ => unreachable!(),
+                };
+                dbg!(mgr.read_tag(&mgr.resolve_dependency(&model.shaders.items.as_ref().unwrap()[0].shader).unwrap()));
+                break;
             }
         }
     }

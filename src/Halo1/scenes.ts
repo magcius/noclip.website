@@ -9,7 +9,7 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { DetailBitmapFunction, BitmapFormat, HaloSceneManager, HaloBSP, HaloLightmap, HaloMaterial, HaloMaterialShader, HaloBitmap, HaloBitmapMetadata, ShaderEnvironmentType, BitmapDataType } from '../../rust/pkg/index';
+import { DetailBitmapFunction, BitmapFormat, HaloSceneManager, HaloBSP, HaloLightmap, HaloMaterial, HaloShaderEnvironment, HaloBitmap, HaloBitmapMetadata, ShaderEnvironmentType, BitmapDataType } from '../../rust/pkg/index';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
 import { decompressBC } from '../Common/bc_texture';
@@ -180,7 +180,7 @@ ${MaterialProgram.includes}
 ${MaterialProgram.varying}
 `;
 
-    constructor(public shader: HaloMaterialShader | undefined, public has_lightmap: boolean) {
+    constructor(public shader: HaloShaderEnvironment | undefined, public has_lightmap: boolean) {
         super();
         this.generateFragmentShader();
     }
@@ -345,7 +345,7 @@ class MaterialRenderer {
     public microDetailMapping: TextureMapping | null;
     public reflectionCubeMapping: TextureMapping | null;
     public program: GfxProgram;
-    public shader: HaloMaterialShader | undefined;
+    public shader: HaloShaderEnvironment | undefined;
 
     constructor(device: GfxDevice, public gfxSampler: GfxSampler, public material: HaloMaterial, public inputLayout: GfxInputLayout, public modelMatrix: mat4, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer, public lightmapMapping: TextureMapping | null) {
         this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, this.bsp).buffer);
@@ -535,9 +535,6 @@ function makeTexture(device: GfxDevice, gfxSampler: GfxSampler, bitmap: HaloBitm
             mips.push(bitmapData.subarray(offset, offset + length));
             offset += length;
         }
-    }
-    if (bitmapMetadata.width === 1) {
-        console.log(bitmapMetadata, mips);
     }
     device.uploadTextureData(texture, 0, mips);
     const mapping = new TextureMapping();
