@@ -2679,7 +2679,7 @@ class Material_Generic extends BaseMaterial {
         if (this.wantsSelfIllumFresnel)
             vec4Count += 1;
         if (this.wantsPhong)
-            vec4Count += 1;
+            vec4Count += 2;
         if (this.wantsProjectedTexture)
             vec4Count += 4 + 2;
         if (this.wantsTreeSway)
