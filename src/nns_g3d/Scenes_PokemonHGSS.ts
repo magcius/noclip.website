@@ -1,5 +1,5 @@
 
-// Pokemon Heart Gold Soul Silver
+// Pokemon HeartGold SoulSilver
 
 import * as Viewer from '../viewer';
 import * as NARC from './narc';
@@ -214,13 +214,13 @@ const id = 'pkmnsslvr';
 const name = 'Pokémon HeartGold & SoulSilver';
 const sceneDescs = [
     new PokemonHGSSSceneDesc("0", "Johto & Kanto Region", false),
-    new PokemonHGSSSceneDesc("69", "Pokémon Center"),
-    new PokemonHGSSSceneDesc("359", "Pokémon Center Basement"),
-    new PokemonHGSSSceneDesc("369", "Pokémon Center Basement (Dupe?)"),
-    new PokemonHGSSSceneDesc("367", "Pokémon Center Basement (Dupe?)"),
-    new PokemonHGSSSceneDesc("368", "Pokémon Center Basement (Dupe?)"),
-    new PokemonHGSSSceneDesc("68", "Poké Mart"),
-    new PokemonHGSSSceneDesc("360", "Poké Mart (Dupe?)"),
+    new PokemonHGSSSceneDesc("69", "Pokemon Center"),
+    new PokemonHGSSSceneDesc("359", "Pokemon Center Basement"),
+    new PokemonHGSSSceneDesc("369", "Pokemon Center Basement (Dupe?)"),
+    new PokemonHGSSSceneDesc("367", "Pokemon Center Basement (Dupe?)"),
+    new PokemonHGSSSceneDesc("368", "Pokemon Center Basement (Dupe?)"),
+    new PokemonHGSSSceneDesc("68", "Poke Mart"),
+    new PokemonHGSSSceneDesc("360", "Poke Mart (Dupe?)"),
     new PokemonHGSSSceneDesc("2", "Union Room"),
     new PokemonHGSSSceneDesc("5", "Battle Room", false),
     new PokemonHGSSSceneDesc("62", "New Bark House 1"),
@@ -235,16 +235,16 @@ const sceneDescs = [
     new PokemonHGSSSceneDesc("277", "Battle Frontier Battle Castle"),
     new PokemonHGSSSceneDesc("278", "Battle Frontier Battle Arcade"), // Room is supposed to be dark
     new PokemonHGSSSceneDesc("279", "Cliff Edge Gate", false),
-    new PokemonHGSSSceneDesc("280", "Pokéathlon Dome", false),
-    new PokemonHGSSSceneDesc("281", "Pokéathlon Dome Interior"),
-    new PokemonHGSSSceneDesc("282", "Pokéathlon Track"),
-    new PokemonHGSSSceneDesc("283", "Pokéathlon 2F Entrance"),
-    new PokemonHGSSSceneDesc("284", "Pokéathlon B1F Solidarity Room"),
-    new PokemonHGSSSceneDesc("285", "Pokéathlon B1F Trust Room"),
-    new PokemonHGSSSceneDesc("286", "Pokéathlon B1F Potential Room"),
+    new PokemonHGSSSceneDesc("280", "Pokeathlon Dome", false),
+    new PokemonHGSSSceneDesc("281", "Pokeathlon Dome Interior"),
+    new PokemonHGSSSceneDesc("282", "Pokeathlon Track"),
+    new PokemonHGSSSceneDesc("283", "Pokeathlon 2F Entrance"),
+    new PokemonHGSSSceneDesc("284", "Pokeathlon B1F Solidarity Room"),
+    new PokemonHGSSSceneDesc("285", "Pokeathlon B1F Trust Room"),
+    new PokemonHGSSSceneDesc("286", "Pokeathlon B1F Potential Room"),
     new PokemonHGSSSceneDesc("287", "Pokéathlon B1F Friendship Room"),
     new PokemonHGSSSceneDesc("288", "Dragon's Den Dragon Shrine"),
-    new PokemonHGSSSceneDesc("299", "Pokémon League Reception Gate"),
+    new PokemonHGSSSceneDesc("299", "Pokemon League Reception Gate"),
     new PokemonHGSSSceneDesc("301", "Elite Four Psychic Room"),
     new PokemonHGSSSceneDesc("302", "Elite Four Poison Room"),
     new PokemonHGSSSceneDesc("303", "Elite Four Fighting Room"),
@@ -283,7 +283,7 @@ const sceneDescs = [
     new PokemonHGSSSceneDesc("353", "Safari Zone Mountain Area", false),
     new PokemonHGSSSceneDesc("354", "Safari Zone Desert Area", false),
     new PokemonHGSSSceneDesc("361", "???"),
-    new PokemonHGSSSceneDesc("362", "Pokémon Fan Club"),
+    new PokemonHGSSSceneDesc("362", "Pokemon Fan Club"),
     new PokemonHGSSSceneDesc("364", "???"),
     new PokemonHGSSSceneDesc("365", "Vermilion City Gym"),
     new PokemonHGSSSceneDesc("366", "Vertical Checkpoint"),
