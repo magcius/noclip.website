@@ -5,6 +5,7 @@ use crate::halo::common::*;
 use crate::halo::util::*;
 use crate::halo::tag::*;
 use crate::halo::bitmap::*;
+use crate::halo::model::*;
 use crate::halo::scenario::*;
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -95,7 +96,21 @@ impl MapManager {
             TagClass::Sky => {
                 let sky = Sky::deserialize(&mut self.reader.data)?;
                 TagData::Sky(sky)
-            }
+            },
+            TagClass::GbxModel => {
+                let mut model = GbxModel::deserialize(&mut self.reader.data)?;
+                model.geometries.read_items(&mut self.reader.data, offset)?;
+                match &mut model.geometries.items {
+                    Some(geometries) => {
+                        for geometry in geometries {
+                            geometry.parts.read_items(&mut self.reader.data, offset)?;
+                        }
+                    },
+                    None => panic!("failed to load geometries for {:?}", model),
+                }
+                model.shaders.read_items(&mut self.reader.data, offset)?;
+                TagData::GbxModel(model)
+            },
             _ => return Err(MapReaderError::UnimplementedTag(format!("can't yet read {:?}", tag_header))),
         };
         Ok(Tag { header: tag_header.clone(), data })
@@ -369,23 +384,15 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut mgr = MapManager::new(read_map("b40"), read_bitmaps()).unwrap();
-        let scenario_tag = mgr.get_scenario().unwrap();
-        let bsps: Vec<BSP> = mgr.get_scenario_bsps(&scenario_tag).unwrap().iter()
-            .map(|tag| match &tag.data {
-                TagData::BSP(bsp) => bsp.clone(),
-                _ => unreachable!(),
-            }).collect();
-        for bsp in &bsps {
-            dbg!(&bsp.lightmaps_bitmap);
-            let hdr = match mgr.resolve_dependency(&bsp.lightmaps_bitmap) {
-                Some(hdr) => hdr.clone(),
-                None => panic!(),
-            };
-            let bitmap = match mgr.read_tag(&hdr).unwrap().data {
-                TagData::Bitmap(bitmap) => Some(bitmap),
-                _ => unreachable!(),
-            };
+        let mut mgr = MapManager::new(read_map("bloodgulch"), read_bitmaps()).unwrap();
+        for hdr in mgr.tag_headers.clone() {
+            if hdr.primary_class == TagClass::Scenery {
+                let tag = mgr.read_tag(&hdr).unwrap();
+                let scenery: &Scenery = dbg!((&tag.data).try_into().unwrap());
+                let model_hdr = dbg!(mgr.resolve_dependency(&scenery.model).unwrap().clone());
+                let model_tag = dbg!(mgr.read_tag(&model_hdr));
+                break;
+            }
         }
     }
 }

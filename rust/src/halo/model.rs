@@ -6,15 +6,17 @@ use crate::halo::common::*;
 use crate::halo::util::*;
 use crate::halo::tag::*;
 
-struct GbxModel {
-    base_bitmap_u_scale: f32,
-    base_bitmap_v_scale: f32,
-    geometries: Block<GbxModelGeometry>,
-    shaders: Block<GbxModelShader>,
+#[derive(Debug, Clone)]
+pub struct GbxModel {
+    pub base_bitmap_u_scale: f32,
+    pub base_bitmap_v_scale: f32,
+    pub geometries: Block<GbxModelGeometry>,
+    pub shaders: Block<GbxModelShader>,
 }
 
-struct GbxModelGeometry {
-    parts: Block<GbxModelPart>,
+#[derive(Debug, Clone)]
+pub struct GbxModelGeometry {
+    pub parts: Block<GbxModelPart>,
 }
 
 impl Deserialize for GbxModelGeometry {
@@ -26,13 +28,14 @@ impl Deserialize for GbxModelGeometry {
     }
 }
 
-struct GbxModelPart {
-    shader_index: u16,
-    centroid: Point3D,
-    tri_count: u32,
-    tri_offset: u32,
-    vert_count: u32,
-    vert_offset: u32,
+#[derive(Debug, Clone)]
+pub struct GbxModelPart {
+    pub shader_index: u16,
+    pub centroid: Point3D,
+    pub tri_count: u32,
+    pub tri_offset: u32,
+    pub vert_count: u32,
+    pub vert_offset: u32,
 }
 
 impl Deserialize for GbxModelPart {
@@ -93,9 +96,10 @@ impl Deserialize for GbxModel {
     }
 }
 
-struct GbxModelShader {
-    shader: TagDependency,
-    permutation: u16,
+#[derive(Debug, Clone)]
+pub struct GbxModelShader {
+    pub shader: TagDependency,
+    pub permutation: u16,
 }
 
 impl Deserialize for GbxModelShader {

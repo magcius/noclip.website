@@ -163,6 +163,7 @@ pub enum TagData {
     ShaderEnvironment(ShaderEnvironment),
     Scenery(Scenery),
     Sky(Sky),
+    GbxModel(GbxModel),
 }
 
 impl<'a> TryFrom<&'a TagData> for &'a Scenario {
@@ -204,6 +205,17 @@ impl<'a> TryFrom<&'a TagData> for &'a ShaderEnvironment {
         match data {
             TagData::ShaderEnvironment(x) => Ok(x),
             t => Err(format!("invalid tag type: expected ShaderEnvironment, got {:?}", t))
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a TagData> for &'a Scenery {
+    type Error = String;
+
+    fn try_from(data: &'a TagData) -> std::result::Result<Self, Self::Error> {
+        match data {
+            TagData::Scenery(x) => Ok(x),
+            t => Err(format!("invalid tag type: expected Scenery, got {:?}", t))
         }
     }
 }
