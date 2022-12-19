@@ -1,6 +1,7 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use wasm_bindgen::prelude::*;
 
 pub type Result<T> = std::result::Result<T, MapReaderError>;
 pub type Pointer = u32;
@@ -133,11 +134,12 @@ impl Deserialize for Tri {
         })
     }
 }
+#[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
 pub struct ColorRGB {
-    r: f32,
-    g: f32,
-    b: f32,
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
 }
 
 impl Deserialize for ColorRGB {

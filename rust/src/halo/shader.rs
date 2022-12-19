@@ -45,6 +45,23 @@ pub struct ShaderEnvironment {
     pub bump_map: TagDependency,
     pub specular_flags: u16,
     pub brightness: f32,
+    pub perpendicular_color: ColorRGB,
+    pub parallel_color: ColorRGB,
+    pub reflection_flags: u16,
+    pub reflection_type: ShaderEnvironmentReflectionType,
+    pub lightmap_brightness_scale: f32,
+    pub perpendicular_brightness: f32,
+    pub parallel_brightness: f32,
+    pub reflection_cube_map: TagDependency,
+}
+
+#[wasm_bindgen]
+#[derive(Copy, Clone, Debug, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderEnvironmentReflectionType {
+    BumpedCubeMap = 0,
+    FlatCubeMap = 1,
+    BumpedRadiosity = 2,
 }
 
 impl Deserialize for ShaderEnvironment {
@@ -85,6 +102,18 @@ impl Deserialize for ShaderEnvironment {
         let specular_flags = data.read_u16::<LittleEndian>()?;
         data.seek(SeekFrom::Start(start + 616))?;
         let brightness = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 640))?;
+        let perpendicular_color = ColorRGB::deserialize(data)?;
+        let parallel_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 680))?;
+        let reflection_flags = data.read_u16::<LittleEndian>()?;
+        let reflection_type = ShaderEnvironmentReflectionType::try_from(data.read_u16::<LittleEndian>()?)?;
+        let lightmap_brightness_scale = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 716))?;
+        let perpendicular_brightness = data.read_f32::<LittleEndian>()?;
+        let parallel_brightness = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 764))?;
+        let reflection_cube_map = TagDependency::deserialize(data)?;
         Ok(ShaderEnvironment {
             radiosity_flags,
             radiosity_detail_level,
@@ -110,6 +139,14 @@ impl Deserialize for ShaderEnvironment {
             bump_map,
             specular_flags,
             brightness,
+            perpendicular_color,
+            parallel_color,
+            reflection_flags,
+            reflection_type,
+            lightmap_brightness_scale,
+            perpendicular_brightness,
+            parallel_brightness,
+            reflection_cube_map,
         })
     }
 }

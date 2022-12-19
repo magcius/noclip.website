@@ -47,11 +47,13 @@ impl HaloMaterial {
 #[derive(Debug, Clone)]
 pub struct HaloMaterialShader {
     inner: ShaderEnvironment,
+    path: String,
     base_bitmap: Bitmap,
     bump_map: Option<Bitmap>,
     primary_detail_bitmap: Option<Bitmap>,
     secondary_detail_bitmap: Option<Bitmap>,
     micro_detail_bitmap: Option<Bitmap>,
+    reflection_cube_map: Option<Bitmap>,
 }
 
 #[wasm_bindgen]
@@ -71,6 +73,15 @@ impl HaloMaterialShader {
     #[wasm_bindgen(getter)] pub fn has_secondary_detail_bitmap(&self) -> bool { self.secondary_detail_bitmap.is_some() }
     #[wasm_bindgen(getter)] pub fn has_micro_detail_bitmap(&self) -> bool { self.micro_detail_bitmap.is_some() }
     #[wasm_bindgen(getter)] pub fn has_bump_map(&self) -> bool { self.bump_map.is_some() }
+    #[wasm_bindgen(getter)] pub fn has_reflection_cube_map(&self) -> bool { self.reflection_cube_map.is_some() }
+    #[wasm_bindgen(getter)] pub fn perpendicular_color(&self) -> ColorRGB { self.inner.perpendicular_color }
+    #[wasm_bindgen(getter)] pub fn parallel_color(&self) -> ColorRGB { self.inner.parallel_color }
+    #[wasm_bindgen(getter)] pub fn reflection_flags(&self) -> u16 { self.inner.reflection_flags }
+    #[wasm_bindgen(getter)] pub fn reflection_type(&self) -> ShaderEnvironmentReflectionType { self.inner.reflection_type }
+    #[wasm_bindgen(getter)] pub fn lightmap_brightness_scale(&self) -> f32 { self.inner.lightmap_brightness_scale }
+    #[wasm_bindgen(getter)] pub fn perpendicular_brightness(&self) -> f32 { self.inner.perpendicular_brightness }
+    #[wasm_bindgen(getter)] pub fn parallel_brightness(&self) -> f32 { self.inner.parallel_brightness }
+    #[wasm_bindgen(getter)] pub fn path(&self) -> String { self.path.clone() }
 
     pub fn get_base_bitmap(&self) -> HaloBitmap {
         HaloBitmap::new(self.base_bitmap.clone())
@@ -93,6 +104,11 @@ impl HaloMaterialShader {
 
     pub fn get_micro_detail_bitmap(&self) -> Option<HaloBitmap> {
         self.micro_detail_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_reflection_cube_map(&self) -> Option<HaloBitmap> {
+        self.reflection_cube_map.as_ref()
             .map(|map| HaloBitmap::new(map.clone()))
     }
 }
@@ -243,6 +259,8 @@ impl HaloSceneManager {
                     primary_detail_bitmap: self.resolve_bitmap_dependency(&shader.primary_detail_bitmap),
                     secondary_detail_bitmap: self.resolve_bitmap_dependency(&shader.secondary_detail_bitmap),
                     micro_detail_bitmap: self.resolve_bitmap_dependency(&shader.micro_detail_bitmap),
+                    reflection_cube_map: self.resolve_bitmap_dependency(&shader.reflection_cube_map),
+                    path: shader_tag.header.path.clone(),
                     inner: shader.clone(),
                 })
             }

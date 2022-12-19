@@ -386,12 +386,16 @@ mod tests {
     fn test() {
         let mut mgr = MapManager::new(read_map("bloodgulch"), read_bitmaps()).unwrap();
         for hdr in mgr.tag_headers.clone() {
-            if hdr.primary_class == TagClass::Scenery {
+            if hdr.primary_class == TagClass::ShaderEnvironment {
                 let tag = mgr.read_tag(&hdr).unwrap();
-                let scenery: &Scenery = dbg!((&tag.data).try_into().unwrap());
-                let model_hdr = dbg!(mgr.resolve_dependency(&scenery.model).unwrap().clone());
-                let model_tag = dbg!(mgr.read_tag(&model_hdr));
-                break;
+                if tag.header.path.ends_with("metal flat generic") {
+                    let shader = match tag.data {
+                        TagData::ShaderEnvironment(s) => s.clone(),
+                        _ => unreachable!(),
+                    };
+                    dbg!(shader);
+                    break;
+                }
             }
         }
     }
