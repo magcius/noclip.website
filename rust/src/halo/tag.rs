@@ -27,7 +27,7 @@ impl Deserialize for TagDependency {
     }
 }
 
-#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq)]
+#[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Hash, Eq)]
 #[repr(u32)]
 pub enum TagClass {
     Actor = 0x61637472,
@@ -160,6 +160,8 @@ pub enum TagData {
     BSP(BSP),
     ShaderEnvironment(ShaderEnvironment),
     ShaderModel(ShaderModel),
+    ShaderTransparentChicago(ShaderTransparentChicago),
+    ShaderTransparentGeneric(ShaderTransparentGeneric),
     Scenery(Scenery),
     Sky(Sky),
     GbxModel(GbxModel),

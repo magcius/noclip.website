@@ -136,17 +136,17 @@ impl HaloShaderModel {
     #[wasm_bindgen(getter)] pub fn detail_mask(&self) -> DetailBitmapMask { self.inner.detail_mask }
     #[wasm_bindgen(getter)] pub fn detail_bitmap_scale(&self) -> f32 { self.inner.detail_map_scale }
     #[wasm_bindgen(getter)] pub fn detail_bitmap_v_scale(&self) -> f32 { self.inner.detail_map_v_scale }
-    #[wasm_bindgen(getter)] pub fn u_animation_source(&self) -> AnimationSource { self.inner.u_animation_source }
+    #[wasm_bindgen(getter)] pub fn u_animation_source(&self) -> FunctionSource { self.inner.u_animation_source }
     #[wasm_bindgen(getter)] pub fn u_animation_function(&self) -> AnimationFunction { self.inner.u_animation_function }
     #[wasm_bindgen(getter)] pub fn u_animation_period(&self) -> f32 { self.inner.u_animation_period }
     #[wasm_bindgen(getter)] pub fn u_animation_phase(&self) -> f32 { self.inner.u_animation_phase }
     #[wasm_bindgen(getter)] pub fn u_animation_scale(&self) -> f32 { self.inner.u_animation_scale }
-    #[wasm_bindgen(getter)] pub fn v_animation_source(&self) -> AnimationSource { self.inner.v_animation_source }
+    #[wasm_bindgen(getter)] pub fn v_animation_source(&self) -> FunctionSource { self.inner.v_animation_source }
     #[wasm_bindgen(getter)] pub fn v_animation_function(&self) -> AnimationFunction { self.inner.v_animation_function }
     #[wasm_bindgen(getter)] pub fn v_animation_period(&self) -> f32 { self.inner.v_animation_period }
     #[wasm_bindgen(getter)] pub fn v_animation_phase(&self) -> f32 { self.inner.v_animation_phase }
     #[wasm_bindgen(getter)] pub fn v_animation_scale(&self) -> f32 { self.inner.v_animation_scale }
-    #[wasm_bindgen(getter)] pub fn rotation_animation_source(&self) -> AnimationSource { self.inner.rotation_animation_source }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_source(&self) -> FunctionSource { self.inner.rotation_animation_source }
     #[wasm_bindgen(getter)] pub fn rotation_animation_function(&self) -> AnimationFunction { self.inner.rotation_animation_function }
     #[wasm_bindgen(getter)] pub fn rotation_animation_period(&self) -> f32 { self.inner.rotation_animation_period }
     #[wasm_bindgen(getter)] pub fn rotation_animation_phase(&self) -> f32 { self.inner.rotation_animation_phase }

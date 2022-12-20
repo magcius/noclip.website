@@ -81,6 +81,7 @@ impl MapManager {
             },
             TagClass::Scenario => {
                 let mut scenario = Scenario::deserialize(&mut self.reader.data)?;
+                scenario.skies.read_items(&mut self.reader.data, offset)?;
                 scenario.scenery.read_items(&mut self.reader.data, offset)?;
                 scenario.scenery_palette.read_items(&mut self.reader.data, offset)?;
                 scenario.structure_bsp_references.read_items(&mut self.reader.data, offset)?;
@@ -102,6 +103,18 @@ impl MapManager {
             TagClass::ShaderModel => {
                 let shader = ShaderModel::deserialize(&mut self.reader.data)?;
                 TagData::ShaderModel(shader)
+            },
+            TagClass::ShaderTransparentChicago => {
+                let mut shader = ShaderTransparentChicago::deserialize(&mut self.reader.data)?;
+                shader.extra_layers.read_items(&mut self.reader.data, offset)?;
+                shader.maps.read_items(&mut self.reader.data, offset)?;
+                TagData::ShaderTransparentChicago(shader)
+            },
+            TagClass::ShaderTransparentGeneric => {
+                let mut shader = ShaderTransparentGeneric::deserialize(&mut self.reader.data)?;
+                shader.extra_layers.read_items(&mut self.reader.data, offset)?;
+                shader.maps.read_items(&mut self.reader.data, offset)?;
+                TagData::ShaderTransparentGeneric(shader)
             },
             TagClass::Scenery => {
                 let mut scenery = Scenery::deserialize(&mut self.reader.data)?;
@@ -391,7 +404,7 @@ mod tests {
     }
 
     fn read_map(path: &str) -> Vec<u8> {
-        std::fs::read(&format!("../data/halo/{}.map", path)).unwrap()
+        std::fs::read(&format!("../data/halo/{}", path)).unwrap()
     }
 
     fn read_bitmaps() -> Vec<u8> {
@@ -400,41 +413,51 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut mgr = MapManager::new(read_map("bloodgulch"), read_bitmaps()).unwrap();
-        let tag_index_header = mgr.tag_index_header.clone();
+        let mut mgr = MapManager::new(read_map("bloodgulch.map"), read_bitmaps()).unwrap();
         let scenario = match mgr.get_scenario().unwrap().data {
             TagData::Scenario(s) => s.clone(),
             _ => unreachable!(),
         };
-        for scenery in scenario.scenery.items.as_ref().unwrap().iter().take(2) {
-            dbg!(&scenery);
-        }
-        return;
-        for palette in scenario.scenery_palette.items.as_ref().unwrap().iter() {
-            let scenery_header = mgr.resolve_dependency(&palette.obj).unwrap();
-            let scenery_tag = mgr.read_tag(&scenery_header).unwrap();
-            dbg!(scenery_header.path);
-            let scenery = match scenery_tag.data {
-                TagData::Scenery(s) => s,
-                _ => unreachable!(),
-            };
-            let model_hdr = mgr.resolve_dependency(&scenery.model).unwrap();
-            let model_tag = mgr.read_tag(&model_hdr).unwrap();
-            let model = match model_tag.data {
-                TagData::GbxModel(m) => m.clone(),
-                _ => unreachable!(),
-            };
-            dbg!(&tag_index_header);
-            for geometry in model.geometries.items.as_ref().unwrap() {
-                for part in geometry.parts.items.as_ref().unwrap() {
-                    let offset = part.tri_offset + mgr.tag_index_header.model_data_file_offset + mgr.tag_index_header.vertex_data_size;
-                    let count = part.tri_count;
-                    let tris = mgr.read_map_u16s(offset as u64, count as usize).unwrap();
-                    dbg!(&tris);
-                    dbg!(count, tris.len());
-                    panic!();
-                }
+        for sky in scenario.skies.items.as_ref().unwrap() {
+            let sky_hdr = dbg!(mgr.resolve_dependency(&sky).unwrap());
+            let sky = dbg!(mgr.read_tag(&sky_hdr).unwrap());
+            let sky_data = match sky.data { TagData::Sky(s) => s.clone(), _ => unreachable!() };
+            let model_hdr = dbg!(mgr.resolve_dependency(&sky_data.model).unwrap());
+            let model = dbg!(mgr.read_tag(&model_hdr).unwrap());
+            let model_data = match model.data { TagData::GbxModel(m) => m.clone(), _ => unreachable!() };
+            for dependency in model_data.shaders.items.as_ref().unwrap() {
+                let shader_hdr = dbg!(mgr.resolve_dependency(&dependency.shader).unwrap());
+                let shader = dbg!(mgr.read_tag(&shader_hdr));
             }
         }
+    }
+
+    fn test_shader_counts() {
+        use std::collections::HashMap;
+        let mut counts: HashMap<TagClass, usize> = HashMap::new();
+        for file in std::fs::read_dir("../data/halo").unwrap() {
+            let name = dbg!(file.unwrap().file_name());
+            if name == "bitmaps.map" {
+                continue;
+            }
+            let mut mgr = MapManager::new(read_map(&name.to_str().unwrap()), read_bitmaps()).unwrap();
+            for hdr in &mgr.tag_headers {
+                if hdr.primary_class == TagClass::ShaderTransparentChicagoExtended {
+                    dbg!(&hdr);
+                }
+                *counts.entry(hdr.primary_class).or_insert(0) += 1;
+            }
+        }
+    
+        dbg!(counts.get(&TagClass::Shader));
+        dbg!(counts.get(&TagClass::ShaderTransparentWater));
+        dbg!(counts.get(&TagClass::ShaderTransparentPlasma));
+        dbg!(counts.get(&TagClass::ShaderTransparentGeneric));
+        dbg!(counts.get(&TagClass::ShaderModel));
+        dbg!(counts.get(&TagClass::ShaderTransparentMeter));
+        dbg!(counts.get(&TagClass::ShaderEnvironment));
+        dbg!(counts.get(&TagClass::ShaderTransparentChicagoExtended));
+        dbg!(counts.get(&TagClass::ShaderTransparentChicago));
+        dbg!(counts.get(&TagClass::ShaderTransparentGlass));
     }
 }

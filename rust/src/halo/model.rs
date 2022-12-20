@@ -7,6 +7,74 @@ use crate::halo::util::*;
 use crate::halo::tag::*;
 
 #[derive(Debug, Clone)]
+pub struct SkyAnimations {
+    animation_index: i16,
+    period: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Sky {
+    pub model: TagDependency,
+    pub animation_graph: TagDependency,
+    pub indoor_ambient_radiosity_color: ColorRGB,
+    pub indoor_ambient_radiosity_power: f32,
+    pub outdoor_ambient_radiosity_color: ColorRGB,
+    pub outdoor_ambient_radiosity_power: f32,
+    pub outdoor_fog_color: ColorRGB,
+    pub outdoor_fog_max_density: f32,
+    pub outdoor_fog_start_distance: f32,
+    pub outdoor_fog_opaque_distance: f32,
+    pub indoor_fog_color: ColorRGB,
+    pub indoor_fog_max_density: f32,
+    pub indoor_fog_start_distance: f32,
+    pub indoor_fog_opaque_distance: f32,
+    pub animations: Block<SkyAnimations>,
+}
+
+impl Deserialize for Sky {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        let model = TagDependency::deserialize(data)?;
+        let animation_graph = TagDependency::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 56))?;
+        let indoor_ambient_radiosity_color = ColorRGB::deserialize(data)?;
+        let indoor_ambient_radiosity_power = data.read_f32::<LittleEndian>()?;
+        let outdoor_ambient_radiosity_color = ColorRGB::deserialize(data)?;
+        let outdoor_ambient_radiosity_power = data.read_f32::<LittleEndian>()?;
+        let outdoor_fog_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 108))?;
+        let outdoor_fog_max_density = data.read_f32::<LittleEndian>()?;
+        let outdoor_fog_start_distance = data.read_f32::<LittleEndian>()?;
+        let outdoor_fog_opaque_distance = data.read_f32::<LittleEndian>()?;
+        let indoor_fog_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 140))?;
+        let indoor_fog_max_density = data.read_f32::<LittleEndian>()?;
+        let indoor_fog_start_distance = data.read_f32::<LittleEndian>()?;
+        let indoor_fog_opaque_distance = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 184))?;
+        let animations: Block<SkyAnimations> = Block::deserialize(data)?;
+        // TODO handle lens flares
+        Ok(Sky {
+            model,
+            animation_graph,
+            indoor_ambient_radiosity_color,
+            indoor_ambient_radiosity_power,
+            outdoor_ambient_radiosity_color,
+            outdoor_ambient_radiosity_power,
+            outdoor_fog_color,
+            outdoor_fog_max_density,
+            outdoor_fog_start_distance,
+            outdoor_fog_opaque_distance,
+            indoor_fog_color,
+            indoor_fog_max_density,
+            indoor_fog_start_distance,
+            indoor_fog_opaque_distance,
+            animations,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct GbxModel {
     pub base_bitmap_u_scale: f32,
     pub base_bitmap_v_scale: f32,

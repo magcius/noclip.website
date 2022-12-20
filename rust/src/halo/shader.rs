@@ -7,6 +7,327 @@ use num_enum::TryFromPrimitive;
 use super::tag::*;
 use super::common::*;
 
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentChicago {
+    // shader properties
+    pub radiosity_flags: u16,
+    pub radiosity_detail_level: RadiosityDetailLevel,
+    pub radiosity_light_power: f32,
+    pub radiosity_light_color: ColorRGB,
+    pub radiosity_tint_color: ColorRGB,
+
+    pub numeric_counter_limit: u8,
+    pub flags: u8,
+    pub first_map_type: ShaderTransparentGenericMapType,
+    pub framebuffer_blend_function: FramebufferBlendFunction,
+    pub framebuffer_fade_mode: FramebufferFadeMode,
+    pub framebuffer_fade_source: FunctionSource,
+    pub lens_flare_spacing: f32,
+    pub lens_flare: TagDependency,
+    pub extra_layers: Block<TagDependency>, // only chicago transparent shaders allowed here
+    pub maps: Block<ShaderTransparentChicagoMap>,
+}
+
+impl Deserialize for ShaderTransparentChicago {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let mut start = data.position();
+        let radiosity_flags = data.read_u16::<LittleEndian>()?;
+        let radiosity_detail_level = RadiosityDetailLevel::try_from(data.read_u16::<LittleEndian>()?)?;
+        let radiosity_light_power = data.read_f32::<LittleEndian>()?;
+        let radiosity_light_color = ColorRGB::deserialize(data)?;
+        let radiosity_tint_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 40))?;
+        start = data.position();
+        let numeric_counter_limit = data.read_u8()?;
+        let flags = data.read_u8()?;
+        let first_map_type = ShaderTransparentGenericMapType::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_blend_function = FramebufferBlendFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_fade_mode = FramebufferFadeMode::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_fade_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        data.seek(SeekFrom::Start(start + 12))?;
+        let lens_flare_spacing = data.read_f32::<LittleEndian>()?;
+        let lens_flare = TagDependency::deserialize(data)?;
+        let extra_layers: Block<TagDependency> = Block::deserialize(data)?;
+        let maps: Block<ShaderTransparentChicagoMap> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 66))?;
+        Ok(ShaderTransparentChicago { radiosity_flags, radiosity_detail_level, radiosity_light_power, radiosity_light_color, radiosity_tint_color, numeric_counter_limit, flags, first_map_type, framebuffer_blend_function, framebuffer_fade_mode, framebuffer_fade_source, lens_flare_spacing, lens_flare, extra_layers, maps })
+    }
+}
+
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderTransparentChicagoColorFunction {
+    Current = 0,
+    NextMap = 1,
+    Multiply = 2,
+    DoubleMultiply = 3,
+    Add = 4,
+    AddSignedCurrent = 5,
+    AddSignedNextMap = 6,
+    SubtractCurrent = 7,
+    SubtractNextMap = 8,
+    BlendCurrentAlpha = 9,
+    BlendCurrentAlphaInverse = 10,
+    BlendNextMapAlpha = 11,
+    BlendNextMapAlphaInverse = 12,
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentChicagoMap {
+    pub flags: u16,
+    pub color_function: ShaderTransparentChicagoColorFunction,
+    pub alpha_function: ShaderTransparentChicagoColorFunction,
+    pub map_u_scale: f32,
+    pub map_v_scale: f32,
+    pub map_u_offset: f32,
+    pub map_v_offset: f32,
+    pub map_rotation: f32,
+    pub mipmap_bias: f32,
+    pub map: TagDependency,
+    pub u_animation_source: FunctionSource,
+    pub u_animation_function: AnimationFunction,
+    pub u_animation_period: f32,
+    pub u_animation_phase: f32,
+    pub u_animation_scale: f32,
+    pub v_animation_source: FunctionSource,
+    pub v_animation_function: AnimationFunction,
+    pub v_animation_period: f32,
+    pub v_animation_phase: f32,
+    pub v_animation_scale: f32,
+    pub rotation_animation_source: FunctionSource,
+    pub rotation_animation_function: AnimationFunction,
+    pub rotation_animation_period: f32,
+    pub rotation_animation_phase: f32,
+    pub rotation_animation_scale: f32,
+    pub rotation_animation_center: Point2D,
+}
+
+impl Deserialize for ShaderTransparentChicagoMap {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        let flags = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 44))?;
+        let color_function = ShaderTransparentChicagoColorFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let alpha_function = ShaderTransparentChicagoColorFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        data.seek(SeekFrom::Start(start + 84))?;
+        let map_u_scale = data.read_f32::<LittleEndian>()?;
+        let map_v_scale = data.read_f32::<LittleEndian>()?;
+        let map_u_offset = data.read_f32::<LittleEndian>()?;
+        let map_v_offset = data.read_f32::<LittleEndian>()?;
+        let map_rotation = data.read_f32::<LittleEndian>()?;
+        let mipmap_bias = data.read_f32::<LittleEndian>()?;
+        let map = TagDependency::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 164))?;
+        let u_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let u_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let u_animation_period = data.read_f32::<LittleEndian>()?;
+        let u_animation_phase = data.read_f32::<LittleEndian>()?;
+        let u_animation_scale = data.read_f32::<LittleEndian>()?;
+        let v_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let v_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let v_animation_period = data.read_f32::<LittleEndian>()?;
+        let v_animation_phase = data.read_f32::<LittleEndian>()?;
+        let v_animation_scale = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let rotation_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let rotation_animation_period = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_phase = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_scale = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_center = Point2D::deserialize(data)?;
+        Ok(ShaderTransparentChicagoMap {
+            flags,
+            color_function,
+            alpha_function,
+            map_u_scale,
+            map_v_scale,
+            map_u_offset,
+            map_v_offset,
+            map_rotation,
+            mipmap_bias,
+            map,
+            u_animation_source,
+            u_animation_function,
+            u_animation_period,
+            u_animation_phase,
+            u_animation_scale,
+            v_animation_source,
+            v_animation_function,
+            v_animation_period,
+            v_animation_phase,
+            v_animation_scale,
+            rotation_animation_source,
+            rotation_animation_function,
+            rotation_animation_period,
+            rotation_animation_phase,
+            rotation_animation_scale,
+            rotation_animation_center,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentGeneric {
+    // shader properties
+    pub radiosity_flags: u16,
+    pub radiosity_detail_level: RadiosityDetailLevel,
+    pub radiosity_light_power: f32,
+    pub radiosity_light_color: ColorRGB,
+    pub radiosity_tint_color: ColorRGB,
+
+    pub numeric_counter_limit: u8,
+    pub flags: u8,
+    pub first_map_type: ShaderTransparentGenericMapType,
+    pub framebuffer_blend_function: FramebufferBlendFunction,
+    pub framebuffer_fade_mode: FramebufferFadeMode,
+    pub framebuffer_fade_source: FunctionSource,
+    pub lens_flare_spacing: f32,
+    pub lens_flare: TagDependency,
+    pub extra_layers: Block<TagDependency>,
+    pub maps: Block<ShaderTransparentGenericMap>,
+    // TODO stages?
+}
+
+impl Deserialize for ShaderTransparentGeneric {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let mut start = data.position();
+        let radiosity_flags = data.read_u16::<LittleEndian>()?;
+        let radiosity_detail_level = RadiosityDetailLevel::try_from(data.read_u16::<LittleEndian>()?)?;
+        let radiosity_light_power = data.read_f32::<LittleEndian>()?;
+        let radiosity_light_color = ColorRGB::deserialize(data)?;
+        let radiosity_tint_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 40))?;
+        start = data.position();
+        let numeric_counter_limit = data.read_u8()?;
+        let flags = data.read_u8()?;
+        let first_map_type = ShaderTransparentGenericMapType::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_blend_function = FramebufferBlendFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_fade_mode = FramebufferFadeMode::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let framebuffer_fade_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        data.seek(SeekFrom::Start(start + 12))?;
+        let lens_flare_spacing = data.read_f32::<LittleEndian>()?;
+        let lens_flare = TagDependency::deserialize(data)?;
+        let extra_layers: Block<TagDependency> = Block::deserialize(data)?;
+        let maps: Block<ShaderTransparentGenericMap> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 64))?;
+        Ok(ShaderTransparentGeneric { radiosity_flags, radiosity_detail_level, radiosity_light_power, radiosity_light_color, radiosity_tint_color, numeric_counter_limit, flags, first_map_type, framebuffer_blend_function, framebuffer_fade_mode, framebuffer_fade_source, lens_flare_spacing, lens_flare, extra_layers, maps })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentGenericMap {
+    pub flags: u16,
+    pub map_u_scale: f32,
+    pub map_v_scale: f32,
+    pub map_u_offset: f32,
+    pub map_v_offset: f32,
+    pub map_rotation: f32,
+    pub mipmap_bias: f32,
+    pub map: TagDependency,
+    pub u_animation_source: FunctionSource,
+    pub u_animation_function: AnimationFunction,
+    pub u_animation_period: f32,
+    pub u_animation_phase: f32,
+    pub u_animation_scale: f32,
+    pub v_animation_source: FunctionSource,
+    pub v_animation_function: AnimationFunction,
+    pub v_animation_period: f32,
+    pub v_animation_phase: f32,
+    pub v_animation_scale: f32,
+    pub rotation_animation_source: FunctionSource,
+    pub rotation_animation_function: AnimationFunction,
+    pub rotation_animation_period: f32,
+    pub rotation_animation_phase: f32,
+    pub rotation_animation_scale: f32,
+    pub rotation_animation_center: Point2D,
+}
+
+impl Deserialize for ShaderTransparentGenericMap {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        let flags = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 4))?;
+        let map_u_scale = data.read_f32::<LittleEndian>()?;
+        let map_v_scale = data.read_f32::<LittleEndian>()?;
+        let map_u_offset = data.read_f32::<LittleEndian>()?;
+        let map_v_offset = data.read_f32::<LittleEndian>()?;
+        let map_rotation = data.read_f32::<LittleEndian>()?;
+        let map_bias = data.read_f32::<LittleEndian>()?;
+        let map = TagDependency::deserialize(data)?;
+        let u_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let u_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let u_animation_period = data.read_f32::<LittleEndian>()?;
+        let u_animation_phase = data.read_f32::<LittleEndian>()?;
+        let u_animation_scale = data.read_f32::<LittleEndian>()?;
+        let v_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let v_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let v_animation_period = data.read_f32::<LittleEndian>()?;
+        let v_animation_phase = data.read_f32::<LittleEndian>()?;
+        let v_animation_scale = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let rotation_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let rotation_animation_period = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_phase = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_scale = data.read_f32::<LittleEndian>()?;
+        let rotation_animation_center = Point2D::deserialize(data)?;
+        Ok(ShaderTransparentGenericMap {
+            flags,
+            map_u_scale,
+            map_v_scale,
+            map_u_offset,
+            map_v_offset,
+            map_rotation,
+            mipmap_bias: map_bias,
+            map,
+            u_animation_source,
+            u_animation_function,
+            u_animation_period,
+            u_animation_phase,
+            u_animation_scale,
+            v_animation_source,
+            v_animation_function,
+            v_animation_period,
+            v_animation_phase,
+            v_animation_scale,
+            rotation_animation_source,
+            rotation_animation_function,
+            rotation_animation_period,
+            rotation_animation_phase,
+            rotation_animation_scale,
+            rotation_animation_center,
+        })
+    }
+}
+
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum FramebufferFadeMode {
+    None = 0,
+    FadeWhenPerpendicular = 1,
+    FadeWhenParallel = 2,
+}
+
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum FramebufferBlendFunction {
+    AlphaBlend = 0,
+    Multiply = 1,
+    DoubleMultiply = 2,
+    Add = 3,
+    Subtract = 4,
+    ComponentMin = 5,
+    ComponentMax = 6,
+    AlphaMultiplyAdd = 7,
+}
+
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderTransparentGenericMapType {
+    Map2D = 0,
+    ReflectionCubeMap = 1,
+    ObjectCenteredCubeMap = 2,
+    ViewerCenteredCubeMap = 3,
+}
+
 #[derive(Debug, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum RadiosityDetailLevel {
@@ -41,17 +362,17 @@ pub struct ShaderModel {
     pub detail_map_scale: f32,
     pub detail_map: TagDependency,
     pub detail_map_v_scale: f32,
-    pub u_animation_source: AnimationSource,
+    pub u_animation_source: FunctionSource,
     pub u_animation_function: AnimationFunction,
     pub u_animation_period: f32,
     pub u_animation_phase: f32,
     pub u_animation_scale: f32,
-    pub v_animation_source: AnimationSource,
+    pub v_animation_source: FunctionSource,
     pub v_animation_function: AnimationFunction,
     pub v_animation_period: f32,
     pub v_animation_phase: f32,
     pub v_animation_scale: f32,
-    pub rotation_animation_source: AnimationSource,
+    pub rotation_animation_source: FunctionSource,
     pub rotation_animation_function: AnimationFunction,
     pub rotation_animation_period: f32,
     pub rotation_animation_phase: f32,
@@ -102,7 +423,7 @@ pub enum DetailBitmapMask {
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
-pub enum AnimationSource {
+pub enum FunctionSource {
     None = 0,
     A = 1,
     B = 2,
@@ -141,17 +462,17 @@ impl Deserialize for ShaderModel {
         let detail_map = TagDependency::deserialize(data)?;
         let detail_map_v_scale = data.read_f32::<LittleEndian>()?;
         data.seek(SeekFrom::Start(start + 212))?;
-        let u_animation_source = AnimationSource::try_from(data.read_u16::<LittleEndian>()?)?;
+        let u_animation_source = FunctionSource::try_from(data.read_u16::<LittleEndian>()?)?;
         let u_animation_function = AnimationFunction::try_from(data.read_u16::<LittleEndian>()?)?;
         let u_animation_period = data.read_f32::<LittleEndian>()?;
         let u_animation_phase = data.read_f32::<LittleEndian>()?;
         let u_animation_scale = data.read_f32::<LittleEndian>()?;
-        let v_animation_source = AnimationSource::try_from(data.read_u16::<LittleEndian>()?)?;
+        let v_animation_source = FunctionSource::try_from(data.read_u16::<LittleEndian>()?)?;
         let v_animation_function = AnimationFunction::try_from(data.read_u16::<LittleEndian>()?)?;
         let v_animation_period = data.read_f32::<LittleEndian>()?;
         let v_animation_phase = data.read_f32::<LittleEndian>()?;
         let v_animation_scale = data.read_f32::<LittleEndian>()?;
-        let rotation_animation_source = AnimationSource::try_from(data.read_u16::<LittleEndian>()?)?;
+        let rotation_animation_source = FunctionSource::try_from(data.read_u16::<LittleEndian>()?)?;
         let rotation_animation_function = AnimationFunction::try_from(data.read_u16::<LittleEndian>()?)?;
         let rotation_animation_period = data.read_f32::<LittleEndian>()?;
         let rotation_animation_phase = data.read_f32::<LittleEndian>()?;

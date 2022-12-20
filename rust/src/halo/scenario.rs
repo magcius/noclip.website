@@ -6,19 +6,6 @@ use crate::halo::common::*;
 use crate::halo::util::*;
 use crate::halo::tag::*;
 
-#[derive(Debug, Clone)]
-pub struct Sky {
-    model: TagDependency,
-}
-
-impl Deserialize for Sky {
-    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        Ok(Sky {
-            model: TagDependency::deserialize(data)?,
-        })
-    }
-}
-
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u16)]
 pub enum ObjectType {
