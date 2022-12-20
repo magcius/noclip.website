@@ -242,7 +242,7 @@ const sceneDescs = [
     new PokemonHGSSSceneDesc("284", "Pokeathlon B1F Solidarity Room"),
     new PokemonHGSSSceneDesc("285", "Pokeathlon B1F Trust Room"),
     new PokemonHGSSSceneDesc("286", "Pokeathlon B1F Potential Room"),
-    new PokemonHGSSSceneDesc("287", "Pokéathlon B1F Friendship Room"),
+    new PokemonHGSSSceneDesc("287", "Pokeathlon B1F Friendship Room"),
     new PokemonHGSSSceneDesc("288", "Dragon's Den Dragon Shrine"),
     new PokemonHGSSSceneDesc("299", "Pokemon League Reception Gate"),
     new PokemonHGSSSceneDesc("301", "Elite Four Psychic Room"),
