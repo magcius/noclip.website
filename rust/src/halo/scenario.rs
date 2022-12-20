@@ -57,24 +57,41 @@ impl Deserialize for ObjectName {
 pub struct ScenarioScenery {
     pub scenery_type: u16,
     pub name_index: u16,
-    pub not_placed: u16,
-    pub desired_permutation: u16,
+    pub not_placed: u32,
     pub position: Point3D,
     pub rotation: Euler3D,
 }
 
 impl Deserialize for ScenarioScenery {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let scenery = ScenarioScenery {
-            scenery_type: data.read_u16::<LittleEndian>()?,
-            name_index: data.read_u16::<LittleEndian>()?,
-            not_placed: data.read_u16::<LittleEndian>()?,
-            desired_permutation: data.read_u16::<LittleEndian>()?,
-            position: Point3D::deserialize(data)?,
-            rotation: Euler3D::deserialize(data)?,
-        };
-        let _bsp_indices = data.read_u16::<LittleEndian>()?;
-        Ok(scenery)
+        let start = data.position();
+        let scenery_type = data.read_u16::<LittleEndian>()?;
+        let name_index = data.read_u16::<LittleEndian>()?;
+        let not_placed = data.read_u32::<LittleEndian>()?;
+        let position = Point3D::deserialize(data)?;
+        let rotation = Euler3D::deserialize(data)?;
+        let _appearance_player_index = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 72))?;
+        Ok(ScenarioScenery {
+            scenery_type,
+            name_index,
+            not_placed,
+            position,
+            rotation,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectSwatch {
+    pub obj: TagDependency,
+}
+
+impl Deserialize for ObjectSwatch {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let obj = TagDependency::deserialize(data)?;
+        data.seek(SeekFrom::Current(32))?;
+        Ok(ObjectSwatch { obj })
     }
 }
 
@@ -82,12 +99,12 @@ impl Deserialize for ScenarioScenery {
 pub struct Scenario {
     pub skies: Block<TagDependency>,
     pub scenery: Block<ScenarioScenery>,
-    pub scenery_palette: Block<TagDependency>,
+    pub scenery_palette: Block<ObjectSwatch>,
     pub light_fixtures: Block<ScenarioLightFixture>,
-    pub light_fixture_palette: Block<TagDependency>,
+    pub light_fixture_palette: Block<ObjectSwatch>,
     pub decals: Block<ScenarioDecal>,
-    pub decal_palette: Block<TagDependency>,
-    pub detail_object_collection_palette: Block<TagDependency>,
+    pub decal_palette: Block<ObjectSwatch>,
+    pub detail_object_collection_palette: Block<ObjectSwatch>,
     pub structure_bsp_references: Block<ScenarioStructureBSPReference>,
 }
 
@@ -98,14 +115,14 @@ impl Deserialize for Scenario {
         let skies: Block<TagDependency> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 528))?;
         let scenery: Block<ScenarioScenery> = Block::deserialize(data)?;
-        let scenery_palette: Block<TagDependency> = Block::deserialize(data)?;
+        let scenery_palette: Block<ObjectSwatch> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 708))?;
         let light_fixtures: Block<ScenarioLightFixture> = Block::deserialize(data)?;
-        let light_fixture_palette: Block<TagDependency> = Block::deserialize(data)?;
+        let light_fixture_palette: Block<ObjectSwatch> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 936))?;
         let decals: Block<ScenarioDecal> = Block::deserialize(data)?;
-        let decal_palette: Block<TagDependency> = Block::deserialize(data)?;
-        let detail_object_collection_palette: Block<TagDependency> = Block::deserialize(data)?;
+        let decal_palette: Block<ObjectSwatch> = Block::deserialize(data)?;
+        let detail_object_collection_palette: Block<ObjectSwatch> = Block::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 1444))?; // skip to BSPs
         let structure_bsps: Block<ScenarioStructureBSPReference> = Block::deserialize(data)?;
         Ok(Scenario {

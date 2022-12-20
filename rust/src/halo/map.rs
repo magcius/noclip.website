@@ -16,7 +16,7 @@ const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 pub struct MapManager {
     reader: MapReader,
     header: Header,
-    tag_index_header: TagIndexHeader,
+    pub tag_index_header: TagIndexHeader,
     bitmaps_reader: ResourceMapReader,
     bitmaps_header: ResourcesHeader,
     tag_headers: Vec<TagHeader>,
@@ -57,6 +57,15 @@ impl MapManager {
         Ok(buf)
     }
 
+    pub fn read_map_u16s(&mut self, offset: u64, length: usize) -> Result<Vec<u16>> {
+        self.reader.data.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0; length];
+        for i in 0..length {
+            buf[i] = self.reader.data.read_u16::<LittleEndian>()?;
+        }
+        Ok(buf)
+    }
+
     fn read_tag_at_offset(&mut self, tag_header: &TagHeader, offset: i64) -> Result<Tag> {
         let tag_pointer = offset + tag_header.tag_data as i64;
         if tag_pointer < 0 {
@@ -72,6 +81,8 @@ impl MapManager {
             },
             TagClass::Scenario => {
                 let mut scenario = Scenario::deserialize(&mut self.reader.data)?;
+                scenario.scenery.read_items(&mut self.reader.data, offset)?;
+                scenario.scenery_palette.read_items(&mut self.reader.data, offset)?;
                 scenario.structure_bsp_references.read_items(&mut self.reader.data, offset)?;
                 TagData::Scenario(scenario)
             },
@@ -93,7 +104,7 @@ impl MapManager {
                 TagData::ShaderModel(shader)
             },
             TagClass::Scenery => {
-                let scenery = Scenery::deserialize(&mut self.reader.data)?;
+                let mut scenery = Scenery::deserialize(&mut self.reader.data)?;
                 TagData::Scenery(scenery)
             },
             TagClass::Sky => {
@@ -332,8 +343,8 @@ impl Deserialize for Header {
     }
 }
 
-#[derive(Debug)]
-struct TagIndexHeader {
+#[derive(Debug, Clone)]
+pub struct TagIndexHeader {
     pub tag_count: u32,
     pub tag_array_pointer: Pointer,
     pub model_part_count: u32,
@@ -390,21 +401,39 @@ mod tests {
     #[test]
     fn test() {
         let mut mgr = MapManager::new(read_map("bloodgulch"), read_bitmaps()).unwrap();
-        for hdr in mgr.tag_headers.clone() {
-            if hdr.path == "scenery\\rocks\\boulder\\boulder" {
-                dbg!(&hdr.path);
-                let tag = mgr.read_tag(&hdr).unwrap();
-                let scenery = match tag.data {
-                    TagData::Scenery(s) => s.clone(),
-                    _ => unreachable!(),
-                };
-                let model_hdr = mgr.resolve_dependency(&scenery.model).unwrap();
-                let model = match mgr.read_tag(&model_hdr).unwrap().data {
-                    TagData::GbxModel(m) => m.clone(),
-                    _ => unreachable!(),
-                };
-                dbg!(mgr.read_tag(&mgr.resolve_dependency(&model.shaders.items.as_ref().unwrap()[0].shader).unwrap()));
-                break;
+        let tag_index_header = mgr.tag_index_header.clone();
+        let scenario = match mgr.get_scenario().unwrap().data {
+            TagData::Scenario(s) => s.clone(),
+            _ => unreachable!(),
+        };
+        for scenery in scenario.scenery.items.as_ref().unwrap().iter().take(2) {
+            dbg!(&scenery);
+        }
+        return;
+        for palette in scenario.scenery_palette.items.as_ref().unwrap().iter() {
+            let scenery_header = mgr.resolve_dependency(&palette.obj).unwrap();
+            let scenery_tag = mgr.read_tag(&scenery_header).unwrap();
+            dbg!(scenery_header.path);
+            let scenery = match scenery_tag.data {
+                TagData::Scenery(s) => s,
+                _ => unreachable!(),
+            };
+            let model_hdr = mgr.resolve_dependency(&scenery.model).unwrap();
+            let model_tag = mgr.read_tag(&model_hdr).unwrap();
+            let model = match model_tag.data {
+                TagData::GbxModel(m) => m.clone(),
+                _ => unreachable!(),
+            };
+            dbg!(&tag_index_header);
+            for geometry in model.geometries.items.as_ref().unwrap() {
+                for part in geometry.parts.items.as_ref().unwrap() {
+                    let offset = part.tri_offset + mgr.tag_index_header.model_data_file_offset + mgr.tag_index_header.vertex_data_size;
+                    let count = part.tri_count;
+                    let tris = mgr.read_map_u16s(offset as u64, count as usize).unwrap();
+                    dbg!(&tris);
+                    dbg!(count, tris.len());
+                    panic!();
+                }
             }
         }
     }

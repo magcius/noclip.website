@@ -41,13 +41,12 @@ pub struct GbxModelPart {
 impl Deserialize for GbxModelPart {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
         let start = data.position();
-        dbg!(start);
         data.seek(SeekFrom::Start(start + 4))?;
         let shader_index = data.read_u16::<LittleEndian>()?;
         data.seek(SeekFrom::Start(start + 20))?;
         let centroid = Point3D::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 72))?;
-        let tri_count = data.read_u32::<LittleEndian>()?;
+        let tri_count = data.read_u32::<LittleEndian>()? + 2; // it's always off by 2????
         let tri_offset = data.read_u32::<LittleEndian>()?;
         data.seek(SeekFrom::Start(start + 88))?;
         let vert_count = data.read_u32::<LittleEndian>()?;

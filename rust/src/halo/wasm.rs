@@ -64,8 +64,7 @@ pub struct HaloSceneryInstance {
 #[wasm_bindgen]
 impl HaloSceneryInstance {
     #[wasm_bindgen(getter)] pub fn scenery_type(&self) -> u16 { self.inner.scenery_type }
-    #[wasm_bindgen(getter)] pub fn not_placed(&self) -> u16 { self.inner.not_placed }
-    #[wasm_bindgen(getter)] pub fn desired_permutation(&self) -> u16 { self.inner.desired_permutation }
+    #[wasm_bindgen(getter)] pub fn not_placed(&self) -> u32 { self.inner.not_placed }
     #[wasm_bindgen(getter)] pub fn position(&self) -> Point3D { self.inner.position }
     #[wasm_bindgen(getter)] pub fn rotation(&self) -> Euler3D { self.inner.rotation }
 }
@@ -106,6 +105,10 @@ impl HaloModelPart {
     fn new(inner: &GbxModelPart) -> HaloModelPart {
         HaloModelPart { inner: inner.clone() }
     }
+
+    pub fn update_tri_count(&mut self, new_count: u32) {
+        self.inner.tri_count = new_count;
+    }
 }
 
 #[wasm_bindgen]
@@ -113,7 +116,7 @@ impl HaloModelPart {
 pub struct HaloShaderModel {
     inner: ShaderModel,
     path: String,
-    base_bitmap: Bitmap,
+    base_bitmap: Option<Bitmap>,
     multipurpose_map: Option<Bitmap>,
     detail_bitmap: Option<Bitmap>,
     reflection_cube_map: Option<Bitmap>,
@@ -155,12 +158,18 @@ impl HaloShaderModel {
     #[wasm_bindgen(getter)] pub fn perpendicular_tint_color(&self) -> ColorRGB { self.inner.perpendicular_tint_color }
     #[wasm_bindgen(getter)] pub fn parallel_brightness(&self) -> f32 { self.inner.parallel_brightness }
     #[wasm_bindgen(getter)] pub fn parallel_tint_color(&self) -> ColorRGB { self.inner.parallel_tint_color }
+    #[wasm_bindgen(getter)] pub fn has_base_bitmap(&self) -> bool { self.base_bitmap.is_some() }
     #[wasm_bindgen(getter)] pub fn has_detail_bitmap(&self) -> bool { self.detail_bitmap.is_some() }
     #[wasm_bindgen(getter)] pub fn has_multipurpose_map(&self) -> bool { self.multipurpose_map.is_some() }
     #[wasm_bindgen(getter)] pub fn has_reflection_cube_map(&self) -> bool { self.reflection_cube_map.is_some() }
 
-    pub fn get_base_bitmap(&self) -> HaloBitmap {
-        HaloBitmap::new(self.base_bitmap.clone())
+    pub fn get_base_bitmap(&self) -> Option<HaloBitmap> {
+        self.base_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+    pub fn get_detail_bitmap(&self) -> Option<HaloBitmap> {
+        self.detail_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
     }
     pub fn get_multipurpose_map(&self) -> Option<HaloBitmap> {
         self.multipurpose_map.as_ref()
@@ -332,11 +341,15 @@ impl HaloSceneManager {
         for model_shader in model.inner.shaders.items.as_ref().unwrap() {
             // FIXME do we need the permutation value?
             let shader_header = self.mgr.resolve_dependency(&model_shader.shader).unwrap();
+            if shader_header.primary_class != TagClass::ShaderModel {
+                result.push(&JsValue::NULL);
+                continue;
+            }
             let shader_tag = self.mgr.read_tag(&shader_header).unwrap();
             match shader_tag.data {
                 TagData::ShaderModel(s) => {
                     result.push(&JsValue::from(HaloShaderModel {
-                        base_bitmap: self.resolve_bitmap_dependency(&s.base_map).unwrap(),
+                        base_bitmap: self.resolve_bitmap_dependency(&s.base_map),
                         detail_bitmap: self.resolve_bitmap_dependency(&s.detail_map),
                         multipurpose_map: self.resolve_bitmap_dependency(&s.multipurpose_map),
                         reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
@@ -345,6 +358,16 @@ impl HaloSceneManager {
                     }));
                 },
                 _ => unreachable!(),
+            }
+        }
+        result
+    }
+
+    pub fn get_model_parts(&mut self, model: &HaloModel) -> Array {
+        let result = Array::new();
+        for geometry in model.inner.geometries.items.as_ref().unwrap() {
+            for part in geometry.parts.items.as_ref().unwrap() {
+                result.push(&JsValue::from(HaloModelPart::new(part)));
             }
         }
         result
@@ -362,8 +385,8 @@ impl HaloSceneManager {
             _ => unreachable!(),
         };
         let palette = Array::new();
-        for dependency in scenario.scenery_palette.items.as_ref().unwrap() {
-            let scenery_header = self.mgr.resolve_dependency(&dependency).unwrap();
+        for palette_entry in scenario.scenery_palette.items.as_ref().unwrap() {
+            let scenery_header = self.mgr.resolve_dependency(&palette_entry.obj).unwrap();
             let scenery_tag = self.mgr.read_tag(&scenery_header).unwrap();
             match scenery_tag.data {
                 TagData::Scenery(s) => palette.push(&JsValue::from(HaloScenery::new(&s))),
@@ -411,6 +434,20 @@ impl HaloSceneManager {
         lightmap.inner.materials.items.as_ref().unwrap().iter()
             .map(|material| JsValue::from(HaloMaterial::new(material)))
             .collect()
+    }
+
+    pub fn get_model_part_indices(&mut self, part: &HaloModelPart) -> Uint16Array {
+        let offset = part.inner.tri_offset + self.mgr.tag_index_header.model_data_file_offset + self.mgr.tag_index_header.vertex_data_size;
+        let count = part.inner.tri_count;
+        let tri_data = self.mgr.read_map_u16s(offset as u64, count as usize).unwrap();
+        Uint16Array::from(&tri_data[..])
+    }
+
+    pub fn get_model_part_vertices(&mut self, part: &HaloModelPart) -> Vec<u8> {
+        let offset = part.inner.vert_offset + self.mgr.tag_index_header.model_data_file_offset;
+        let count = part.inner.vert_count;
+        let item_size = 68;
+        self.mgr.read_map_bytes(offset as u64, item_size * count as usize).unwrap()
     }
 
     pub fn get_bsp_indices(&self, bsp: &HaloBSP) -> Vec<u16> {
