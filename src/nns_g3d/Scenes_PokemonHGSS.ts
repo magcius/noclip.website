@@ -323,4 +323,4 @@ const sceneDescs = [
     new PokemonHGSSSceneDesc("545", "???", false),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, altName: "Pokemon HeartGold SoulSilver HGSS" };
