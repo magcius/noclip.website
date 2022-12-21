@@ -1,13 +1,13 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric } from '../../rust/pkg/index';
+import { HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
 import { CameraController } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -20,18 +20,13 @@ import { TextureMapping } from '../TextureHolder';
 import { assert } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 /**
- * notes:
- *   * mipmaps not working up to 8, seems to be invalid sized BC1 maps
- * 
  * todo:
- *   * models
- *     * skyboxes
  *   * decals/glowing elements/purple textures
- *   * garbage collection
- *   * implement some kinda tag cache (for textures mostly)
- *   * implement default textures based on globals.globals (to fix specular reflection)
+ *   * fog
+ *   * water
  */
 
 const noclipSpaceFromHaloSpace = mat4.fromValues(
@@ -146,28 +141,33 @@ void mainVS() {
 ${BaseShaderProgram.header}
 
 void mainPS() {
-    gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+    //gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+    discard;
 }
 `;
 }
 
 class ShaderTransparencyGenericProgram extends BaseShaderProgram {
-    constructor(public shader: HaloShaderTransparencyChicago) {
+    constructor(public shader: HaloShaderTransparencyGeneric) {
         super()
-        //this.frag = this.generateFragSection();
+        this.frag = this.generateFragSection();
     }
 
     private generateFragSection(): string {
-        const fragBody: string[] = [
-            `vec4 t0 = texture(SAMPLER_2D(u_Texture), u_UV);`,
-            `vec4 t1 = texture(SAMPLER_2D(u_Lightmap), u_UV);`,
-            `vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), u_UV);`,
-            `vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), u_UV);`,
-        ];
-
+        const fragBody: string[] = [];
         if (this.shader.first_map_type !== _wasm!.ShaderTransparentGenericMapType.Map2D) {
-            console.log('cube!!!');
+            fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture), v_UV);`);
+        } else {
+            fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
+            fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_ReflectionCubeMap), t_EyeWorld);`);
         }
+        
+        fragBody.push(`
+vec4 t1 = texture(SAMPLER_2D(u_Lightmap), v_UV);
+vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), v_UV);
+vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), v_UV);
+gl_FragColor = t0;
+`);
 
         return `
 ${BaseShaderProgram.header}
@@ -182,6 +182,77 @@ ${fragBody.join('\n')}
 class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
     constructor(public shader: HaloShaderTransparencyChicago) {
         super()
+        this.frag = this.generateFragSection();
+    }
+
+    private vec2Literal(x: number, y: number): string {
+        return `vec2(${x.toFixed(8)}, ${y.toFixed(8)})`;
+    }
+
+    private getMapUVTransform(map: HaloShaderTransparentChicagoMap): string {
+        let scale, offset;
+        if (map) {
+            scale = this.vec2Literal(map.map_u_scale, map.map_v_scale);
+            offset = this.vec2Literal(map.map_u_offset, map.map_v_offset);
+        } else {
+            scale = this.vec2Literal(0, 0);
+            offset = this.vec2Literal(0, 0);
+        }
+        return `v_UV * ${scale} + ${offset}`;
+    }
+
+    private getColorFunction(out: string, current: string, next: string, fn: ShaderTransparentChicagoColorFunction): string {
+        switch (fn) {
+            case _wasm!.ShaderTransparentChicagoColorFunction.Current:
+                return ``;
+            case _wasm!.ShaderTransparentChicagoColorFunction.NextMap:
+                return `${out} = ${next};`
+            case _wasm!.ShaderTransparentChicagoColorFunction.Multiply:
+                return `${out} = ${current} * ${next};`;
+            case _wasm!.ShaderTransparentChicagoColorFunction.DoubleMultiply:
+                return `${next} = 2.0 * ${current} * ${next};`;
+            case _wasm!.ShaderTransparentChicagoColorFunction.Add:
+                return `${out} = ${current} + ${next};`;
+            default:
+                throw new Error(`unrecognized ShaderTransparentChicagoColorFunction ${fn}`)
+        }
+    }
+
+    private generateFragSection(): string {
+        const maps = [];
+        for (let i=0; i<4; i++) {
+            const map = this.shader.get_map(i);
+            if (map) {
+                maps.push(map);
+            }
+        }
+        const fragBody: string[] = [
+            `vec4 t0 = texture(SAMPLER_2D(u_Texture), ${this.getMapUVTransform(maps[0])});`,
+            `vec4 t1 = texture(SAMPLER_2D(u_Lightmap), ${this.getMapUVTransform(maps[1])});`,
+            `vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), ${this.getMapUVTransform(maps[2])});`,
+            `vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), ${this.getMapUVTransform(maps[3])});`,
+        ];
+
+        fragBody.push(`vec4 scratch;`)
+        fragBody.push(`vec4 current = t0;`)
+        fragBody.push(`vec4 next;`)
+
+        maps.forEach((map, i) => {
+            fragBody.push(`next = t${i+1};`)
+            fragBody.push(this.getColorFunction('scratch.rgb', 'current.rgb', 'next.rgb', map.color_function));
+            fragBody.push(this.getColorFunction('scratch.a', 'current.a', 'next.a', map.color_function));
+            fragBody.push(`current = scratch;`)
+        })
+
+        fragBody.push(`gl_FragColor = current;`)
+
+        return `
+${BaseShaderProgram.header}
+
+void mainPS() {
+${fragBody.join('\n')}
+}
+`;
     }
 }
 
@@ -540,12 +611,18 @@ class ModelRenderer {
     }
 
     private setupShaderTransparencyGeneric(shader: HaloShaderTransparencyGeneric, renderHelper: GfxRenderHelper) {
-        this.textureMappings.push([
-            null, // this.textureCache.getTextureMapping(shader.get_bitmap(0)),
-            null, // this.textureCache.getTextureMapping(shader.get_bitmap(1)),
-            null, // this.textureCache.getTextureMapping(shader.get_bitmap(2)),
-            null, // this.textureCache.getTextureMapping(shader.get_bitmap(3)),
-        ]);
+        const mappings = [
+            null,
+            this.textureCache.getTextureMapping(shader.get_bitmap(1)),
+            this.textureCache.getTextureMapping(shader.get_bitmap(2)),
+            this.textureCache.getTextureMapping(shader.get_bitmap(3)),
+        ];
+        if (shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
+            mappings[0] = this.textureCache.getTextureMapping(shader.get_bitmap(0));
+        } else {
+            mappings[6] = this.textureCache.getTextureMapping(shader.get_bitmap(0));
+        }
+        this.textureMappings.push(mappings);
         this.programs.push(renderHelper.renderCache.createProgram(new ShaderTransparencyGenericProgram(shader)));
     }
 
@@ -618,9 +695,20 @@ class ModelRenderer {
             if (!this.programs[part.shader_index]) {
                 return;
             }
+            const shader = this.shaders[part.shader_index];
 
             const renderInst = renderInstManager.newRenderInst();
             renderInst.setGfxProgram(this.programs[part.shader_index]!);
+
+            if (shader instanceof _wasm!.HaloShaderTransparencyChicago || shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
+                const megaStateFlags = { depthWrite: false };
+                setAttachmentStateSimple(megaStateFlags, {
+                    blendMode: GfxBlendMode.Add,
+                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+                });
+                renderInst.setMegaStateFlags(megaStateFlags);
+            }
 
             offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
             mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
@@ -744,6 +832,8 @@ class LightmapMaterialRenderer {
     public perpendicularColor: vec4;
     public parallelColor: vec4;
     public modelMatrix: mat4;
+    public numIndices: number;
+    public indexOffset: number;
 
     constructor(device: GfxDevice, public textureCache: TextureCache, public material: HaloMaterial, public inputLayout: GfxInputLayout, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer, public lightmapMapping: TextureMapping | null, public bspIndex: number) {
         this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, this.bsp).buffer);
@@ -768,6 +858,8 @@ class LightmapMaterialRenderer {
         }
         const renderHelper = new GfxRenderHelper(device);
         this.program = renderHelper.renderCache.createProgram(new ShaderEnvironmentProgram(this.shader, !!this.lightmapMapping));
+        this.numIndices = this.material.get_num_indices();
+        this.indexOffset = this.material.get_index_offset();
 
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertsBuf, byteOffset: 0 },
@@ -803,10 +895,9 @@ class LightmapMaterialRenderer {
             this.secondaryDetailMapping,
             this.microDetailMapping,
             this.reflectionCubeMapping,
-            null,
         ])
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.material.get_num_indices(), this.material.get_index_offset());
+        renderInst.drawIndexes(this.numIndices, this.indexOffset);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }

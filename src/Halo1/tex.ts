@@ -97,6 +97,17 @@ function convertP8Data(p8Data: Uint8Array): Uint8Array {
     return result;
 }
 
+function convertA8R8G8B8Data(input: Uint8Array) {
+    const result = new Uint8Array(input.length);
+    for (let i=0; i<input.byteLength; i+=4) {
+        result[i+0] = input[i + 2];
+        result[i+1] = input[i + 1];
+        result[i+2] = input[i + 0];
+        result[i+3] = input[i + 3];
+    }
+    return result;
+}
+
 function convertA8Data(input: Uint8Array): Uint8Array {
     const result = new Uint8Array(input.byteLength * 4);
     for (let i=0; i<input.byteLength; i++) {
@@ -128,6 +139,8 @@ function getAndConvertBitmap(mgr: HaloSceneManager, bitmap: HaloBitmap, submap =
         bitmapData = convertA8Data(bitmapData);
     } else if (bitmapMetadata.format === wasm().BitmapFormat.Y8) {
         bitmapData = convertY8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8r8g8b8) {
+        bitmapData = convertA8R8G8B8Data(bitmapData);
     }
     return [bitmapMetadata, bitmapData];
 }

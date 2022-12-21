@@ -190,6 +190,10 @@ impl HaloShaderTransparencyChicago {
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
         self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
     }
+
+    pub fn get_map(&self, i: usize) -> Option<HaloShaderTransparentChicagoMap> {
+        self.maps.get(i).cloned()
+    }
 }
 
 #[wasm_bindgen]
