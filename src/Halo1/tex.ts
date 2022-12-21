@@ -1,8 +1,9 @@
 import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap } from "../../rust/pkg";
 import { TextureMapping } from "../TextureHolder";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { GfxDevice, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
-import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { wasm } from "./scenes";
 
 const P8Palette = [
@@ -54,6 +55,7 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
         case wasm().BitmapFormat.Dxt5: return GfxFormat.BC3;
         case wasm().BitmapFormat.X8r8g8b8: return GfxFormat.U8_RGBA_NORM;
         case wasm().BitmapFormat.A8r8g8b8: return GfxFormat.U8_RGBA_NORM;
+        case wasm().BitmapFormat.A8: return GfxFormat.U8_RGBA_NORM;
         case wasm().BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
         case wasm().BitmapFormat.P8: return GfxFormat.U8_RGBA_NORM;
         case wasm().BitmapFormat.P8Bump: return GfxFormat.U8_RGBA_NORM;
@@ -99,16 +101,29 @@ function convertP8Data(p8Data: Uint8Array): Uint8Array {
     return result;
 }
 
+function convertA8Data(input: Uint8Array): Uint8Array {
+    const result = new Uint8Array(input.byteLength * 4);
+    for (let i=0; i<input.byteLength; i++) {
+        result[4*i+0] = 0xFF;
+        result[4*i+1] = 0xFF;
+        result[4*i+2] = 0xFF;
+        result[4*i+3] = input[i];
+    }
+    return result;
+}
+
 function getAndConvertBitmap(mgr: HaloSceneManager, bitmap: HaloBitmap, submap = 0): [HaloBitmapMetadata, Uint8Array] {
     const bitmapMetadata = bitmap.get_metadata_for_index(submap);
     let bitmapData = mgr.get_bitmap_data(bitmap, submap);
     if (bitmapMetadata.format === wasm().BitmapFormat.P8 || bitmapMetadata.format === wasm().BitmapFormat.P8Bump) {
         bitmapData = convertP8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8) {
+        bitmapData = convertA8Data(bitmapData);
     }
     return [bitmapMetadata, bitmapData];
 }
 
-export function makeTexture(device: GfxDevice, gfxSampler: GfxSampler, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): TextureMapping {
+export function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): GfxTexture {
     const [bitmapMetadata, bitmapData] = getAndConvertBitmap(mgr, bitmap, submap);
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const mipmapCount = Math.max(bitmapMetadata.mipmap_count, 1);
@@ -142,8 +157,48 @@ export function makeTexture(device: GfxDevice, gfxSampler: GfxSampler, bitmap: H
         }
     }
     device.uploadTextureData(texture, 0, mips);
-    const mapping = new TextureMapping();
-    mapping.gfxSampler = gfxSampler;
-    mapping.gfxTexture = texture;
-    return mapping
+    return texture;
+}
+
+export class TextureCache {
+    public textures: Map<[number, number], GfxTexture>;
+    public default2DTexture: GfxTexture;
+
+    constructor(public device: GfxDevice, public gfxSampler: GfxSampler, public mgr: HaloSceneManager) {
+        this.textures = new Map();
+        this.default2DTexture = makeSolidColorTexture2D(this.device, {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+            a: 1.0,
+        });
+    }
+
+    public getTexture(bitmap: HaloBitmap | undefined, submap = 0): GfxTexture {
+        if (!bitmap) {
+            return this.default2DTexture;
+        }
+        const key: [number, number] = [bitmap.get_tag_id(), submap];
+        if (this.textures.has(key)) {
+            return this.textures.get(key)!;
+        } else {
+            const texture = makeTexture(this.device, bitmap, this.mgr, submap);
+            this.textures.set(key, texture);
+            return texture;
+        }
+    }
+
+    public getTextureMapping(bitmap: HaloBitmap | undefined, submap = 0): TextureMapping {
+        const mapping = new TextureMapping();
+        mapping.gfxTexture = this.getTexture(bitmap, submap);
+        mapping.gfxSampler = this.gfxSampler;
+        return mapping;
+    }
+
+    public destroy(device: GfxDevice) {
+        device.destroyTexture(this.default2DTexture);
+        for (let tex of this.textures.values()) {
+            device.destroyTexture(tex);
+        }
+    }
 }

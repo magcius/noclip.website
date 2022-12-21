@@ -1,5 +1,6 @@
 use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
 
+use js_sys::Function;
 use wasm_bindgen::prelude::*;
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;
@@ -25,7 +26,7 @@ pub struct ShaderTransparentChicago {
     pub lens_flare_spacing: f32,
     pub lens_flare: TagDependency,
     pub extra_layers: Block<TagDependency>, // only chicago transparent shaders allowed here
-    pub maps: Block<ShaderTransparentChicagoMap>,
+    pub maps: Block<ShaderTransparentChicagoMap>, // max of 4
 }
 
 impl Deserialize for ShaderTransparentChicago {
@@ -54,7 +55,8 @@ impl Deserialize for ShaderTransparentChicago {
     }
 }
 
-#[derive(Debug, Clone, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, TryFromPrimitive)]
 #[repr(u16)]
 pub enum ShaderTransparentChicagoColorFunction {
     Current = 0,
@@ -182,9 +184,9 @@ pub struct ShaderTransparentGeneric {
     pub framebuffer_fade_source: FunctionSource,
     pub lens_flare_spacing: f32,
     pub lens_flare: TagDependency,
-    pub extra_layers: Block<TagDependency>,
-    pub maps: Block<ShaderTransparentGenericMap>,
-    // TODO stages?
+    pub extra_layers: Block<TagDependency>, // max of 4
+    pub maps: Block<ShaderTransparentGenericMap>, // max of 4
+    pub stages: Block<ShaderTransparentGenericStage>, // max of 7
 }
 
 impl Deserialize for ShaderTransparentGeneric {
@@ -208,8 +210,8 @@ impl Deserialize for ShaderTransparentGeneric {
         let lens_flare = TagDependency::deserialize(data)?;
         let extra_layers: Block<TagDependency> = Block::deserialize(data)?;
         let maps: Block<ShaderTransparentGenericMap> = Block::deserialize(data)?;
-        data.seek(SeekFrom::Start(start + 64))?;
-        Ok(ShaderTransparentGeneric { radiosity_flags, radiosity_detail_level, radiosity_light_power, radiosity_light_color, radiosity_tint_color, numeric_counter_limit, flags, first_map_type, framebuffer_blend_function, framebuffer_fade_mode, framebuffer_fade_source, lens_flare_spacing, lens_flare, extra_layers, maps })
+        let stages: Block<ShaderTransparentGenericStage> = Block::deserialize(data)?;
+        Ok(ShaderTransparentGeneric { radiosity_flags, radiosity_detail_level, radiosity_light_power, radiosity_light_color, radiosity_tint_color, numeric_counter_limit, flags, first_map_type, framebuffer_blend_function, framebuffer_fade_mode, framebuffer_fade_source, lens_flare_spacing, lens_flare, extra_layers, maps, stages })
     }
 }
 
@@ -298,7 +300,195 @@ impl Deserialize for ShaderTransparentGenericMap {
     }
 }
 
-#[derive(Debug, Clone, TryFromPrimitive)]
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentGenericStage {
+    pub flags: u16,
+    pub color0_source: FunctionSource,
+    pub color0_animation_function: AnimationFunction,
+    pub color0_animation_period: f32,
+    pub color0_animation_lower_bound: ColorARGB,
+    pub color1: ColorARGB,
+    pub input_a: ShaderInput,
+    pub input_a_mapping: ShaderMapping,
+    pub input_b: ShaderInput,
+    pub input_b_mapping: ShaderMapping,
+    pub input_c: ShaderInput,
+    pub input_c_mapping: ShaderMapping,
+    pub input_d: ShaderInput,
+    pub input_d_mapping: ShaderMapping,
+    pub output_ab: ShaderOutput,
+    pub output_ab_function: ShaderOutputFunction,
+    pub output_bc: ShaderOutput,
+    pub output_cd_function: ShaderOutputFunction,
+    pub output_ab_cd_mux_sum: ShaderOutput,
+    pub output_mapping_color: ShaderOutputMappingColor,
+    pub input_a_alpha: ShaderAlphaInput,
+    pub input_a_mapping_alpha: ShaderMapping, 
+    pub input_b_alpha: ShaderAlphaInput,
+    pub input_b_mapping_alpha: ShaderMapping, 
+    pub input_c_alpha: ShaderAlphaInput,
+    pub input_c_mapping_alpha: ShaderMapping, 
+    pub input_d_alpha: ShaderAlphaInput,
+    pub input_d_mapping_alpha: ShaderMapping, 
+    pub output_ab_alpha: ShaderOutput,
+    pub output_cd_alpha: ShaderOutput,
+    pub output_ab_cd_mux_sum_alpha: ShaderOutput,
+    pub output_mapping_alpha: ShaderOutputMappingColor,
+}
+
+impl Deserialize for ShaderTransparentGenericStage {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let start = data.position();
+        let flags = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Start(start + 4))?;
+        let color0_source = FunctionSource::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let color0_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let color0_animation_period = data.read_f32::<LittleEndian>()?;
+        let color0_animation_lower_bound = ColorARGB::deserialize(data)?;
+        let color1 = ColorARGB::deserialize(data)?;
+        let input_a = ShaderInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_a_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_b = ShaderInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_b_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_c = ShaderInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_c_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_d = ShaderInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_d_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_ab = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_ab_function = ShaderOutputFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_bc = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_cd_function = ShaderOutputFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_ab_cd_mux_sum = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_mapping_color = ShaderOutputMappingColor::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_a_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_a_mapping_alpha = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_b_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_b_mapping_alpha = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_c_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_c_mapping_alpha = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_d_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let input_d_mapping_alpha = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_ab_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_cd_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_ab_cd_mux_sum_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_mapping_alpha = ShaderOutputMappingColor::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        Ok(ShaderTransparentGenericStage { flags, color0_source, color0_animation_function, color0_animation_period, color0_animation_lower_bound, color1, input_a, input_a_mapping, input_b, input_b_mapping, input_c, input_c_mapping, input_d, input_d_mapping, output_ab, output_ab_function, output_bc, output_cd_function, output_ab_cd_mux_sum, output_mapping_color, input_a_alpha, input_a_mapping_alpha, input_b_alpha, input_b_mapping_alpha, input_c_alpha, input_c_mapping_alpha, input_d_alpha, input_d_mapping_alpha, output_ab_alpha, output_cd_alpha, output_ab_cd_mux_sum_alpha, output_mapping_alpha })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderAlphaInput {
+    Zero = 0,
+    One = 1,
+    OneHalf = 2,
+    NegativeOne = 3,
+    NegativeOneHalf = 4,
+    Texture0Alpha = 5,
+    Texture1Alpha = 6,
+    Texture2Alpha = 7,
+    Texture3Alpha = 8,
+    VertexColor0Alpha = 9,
+    VertexColor1Alpha = 10,
+    Scratch0Alpha = 11,
+    Scratch1Alpha = 12,
+    Constant0Alpha = 13,
+    Constant1Alpha = 14,
+    Texture0Blue = 15,
+    Texture1Blue = 16,
+    Texture2Blue = 17,
+    Texture3Blue = 18,
+    Vertexcolor0Blue = 19,
+    Vertexcolor1Blue = 20,
+    Scratch0Blue = 21,
+    Scratch1Blue = 22,
+    Constant0Blue = 23,
+    Constant1Blue = 24,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderOutputMappingColor {
+    ColorIdentity = 0,
+    ColorScaleByHalf = 1,
+    ColorScaleByTwo = 2,
+    ColorScaleByFour = 3,
+    ColorBiasByHalf = 4,
+    ColorExpandNormal = 5,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderOutputFunction {
+    Multiply = 0,
+    DotProduct = 1,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderOutput {
+    AlphaDiscard = 0,
+    AlphaScratchAlpha0FinalAlpha = 1,
+    AlphaScratchAlpha1 = 2,
+    AlphaVertexAlpha0Fog = 3,
+    AlphaVertexAlpha1 = 4,
+    AlphaMapAlpha0 = 5,
+    AlphaMapAlpha1 = 6,
+    AlphaMapAlpha2 = 7,
+    AlphaMapAlpha3 = 8,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderMapping {
+    UnsignedIdentity = 0,
+    UnsignedInvert = 1,
+    ExpandNormal = 2,
+    ExpandNegate = 3,
+    HalfbiasNormal = 4,
+    HalfbiasNegate = 5,
+    SignedIdentity = 6,
+    SignedNegate = 7,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderInput {
+    Zero = 0x0,
+    One = 0x1,
+    OneHalf = 0x2,
+    NegativeOne = 0x3,
+    NegativeOneHalf = 0x4,
+    MapColor0 = 0x5,
+    MapColor1 = 0x6,
+    MapColor2 = 0x7,
+    MapColor3 = 0x8,
+    VertexColor0DiffuseLight = 0x9,
+    VertexColor1FadePerpendicular = 0xA,
+    ScratchColor0 = 0xB,
+    ScratchColor1 = 0xC,
+    ConstantColor0 = 0xD,
+    ConstantColor1 = 0xE,
+    MapAlpha0 = 0xF,
+    MapAlpha1 = 0x10,
+    MapAlpha2 = 0x11,
+    MapAlpha3 = 0x12,
+    VertexAlpha0FadeNone = 0x13,
+    VertexAlpha0FadePerpendicular = 0x14,
+    ScratchAlpha0 = 0x15,
+    ScratchAlpha1 = 0x16,
+    ConstantAlpha0 = 0x17,
+    ConstantAlpha1 = 0x18,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum FramebufferFadeMode {
     None = 0,
@@ -306,7 +496,8 @@ pub enum FramebufferFadeMode {
     FadeWhenParallel = 2,
 }
 
-#[derive(Debug, Clone, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum FramebufferBlendFunction {
     AlphaBlend = 0,
@@ -319,7 +510,8 @@ pub enum FramebufferBlendFunction {
     AlphaMultiplyAdd = 7,
 }
 
-#[derive(Debug, Clone, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum ShaderTransparentGenericMapType {
     Map2D = 0,
@@ -328,7 +520,8 @@ pub enum ShaderTransparentGenericMapType {
     ViewerCenteredCubeMap = 3,
 }
 
-#[derive(Debug, Clone, TryFromPrimitive)]
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum RadiosityDetailLevel {
     High = 0,

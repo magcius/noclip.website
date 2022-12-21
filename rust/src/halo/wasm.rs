@@ -21,6 +21,20 @@ pub struct HaloSceneManager {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
+pub struct HaloSky {
+    inner: Sky,
+    model: GbxModel,
+}
+
+#[wasm_bindgen]
+impl HaloSky {
+    pub fn get_model(&self) -> HaloModel {
+        HaloModel { inner: self.model.clone() }
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct HaloMaterial {
     inner: BSPMaterial,
 }
@@ -113,9 +127,132 @@ impl HaloModelPart {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
+pub struct HaloShaderTransparentChicagoMap {
+    inner: ShaderTransparentChicagoMap,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparentChicagoMap {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn color_function(&self) -> ShaderTransparentChicagoColorFunction { self.inner.color_function }
+    #[wasm_bindgen(getter)] pub fn alpha_function(&self) -> ShaderTransparentChicagoColorFunction { self.inner.alpha_function }
+    #[wasm_bindgen(getter)] pub fn map_u_scale(&self) -> f32 { self.inner.map_u_scale }
+    #[wasm_bindgen(getter)] pub fn map_v_scale(&self) -> f32 { self.inner.map_v_scale }
+    #[wasm_bindgen(getter)] pub fn map_u_offset(&self) -> f32 { self.inner.map_u_offset }
+    #[wasm_bindgen(getter)] pub fn map_v_offset(&self) -> f32 { self.inner.map_v_offset }
+    #[wasm_bindgen(getter)] pub fn map_rotation(&self) -> f32 { self.inner.map_rotation }
+    #[wasm_bindgen(getter)] pub fn mipmap_bias(&self) -> f32 { self.inner.mipmap_bias }
+    #[wasm_bindgen(getter)] pub fn u_animation_source(&self) -> FunctionSource { self.inner.u_animation_source }
+    #[wasm_bindgen(getter)] pub fn u_animation_function(&self) -> AnimationFunction { self.inner.u_animation_function }
+    #[wasm_bindgen(getter)] pub fn u_animation_period(&self) -> f32 { self.inner.u_animation_period }
+    #[wasm_bindgen(getter)] pub fn u_animation_phase(&self) -> f32 { self.inner.u_animation_phase }
+    #[wasm_bindgen(getter)] pub fn u_animation_scale(&self) -> f32 { self.inner.u_animation_scale }
+    #[wasm_bindgen(getter)] pub fn v_animation_source(&self) -> FunctionSource { self.inner.v_animation_source }
+    #[wasm_bindgen(getter)] pub fn v_animation_function(&self) -> AnimationFunction { self.inner.v_animation_function }
+    #[wasm_bindgen(getter)] pub fn v_animation_period(&self) -> f32 { self.inner.v_animation_period }
+    #[wasm_bindgen(getter)] pub fn v_animation_phase(&self) -> f32 { self.inner.v_animation_phase }
+    #[wasm_bindgen(getter)] pub fn v_animation_scale(&self) -> f32 { self.inner.v_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_source(&self) -> FunctionSource { self.inner.rotation_animation_source }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_function(&self) -> AnimationFunction { self.inner.rotation_animation_function }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_period(&self) -> f32 { self.inner.rotation_animation_period }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_phase(&self) -> f32 { self.inner.rotation_animation_phase }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_scale(&self) -> f32 { self.inner.rotation_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_center(&self) -> Point2D { self.inner.rotation_animation_center }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderTransparencyChicago {
+    inner: ShaderTransparentChicago,
+    maps: Vec<HaloShaderTransparentChicagoMap>,
+    bitmaps: Vec<Bitmap>,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparencyChicago {
+    #[wasm_bindgen(getter)] pub fn radiosity_flags(&self) -> u16 { self.inner.radiosity_flags }
+    #[wasm_bindgen(getter)] pub fn radiosity_detail_level(&self) -> RadiosityDetailLevel { self.inner.radiosity_detail_level }
+    #[wasm_bindgen(getter)] pub fn radiosity_light_power(&self) -> f32 { self.inner.radiosity_light_power }
+    #[wasm_bindgen(getter)] pub fn radiosity_light_color(&self) -> ColorRGB { self.inner.radiosity_light_color }
+    #[wasm_bindgen(getter)] pub fn radiosity_tint_color(&self) -> ColorRGB { self.inner.radiosity_tint_color }
+    #[wasm_bindgen(getter)] pub fn numeric_counter_limit(&self) -> u8 { self.inner.numeric_counter_limit }
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u8 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn first_map_type(&self) -> ShaderTransparentGenericMapType { self.inner.first_map_type }
+    #[wasm_bindgen(getter)] pub fn framebuffer_blend_function(&self) -> FramebufferBlendFunction { self.inner.framebuffer_blend_function }
+    #[wasm_bindgen(getter)] pub fn framebuffer_fade_mode(&self) -> FramebufferFadeMode { self.inner.framebuffer_fade_mode }
+    #[wasm_bindgen(getter)] pub fn framebuffer_fade_source(&self) -> FunctionSource { self.inner.framebuffer_fade_source }
+    #[wasm_bindgen(getter)] pub fn lens_flare_spacing(&self) -> f32 { self.inner.lens_flare_spacing }
+
+    pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
+        self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderTransparentGenericMap {
+    inner: ShaderTransparentGenericMap,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparentGenericMap {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn map_u_scale(&self) -> f32 { self.inner.map_u_scale }
+    #[wasm_bindgen(getter)] pub fn map_v_scale(&self) -> f32 { self.inner.map_v_scale }
+    #[wasm_bindgen(getter)] pub fn map_u_offset(&self) -> f32 { self.inner.map_u_offset }
+    #[wasm_bindgen(getter)] pub fn map_v_offset(&self) -> f32 { self.inner.map_v_offset }
+    #[wasm_bindgen(getter)] pub fn map_rotation(&self) -> f32 { self.inner.map_rotation }
+    #[wasm_bindgen(getter)] pub fn mipmap_bias(&self) -> f32 { self.inner.mipmap_bias }
+    #[wasm_bindgen(getter)] pub fn u_animation_source(&self) -> FunctionSource { self.inner.u_animation_source }
+    #[wasm_bindgen(getter)] pub fn u_animation_function(&self) -> AnimationFunction { self.inner.u_animation_function }
+    #[wasm_bindgen(getter)] pub fn u_animation_period(&self) -> f32 { self.inner.u_animation_period }
+    #[wasm_bindgen(getter)] pub fn u_animation_phase(&self) -> f32 { self.inner.u_animation_phase }
+    #[wasm_bindgen(getter)] pub fn u_animation_scale(&self) -> f32 { self.inner.u_animation_scale }
+    #[wasm_bindgen(getter)] pub fn v_animation_source(&self) -> FunctionSource { self.inner.v_animation_source }
+    #[wasm_bindgen(getter)] pub fn v_animation_function(&self) -> AnimationFunction { self.inner.v_animation_function }
+    #[wasm_bindgen(getter)] pub fn v_animation_period(&self) -> f32 { self.inner.v_animation_period }
+    #[wasm_bindgen(getter)] pub fn v_animation_phase(&self) -> f32 { self.inner.v_animation_phase }
+    #[wasm_bindgen(getter)] pub fn v_animation_scale(&self) -> f32 { self.inner.v_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_source(&self) -> FunctionSource { self.inner.rotation_animation_source }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_function(&self) -> AnimationFunction { self.inner.rotation_animation_function }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_period(&self) -> f32 { self.inner.rotation_animation_period }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_phase(&self) -> f32 { self.inner.rotation_animation_phase }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_scale(&self) -> f32 { self.inner.rotation_animation_scale }
+    #[wasm_bindgen(getter)] pub fn rotation_animation_center(&self) -> Point2D { self.inner.rotation_animation_center }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderTransparencyGeneric {
+    inner: ShaderTransparentGeneric,
+    maps: Vec<HaloShaderTransparentGenericMap>,
+    bitmaps: Vec<Bitmap>,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparencyGeneric {
+    #[wasm_bindgen(getter)] pub fn radiosity_flags(&self) -> u16 { self.inner.radiosity_flags }
+    #[wasm_bindgen(getter)] pub fn radiosity_detail_level(&self) -> RadiosityDetailLevel { self.inner.radiosity_detail_level }
+    #[wasm_bindgen(getter)] pub fn radiosity_light_power(&self) -> f32 { self.inner.radiosity_light_power }
+    #[wasm_bindgen(getter)] pub fn radiosity_light_color(&self) -> ColorRGB { self.inner.radiosity_light_color }
+    #[wasm_bindgen(getter)] pub fn radiosity_tint_color(&self) -> ColorRGB { self.inner.radiosity_tint_color }
+    #[wasm_bindgen(getter)] pub fn numeric_counter_limit(&self) -> u8 { self.inner.numeric_counter_limit }
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u8 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn first_map_type(&self) -> ShaderTransparentGenericMapType { self.inner.first_map_type }
+    #[wasm_bindgen(getter)] pub fn framebuffer_blend_function(&self) -> FramebufferBlendFunction { self.inner.framebuffer_blend_function }
+    #[wasm_bindgen(getter)] pub fn framebuffer_fade_mode(&self) -> FramebufferFadeMode { self.inner.framebuffer_fade_mode }
+    #[wasm_bindgen(getter)] pub fn framebuffer_fade_source(&self) -> FunctionSource { self.inner.framebuffer_fade_source }
+    #[wasm_bindgen(getter)] pub fn lens_flare_spacing(&self) -> f32 { self.inner.lens_flare_spacing }
+
+    pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
+        self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct HaloShaderModel {
     inner: ShaderModel,
-    path: String,
     base_bitmap: Option<Bitmap>,
     multipurpose_map: Option<Bitmap>,
     detail_bitmap: Option<Bitmap>,
@@ -305,6 +442,10 @@ impl HaloBitmap {
     pub fn get_metadata_for_index(&self, index: usize) -> HaloBitmapMetadata {
         HaloBitmapMetadata::new(&self.inner.data.items.as_ref().unwrap()[index])
     }
+
+    pub fn get_tag_id(&self) -> u32 {
+        self.inner.data.items.as_ref().unwrap()[0].bitmap_tag_id
+    }
 }
 
 #[wasm_bindgen]
@@ -341,24 +482,46 @@ impl HaloSceneManager {
         for model_shader in model.inner.shaders.items.as_ref().unwrap() {
             // FIXME do we need the permutation value?
             let shader_header = self.mgr.resolve_dependency(&model_shader.shader).unwrap();
-            if shader_header.primary_class != TagClass::ShaderModel {
-                result.push(&JsValue::NULL);
-                continue;
-            }
-            let shader_tag = self.mgr.read_tag(&shader_header).unwrap();
-            match shader_tag.data {
-                TagData::ShaderModel(s) => {
-                    result.push(&JsValue::from(HaloShaderModel {
+            let js_value = match self.mgr.read_tag(&shader_header) {
+                Ok(tag) => match tag.data {
+                    TagData::ShaderModel(s) => JsValue::from(HaloShaderModel {
                         base_bitmap: self.resolve_bitmap_dependency(&s.base_map),
                         detail_bitmap: self.resolve_bitmap_dependency(&s.detail_map),
                         multipurpose_map: self.resolve_bitmap_dependency(&s.multipurpose_map),
                         reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
-                        path: shader_header.path.clone(),
                         inner: s,
-                    }));
+                    }),
+                    TagData::ShaderTransparentGeneric(s) => {
+                        let mut maps = Vec::new();
+                        let mut bitmaps = Vec::new();
+                        for chicago_map in s.maps.items.as_ref().unwrap() {
+                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                            maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
+                        }
+                        JsValue::from(HaloShaderTransparencyGeneric {
+                            maps,
+                            bitmaps,
+                            inner: s,
+                        })
+                    },
+                    TagData::ShaderTransparentChicago(s) => {
+                        let mut maps = Vec::new();
+                        let mut bitmaps = Vec::new();
+                        for chicago_map in s.maps.items.as_ref().unwrap() {
+                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                            maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
+                        }
+                        JsValue::from(HaloShaderTransparencyChicago {
+                            maps,
+                            bitmaps,
+                            inner: s,
+                        })
+                    },
+                    _ => JsValue::NULL,
                 },
-                _ => unreachable!(),
-            }
+                _ => JsValue::NULL,
+            };
+            result.push(&js_value);
         }
         result
     }
@@ -407,6 +570,26 @@ impl HaloSceneManager {
             instances.push(&JsValue::from(HaloSceneryInstance { inner: scenery.clone() }));
         }
         instances
+    }
+
+    pub fn get_skies(&mut self) -> Array {
+        let result = Array::new();
+        let scenario_tag = self.mgr.get_scenario().unwrap();
+        let scenario_data = match scenario_tag.data { TagData::Scenario(s) => s.clone(), _ => unreachable!(), };
+        for dependency in scenario_data.skies.items.as_ref().unwrap() {
+            let sky_header = self.mgr.resolve_dependency(dependency).unwrap();
+            match self.mgr.read_tag(&sky_header).unwrap().data {
+                TagData::Sky(s) => {
+                    let model = self.resolve_model_dependency(&s.model).unwrap();
+                    result.push(&JsValue::from(HaloSky {
+                        model,
+                        inner: s,
+                    }));
+                },
+                _ => unreachable!(),
+            }
+        }
+        result
     }
 
     pub fn get_bsps(&mut self) -> Array {
