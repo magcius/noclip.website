@@ -38,9 +38,7 @@ impl HaloBitmapReader {
         get_and_convert_bitmap_data(self.inner.data.get_ref(), bitmap_data)
     }
 
-    pub fn destroy(self) {
-        panic!("destroy");
-    }
+    pub fn destroy(self) {}
 }
 
 fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8> {
@@ -60,13 +58,13 @@ fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8
 #[derive(Debug, Clone)]
 pub struct HaloSky {
     inner: Sky,
-    model: GbxModel,
+    model: Option<GbxModel>,
 }
 
 #[wasm_bindgen]
 impl HaloSky {
-    pub fn get_model(&self) -> HaloModel {
-        HaloModel { inner: self.model.clone() }
+    pub fn get_model(&self) -> Option<HaloModel> {
+        self.model.as_ref().map(|model| HaloModel { inner: model.clone() })
     }
 }
 
@@ -629,9 +627,8 @@ impl HaloSceneManager {
             let sky_header = self.mgr.resolve_dependency(dependency).unwrap();
             match self.mgr.read_tag(&sky_header).unwrap().data {
                 TagData::Sky(s) => {
-                    let model = self.resolve_model_dependency(&s.model).unwrap();
                     result.push(&JsValue::from(HaloSky {
-                        model,
+                        model: self.resolve_model_dependency(&s.model),
                         inner: s,
                     }));
                 },

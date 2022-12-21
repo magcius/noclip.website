@@ -876,11 +876,15 @@ class BSPRenderer {
             const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
             return new SceneryRenderer(this.device, this.textureCache, renderCache, this.bsp, this.mgr, scenery, instances);
         });
-        this.skyboxRenderers = mgr.get_skies().map(sky => {
+        this.skyboxRenderers = [];
+        mgr.get_skies().map(sky => {
             const modelMatrix = mat4.create();
-            const model = new ModelRenderer(this.device, this.textureCache, renderCache, bsp, mgr, sky.get_model(), modelMatrix);
-            model.isSkybox = true;
-            return model;
+            const skyModel = sky.get_model();
+            if (skyModel) {
+                const model = new ModelRenderer(this.device, this.textureCache, renderCache, bsp, mgr, skyModel, modelMatrix);
+                model.isSkybox = true;
+                this.skyboxRenderers.push(model);
+            }
         });
     }
 
@@ -1124,20 +1128,13 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const wasm = await loadWasm();
         wasm.init_panic_hook();
         const bitmapReader = await context.dataShare.ensureObject(`Halo1/BitmapReader`, async () => {
-            console.log(`fetching bitmaps`)
             const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
             return wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
         });
-        console.log(bitmapReader)
-        console.log(`fetching map`)
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
-        console.log(`creating manager`)
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
-        console.log(`creating renderer`)
         const renderer = new HaloScene(device, mapManager, bitmapReader);
-        console.log(`get_bsps`)
         mapManager.get_bsps().forEach((bsp, i) => renderer.addBSP(bsp, i));
-        console.log(`done`)
         return renderer;
     }
 
