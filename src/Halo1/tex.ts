@@ -130,21 +130,6 @@ function convertY8Data(input: Uint8Array): Uint8Array {
     return result;
 }
 
-function getAndConvertBitmap(mgr: HaloSceneManager, bitmap: HaloBitmap, submap = 0): [HaloBitmapMetadata, Uint8Array] {
-    const bitmapMetadata = bitmap.get_metadata_for_index(submap);
-    let bitmapData = mgr.get_bitmap_data(bitmap, submap);
-    if (bitmapMetadata.format === wasm().BitmapFormat.P8 || bitmapMetadata.format === wasm().BitmapFormat.P8Bump) {
-        bitmapData = convertP8Data(bitmapData);
-    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8) {
-        bitmapData = convertA8Data(bitmapData);
-    } else if (bitmapMetadata.format === wasm().BitmapFormat.Y8) {
-        bitmapData = convertY8Data(bitmapData);
-    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8r8g8b8) {
-        bitmapData = convertA8R8G8B8Data(bitmapData);
-    }
-    return [bitmapMetadata, bitmapData];
-}
-
 function getTextureDimension(type: number): GfxTextureDimension {
     if (type === wasm().BitmapDataType.CubeMap)
         return GfxTextureDimension.Cube;
@@ -155,7 +140,8 @@ function getTextureDimension(type: number): GfxTextureDimension {
 }
 
 function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): GfxTexture {
-    const [bitmapMetadata, bitmapData] = getAndConvertBitmap(mgr, bitmap, submap);
+    const bitmapMetadata = bitmap.get_metadata_for_index(submap);
+    const bitmapData = mgr.get_and_convert_bitmap_data(bitmap, submap);
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const mipmapCount = Math.max(bitmapMetadata.mipmap_count, 1);
 

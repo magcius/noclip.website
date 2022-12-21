@@ -17,58 +17,48 @@ static P8_PALETTE: &[u8] = &[
     0xFF,0x80,0xD0,0xE2,0xFF,0x81,0xD0,0xE2,0xFF,0x85,0xD0,0xE2,0xFF,0x8B,0xD0,0xE2,0xFF,0x7A,0xE5,0xCC,0xFF,0x7E,0xE5,0xCC,0xFF,0x80,0xE5,0xCC,0xFF,0x81,0xE5,0xCC,0xFF,0x85,0xE5,0xCC,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x80,0xFF
 ];
 
-pub fn convert_a8_data(input: &[u8], length: usize) -> Vec<u8> {
-    let mut result = Vec::with_capacity(length * 4);
-    /*
-    const result = new Uint8Array(input.byteLength * 4);
-    for (let i=0; i<input.byteLength; i++) {
-        result[4*i+0] = 0xFF;
-        result[4*i+1] = 0xFF;
-        result[4*i+2] = 0xFF;
-        result[4*i+3] = input[i];
+pub fn convert_p8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len() * 4);
+    for i in 0..input.len() {
+        let p8_offset = 4 * input[i] as usize;
+        result.push(P8_PALETTE[p8_offset+1]);
+        result.push(P8_PALETTE[p8_offset+2]);
+        result.push(P8_PALETTE[p8_offset+3]);
+        result.push(P8_PALETTE[p8_offset+0]);
     }
     return result;
-    */
+}
+
+pub fn convert_a8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len() * 4);
+    for i in 0..input.len() {
+        result.push(0xFF);
+        result.push(0xFF);
+        result.push(0xFF);
+        result.push(input[i]);
+    }
     result
 }
 
-pub fn convert_y8_data(input: &[u8], length: usize) -> Vec<u8> {
-    let mut result = Vec::with_capacity(length * 4);
-    /*
-    for (let i=0; i<input.byteLength; i++) {
-        result[4*i+0] = input[i];
-        result[4*i+1] = input[i];
-        result[4*i+2] = input[i];
-        result[4*i+3] = 0xFF;
+pub fn convert_y8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len() * 4);
+    for i in 0..input.len() {
+        result.push(input[i]);
+        result.push(input[i]);
+        result.push(input[i]);
+        result.push(0xFF);
     }
-    return result;
-    */
     result
 }
 
-pub fn convert_a8r8g8b8_data(input: &[u8], length: usize) -> Vec<u8> {
-    let mut result = Vec::with_capacity(length);
-    /*
-    for (let i=0; i<input.byteLength; i+=4) {
-        result[i+0] = input[i + 2];
-        result[i+1] = input[i + 1];
-        result[i+2] = input[i + 0];
-        result[i+3] = input[i + 3];
+pub fn convert_a8r8g8b8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len());
+    for i in 0..input.len()/4 {
+        let pixel_offset = 4*i;
+        result.push(input[pixel_offset + 2]);
+        result.push(input[pixel_offset + 1]);
+        result.push(input[pixel_offset + 0]);
+        result.push(input[pixel_offset + 3]);
     }
-    */
     result
-}
-
-
-pub fn convert_p8_data(input: &[u8], length: usize) -> Vec<u8> {
-    let mut result = Vec::with_capacity(length * 4);
-    /*
-    for (let i=0; i<p8Data.byteLength; i++) {
-        result[4*i+0] = P8Palette[4*i + 1];
-        result[4*i+1] = P8Palette[4*i + 2];
-        result[4*i+2] = bP8Palette[4*i + 3];
-        result[4*i+3] = aP8Palette[4*i + 0];
-    }
-    */
-    return result;
 }
