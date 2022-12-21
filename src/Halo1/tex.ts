@@ -194,8 +194,8 @@ function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManage
         levelDatas.push(levelData);
 
         byteOffset += sliceByteLength * depth;
-        w >>= 1;
-        h >>= 1;
+        w = Math.max(w >>> 1, 1);
+        h = Math.max(h >>> 1, 1);
     }
 
     device.uploadTextureData(texture, 0, levelDatas);
