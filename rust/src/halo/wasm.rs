@@ -64,8 +64,12 @@ pub struct HaloModel {
 
 #[wasm_bindgen]
 impl HaloModel {
-    fn new(model: &GbxModel) -> HaloModel {
-        HaloModel { inner: model.clone() }
+    pub fn get_base_bitmap_u_scale(&self) -> f32 {
+        self.inner.base_bitmap_u_scale
+    }
+
+    pub fn get_base_bitmap_v_scale(&self) -> f32 {
+        self.inner.base_bitmap_v_scale
     }
 }
 

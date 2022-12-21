@@ -1,10 +1,12 @@
+
 import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap } from "../../rust/pkg";
 import { TextureMapping } from "../TextureHolder";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { GfxDevice, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { wasm } from "./scenes";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 const P8Palette = [
     0xFF,0x7A,0x19,0xCC,0xFF,0x7E,0x19,0xCC,0xFF,0x80,0x19,0xCC,0xFF,0x81,0x19,0xCC,0xFF,0x85,0x19,0xCC,0xFF,0x74,0x2F,0xE2,0xFF,0x7A,0x2F,0xE2,0xFF,0x7E,0x2F,0xE2,0xFF,0x80,0x2F,0xE2,0xFF,0x81,0x2F,0xE2,0xFF,0x85,0x2F,0xE2,0xFF,0x8B,0x2F,0xE2,0xFF,0x6B,0x42,0xED,0xFF,0x74,0x42,0xEE,0xFF,0x7A,0x42,0xEF,0xFF,0x7E,0x42,0xEF,
@@ -59,16 +61,17 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
         case wasm().BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
         case wasm().BitmapFormat.P8: return GfxFormat.U8_RGBA_NORM;
         case wasm().BitmapFormat.P8Bump: return GfxFormat.U8_RGBA_NORM;
+        case wasm().BitmapFormat.Y8: return GfxFormat.U8_RGBA_NORM;
         default:
             throw new Error(`couldn't recognize bitmap format ${wasm().BitmapFormat[format]}`);
     }
 }
 
-function getImageFormatByteLength(fmt: GfxFormat, width: number, height: number, depth = 1): number {
+function getImageFormatByteLength(fmt: GfxFormat, width: number, height: number): number {
     if (isimageFormatCompressed(fmt)) {
         width = Math.max(width, 4);
         height = Math.max(height, 4);
-        const count = ((width * height) / 16) * depth;
+        const count = ((width * height) / 16);
         if (fmt === GfxFormat.BC1)
             return count * 8;
         else if (fmt === GfxFormat.BC2)
@@ -78,15 +81,8 @@ function getImageFormatByteLength(fmt: GfxFormat, width: number, height: number,
         else
             throw new Error(`unrecognized compressed format ${GfxFormat[fmt]}`)
     } else {
-        return (width * height * depth) * getImageFormatBPP(fmt);
+        return (width * height) * getImageFormatBPP(fmt);
     }
-}
-
-function getBitmapByteLength(metadata: HaloBitmapMetadata, mipLevel = 0, depth = 1): number {
-    let width = Math.max(metadata.width / 2 ** mipLevel, 4);
-    let height = Math.max(metadata.height / 2 ** mipLevel, 4);
-    const format = getBitmapTextureFormat(metadata.format);
-    return getImageFormatByteLength(format, width, height, depth);
 }
 
 function convertP8Data(p8Data: Uint8Array): Uint8Array {
@@ -112,6 +108,17 @@ function convertA8Data(input: Uint8Array): Uint8Array {
     return result;
 }
 
+function convertY8Data(input: Uint8Array): Uint8Array {
+    const result = new Uint8Array(input.byteLength * 4);
+    for (let i=0; i<input.byteLength; i++) {
+        result[4*i+0] = input[i];
+        result[4*i+1] = input[i];
+        result[4*i+2] = input[i];
+        result[4*i+3] = 0xFF;
+    }
+    return result;
+}
+
 function getAndConvertBitmap(mgr: HaloSceneManager, bitmap: HaloBitmap, submap = 0): [HaloBitmapMetadata, Uint8Array] {
     const bitmapMetadata = bitmap.get_metadata_for_index(submap);
     let bitmapData = mgr.get_bitmap_data(bitmap, submap);
@@ -119,49 +126,84 @@ function getAndConvertBitmap(mgr: HaloSceneManager, bitmap: HaloBitmap, submap =
         bitmapData = convertP8Data(bitmapData);
     } else if (bitmapMetadata.format === wasm().BitmapFormat.A8) {
         bitmapData = convertA8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.Y8) {
+        bitmapData = convertY8Data(bitmapData);
     }
     return [bitmapMetadata, bitmapData];
 }
 
-export function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): GfxTexture {
+function getTextureDimension(type: number): GfxTextureDimension {
+    if (type === wasm().BitmapDataType.CubeMap)
+        return GfxTextureDimension.Cube;
+    else if (type === wasm().BitmapDataType.Tex2D)
+        return GfxTextureDimension.n2D;
+    else
+        throw "whoops";
+}
+
+function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): GfxTexture {
     const [bitmapMetadata, bitmapData] = getAndConvertBitmap(mgr, bitmap, submap);
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const mipmapCount = Math.max(bitmapMetadata.mipmap_count, 1);
-    let textureDescriptor: GfxTextureDescriptor;
-    if (bitmapMetadata.bitmap_type === wasm().BitmapDataType.CubeMap) {
-        textureDescriptor = {
-            dimension: GfxTextureDimension.Cube,
-            pixelFormat: format,
-            width: bitmapMetadata.width,
-            height: bitmapMetadata.height,
-            numLevels: mipmapCount,
-            depth: 6,
-            usage: GfxTextureUsage.Sampled,
-        };
-    } else {
-        textureDescriptor = makeTextureDescriptor2D(format, bitmapMetadata.width, bitmapMetadata.height, mipmapCount);
-    }
+
+    const dimension = getTextureDimension(bitmapMetadata.bitmap_type);
+    let depth = 1;
+    if (dimension === GfxTextureDimension.Cube)
+        depth *= 6;
+
+    const textureDescriptor = {
+        dimension,
+        pixelFormat: format,
+        width: bitmapMetadata.width,
+        height: bitmapMetadata.height,
+        numLevels: mipmapCount,
+        depth,
+        usage: GfxTextureUsage.Sampled,
+    };
+
     const texture = device.createTexture(textureDescriptor!);
-    const mips = [];
-    let offset = 0;
-    for (let i=0; i<mipmapCount; i++) {
-        let length = getBitmapByteLength(bitmapMetadata, i, textureDescriptor.depth);
-        if (format === GfxFormat.U16_RGB_565) {
-            // TODO swap X- (idx 1) and Y+ (idx 2) on cube faces
-            const u16buf = new Uint16Array(bitmapData.buffer);
-            mips.push(u16buf.subarray(offset, offset + length/2));
-            offset += length/2;
-        } else {
-            mips.push(bitmapData.subarray(offset, offset + length));
-            offset += length;
+    const levelDatas = [];
+    let byteOffset = 0;
+    let w = bitmapMetadata.width;
+    let h = bitmapMetadata.height;
+    for (let i = 0; i < mipmapCount; i++) {
+        const sliceByteLength = getImageFormatByteLength(format, w, h);
+
+        let buffer = new ArrayBufferSlice(bitmapData.buffer, byteOffset, sliceByteLength * depth);
+        if (dimension === GfxTextureDimension.Cube) {
+            // Rearrange cubemaps. Need to swap 1st and 2nd face.
+            // TODO: Maybe it makes more sense to do this in Rust?
+
+            const newData = new Uint8Array(buffer.copyToBuffer());
+
+            const face1Offs = 1 * sliceByteLength;
+            const face2Offs = 2 * sliceByteLength;
+            newData.set(buffer.subarray(face2Offs, sliceByteLength).createTypedArray(Uint8Array), face1Offs);
+            newData.set(buffer.subarray(face1Offs, sliceByteLength).createTypedArray(Uint8Array), face2Offs);
+
+            buffer = new ArrayBufferSlice(newData.buffer);
         }
+
+        let levelData: ArrayBufferView;
+        if (format === GfxFormat.U16_RGB_565) {
+            levelData = buffer.createTypedArray(Uint16Array);
+        } else {
+            levelData = buffer.createTypedArray(Uint8Array);
+        }
+
+        levelDatas.push(levelData);
+
+        byteOffset += sliceByteLength * depth;
+        w >>= 1;
+        h >>= 1;
     }
-    device.uploadTextureData(texture, 0, mips);
+
+    device.uploadTextureData(texture, 0, levelDatas);
     return texture;
 }
 
 export class TextureCache {
-    public textures: Map<[number, number], GfxTexture>;
+    public textures: Map<string, GfxTexture>;
     public default2DTexture: GfxTexture;
 
     constructor(public device: GfxDevice, public gfxSampler: GfxSampler, public mgr: HaloSceneManager) {
@@ -178,7 +220,8 @@ export class TextureCache {
         if (!bitmap) {
             return this.default2DTexture;
         }
-        const key: [number, number] = [bitmap.get_tag_id(), submap];
+
+        const key: string = `${bitmap.get_tag_id()}_${submap}`;
         if (this.textures.has(key)) {
             return this.textures.get(key)!;
         } else {

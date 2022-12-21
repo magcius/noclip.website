@@ -1,31 +1,25 @@
-import * as Viewer from '../viewer';
+
+import { mat4, vec3, vec4 } from 'gl-matrix';
+import { HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric } from '../../rust/pkg/index';
+import { CameraController } from '../Camera';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
+import { computeModelMatrixS, getMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
-import { fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, makeTextureDescriptor2D, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxCullMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode, GfxTextureDimension, GfxTextureUsage, GfxTextureDescriptor, GfxSamplerFormatKind, GfxProgramDescriptor, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { FormatCompFlags, FormatTypeFlags, GfxFormat, makeFormat, setFormatCompFlags } from "../gfx/platform/GfxPlatformFormat";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { DetailBitmapFunction, BitmapFormat, HaloSceneManager, HaloBSP, HaloLightmap, HaloMaterial, HaloShaderEnvironment, HaloBitmap, HaloBitmapMetadata, ShaderEnvironmentType, BitmapDataType, HaloSceneryInstance, HaloScenery, HaloModel, HaloShaderModel, HaloModelPart, HaloShaderTransparencyGeneric, HaloShaderTransparencyChicago, HaloSky } from '../../rust/pkg/index';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
-import { decompressBC } from '../Common/bc_texture';
-import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
-import { CameraController } from '../Camera';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
-import { UI } from '../ui';
-import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { InputLayout } from '../DarkSouls/flver';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { getMatrixTranslation } from '../MathHelpers';
-import { TextureCache }  from './tex';
+import { TextureMapping } from '../TextureHolder';
 import { assert } from '../util';
-import { GfxTopology, convertToTriangleIndexBuffer } from '../gfx/helpers/TopologyHelpers';
-import { Texture } from 'librw';
-
+import * as Viewer from '../viewer';
+import { TextureCache } from './tex';
 
 /**
  * notes:
@@ -40,17 +34,11 @@ import { Texture } from 'librw';
  *   * implement default textures based on globals.globals (to fix specular reflection)
  */
 
-export const noclipSpaceFromHaloSpace = mat4.fromValues(
+const noclipSpaceFromHaloSpace = mat4.fromValues(
     1, 0,  0, 0,
     0, 0, -1, 0,
     0, 1,  0, 0,
     0, 0,  0, 1,
-);
-export const haloSpaceFromNoclipSpace = mat4.fromValues(
-    1,  0, 0, 0,
-    0,  0, 1, 0,
-    0, -1, 0, 0,
-    0,  0, 0, 1,
 );
 
 let _wasm: typeof import('../../rust/pkg/index') | null = null;
@@ -220,7 +208,7 @@ ${GfxShaderLibrary.saturate}
 
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
-    vec4 empty;
+    Mat4x2 u_BaseMapTransform;
 };
 `;
 
@@ -250,7 +238,7 @@ vec4 toWorldCoord(vec4 x) {
 
 void mainVS() {
     gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
-    v_UV = a_TexCoord;
+    v_UV = Mul(u_BaseMapTransform, vec4(a_TexCoord.xy, 1.0, 1.0)).xy;
     v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
     v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
     v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
@@ -261,7 +249,12 @@ void mainVS() {
     private generateFragSection(): string {
         const fragBody: string[] = [];
 
-        fragBody.push(`gl_FragColor.rgb = texture(SAMPLER_2D(u_Texture), v_UV).rgb;`)
+        fragBody.push(`
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), v_UV).rgba;
+gl_FragColor.rgba = t_BaseTexture.rgba;
+if (t_BaseTexture.a < 0.5)
+    discard;
+`);
 
         return `
 ${ShaderModelProgram.header}
@@ -296,7 +289,12 @@ varying vec3 v_IncidentLight;
 
     public static includes = `
 ${GfxShaderLibrary.saturate}
+
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
+}
 `;
+
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
     vec4 u_ReflectionPerpendicularColor;
@@ -415,22 +413,10 @@ void mainVS() {
 
     private getReflectionSection(fragBody: String[]): void {
         fragBody.push(`
-vec2 bumpUV = v_UV * ${this.shader!.bump_map_scale.toFixed(2)};
-vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Bumpmap), bumpUV) - 1.0;
-vec3 E = normalize(u_PlayerPos - v_Position);
-vec3 N;
-`);
-
-        if (this.shader!.has_bump_map) {
-            fragBody.push(`N = normalize(v_Tangent * t_BumpMap.r + v_Binormal * t_BumpMap.g + v_Normal * t_BumpMap.b);`);
-        } else {
-            fragBody.push(`N = v_Normal;`)
-        }
-        fragBody.push(`
-N = normalize(2.0 * dot(N, E) * N - E);
+vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
 vec3 reflectionColor = texture(SAMPLER_CUBE(u_ReflectionCubeMap, N.xyz)).xyz;
 vec3 specularColor = pow(reflectionColor, vec3(8.0));
-float diffuseReflection = pow(dot(N, E), 2.0);
+float diffuseReflection = pow(dot(t_NormalWorld, t_EyeWorld), 2.0);
 float attenuation = mix(u_ReflectionParallelColor.a, u_ReflectionPerpendicularColor.a, diffuseReflection);
 vec3 tintColor = mix(u_ReflectionParallelColor.rgb, u_ReflectionPerpendicularColor.rgb, diffuseReflection);
 vec3 tintedReflection = mix(specularColor, reflectionColor, tintColor);
@@ -442,11 +428,36 @@ color.rgb = saturate(color.rgb + finalColor * specularReflectionMask);
     private generateFragmentShader(): void {
         let fragBody = [];
         if (this.shader) {
-            fragBody.push(`vec4 base = texture(SAMPLER_2D(u_Texture), v_UV);`);
-            fragBody.push(`vec4 color = base;`);
-            if (this.has_lightmap) {
-                fragBody.push(`color.rgb *= texture(SAMPLER_2D(u_Lightmap), v_lightmapUV).rgb;`)
+            fragBody.push(`
+vec4 base = texture(SAMPLER_2D(u_Texture), v_UV);
+vec4 color = base;
+vec2 t_BumpTexCoord = v_UV * ${this.shader!.bump_map_scale.toFixed(2)};
+vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Bumpmap), t_BumpTexCoord) - 1.0;
+vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
+`);
+
+            if (this.shader!.has_bump_map) {
+                fragBody.push(`vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));`);
+            } else {
+                fragBody.push(`vec3 t_NormalWorld = v_Normal;`);
             }
+
+            if (this.has_lightmap) {
+                fragBody.push(`
+vec3 t_LightmapSample = texture(SAMPLER_2D(u_Lightmap), v_lightmapUV).rgb;
+float t_Variance = dot(v_IncidentLight.rgb, v_IncidentLight.rgb);
+float t_BumpAtten = (dot(v_IncidentLight, t_NormalWorld) * t_Variance) + (1.0 - t_Variance);
+color.rgb *= t_LightmapSample * t_BumpAtten;
+`);
+            }
+
+            if (!!(this.shader!.flags & 0x01)) {
+                fragBody.push(`
+if (t_BumpMap.a < 0.5)
+    discard;
+`);
+            }
+
             this.getDetailSection(fragBody);
             this.getMicroDetailSection(fragBody);
             if (this.shader!.has_reflection_cube_map) {
@@ -512,6 +523,7 @@ class ModelRenderer {
     public programs: (GfxProgram | null)[];
     public textureMappings: (TextureMapping | null)[][];
     public shaderParams: Float32Array[];
+    private baseMapTransform = mat4.create();
 
     // per part
     public parts: HaloModelPart[];
@@ -529,10 +541,10 @@ class ModelRenderer {
 
     private setupShaderTransparencyGeneric(shader: HaloShaderTransparencyGeneric, renderHelper: GfxRenderHelper) {
         this.textureMappings.push([
-            this.textureCache.getTextureMapping(shader.get_bitmap(0)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(1)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(2)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(3)),
+            null, // this.textureCache.getTextureMapping(shader.get_bitmap(0)),
+            null, // this.textureCache.getTextureMapping(shader.get_bitmap(1)),
+            null, // this.textureCache.getTextureMapping(shader.get_bitmap(2)),
+            null, // this.textureCache.getTextureMapping(shader.get_bitmap(3)),
         ]);
         this.programs.push(renderHelper.renderCache.createProgram(new ShaderTransparencyGenericProgram(shader)));
     }
@@ -559,6 +571,9 @@ class ModelRenderer {
         this.textureMappings = [];
         this.programs = [];
         this.shaderParams = [];
+
+        computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
+
         this.shaders.forEach(shader => {
             if (shader instanceof _wasm!.HaloShaderModel) {
                 this.setupShaderModel(shader, renderHelper);
@@ -595,20 +610,22 @@ class ModelRenderer {
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
 
+        let offs = template.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
+        let mapped = template.mapUniformBufferF32(BaseProgram.ub_ModelParams);
+        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+
         this.parts.forEach((part, partIdx) => {
             if (!this.programs[part.shader_index]) {
                 return;
             }
 
-            let offs = template.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
-            let mapped = template.mapUniformBufferF32(BaseProgram.ub_ModelParams);
-            offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
-
-            offs = template.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
-            mapped = template.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
-
             const renderInst = renderInstManager.newRenderInst();
             renderInst.setGfxProgram(this.programs[part.shader_index]!);
+
+            offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
+            mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
+
+            offs += fillMatrix4x2(mapped, offs, this.baseMapTransform);
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings[part.shader_index])
             renderInst.setInputLayoutAndState(this.inputLayout, this.inputStates[partIdx]);
@@ -743,9 +760,11 @@ class LightmapMaterialRenderer {
             this.microDetailMapping = this.textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap());
             this.reflectionCubeMapping = this.shader && this.shader.has_reflection_cube_map ? this.textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null;
             const perpendicular = this.shader.perpendicular_color;
-            this.perpendicularColor = vec4.fromValues(perpendicular.r, perpendicular.g, perpendicular.b, this.shader.perpendicular_brightness);
+            vec4.set(this.perpendicularColor, perpendicular.r, perpendicular.g, perpendicular.b, this.shader.perpendicular_brightness);
+            perpendicular.free();
             const parallel = this.shader.parallel_color;
-            this.parallelColor = vec4.fromValues(parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
+            vec4.set(this.parallelColor, parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
+            parallel.free();
         }
         const renderHelper = new GfxRenderHelper(device);
         this.program = renderHelper.renderCache.createProgram(new ShaderEnvironmentProgram(this.shader, !!this.lightmapMapping));
@@ -765,7 +784,7 @@ class LightmapMaterialRenderer {
         if (this.shader) {
             offs += fillVec4v(mapped, offs, this.perpendicularColor);
             offs += fillVec4v(mapped, offs, this.parallelColor);
-            offs += fillVec4(mapped, offs, this.bspIndex, this.bspIndex, this.bspIndex, this.bspIndex);
+            offs += fillVec4(mapped, offs, this.bspIndex);
         }
 
         {
@@ -836,7 +855,7 @@ class HaloScene implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(1/1000);
     }
 
-    addBSP(bsp: HaloBSP, bspIndex: number) {
+    public addBSP(bsp: HaloBSP, bspIndex: number) {
         this.bspRenderers.push(new BSPRenderer(this.device, this.textureCache, bsp, this.mgr, bspIndex));
     }
 
@@ -899,6 +918,8 @@ class HaloScene implements Viewer.SceneGfx {
     }
 }
 
+const pathBase = `Halo1`;
+
 class HaloSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -907,8 +928,8 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const wasm = await loadWasm();
         wasm.init_panic_hook();
         const dataFetcher = context.dataFetcher;
-        const resourceMapData = await dataFetcher.fetchData("halo/bitmaps.map");
-        const mapData = await dataFetcher.fetchData(`halo/${this.id}.map`);
+        const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
+        const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array));
         const renderer = new HaloScene(device, mapManager);
         mapManager.get_bsps().forEach((bsp, i) => renderer.addBSP(bsp, i));
