@@ -9,6 +9,7 @@ pub mod scenario;
 pub mod model;
 pub mod shader;
 pub mod wasm;
+pub mod bitmap_utils;
 
 #[wasm_bindgen]
 pub fn init_panic_hook() {

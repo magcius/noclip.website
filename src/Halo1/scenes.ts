@@ -1116,14 +1116,21 @@ class HaloSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log(`loadWasm`)
         const wasm = await loadWasm();
         wasm.init_panic_hook();
         const dataFetcher = context.dataFetcher;
+        console.log(`fetching resources`)
         const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
+        console.log(`fetching map`)
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
+        console.log(`creating manager`)
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array));
+        console.log(`creating renderer`)
         const renderer = new HaloScene(device, mapManager);
+        console.log(`get_bsps`)
         mapManager.get_bsps().forEach((bsp, i) => renderer.addBSP(bsp, i));
+        console.log(`done`)
         return renderer;
     }
 

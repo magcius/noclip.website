@@ -14,12 +14,12 @@ use byteorder::{LittleEndian, ReadBytesExt};
 const BASE_MEMORY_ADDRESS: Pointer = 0x50000000;
 
 pub struct MapManager {
-    reader: MapReader,
-    header: Header,
+    pub reader: MapReader,
+    pub header: Header,
     pub tag_index_header: TagIndexHeader,
-    bitmaps_reader: ResourceMapReader,
-    bitmaps_header: ResourcesHeader,
-    tag_headers: Vec<TagHeader>,
+    pub bitmaps_reader: ResourceMapReader,
+    pub bitmaps_header: ResourcesHeader,
+    pub tag_headers: Vec<TagHeader>,
 }
 
 impl MapManager {
@@ -196,25 +196,9 @@ impl MapManager {
         }
         Ok(result)
     }
-
-    pub fn read_bitmap_data(&mut self, bitmap: &Bitmap, index: usize) -> Result<Vec<u8>> {
-        if let Some(bitmap_data) = &bitmap.data.items {
-            let data = &bitmap_data[index];
-            let mut result = vec![0; data.pixel_data_size as usize];
-            if data.flags & 0x100 > 0 { // check if it's external
-                self.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
-                self.bitmaps_reader.data.read_exact(&mut result)?;
-            } else {
-                self.reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64))?;
-                self.reader.data.read_exact(&mut result)?;
-            }
-            return Ok(result);
-        }
-        return Err(MapReaderError::InvalidTag(format!("bitmap has no BitmapData")));
-    }
 }
 
-struct ResourceMapReader {
+pub struct ResourceMapReader {
     pub data: Cursor<Vec<u8>>,
 }
 
@@ -228,7 +212,7 @@ impl ResourceMapReader {
     }
 }
 
-struct MapReader {
+pub struct MapReader {
     pub data: Cursor<Vec<u8>>,
 }
 
@@ -264,7 +248,7 @@ impl MapReader {
 }
 
 #[derive(Debug)]
-struct Header {
+pub struct Header {
     pub uncompressed_file_size: u32,
     pub tag_data_offset: Pointer,
     pub tag_data_size: u32,
@@ -280,7 +264,7 @@ enum ResourceType {
 }
 
 #[derive(Debug)]
-struct ResourcesHeader {
+pub struct ResourcesHeader {
     resource_type: ResourceType,
     paths_offset: Pointer,
     resources_offset: Pointer,
@@ -288,7 +272,7 @@ struct ResourcesHeader {
 }
 
 #[derive(Debug)]
-struct ResourceHeader {
+pub struct ResourceHeader {
     path_offset: Pointer,
     size: u32,
     data_offset: Pointer,

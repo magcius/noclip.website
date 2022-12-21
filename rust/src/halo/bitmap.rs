@@ -259,7 +259,7 @@ pub struct BitmapData {
 }
 
 impl BitmapData {
-    fn is_external(&self) -> bool {
+    pub fn is_external(&self) -> bool {
         (self.flags & 0x100) > 0
     }
 }

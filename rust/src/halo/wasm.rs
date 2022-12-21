@@ -1,4 +1,6 @@
 use std::convert::TryInto;
+use std::io::{Seek, Read, SeekFrom};
+use std::sync::Arc;
 
 use js_sys::Float32Array;
 use js_sys::Uint16Array;
@@ -11,6 +13,7 @@ use crate::halo::scenario::*;
 use crate::halo::common::*;
 use crate::halo::shader::*;
 use crate::halo::bitmap::*;
+use crate::halo::bitmap_utils::*;
 use crate::halo::tag::*;
 use crate::halo::model::*;
 
@@ -695,8 +698,33 @@ impl HaloSceneManager {
         }
     }
 
-    pub fn get_bitmap_data(&mut self, bitmap: &HaloBitmap, index: usize) -> Vec<u8> {
-        self.mgr.read_bitmap_data(&bitmap.inner, index).unwrap()
+    pub fn get_and_convert_bitmap_data(&mut self, bitmap: &HaloBitmap, index: usize) -> Vec<u8> {
+        let data = &bitmap.inner.data.items.as_ref().unwrap()[index];
+        let mut reader: &[u8] = if data.is_external() {
+            self.mgr.bitmaps_reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64)).unwrap();
+            self.mgr.bitmaps_reader.data.get_ref()
+        } else {
+            self.mgr.reader.data.seek(SeekFrom::Start(data.pixel_data_offset as u64)).unwrap();
+            self.mgr.reader.data.get_ref()
+        };
+        match data.format {
+            BitmapFormat::P8 | BitmapFormat::P8Bump => convert_p8_data(&*reader, data.pixel_data_size as usize),
+            _ => {
+                let mut result = vec![0; data.pixel_data_size as usize];
+                reader.read_exact(&mut result).unwrap();
+                result
+            }
+        }
+        /*
+    if (bitmapMetadata.format === wasm().BitmapFormat.P8 || bitmapMetadata.format === wasm().BitmapFormat.P8Bump) {
+        bitmapData = convertP8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8) {
+        bitmapData = convertA8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.Y8) {
+        bitmapData = convertY8Data(bitmapData);
+    } else if (bitmapMetadata.format === wasm().BitmapFormat.A8r8g8b8) {
+        bitmapData = convertA8R8G8B8Data(bitmapData);
+        */
     }
 
     pub fn get_material_vertex_data(&mut self, material: &HaloMaterial, bsp: &HaloBSP) -> Vec<u8> {
