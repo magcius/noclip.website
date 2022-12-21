@@ -702,15 +702,64 @@ class LightmapRenderer {
     }
 }
 
+class ModelPart {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private indexCount = 0;
+    public shaderIndex = 0;
+
+    constructor(cache: GfxRenderCache, mgr: HaloSceneManager, private part: HaloModelPart) {
+        const triStrips = mgr.get_model_part_indices(part);
+        const indices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, triStrips);
+        this.indexCount = indices.length;
+
+        const device = cache.device;
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_model_part_vertices(part).buffer);
+
+        this.inputLayout = this.getInputLayout(cache);
+        this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+
+        this.shaderIndex = part.shader_index;
+    }
+
+    private getInputLayout(cache: GfxRenderCache): GfxInputLayout {
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+        const vec3fSize = 3 * 4;
+        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Pos, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Norm, bufferIndex: 0, bufferByteOffset: 1 * vec3fSize, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Binorm, bufferIndex: 0, bufferByteOffset: 2 * vec3fSize, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Tangent, bufferIndex: 0, bufferByteOffset: 3 * vec3fSize, format: GfxFormat.F32_RGB});
+        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 4 * vec3fSize, format: GfxFormat.F32_RG});
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 68, frequency: GfxVertexBufferFrequency.PerVertex },
+        ];
+        let indexBufferFormat: GfxFormat = GfxFormat.U16_R;
+        return cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.indexCount);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
+        this.part.free();
+    }
+}
+
 class ModelRenderer {
-    public inputLayout: GfxInputLayout;
     private materialRenderers: (MaterialRender_Model | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[] = [];
 
     public baseMapTransform = mat4.create();
 
     // per part
-    public parts: HaloModelPart[];
-    public inputStates: GfxInputState[];
+    public parts: ModelPart[];
     public isSkybox: boolean = false;
     public visible = true;
 
@@ -730,16 +779,8 @@ class ModelRenderer {
 
         computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
 
-        this.parts = mgr.get_model_parts(this.model);
-
-        this.inputLayout = this.getInputLayout();
-        this.inputStates = this.parts.map(part => {
-            const triStrips = mgr.get_model_part_indices(part);
-            const indices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, triStrips);
-            part.update_tri_count(indices.length);
-            const triBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
-            const vertBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_model_part_vertices(part).buffer);
-            return device.createInputState(this.inputLayout, [{ buffer: vertBuf, byteOffset: 0 }], { buffer: triBuf, byteOffset: 0 });
+        this.parts = mgr.get_model_parts(this.model).map((part) => {
+            return new ModelPart(renderCache, mgr, part);
         });
     }
 
@@ -754,7 +795,7 @@ class ModelRenderer {
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
         this.parts.forEach((part, partIdx) => {
-            const materialRenderer = this.materialRenderers[part.shader_index];
+            const materialRenderer = this.materialRenderers[part.shaderIndex];
 
             if (!materialRenderer)
                 return; // Renderer will return...
@@ -763,9 +804,9 @@ class ModelRenderer {
                 return;
 
             const renderInst = renderInstManager.newRenderInst();
+            part.setOnRenderInst(renderInst);
             materialRenderer.setOnRenderInst(renderInst);
-            renderInst.setInputLayoutAndState(this.inputLayout, this.inputStates[partIdx]);
-            renderInst.drawIndexes(part.tri_count, 0);
+
             // TODO: Part AABB?
             renderInst.sortKey = materialRenderer.sortKeyBase;
 
@@ -782,25 +823,9 @@ class ModelRenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    private getInputLayout(): GfxInputLayout {
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        const vec3fSize = 3 * 4;
-        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Pos, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB});
-        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Norm, bufferIndex: 0, bufferByteOffset: 1 * vec3fSize, format: GfxFormat.F32_RGB});
-        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Binorm, bufferIndex: 0, bufferByteOffset: 2 * vec3fSize, format: GfxFormat.F32_RGB});
-        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_Tangent, bufferIndex: 0, bufferByteOffset: 3 * vec3fSize, format: GfxFormat.F32_RGB});
-        vertexAttributeDescriptors.push({ location: ShaderModelProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 4 * vec3fSize, format: GfxFormat.F32_RG});
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 68, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        let indexBufferFormat: GfxFormat = GfxFormat.U16_R;
-        return this.device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-    }
-
     public destroy(device: GfxDevice) {
-        this.inputStates.forEach(state => device.destroyInputState(state));
+        this.parts.forEach((part) => part.destroy(device));
         this.materialRenderers.forEach((materialRenderer) => materialRenderer?.destroy(device));
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -868,6 +893,7 @@ class BSPRenderer {
     public destroy(device: GfxDevice) {
         this.lightmapRenderers.forEach(r => r.destroy(device));
         this.sceneryRenderers.forEach(r => r.destroy(device));
+        this.skyboxRenderers.forEach(r => r.destroy(device));
         device.destroyBuffer(this.trisBuf);
     }
 }
@@ -959,6 +985,7 @@ class LightmapMaterialRenderer {
     public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertsBuf);
         device.destroyBuffer(this.lightmapVertsBuf);
+        device.destroyInputState(this.inputState);
     }
 }
 
