@@ -17,17 +17,13 @@ pub struct MapManager {
     pub reader: MapReader,
     pub header: Header,
     pub tag_index_header: TagIndexHeader,
-    pub bitmaps_reader: ResourceMapReader,
-    pub bitmaps_header: ResourcesHeader,
     pub tag_headers: Vec<TagHeader>,
 }
 
 impl MapManager {
-    pub fn new(map: Vec<u8>, bitmaps: Vec<u8>) -> Result<Self> {
+    pub fn new(map: Vec<u8>) -> Result<Self> {
         let mut reader = MapReader::new(map);
         let header = reader.read_header()?;
-        let mut bitmaps_reader = ResourceMapReader::new(bitmaps);
-        let bitmaps_header = bitmaps_reader.read_header()?;
 
         let tag_index_header = reader.read_tag_index_header(&header)?;
         let tag_headers = reader.read_tag_headers(&header, &tag_index_header)?;
@@ -36,8 +32,6 @@ impl MapManager {
             reader,
             header,
             tag_index_header,
-            bitmaps_reader,
-            bitmaps_header,
             tag_headers,
         })
     }
@@ -203,7 +197,7 @@ pub struct ResourceMapReader {
 }
 
 impl ResourceMapReader {
-    fn new(data: Vec<u8>) -> ResourceMapReader {
+    pub fn new(data: Vec<u8>) -> ResourceMapReader {
         ResourceMapReader { data: Cursor::new(data) }
     }
 
@@ -397,7 +391,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut mgr = MapManager::new(read_map("bloodgulch.map"), read_bitmaps()).unwrap();
+        let mut mgr = MapManager::new(read_map("bloodgulch.map")).unwrap();
         let scenario = match mgr.get_scenario().unwrap().data {
             TagData::Scenario(s) => s.clone(),
             _ => unreachable!(),
@@ -424,7 +418,7 @@ mod tests {
             if name == "bitmaps.map" {
                 continue;
             }
-            let mut mgr = MapManager::new(read_map(&name.to_str().unwrap()), read_bitmaps()).unwrap();
+            let mut mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
             for hdr in &mgr.tag_headers {
                 if hdr.primary_class == TagClass::ShaderTransparentChicagoExtended {
                     dbg!(&hdr);

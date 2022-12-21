@@ -1,6 +1,6 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
+import { HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
@@ -1032,7 +1032,7 @@ class HaloScene implements Viewer.SceneGfx {
     public bspRenderers: BSPRenderer[];
     private mainView = new View();
 
-    constructor(public device: GfxDevice, public mgr: HaloSceneManager) {
+    constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
         this.bspRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
         const gfxSampler = this.renderHelper.renderCache.createSampler({
@@ -1044,7 +1044,7 @@ class HaloScene implements Viewer.SceneGfx {
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
         });
-        this.textureCache = new TextureCache(this.device, gfxSampler, this.mgr);
+        this.textureCache = new TextureCache(this.device, gfxSampler, this.mgr, bitmapReader);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -1109,6 +1109,10 @@ class HaloScene implements Viewer.SceneGfx {
     }
 }
 
+class Main {
+
+}
+
 const pathBase = `Halo1`;
 
 class HaloSceneDesc implements Viewer.SceneDesc {
@@ -1116,18 +1120,21 @@ class HaloSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        console.log(`loadWasm`)
+        const dataFetcher = context.dataFetcher;
         const wasm = await loadWasm();
         wasm.init_panic_hook();
-        const dataFetcher = context.dataFetcher;
-        console.log(`fetching resources`)
-        const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
+        const bitmapReader = await context.dataShare.ensureObject(`Halo1/BitmapReader`, async () => {
+            console.log(`fetching bitmaps`)
+            const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
+            return wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
+        });
+        console.log(bitmapReader)
         console.log(`fetching map`)
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
         console.log(`creating manager`)
-        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array), resourceMapData.createTypedArray(Uint8Array));
+        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
         console.log(`creating renderer`)
-        const renderer = new HaloScene(device, mapManager);
+        const renderer = new HaloScene(device, mapManager, bitmapReader);
         console.log(`get_bsps`)
         mapManager.get_bsps().forEach((bsp, i) => renderer.addBSP(bsp, i));
         console.log(`done`)

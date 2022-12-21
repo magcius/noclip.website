@@ -1,5 +1,5 @@
 
-import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap } from "../../rust/pkg";
+import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg";
 import { TextureMapping } from "../TextureHolder";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { GfxDevice, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
@@ -139,9 +139,14 @@ function getTextureDimension(type: number): GfxTextureDimension {
         throw "whoops";
 }
 
-function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, submap = 0): GfxTexture {
+function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManager, bitmapReader: HaloBitmapReader, submap = 0): GfxTexture {
     const bitmapMetadata = bitmap.get_metadata_for_index(submap);
-    const bitmapData = mgr.get_and_convert_bitmap_data(bitmap, submap);
+    let bitmapData;
+    if (bitmapMetadata.is_external()) {
+        bitmapData = bitmapReader.get_and_convert_bitmap_data(bitmap, submap);
+    } else {
+        bitmapData = mgr.get_and_convert_bitmap_data(bitmap, submap);
+    }
     const format = getBitmapTextureFormat(bitmapMetadata.format);
     const mipmapCount = Math.max(bitmapMetadata.mipmap_count, 1);
 
@@ -205,7 +210,7 @@ export class TextureCache {
     public textures: Map<string, GfxTexture>;
     public default2DTexture: GfxTexture;
 
-    constructor(public device: GfxDevice, public gfxSampler: GfxSampler, public mgr: HaloSceneManager) {
+    constructor(public device: GfxDevice, public gfxSampler: GfxSampler, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
         this.textures = new Map();
         this.default2DTexture = makeSolidColorTexture2D(this.device, {
             r: 0.5,
@@ -224,7 +229,7 @@ export class TextureCache {
         if (this.textures.has(key)) {
             return this.textures.get(key)!;
         } else {
-            const texture = makeTexture(this.device, bitmap, this.mgr, submap);
+            const texture = makeTexture(this.device, bitmap, this.mgr, this.bitmapReader, submap);
             this.textures.set(key, texture);
             return texture;
         }

@@ -23,6 +23,40 @@ pub struct HaloSceneManager {
 }
 
 #[wasm_bindgen]
+pub struct HaloBitmapReader {
+    inner: ResourceMapReader,
+}
+
+#[wasm_bindgen]
+impl HaloBitmapReader {
+    pub fn new(data: Vec<u8>) -> Self {
+        HaloBitmapReader { inner: ResourceMapReader::new(data) }
+    }
+
+    pub fn get_and_convert_bitmap_data(&mut self, bitmap: &HaloBitmap, submap: usize) -> Vec<u8> {
+        let bitmap_data = &bitmap.inner.data.items.as_ref().unwrap()[submap];
+        get_and_convert_bitmap_data(self.inner.data.get_ref(), bitmap_data)
+    }
+
+    pub fn destroy(self) {
+        panic!("destroy");
+    }
+}
+
+fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8> {
+    let offset = bitmap_data.pixel_data_offset as usize;
+    let length = bitmap_data.pixel_data_size as usize;
+    let byte_range = &bytes[offset..offset+length];
+    match bitmap_data.format {
+        BitmapFormat::P8 | BitmapFormat::P8Bump => convert_p8_data(byte_range),
+        BitmapFormat::A8r8g8b8 => convert_a8r8g8b8_data(byte_range),
+        BitmapFormat::A8 => convert_a8_data(byte_range),
+        BitmapFormat::Y8 => convert_y8_data(byte_range),
+        _ => Vec::from(&byte_range[..]),
+    }
+}
+
+#[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct HaloSky {
     inner: Sky,
@@ -479,12 +513,16 @@ impl HaloBitmapMetadata {
     #[wasm_bindgen(getter)] pub fn format(&self) -> BitmapFormat { self.inner.format }
     #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
     #[wasm_bindgen(getter)] pub fn mipmap_count(&self) -> u16 { self.inner.mipmap_count }
+
+    pub fn is_external(&self) -> bool {
+        self.inner.is_external()
+    }
 }
 
 #[wasm_bindgen]
 impl HaloSceneManager {
-    pub fn new(map_data: Vec<u8>, bitmap_data: Vec<u8>) -> Self {
-        let mgr = MapManager::new(map_data, bitmap_data).unwrap();
+    pub fn new(map_data: Vec<u8>) -> Self {
+        let mgr = MapManager::new(map_data).unwrap();
         HaloSceneManager { mgr }
     }
 
@@ -700,20 +738,7 @@ impl HaloSceneManager {
 
     pub fn get_and_convert_bitmap_data(&mut self, bitmap: &HaloBitmap, submap: usize) -> Vec<u8> {
         let bitmap_data = &bitmap.inner.data.items.as_ref().unwrap()[submap];
-        let offset = bitmap_data.pixel_data_offset as usize;
-        let length = bitmap_data.pixel_data_size as usize;
-        let bytes: &[u8] = if bitmap_data.is_external() {
-            &self.mgr.bitmaps_reader.data.get_ref()[offset..offset+length]
-        } else {
-            &self.mgr.reader.data.get_ref()[offset..offset+length]
-        };
-        match bitmap_data.format {
-            BitmapFormat::P8 | BitmapFormat::P8Bump => convert_p8_data(bytes),
-            BitmapFormat::A8r8g8b8 => convert_a8r8g8b8_data(bytes),
-            BitmapFormat::A8 => convert_a8_data(bytes),
-            BitmapFormat::Y8 => convert_y8_data(bytes),
-            _ => Vec::from(&bytes[..]),
-        }
+        get_and_convert_bitmap_data(self.mgr.reader.data.get_ref(), bitmap_data)
     }
 
     pub fn get_material_vertex_data(&mut self, material: &HaloMaterial, bsp: &HaloBSP) -> Vec<u8> {
