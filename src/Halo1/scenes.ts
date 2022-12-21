@@ -285,7 +285,7 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
         fragBody.push(`vec4 current = t0;`)
         fragBody.push(`vec4 next;`)
 
-        maps.forEach((map, i) => {
+        maps.slice(0, 3).forEach((map, i) => {
             fragBody.push(`next = t${i+1};`)
             fragBody.push(this.getColorFunction('scratch.rgb', 'current.rgb', 'next.rgb', map.color_function));
             fragBody.push(this.getColorFunction('scratch.a', 'current.a', 'next.a', map.color_function));
@@ -1113,10 +1113,6 @@ class HaloScene implements Viewer.SceneGfx {
     }
 }
 
-class Main {
-
-}
-
 const pathBase = `Halo1`;
 
 class HaloSceneDesc implements Viewer.SceneDesc {
@@ -1127,7 +1123,7 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const wasm = await loadWasm();
         wasm.init_panic_hook();
-        const bitmapReader = await context.dataShare.ensureObject(`Halo1/BitmapReader`, async () => {
+        const bitmapReader = await context.dataShare.ensureObject(`${pathBase}/BitmapReader`, async () => {
             const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
             return wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
         });
