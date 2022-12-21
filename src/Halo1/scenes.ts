@@ -1,9 +1,9 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
-import { CameraController } from '../Camera';
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
@@ -12,12 +12,12 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixS, getMatrixTranslation } from '../MathHelpers';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -36,6 +36,8 @@ const noclipSpaceFromHaloSpace = mat4.fromValues(
     0, 0,  0, 1,
 );
 
+const scratchVec3a = vec3.create();
+
 let _wasm: typeof import('../../rust/pkg/index') | null = null;
 
 async function loadWasm() {
@@ -48,6 +50,11 @@ async function loadWasm() {
 export function wasm() {
     assert(_wasm !== null);
     return _wasm!;
+}
+
+const enum SortKey {
+    Translucent = GfxRendererLayer.TRANSLUCENT + 2,
+    Skybox = GfxRendererLayer.TRANSLUCENT + 1,
 }
 
 class BaseProgram extends DeviceProgram {
@@ -155,13 +162,13 @@ class ShaderTransparencyGenericProgram extends BaseShaderProgram {
 
     private generateFragSection(): string {
         const fragBody: string[] = [];
-        if (this.shader.first_map_type !== _wasm!.ShaderTransparentGenericMapType.Map2D) {
+        if (this.shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture), v_UV);`);
         } else {
             fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
             fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_ReflectionCubeMap), t_EyeWorld);`);
         }
-        
+
         fragBody.push(`
 vec4 t1 = texture(SAMPLER_2D(u_Lightmap), v_UV);
 vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), v_UV);
@@ -179,6 +186,47 @@ ${fragBody.join('\n')}
     }
 }
 
+class MaterialRender_TransparencyGeneric {
+    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
+    private gfxProgram: GfxProgram;
+    public sortKeyBase: number = 0;
+    public visible = true;
+
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric, private model: ModelRenderer) {
+        this.textureMapping[1] = textureCache.getTextureMapping(shader.get_bitmap(1));
+        this.textureMapping[2] = textureCache.getTextureMapping(shader.get_bitmap(2));
+        this.textureMapping[3] = textureCache.getTextureMapping(shader.get_bitmap(3));
+        if (shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
+            this.textureMapping[0] = textureCache.getTextureMapping(shader.get_bitmap(0));
+        } else {
+            this.textureMapping[6] = textureCache.getTextureMapping(shader.get_bitmap(0));
+        }
+
+        this.gfxProgram = cache.createProgram(new ShaderTransparencyGenericProgram(shader));
+        this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+        const megaStateFlags = { depthWrite: false };
+        setAttachmentStateSimple(megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+        renderInst.setMegaStateFlags(megaStateFlags);
+
+        // XXX(jstpierre): Have to allocate something...
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.shader.free();
+    }
+}
+
 class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
     constructor(public shader: HaloShaderTransparencyChicago) {
         super()
@@ -186,7 +234,7 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
     }
 
     private vec2Literal(x: number, y: number): string {
-        return `vec2(${x.toFixed(8)}, ${y.toFixed(8)})`;
+        return `vec2(${glslGenerateFloat(x)}, ${glslGenerateFloat(y)})`;
     }
 
     private getMapUVTransform(map: HaloShaderTransparentChicagoMap): string {
@@ -253,6 +301,41 @@ void mainPS() {
 ${fragBody.join('\n')}
 }
 `;
+    }
+}
+
+class MaterialRender_TransparencyChicago {
+    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
+    private gfxProgram: GfxProgram;
+    public sortKeyBase: number = 0;
+    public visible = true;
+
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago, private model: ModelRenderer) {
+        for (let i = 0; i < 4; i++)
+            this.textureMapping[i] = textureCache.getTextureMapping(shader.get_bitmap(i));
+
+        this.gfxProgram = cache.createProgram(new ShaderTransparencyChicagoProgram(shader));
+        this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+        const megaStateFlags = { depthWrite: false };
+        setAttachmentStateSimple(megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+        renderInst.setMegaStateFlags(megaStateFlags);
+
+        // XXX(jstpierre): Have to allocate something...
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.shader.free();
     }
 }
 
@@ -334,6 +417,38 @@ void mainPS() {
 ${fragBody.join('\n')}
 }
 `;
+    }
+}
+
+class MaterialRender_Model {
+    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
+    private gfxProgram: GfxProgram;
+    public sortKeyBase: number = 0;
+    public visible = true;
+
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel, private model: ModelRenderer) {
+        this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap());
+        this.textureMapping[1] = textureCache.getTextureMapping(shader.get_detail_bitmap());
+        if (shader.has_reflection_cube_map)
+            this.textureMapping[6] = textureCache.getTextureMapping(shader.get_reflection_cube_map());
+        this.textureMapping[5] = textureCache.getTextureMapping(shader.get_multipurpose_map());
+
+        this.gfxProgram = cache.createProgram(new ShaderModelProgram(shader));
+        this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
+        const d = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
+
+        offs += fillMatrix4x2(d, offs, this.model.baseMapTransform);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.shader.free();
     }
 }
 
@@ -551,15 +666,15 @@ ${fragBody.join('\n')}
 class LightmapRenderer {
     public lightmapMaterialRenderers: LightmapMaterialRenderer[];
     public inputLayout: GfxInputLayout;
-    constructor(public device: GfxDevice, public textureCache: TextureCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | undefined) {
+    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | undefined) {
         this.inputLayout = this.getInputLayout();
         this.lightmapMaterialRenderers = mgr.get_lightmap_materials(lightmap).map(material => {
-            return new LightmapMaterialRenderer(this.device, this.textureCache, material, this.inputLayout, this.mgr, this.bsp, this.trisBuf, lightmapTex!, this.bspIndex);
+            return new LightmapMaterialRenderer(this.device, this.textureCache, renderCache, material, this.inputLayout, this.mgr, this.bsp, this.trisBuf, lightmapTex!, this.bspIndex);
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.lightmapMaterialRenderers.forEach(r => r.prepareToRender(renderInstManager, viewerInput));
+    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        this.lightmapMaterialRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
     }
 
     public destroy(device: GfxDevice) {
@@ -589,91 +704,35 @@ class LightmapRenderer {
 
 class ModelRenderer {
     public inputLayout: GfxInputLayout;
-    // per shader
-    public shaders: (HaloShaderModel | HaloShaderTransparencyGeneric | HaloShaderTransparencyChicago | null)[];
-    public programs: (GfxProgram | null)[];
-    public textureMappings: (TextureMapping | null)[][];
-    public shaderParams: Float32Array[];
-    private baseMapTransform = mat4.create();
+    private materialRenderers: (MaterialRender_Model | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[] = [];
+
+    public baseMapTransform = mat4.create();
 
     // per part
     public parts: HaloModelPart[];
     public inputStates: GfxInputState[];
+    public isSkybox: boolean = false;
+    public visible = true;
 
-    private setupShaderTransparencyChicago(shader: HaloShaderTransparencyChicago, renderHelper: GfxRenderHelper) {
-        this.textureMappings.push([
-            this.textureCache.getTextureMapping(shader.get_bitmap(0)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(1)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(2)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(3)),
-        ]);
-        this.programs.push(renderHelper.renderCache.createProgram(new ShaderTransparencyChicagoProgram(shader)));
-    }
-
-    private setupShaderTransparencyGeneric(shader: HaloShaderTransparencyGeneric, renderHelper: GfxRenderHelper) {
-        const mappings = [
-            null,
-            this.textureCache.getTextureMapping(shader.get_bitmap(1)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(2)),
-            this.textureCache.getTextureMapping(shader.get_bitmap(3)),
-        ];
-        if (shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
-            mappings[0] = this.textureCache.getTextureMapping(shader.get_bitmap(0));
-        } else {
-            mappings[6] = this.textureCache.getTextureMapping(shader.get_bitmap(0));
-        }
-        this.textureMappings.push(mappings);
-        this.programs.push(renderHelper.renderCache.createProgram(new ShaderTransparencyGenericProgram(shader)));
-    }
-
-    private setupShaderModel(shader: HaloShaderModel, renderHelper: GfxRenderHelper) {
-        this.textureMappings.push([
-            this.textureCache.getTextureMapping(shader.get_base_bitmap()),
-            null,
-            null,
-            this.textureCache.getTextureMapping(shader.get_detail_bitmap()),
-            null,
-            null,
-            shader.has_reflection_cube_map ? this.textureCache.getTextureMapping(shader.get_reflection_cube_map()) : null,
-            this.textureCache.getTextureMapping(shader.get_multipurpose_map()),
-        ]);
-        this.programs.push(renderHelper.renderCache.createProgram(new ShaderModelProgram(shader)));
-
-    }
-
-    constructor(public device: GfxDevice, public textureCache: TextureCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4) {
-        this.shaders = mgr.get_model_shaders(this.model);
-        this.inputLayout = this.getInputLayout();
-        const renderHelper = new GfxRenderHelper(device);
-        this.textureMappings = [];
-        this.programs = [];
-        this.shaderParams = [];
-
-        computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
-
-        this.shaders.forEach(shader => {
+    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4) {
+        const shaders = mgr.get_model_shaders(this.model);
+        shaders.forEach(shader => {
             if (shader instanceof _wasm!.HaloShaderModel) {
-                this.setupShaderModel(shader, renderHelper);
+                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, this));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
-                this.setupShaderTransparencyGeneric(shader, renderHelper);
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, this));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
-                this.setupShaderTransparencyChicago(shader, renderHelper);
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, this));
             } else {
-                this.textureMappings.push([
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                ]);
-                this.programs.push(null);
+                this.materialRenderers.push(null);
             }
         });
 
+        computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
+
         this.parts = mgr.get_model_parts(this.model);
+
+        this.inputLayout = this.getInputLayout();
         this.inputStates = this.parts.map(part => {
             const triStrips = mgr.get_model_part_indices(part);
             const indices = convertToTriangleIndexBuffer(GfxTopology.TriStrips, triStrips);
@@ -681,10 +740,13 @@ class ModelRenderer {
             const triBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
             const vertBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_model_part_vertices(part).buffer);
             return device.createInputState(this.inputLayout, [{ buffer: vertBuf, byteOffset: 0 }], { buffer: triBuf, byteOffset: 0 });
-        })
+        });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        if (!this.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
 
         let offs = template.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
@@ -692,32 +754,28 @@ class ModelRenderer {
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
         this.parts.forEach((part, partIdx) => {
-            if (!this.programs[part.shader_index]) {
+            const materialRenderer = this.materialRenderers[part.shader_index];
+
+            if (!materialRenderer)
+                return; // Renderer will return...
+
+            if (!materialRenderer.visible)
                 return;
-            }
-            const shader = this.shaders[part.shader_index];
 
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.setGfxProgram(this.programs[part.shader_index]!);
-
-            if (shader instanceof _wasm!.HaloShaderTransparencyChicago || shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
-                const megaStateFlags = { depthWrite: false };
-                setAttachmentStateSimple(megaStateFlags, {
-                    blendMode: GfxBlendMode.Add,
-                    blendSrcFactor: GfxBlendFactor.SrcAlpha,
-                    blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-                });
-                renderInst.setMegaStateFlags(megaStateFlags);
-            }
-
-            offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
-            mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
-
-            offs += fillMatrix4x2(mapped, offs, this.baseMapTransform);
-
-            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings[part.shader_index])
+            materialRenderer.setOnRenderInst(renderInst);
             renderInst.setInputLayoutAndState(this.inputLayout, this.inputStates[partIdx]);
             renderInst.drawIndexes(part.tri_count, 0);
+            // TODO: Part AABB?
+            renderInst.sortKey = materialRenderer.sortKeyBase;
+
+            // XXX(jstpierre): This is a bit ugly... perhaps do skyboxen in a different render pass?
+            if (this.isSkybox)
+                renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, SortKey.Skybox);
+
+            getMatrixTranslation(scratchVec3a, this.modelMatrix);
+            const depth = computeViewSpaceDepthFromWorldSpacePoint(mainView.viewFromWorldMatrix, scratchVec3a);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
             renderInstManager.submitRenderInst(renderInst);
         });
 
@@ -741,35 +799,30 @@ class ModelRenderer {
 
     public destroy(device: GfxDevice) {
         this.inputStates.forEach(state => device.destroyInputState(state));
+        this.materialRenderers.forEach((materialRenderer) => materialRenderer?.destroy(device));
         device.destroyInputLayout(this.inputLayout);
     }
 }
 
 class SceneryRenderer {
     public modelRenderers: ModelRenderer[];
-    public modelMatrix: mat4;
     public model: HaloModel;
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
+    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
         this.model = mgr.get_scenery_model(this.scenery)!;
-        this.modelMatrix = mat4.create();
-        const initPos = vec3.fromValues(this.scenery.origin_offset.x, this.scenery.origin_offset.y, this.scenery.origin_offset.z);
-        mat4.fromTranslation(this.modelMatrix, initPos)
         this.modelRenderers = this.instances.map(instance => {
-            const instModelMatrix = mat4.clone(this.modelMatrix);
-            const pos = vec3.fromValues(instance.position.x, instance.position.y, instance.position.z);
-            mat4.translate(instModelMatrix, instModelMatrix, pos);
-            /*
-            mat4.rotateX(instModelMatrix, instModelMatrix, 180 * instance.rotation.roll / Math.PI);
-            mat4.rotateZ(instModelMatrix, instModelMatrix, 180 * instance.rotation.yaw / Math.PI);
-            mat4.rotateY(instModelMatrix, instModelMatrix, 180 * instance.rotation.pitch / Math.PI);
-            */
-            return new ModelRenderer(this.device, this.textureCache, this.bsp, this.mgr, this.model, instModelMatrix);
+            const instModelMatrix = mat4.create();
+            computeModelMatrixSRT(instModelMatrix, 1, 1, 1,
+                instance.rotation.roll, instance.rotation.pitch, instance.rotation.yaw,
+                instance.position.x + this.scenery.origin_offset.x,
+                instance.position.y + this.scenery.origin_offset.y,
+                instance.position.z + this.scenery.origin_offset.z);
+            return new ModelRenderer(this.device, this.textureCache, renderCache, this.bsp, this.mgr, this.model, instModelMatrix);
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.modelRenderers.forEach(m => m.prepareToRender(renderInstManager, viewerInput));
+    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        this.modelRenderers.forEach(m => m.prepareToRender(renderInstManager, mainView));
     }
 
     public destroy(device: GfxDevice) {
@@ -783,7 +836,7 @@ class BSPRenderer {
     public sceneryRenderers: SceneryRenderer[];
     public skyboxRenderers: ModelRenderer[];
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number) {
+    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number) {
         this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
         const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
@@ -791,23 +844,25 @@ class BSPRenderer {
             if (lightmapsBitmap && lightmap.get_bitmap_index() !== 65535) {
                 lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.get_bitmap_index());
             }
-            return new LightmapRenderer(this.device, this.textureCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex);
+            return new LightmapRenderer(this.device, this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex);
         });
         const sceneryInstances: HaloSceneryInstance[] = mgr.get_scenery_instances();
         this.sceneryRenderers = mgr.get_scenery_palette().map((scenery, i) => {
             const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
-            return new SceneryRenderer(this.device, this.textureCache, this.bsp, this.mgr, scenery, instances);
+            return new SceneryRenderer(this.device, this.textureCache, renderCache, this.bsp, this.mgr, scenery, instances);
         });
         this.skyboxRenderers = mgr.get_skies().map(sky => {
             const modelMatrix = mat4.create();
-            return new ModelRenderer(this.device, this.textureCache, bsp, mgr, sky.get_model(), modelMatrix);
+            const model = new ModelRenderer(this.device, this.textureCache, renderCache, bsp, mgr, sky.get_model(), modelMatrix);
+            model.isSkybox = true;
+            return model;
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.lightmapRenderers.forEach(r => r.prepareToRender(renderInstManager, viewerInput));
-        this.sceneryRenderers.forEach(r => r.prepareToRender(renderInstManager, viewerInput));
-        this.skyboxRenderers.forEach(r => r.prepareToRender(renderInstManager, viewerInput));
+    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        this.lightmapRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
+        this.sceneryRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
+        this.skyboxRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
     }
 
     public destroy(device: GfxDevice) {
@@ -835,7 +890,7 @@ class LightmapMaterialRenderer {
     public numIndices: number;
     public indexOffset: number;
 
-    constructor(device: GfxDevice, public textureCache: TextureCache, public material: HaloMaterial, public inputLayout: GfxInputLayout, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer, public lightmapMapping: TextureMapping | null, public bspIndex: number) {
+    constructor(device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public material: HaloMaterial, public inputLayout: GfxInputLayout, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer, public lightmapMapping: TextureMapping | null, public bspIndex: number) {
         this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, this.bsp).buffer);
         this.modelMatrix = mat4.create();
         this.lightmapVertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_lightmap_data(this.material, this.bsp).buffer);
@@ -856,8 +911,7 @@ class LightmapMaterialRenderer {
             vec4.set(this.parallelColor, parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
             parallel.free();
         }
-        const renderHelper = new GfxRenderHelper(device);
-        this.program = renderHelper.renderCache.createProgram(new ShaderEnvironmentProgram(this.shader, !!this.lightmapMapping));
+        this.program = renderCache.createProgram(new ShaderEnvironmentProgram(this.shader, !!this.lightmapMapping));
         this.numIndices = this.material.get_num_indices();
         this.indexOffset = this.material.get_index_offset();
 
@@ -867,7 +921,7 @@ class LightmapMaterialRenderer {
         ], { buffer: this.trisBuf, byteOffset: 0 })
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
@@ -921,16 +975,40 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     ] },
 ];
 
+// A "View" is effectively camera settings, but in Halo space.
+class View {
+    // aka viewMatrix
+    public viewFromWorldMatrix = mat4.create();
+    // aka worldMatrix
+    public worldFromViewMatrix = mat4.create();
+    public clipFromWorldMatrix = mat4.create();
+    // aka projectionMatrix
+    public clipFromViewMatrix = mat4.create();
+    public cameraPos = vec3.create();
+
+    public finishSetup(): void {
+        mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
+        getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromHaloSpace);
+        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
+        this.finishSetup();
+    }
+}
+
 class HaloScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     public textureCache: TextureCache;
     public bspRenderers: BSPRenderer[];
+    private mainView = new View();
 
     constructor(public device: GfxDevice, public mgr: HaloSceneManager) {
         this.bspRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
-        const cache = new GfxRenderCache(this.device);
-        const gfxSampler = cache.createSampler({
+        const gfxSampler = this.renderHelper.renderCache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.Linear,
@@ -947,28 +1025,23 @@ class HaloScene implements Viewer.SceneGfx {
     }
 
     public addBSP(bsp: HaloBSP, bspIndex: number) {
-        this.bspRenderers.push(new BSPRenderer(this.device, this.textureCache, bsp, this.mgr, bspIndex));
+        this.bspRenderers.push(new BSPRenderer(this.device, this.textureCache, this.renderHelper.renderCache, bsp, this.mgr, bspIndex));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        {
-            let offs = template.allocateUniformBuffer(BaseProgram.ub_SceneParams, 32 + 12);
-            const mapped = template.mapUniformBufferF32(BaseProgram.ub_SceneParams);
-            offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-            const view = mat4.create();
-            mat4.mul(view, viewerInput.camera.viewMatrix, noclipSpaceFromHaloSpace);
-            offs += fillMatrix4x4(mapped, offs, view);
-            const cameraPos = vec3.create();
-            mat4.invert(view, view);
-            getMatrixTranslation(cameraPos, view);
-            offs += fillVec3v(mapped, offs, cameraPos);
-        }
+        this.mainView.setupFromCamera(viewerInput.camera);
+
+        let offs = template.allocateUniformBuffer(BaseProgram.ub_SceneParams, 32 + 12);
+        const mapped = template.mapUniformBufferF32(BaseProgram.ub_SceneParams);
+        offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromViewMatrix);
+        offs += fillMatrix4x4(mapped, offs, this.mainView.viewFromWorldMatrix);
+        offs += fillVec3v(mapped, offs, this.mainView.cameraPos);
 
         this.bspRenderers.forEach((r, i) => {
-            r.prepareToRender(this.renderHelper.renderInstManager, viewerInput)
+            r.prepareToRender(this.renderHelper.renderInstManager, this.mainView);
         })
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
