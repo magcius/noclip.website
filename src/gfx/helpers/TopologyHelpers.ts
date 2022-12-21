@@ -99,23 +99,17 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array | n
 export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer: Uint16Array): Uint16Array {
     if (topology === GfxTopology.Triangles)
         return indexBuffer;
-
     const newSize = getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length);
     const newBuffer = new Uint16Array(newSize);
     convertToTriangles(newBuffer, 0, topology, indexBuffer);
-
     return newBuffer;
 }
 
-function range(start: number, length: number): Uint16Array {
-    const r = new Uint16Array(length);
-    for (let i = 0; i < length; i++)
-        r[i] = start + i;
-    return r;
-}
-
 export function makeTriangleIndexBuffer(topology: GfxTopology, baseVertex: number, numVertices: number): Uint16Array {
-    return convertToTriangleIndexBuffer(topology, range(baseVertex, numVertices));
+    const newSize = getTriangleIndexCountForTopologyIndexCount(topology, numVertices);
+    const newBuffer = new Uint16Array(newSize);
+    convertToTrianglesRange(newBuffer, 0, topology, baseVertex, numVertices);
+    return newBuffer;
 }
 
 export function getTriangleCountForTopologyIndexCount(topology: GfxTopology, indexCount: number): number {
