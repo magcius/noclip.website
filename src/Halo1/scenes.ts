@@ -164,24 +164,40 @@ void mainVS() {
 }
 
 class ShaderTransparencyGenericProgram extends BaseProgram {
+    public static BindingsDefinition = `
+layout(std140) uniform ub_ShaderParams {
+    Mat4x2 u_MapTransform0;
+    Mat4x2 u_MapTransform1;
+    Mat4x2 u_MapTransform2;
+    Mat4x2 u_MapTransform3;
+};
+`;
+
     constructor(public shader: HaloShaderTransparencyGeneric) {
-        super([])
+        super([ShaderTransparencyGenericProgram.BindingsDefinition])
         this.frag = this.generateFragSection();
     }
 
     private generateFragSection(): string {
         const fragBody: string[] = [];
+
+        fragBody.push(`
+vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));
+vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));
+vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));
+vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
+`);
         if (this.shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
-            fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture), v_UV);`);
+            fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture), uv0);`);
         } else {
             fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
             fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_ReflectionCubeMap), t_EyeWorld);`);
         }
 
         fragBody.push(`
-vec4 t1 = texture(SAMPLER_2D(u_Lightmap), v_UV);
-vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), v_UV);
-vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), v_UV);
+vec4 t1 = texture(SAMPLER_2D(u_Lightmap), uv1);
+vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), uv2);
+vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), uv3);
 vec4 r0 = vec4(0.0, 0.0, 0.0, t0.a);
 vec4 r1 = vec4(0.0, 0.0, 0.0, 0.0);
 vec4 v0 = vec4(0.0, 0.0, 0.0, 0.0); // TODO(jstpierre): Vertex lighting
@@ -489,6 +505,8 @@ function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlend
 
 class MaterialRender_TransparencyGeneric {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
+    private animationHandlers: (TextureAnimationHandler | undefined)[];
+    private mapTransform: mat4;
     private gfxProgram: GfxProgram;
     public sortKeyBase: number = 0;
     public visible = true;
@@ -502,12 +520,30 @@ class MaterialRender_TransparencyGeneric {
         } else {
             this.textureMapping[6] = textureCache.getTextureMapping(shader.get_bitmap(0));
         }
+        const maps = [
+            this.shader.get_map(0),
+            this.shader.get_map(1),
+            this.shader.get_map(2),
+            this.shader.get_map(3),
+        ];
+        this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
 
+        this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyGenericProgram(shader));
         this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    private setupMapTransform(i: number, t: number): mat4 {
+        const handler = this.animationHandlers[i];
+        if (handler) {
+            handler.setTransform(this.mapTransform, t);
+        } else {
+            mat4.identity(this.mapTransform);
+        }
+        return this.mapTransform;
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -515,8 +551,12 @@ class MaterialRender_TransparencyGeneric {
         setBlendMode(megaStateFlags, this.shader.framebuffer_blend_function);
         renderInst.setMegaStateFlags(megaStateFlags);
 
-        // XXX(jstpierre): Have to allocate something...
-        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4);
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
+        const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time));
     }
 
     public destroy(device: GfxDevice): void {
@@ -638,7 +678,6 @@ class MaterialRender_TransparencyChicago {
         setBlendMode(megaStateFlags, this.shader.framebuffer_blend_function);
         renderInst.setMegaStateFlags(megaStateFlags);
 
-        // XXX(jstpierre): Have to allocate something...
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
         const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time));
@@ -652,6 +691,8 @@ class MaterialRender_TransparencyChicago {
     }
 }
 
+function defaultTo1(v: number) { return v === 0 ? 1 : v;}
+
 class TextureAnimationHandler {
     private u: TextureAnimationFunction;
     private v: TextureAnimationFunction;
@@ -659,28 +700,28 @@ class TextureAnimationHandler {
     constructor(map: HaloShaderTransparentGenericMap | HaloShaderTransparentChicagoMap) {
         this.u = {
             fn: map.u_animation_function,
-            scale: map.u_animation_scale,
-            period: map.u_animation_period,
+            scale: defaultTo1(map.u_animation_scale),
+            period: defaultTo1(map.u_animation_period),
             phase: map.u_animation_phase,
-            baseScale: map.map_u_scale,
+            baseScale: defaultTo1(map.map_u_scale),
             baseOffset: map.map_u_offset,
             baseRotation: 0,
             center: null,
         };
         this.v = {
             fn: map.v_animation_function,
-            scale: map.v_animation_scale,
-            period: map.v_animation_period,
+            scale: defaultTo1(map.v_animation_scale),
+            period: defaultTo1(map.v_animation_period),
             phase: map.v_animation_phase,
-            baseScale: map.map_v_scale,
+            baseScale: defaultTo1(map.map_v_scale),
             baseOffset: map.map_v_offset,
             baseRotation: 0,
             center: null,
         };
         this.rotation = {
             fn: map.rotation_animation_function,
-            scale: map.rotation_animation_scale,
-            period: map.rotation_animation_period,
+            scale: defaultTo1(map.rotation_animation_scale),
+            period: defaultTo1(map.rotation_animation_period),
             phase: map.rotation_animation_phase,
             baseScale: 0,
             baseOffset: 0,
@@ -690,14 +731,21 @@ class TextureAnimationHandler {
     }
 
     public setTransform(out: mat4, t: number) {
+        // TODO: Spark/Noise
         computeModelMatrixS(out, this.u.baseScale, this.v.baseScale);
         const translation = vec3.fromValues(this.u.baseOffset, this.v.baseOffset, 0);
-        const slideConstant = 0.000005;
-        if (this.u.fn === _wasm!.AnimationFunction.Slide) {
-            translation[0] += t * slideConstant;
+        const tSecs = t / 1000;
+        switch (this.u.fn) {
+            case _wasm!.AnimationFunction.One: break;
+            case _wasm!.AnimationFunction.Slide:
+                translation[0] += (tSecs / this.u.period) * this.u.scale;
+                break;
         }
-        if (this.v.fn === _wasm!.AnimationFunction.Slide) {
-            translation[1] += t * slideConstant;
+        switch (this.v.fn) {
+            case _wasm!.AnimationFunction.One: break;
+            case _wasm!.AnimationFunction.Slide:
+                translation[1] += (tSecs / this.v.period) * this.v.scale;
+                break;
         }
         mat4.translate(out, out, translation);
     }
