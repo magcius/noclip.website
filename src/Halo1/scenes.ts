@@ -1,12 +1,12 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, } from '../../rust/pkg/index';
+import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, FunctionSource, } from '../../rust/pkg/index';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -21,6 +21,7 @@ import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { Color, colorCopy, colorNewCopy, White } from '../Color';
 
 /**
  * todo:
@@ -169,6 +170,8 @@ layout(std140) uniform ub_ShaderParams {
     Mat4x2 u_MapTransform1;
     Mat4x2 u_MapTransform2;
     Mat4x2 u_MapTransform3;
+    vec4 u_Color0[8];
+    vec4 u_Color1[8];
 };
 `;
 
@@ -206,7 +209,7 @@ vec4 A, B, C, D;
 vec4 AB, CD, ABCD;
 `);
 
-        function genInputColor(input: ShaderInput): string { // vec3
+        function genInputColor(input: ShaderInput, stage: number): string { // vec3
             if (input === _wasm!.ShaderInput.Zero)
                 return `vec3(0.0)`;
             else if (input === _wasm!.ShaderInput.One)
@@ -234,9 +237,9 @@ vec4 AB, CD, ABCD;
             else if (input === _wasm!.ShaderInput.Scratch1Color)
                 return `r1.rgb`;
             else if (input === _wasm!.ShaderInput.Constant0Color)
-                return `vec3(0.0)`; // TODO(jstpierre): Constant stage color
+                return `u_Color0[${stage}].rgb`;
             else if (input === _wasm!.ShaderInput.Constant1Color)
-                return `vec3(0.0)`; // TODO(jstpierre): Constant stage color
+                return `u_Color1[${stage}].rgb`;
             else if (input === _wasm!.ShaderInput.Texture0Alpha)
                 return `t0.aaa`;
             else if (input === _wasm!.ShaderInput.Texture1Alpha)
@@ -254,14 +257,14 @@ vec4 AB, CD, ABCD;
             else if (input === _wasm!.ShaderInput.Scratch1Alpha)
                 return `r1.aaa`;
             else if (input === _wasm!.ShaderInput.Constant0Alpha)
-                return `vec3(0.0)`; // TODO(jstpierre): Constant stage alpha
+                return `u_Color0[${stage}].aaa`;
             else if (input === _wasm!.ShaderInput.Constant1Alpha)
-                return `vec3(0.0)`; // TODO(jstpierre): Constant stage alpha
+                return `u_Color1[${stage}].aaa`;
             else
                 throw "whoops";
         }
 
-        function genInputAlpha(input: ShaderAlphaInput): string { // float
+        function genInputAlpha(input: ShaderAlphaInput, stage: number): string { // float
             if (input === _wasm!.ShaderAlphaInput.Zero)
                 return `0.0`;
             else if (input === _wasm!.ShaderAlphaInput.One)
@@ -289,9 +292,9 @@ vec4 AB, CD, ABCD;
             else if (input === _wasm!.ShaderAlphaInput.Scratch1Alpha)
                 return `r1.a`;
             else if (input === _wasm!.ShaderAlphaInput.Constant0Alpha)
-                return `0.0`; // TODO(jstpierre): Constant stage alpha
+                return `u_Color0[${stage}].a`;
             else if (input === _wasm!.ShaderAlphaInput.Constant1Alpha)
-                return `0.0`; // TODO(jstpierre): Constant stage alpha
+                return `u_Color1[${stage}].a`;
             else if (input === _wasm!.ShaderAlphaInput.Texture0Blue)
                 return `t0.b`;
             else if (input === _wasm!.ShaderAlphaInput.Texture1Blue)
@@ -309,9 +312,9 @@ vec4 AB, CD, ABCD;
             else if (input === _wasm!.ShaderAlphaInput.Scratch1Blue)
                 return `r1.b`;
             else if (input === _wasm!.ShaderAlphaInput.Constant0Blue)
-                return `0.0`; // TODO(jstpierre): Constant stage blue
+                return `u_Color0[${stage}].b`;
             else if (input === _wasm!.ShaderAlphaInput.Constant1Blue)
-                return `0.0`; // TODO(jstpierre): Constant stage blue
+                return `u_Color1[${stage}].b`;
             else
                 throw "whoops";
         }
@@ -338,9 +341,9 @@ vec4 AB, CD, ABCD;
                 throw "whoops";
         }
 
-        function genInput(colorInput: ShaderInput, colorMapping: ShaderMapping, alphaInput: ShaderAlphaInput, alphaMapping: ShaderMapping): string {
-            const color = genMapping(genInputColor(colorInput), colorMapping, true);
-            const alpha = genMapping(genInputAlpha(alphaInput), alphaMapping, false);
+        function genInput(colorInput: ShaderInput, colorMapping: ShaderMapping, alphaInput: ShaderAlphaInput, alphaMapping: ShaderMapping, stage: number): string {
+            const color = genMapping(genInputColor(colorInput, stage), colorMapping, true);
+            const alpha = genMapping(genInputAlpha(alphaInput, stage), alphaMapping, false);
             return `vec4(${color}, ${alpha})`;
         }
 
@@ -426,10 +429,10 @@ vec4 AB, CD, ABCD;
 
             fragBody.push(`
 // Stage ${i}
-A = ${genInput(stage.input_a, stage.input_a_mapping, stage.input_a_alpha, stage.input_a_mapping_alpha)};
-B = ${genInput(stage.input_b, stage.input_b_mapping, stage.input_b_alpha, stage.input_b_mapping_alpha)};
-C = ${genInput(stage.input_c, stage.input_c_mapping, stage.input_c_alpha, stage.input_c_mapping_alpha)};
-D = ${genInput(stage.input_d, stage.input_d_mapping, stage.input_d_alpha, stage.input_d_mapping_alpha)};
+A = ${genInput(stage.input_a, stage.input_a_mapping, stage.input_a_alpha, stage.input_a_mapping_alpha, i)};
+B = ${genInput(stage.input_b, stage.input_b_mapping, stage.input_b_alpha, stage.input_b_mapping_alpha, i)};
+C = ${genInput(stage.input_c, stage.input_c_mapping, stage.input_c_alpha, stage.input_c_mapping_alpha, i)};
+D = ${genInput(stage.input_d, stage.input_d_mapping, stage.input_d_alpha, stage.input_d_mapping_alpha, i)};
 
 AB.rgb = ${genOutputFunction(stage.output_ab_function, `A.rgb`, `B.rgb`)};
 AB.a   = A.a * B.a;
@@ -502,11 +505,29 @@ function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlend
     }
 }
 
+class ColorAnimationController {
+    public lower = colorNewCopy(White);
+    public upper = colorNewCopy(White);
+
+    constructor(private dst: Color, private source: FunctionSource, private fn: AnimationFunction, private period: number, lower: Color, upper: Color) {
+        colorCopy(this.lower, lower);
+        colorCopy(this.upper, upper);
+    }
+
+    public calc(time: number): void {
+        // TODO(jstpierre): How does color animation work, exactly?
+        colorCopy(this.dst, this.upper);
+    }
+}
+
 class MaterialRender_TransparencyGeneric {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private animationHandlers: (TextureAnimationHandler | undefined)[];
     private mapTransform: mat4;
     private gfxProgram: GfxProgram;
+    private color0: Color[] = nArray(8, () => colorNewCopy(White));
+    private color0Animation: ColorAnimationController[] = [];
+    private color1: Color[] = nArray(8, () => colorNewCopy(White));
     public sortKeyBase: number = 0;
     public visible = true;
 
@@ -530,6 +551,24 @@ class MaterialRender_TransparencyGeneric {
         this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyGenericProgram(shader));
         this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+
+        for (let i = 0; i < 8; i++) {
+            const stage = this.shader.get_stage(i);
+            if (stage === undefined)
+                break;
+
+            const color0_lower = stage.color0_animation_lower_bound;
+            const color0_upper = stage.color0_animation_upper_bound;
+            this.color0Animation.push(new ColorAnimationController(this.color0[i], stage.color0_source, stage.color0_animation_function, stage.color0_animation_period, color0_lower, color0_upper));
+            color0_lower.free();
+            color0_upper.free();
+
+            const color1 = stage.color1;
+            colorCopy(this.color1[i], color1);
+            color1.free();
+
+            stage.free();
+        }
     }
 
     private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
@@ -550,12 +589,20 @@ class MaterialRender_TransparencyGeneric {
         setBlendMode(megaStateFlags, this.shader.framebuffer_blend_function);
         renderInst.setMegaStateFlags(megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8 + 4 * 8 + 4 * 8);
         const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time, baseMapTransform));
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time, baseMapTransform));
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time, baseMapTransform));
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time, baseMapTransform));
+
+        for (let i = 0; i < this.color0Animation.length; i++)
+            this.color0Animation[i].calc(view.time);
+
+        for (let i = 0; i < 8; i++)
+            offs += fillColor(mapped, offs, this.color0[i]);
+        for (let i = 0; i < 8; i++)
+            offs += fillColor(mapped, offs, this.color1[i]);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1092,11 +1139,13 @@ class LightmapRenderer {
             return;
 
         this.materialRenderers.forEach((materialRenderer, i) => {
-            const renderInst = renderInstManager.newRenderInst();
-
-            if (!materialRenderer) {
+            if (!materialRenderer)
                 return;
-            }
+
+            if (!materialRenderer.visible)
+                return;
+
+            const renderInst = renderInstManager.newRenderInst();
 
             materialRenderer.setOnRenderInst(renderInst, mainView, null);
             this.materials[i].setOnRenderInst(renderInst);

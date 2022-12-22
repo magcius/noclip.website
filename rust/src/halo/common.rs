@@ -153,6 +153,7 @@ impl Deserialize for ColorRGB {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[wasm_bindgen]
 pub struct ColorARGB {
     pub a: f32,
     pub r: f32,

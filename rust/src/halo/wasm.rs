@@ -292,9 +292,9 @@ impl HaloShaderTransparentGenericStage {
     #[wasm_bindgen(getter)] pub fn color0_source(&self) -> FunctionSource { self.inner.color0_source }
     #[wasm_bindgen(getter)] pub fn color0_animation_function(&self) -> AnimationFunction { self.inner.color0_animation_function }
     #[wasm_bindgen(getter)] pub fn color0_animation_period(&self) -> f32 { self.inner.color0_animation_period }
-    // #[wasm_bindgen(getter)] pub fn color0_animation_lower_bound(&self) -> ColorARGB { self.inner.color0_animation_lower_bound }
-    // #[wasm_bindgen(getter)] pub fn color0_animation_upper_bound(&self) -> ColorARGB { self.inner.color0_animation_upper_bound }
-    // #[wasm_bindgen(getter)] pub fn color1(&self) -> ColorARGB { self.inner.color1 }
+    #[wasm_bindgen(getter)] pub fn color0_animation_lower_bound(&self) -> ColorARGB { self.inner.color0_animation_lower_bound }
+    #[wasm_bindgen(getter)] pub fn color0_animation_upper_bound(&self) -> ColorARGB { self.inner.color0_animation_upper_bound }
+    #[wasm_bindgen(getter)] pub fn color1(&self) -> ColorARGB { self.inner.color1 }
     #[wasm_bindgen(getter)] pub fn input_a(&self) -> ShaderInput { self.inner.input_a }
     #[wasm_bindgen(getter)] pub fn input_a_mapping(&self) -> ShaderMapping { self.inner.input_a_mapping }
     #[wasm_bindgen(getter)] pub fn input_b(&self) -> ShaderInput { self.inner.input_b }
