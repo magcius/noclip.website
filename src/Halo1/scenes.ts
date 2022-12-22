@@ -105,7 +105,7 @@ layout(binding = 7) uniform samplerCube u_TextureCube;
 
     public static CalcFog = `
 void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
-    return; // broken???
+#if defined USE_FOG
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_PlayerPos.xyz);
     float t_FogFactor = saturate(invlerp(u_FogDistances.x, u_FogDistances.y, t_DistanceWorld));
     t_FogFactor = min(t_FogFactor, u_FogColor.a);
@@ -114,6 +114,7 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
     t_FogFactor *= t_FogFactor;
 
     t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
+#endif
 }
 `;
 
@@ -522,7 +523,7 @@ class MaterialRender_TransparencyGeneric {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric, fogEnabled: boolean) {
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_bitmap(1));
         this.textureMapping[2] = textureCache.getTextureMapping(shader.get_bitmap(2));
         this.textureMapping[3] = textureCache.getTextureMapping(shader.get_bitmap(3));
@@ -540,7 +541,9 @@ class MaterialRender_TransparencyGeneric {
         this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
 
         this.mapTransform = mat4.create();
-        this.gfxProgram = cache.createProgram(new ShaderTransparencyGenericProgram(shader));
+        const prog = new ShaderTransparencyGenericProgram(shader);
+        prog.setDefineBool('USE_FOG', fogEnabled);
+        this.gfxProgram = cache.createProgram(prog);
         this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
 
         for (let i = 0; i < 8; i++) {
@@ -681,12 +684,14 @@ class MaterialRender_TransparencyChicago {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago, fogEnabled: boolean) {
         for (let i = 0; i < 4; i++)
             this.textureMapping[i] = textureCache.getTextureMapping(shader.get_bitmap(i));
 
         this.mapTransform = mat4.create();
-        this.gfxProgram = cache.createProgram(new ShaderTransparencyChicagoProgram(shader));
+        const prog = new ShaderTransparencyChicagoProgram(shader);
+        prog.setDefineBool('USE_FOG', fogEnabled);
+        this.gfxProgram = cache.createProgram(prog);
         this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
         const maps = [
             this.shader.get_map(0),
@@ -845,14 +850,16 @@ class MaterialRender_Model {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel, fogEnabled: boolean) {
         this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap());
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_detail_bitmap());
         if (shader.has_reflection_cube_map)
             this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_cube_map());
         this.textureMapping[5] = textureCache.getTextureMapping(shader.get_multipurpose_map());
 
-        this.gfxProgram = cache.createProgram(new ShaderModelProgram(shader));
+        const prog = new ShaderModelProgram(shader);
+        prog.setDefineBool('USE_FOG', fogEnabled);
+        this.gfxProgram = cache.createProgram(prog);
         this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
@@ -1084,8 +1091,10 @@ class MaterialRender_Environment {
     public sortKeyBase = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, private bspIndex: number) {
-        this.gfxProgram = cache.createProgram(new ShaderEnvironmentProgram(shader, !!lightmapMapping));
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, private bspIndex: number, fogEnabled: boolean) {
+        const prog = new ShaderEnvironmentProgram(shader, !!lightmapMapping);
+        prog.setDefineBool('USE_FOG', fogEnabled);
+        this.gfxProgram = cache.createProgram(prog);
         const perpendicular = this.shader.perpendicular_color;
         this.perpendicularColor = vec4.fromValues(perpendicular.r, perpendicular.g, perpendicular.b, this.shader.perpendicular_brightness);
         perpendicular.free();
@@ -1128,17 +1137,17 @@ class LightmapRenderer {
     public materialRenderers: (MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[];
     public visible = true;
 
-    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null, public fogEnabled: boolean) {
         this.materials = [];
         this.materialRenderers = [];
         mgr.get_lightmap_materials(lightmap).forEach(material => {
             const shader = this.mgr.get_material_shaders(material)[0];
             if (shader instanceof _wasm!.HaloShaderEnvironment) {
-                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, bspIndex));
+                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, bspIndex, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
-                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader));
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
-                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader));
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
             }
@@ -1240,15 +1249,15 @@ class ModelRenderer {
     public isSkybox: boolean = false;
     public visible = true;
 
-    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4, public modelData: ModelData) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4, public modelData: ModelData, fogEnabled: boolean) {
         const shaders = mgr.get_model_shaders(this.model);
         shaders.forEach(shader => {
             if (shader instanceof _wasm!.HaloShaderModel) {
-                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader));
+                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
-                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader));
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
-                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader));
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
             }
@@ -1420,7 +1429,7 @@ class SceneryRenderer {
     public modelData: ModelData | null = null;
     public visible = true;
 
-    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[], fogEnabled: boolean) {
         this.model = mgr.get_scenery_model(this.scenery);
         if (this.model) {
             this.modelData = new ModelData(renderCache, mgr, this.model);
@@ -1431,7 +1440,7 @@ class SceneryRenderer {
                     instance.position.x + this.scenery.origin_offset.x,
                     instance.position.y + this.scenery.origin_offset.y,
                     instance.position.z + this.scenery.origin_offset.z);
-                return new ModelRenderer(this.textureCache, renderCache, this.mgr, this.model!, instModelMatrix, this.modelData!);
+                return new ModelRenderer(this.textureCache, renderCache, this.mgr, this.model!, instModelMatrix, this.modelData!, fogEnabled);
             });
         } else {
             assert(this.instances.length === 0);
@@ -1458,7 +1467,7 @@ class BSPRenderer {
     public trisBuf: GfxBuffer;
     public lightmapRenderers: LightmapRenderer[];
 
-    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public fogEnabled: boolean) {
         this.trisBuf = makeStaticDataBuffer(renderCache.device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
         const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
@@ -1466,7 +1475,7 @@ class BSPRenderer {
             if (lightmapsBitmap && lightmap.get_bitmap_index() !== 65535) {
                 lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.get_bitmap_index());
             }
-            return new LightmapRenderer(this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex);
+            return new LightmapRenderer(this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex, fogEnabled);
         });
     }
 
@@ -1527,11 +1536,12 @@ class HaloScene implements Viewer.SceneGfx {
     public skyboxRenderer: ModelRenderer | undefined;
     public skyboxData: ModelData | null = null;
     public activeSky: HaloSky | undefined;
+    public fogEnabled: boolean
     public fogColor = vec4.create();
     public fogDistances = vec4.create();
     private mainView = new View();
 
-    constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
+    constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader, public fogSettings: FogSettings) {
         this.bspRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
         const gfxSampler = this.renderHelper.renderCache.createSampler({
@@ -1544,14 +1554,9 @@ class HaloScene implements Viewer.SceneGfx {
             wrapT: GfxWrapMode.Repeat,
         });
         this.textureCache = new TextureCache(this.device, gfxSampler, this.mgr, bitmapReader);
-        const sceneryInstances: HaloSceneryInstance[] = mgr.get_scenery_instances();
-        this.sceneryRenderers = mgr.get_scenery_palette().map((scenery, i) => {
-            const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
-            return new SceneryRenderer(this.textureCache, this.renderHelper.renderCache, this.mgr, scenery, instances);
-        });
-
         // for now, just choose the first skybox. eventually we'll want to switch between them depending on the current BSP
         this.activeSky = mgr.get_skies()[0];
+        this.setupFogSettings();
         if (this.activeSky !== undefined) {
             const color = this.activeSky.outdoor_fog_color;
             vec4.set(this.fogColor, color.r, color.g, color.b, this.activeSky.outdoor_fog_max_density);
@@ -1562,9 +1567,29 @@ class HaloScene implements Viewer.SceneGfx {
             if (skyModel) {
                 const skyModelData = new ModelData(this.renderHelper.renderCache, mgr, skyModel);
                 this.skyboxData = skyModelData;
-                this.skyboxRenderer = new ModelRenderer(this.textureCache, this.renderHelper.renderCache, mgr, skyModel, modelMatrix, skyModelData);
+                this.skyboxRenderer = new ModelRenderer(this.textureCache, this.renderHelper.renderCache, mgr, skyModel, modelMatrix, skyModelData, this.fogEnabled);
                 this.skyboxRenderer.isSkybox = true;
             }
+        }
+        const sceneryInstances: HaloSceneryInstance[] = mgr.get_scenery_instances();
+        this.sceneryRenderers = mgr.get_scenery_palette().map((scenery, i) => {
+            const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
+            return new SceneryRenderer(this.textureCache, this.renderHelper.renderCache, this.mgr, scenery, instances, this.fogEnabled);
+        });
+    }
+
+    private setupFogSettings() {
+        this.fogEnabled = this.fogSettings !== FogSettings.Disabled;
+        if (this.activeSky && this.fogEnabled) {
+            const fogLocation = this.fogSettings === FogSettings.Outdoor ? 'outdoor' : 'indoor';
+            const color =  this.activeSky[`${fogLocation}_fog_color`];
+            this.fogColor = vec4.fromValues(color.r, color.g, color.b, this.activeSky[`${fogLocation}_fog_max_density`]);
+            color.free();
+            this.fogDistances = vec4.fromValues(this.activeSky[`${fogLocation}_fog_start_distance`], this.activeSky[`${fogLocation}_fog_opaque_distance`], 0, 0);
+        } else {
+            this.fogEnabled = false;
+            this.fogColor = vec4.create();
+            this.fogDistances = vec4.create();
         }
     }
 
@@ -1573,7 +1598,7 @@ class HaloScene implements Viewer.SceneGfx {
     }
 
     public addBSP(bsp: HaloBSP, bspIndex: number) {
-        this.bspRenderers.push(new BSPRenderer(this.textureCache, this.renderHelper.renderCache, bsp, this.mgr, bspIndex));
+        this.bspRenderers.push(new BSPRenderer(this.textureCache, this.renderHelper.renderCache, bsp, this.mgr, bspIndex, this.fogEnabled));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1647,8 +1672,14 @@ class HaloScene implements Viewer.SceneGfx {
 
 const pathBase = `Halo1`;
 
+enum FogSettings {
+    Indoor,
+    Outdoor,
+    Disabled,
+}
+
 class HaloSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
+    constructor(public id: string, public name: string, public specificBSPs: number[] = [], public fogSettings = FogSettings.Outdoor) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -1665,8 +1696,12 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         });
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
-        const renderer = new HaloScene(device, mapManager, bitmapReader);
-        mapManager.get_bsps().forEach((bsp, i) => renderer.addBSP(bsp, i));
+        const renderer = new HaloScene(device, mapManager, bitmapReader, this.fogSettings);
+        let bsps = mapManager.get_bsps();
+        if (this.specificBSPs.length > 0) {
+            bsps = bsps.filter((_, i) => this.specificBSPs.indexOf(i) >= 0);
+        }
+        bsps.forEach((bsp, i) => renderer.addBSP(bsp, i));
         return renderer;
     }
 
@@ -1676,35 +1711,37 @@ const id = 'Halo';
 const name = 'Halo';
 
 const sceneDescs = [
-    new HaloSceneDesc("bloodgulch", "bloodgulch"),
-    new HaloSceneDesc("beavercreek", "beavercreek"),
-    new HaloSceneDesc("boardingaction", "boardingaction"),
-    new HaloSceneDesc("carousel", "carousel"),
-    new HaloSceneDesc("chillout", "chillout"),
-    new HaloSceneDesc("damnation", "damnation"),
-    new HaloSceneDesc("dangercanyon", "dangercanyon"),
-    new HaloSceneDesc("deathisland", "deathisland"),
-    new HaloSceneDesc("gephyrophobia", "gephyrophobia"),
-    new HaloSceneDesc("hangemhigh", "hangemhigh"),
-    new HaloSceneDesc("icefields", "icefields"),
-    new HaloSceneDesc("infinity", "infinity"),
-    new HaloSceneDesc("longest", "longest"),
-    new HaloSceneDesc("prisoner", "prisoner"),
-    new HaloSceneDesc("putput", "putput"),
-    new HaloSceneDesc("ratrace", "ratrace"),
-    new HaloSceneDesc("sidewinder", "sidewinder"),
-    new HaloSceneDesc("timberland", "timberland"),
-    new HaloSceneDesc("wizard", "wizard"),
-    new HaloSceneDesc("a10", "a10"), // the BSPs don't all play nice here
-    new HaloSceneDesc("a30", "a30"),
-    new HaloSceneDesc("a50", "a50"),
-    new HaloSceneDesc("b30", "b30"),
-    new HaloSceneDesc("b40", "b40"),
-    new HaloSceneDesc("c10", "c10"),
-    new HaloSceneDesc("c20", "c20"),
-    new HaloSceneDesc("c40", "c40"),
-    new HaloSceneDesc("d20", "d20"),
-    new HaloSceneDesc("d40", "d40"),
+    "Campaign",
+    new HaloSceneDesc("a10", "Pillar of Autumn", [0, 1, 2, 3, 4, 5, 6, 7], FogSettings.Disabled), // the BSPs don't all play nice here
+    new HaloSceneDesc("a30", "Halo"),
+    new HaloSceneDesc("a50", "Truth and Reconciliation"),
+    new HaloSceneDesc("b30", "The Silent Cartographer"),
+    new HaloSceneDesc("b40", "Assault on the Control Room"),
+    new HaloSceneDesc("c10", "343 Guilty Spark"),
+    new HaloSceneDesc("c20", "The Library", [], FogSettings.Indoor),
+    new HaloSceneDesc("c40", "Two Betrayals"),
+    new HaloSceneDesc("d20", "Keyes"),
+    new HaloSceneDesc("d40", "The Maw"),
+    "Multiplayer",
+    new HaloSceneDesc("bloodgulch", "Blood Gulch"),
+    new HaloSceneDesc("beavercreek", "Battle Creek"),
+    new HaloSceneDesc("boardingaction", "Boarding Action"),
+    new HaloSceneDesc("chillout", "Chill Out"),
+    new HaloSceneDesc("putput", "Chiron TL-34"),
+    new HaloSceneDesc("damnation", "Damnation"),
+    new HaloSceneDesc("dangercanyon", "Danger Canyon"),
+    new HaloSceneDesc("deathisland", "Death Island"),
+    new HaloSceneDesc("carousel", "Derelict"),
+    new HaloSceneDesc("gephyrophobia", "Gephyrophobia"),
+    new HaloSceneDesc("hangemhigh", "Hang 'em High"),
+    new HaloSceneDesc("icefields", "Ice Fields"),
+    new HaloSceneDesc("infinity", "Infinity"),
+    new HaloSceneDesc("longest", "Longest"),
+    new HaloSceneDesc("prisoner", "Prisoner"),
+    new HaloSceneDesc("ratrace", "Rat Race"),
+    new HaloSceneDesc("sidewinder", "Sidewinder"),
+    new HaloSceneDesc("timberland", "Timberland"),
+    new HaloSceneDesc("wizard", "Wizard"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: false };
