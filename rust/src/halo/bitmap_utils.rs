@@ -40,12 +40,35 @@ pub fn convert_a8_data(input: &[u8]) -> Vec<u8> {
     result
 }
 
+pub fn convert_a8y8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len() * 2);
+    for i in (0..input.len()).step_by(2) {
+        result.push(input[i+1]);
+        result.push(input[i+1]);
+        result.push(input[i+1]);
+        result.push(input[i]);
+    }
+    result
+}
+
 pub fn convert_y8_data(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(input.len() * 4);
     for i in 0..input.len() {
         result.push(input[i]);
         result.push(input[i]);
         result.push(input[i]);
+        result.push(0xFF);
+    }
+    result
+}
+
+pub fn convert_x8r8g8b8_data(input: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(input.len());
+    for i in 0..input.len()/4 {
+        let pixel_offset = 4*i;
+        result.push(input[pixel_offset + 2]);
+        result.push(input[pixel_offset + 1]);
+        result.push(input[pixel_offset + 0]);
         result.push(0xFF);
     }
     result

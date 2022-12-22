@@ -48,8 +48,10 @@ fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8
     match bitmap_data.format {
         BitmapFormat::P8 | BitmapFormat::P8Bump => convert_p8_data(byte_range),
         BitmapFormat::A8r8g8b8 => convert_a8r8g8b8_data(byte_range),
+        BitmapFormat::X8r8g8b8 => convert_x8r8g8b8_data(byte_range),
         BitmapFormat::A8 => convert_a8_data(byte_range),
         BitmapFormat::Y8 => convert_y8_data(byte_range),
+        BitmapFormat::A8y8 => convert_a8y8_data(byte_range),
         _ => Vec::from(&byte_range[..]),
     }
 }
@@ -709,28 +711,57 @@ impl HaloSceneManager {
         }
     }
 
-    pub fn get_material_shader(&mut self, material: &HaloMaterial) -> Option<HaloShaderEnvironment> {
+    // hack to get around returning variable types
+    pub fn get_material_shaders(&mut self, material: &HaloMaterial) -> Array {
+        let result = Array::new();
         let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap();
-        match &shader_hdr.primary_class {
-            TagClass::ShaderEnvironment => {
-                let shader_tag = self.mgr.read_tag(&shader_hdr).unwrap();
-                let shader: &ShaderEnvironment = (&shader_tag.data).try_into().unwrap();
-                if shader.base_bitmap.path_pointer == 0 {
-                    return None;
-                }
-                Some(HaloShaderEnvironment {
-                    base_bitmap: self.resolve_bitmap_dependency(&shader.base_bitmap).unwrap(),
-                    bump_map: self.resolve_bitmap_dependency(&shader.bump_map),
-                    primary_detail_bitmap: self.resolve_bitmap_dependency(&shader.primary_detail_bitmap),
-                    secondary_detail_bitmap: self.resolve_bitmap_dependency(&shader.secondary_detail_bitmap),
-                    micro_detail_bitmap: self.resolve_bitmap_dependency(&shader.micro_detail_bitmap),
-                    reflection_cube_map: self.resolve_bitmap_dependency(&shader.reflection_cube_map),
-                    path: shader_tag.header.path.clone(),
-                    inner: shader.clone(),
-                })
-            }
-            _ => None,
+        match self.mgr.read_tag(&shader_hdr) {
+            Ok(tag) => match tag.data {
+                TagData::ShaderEnvironment(s) => {
+                    if s.base_bitmap.path_pointer != 0 {
+                        result.push(&JsValue::from(HaloShaderEnvironment {
+                            base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
+                            bump_map: self.resolve_bitmap_dependency(&s.bump_map),
+                            primary_detail_bitmap: self.resolve_bitmap_dependency(&s.primary_detail_bitmap),
+                            secondary_detail_bitmap: self.resolve_bitmap_dependency(&s.secondary_detail_bitmap),
+                            micro_detail_bitmap: self.resolve_bitmap_dependency(&s.micro_detail_bitmap),
+                            reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
+                            path: shader_hdr.path.clone(),
+                            inner: s.clone(),
+                        }));
+                    }
+                },
+                TagData::ShaderTransparentGeneric(s) => {
+                    let mut maps = Vec::new();
+                    let mut bitmaps = Vec::new();
+                    for chicago_map in s.maps.items.as_ref().unwrap() {
+                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                        maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
+                    }
+                    result.push(&JsValue::from(HaloShaderTransparencyGeneric {
+                        maps,
+                        bitmaps,
+                        inner: s,
+                    }));
+                },
+                TagData::ShaderTransparentChicago(s) => {
+                    let mut maps = Vec::new();
+                    let mut bitmaps = Vec::new();
+                    for chicago_map in s.maps.items.as_ref().unwrap() {
+                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                        maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
+                    }
+                    result.push(&JsValue::from(HaloShaderTransparencyChicago {
+                        maps,
+                        bitmaps,
+                        inner: s,
+                    }));
+                },
+                _ => {},
+            },
+            Err(_) => {},
         }
+        result
     }
 
     pub fn get_and_convert_bitmap_data(&mut self, bitmap: &HaloBitmap, submap: usize) -> Vec<u8> {

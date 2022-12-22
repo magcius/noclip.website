@@ -143,15 +143,6 @@ void mainVS() {
     v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
 }
 `;
-
-    public override frag = `
-${BaseShaderProgram.header}
-
-void mainPS() {
-    //gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
-    discard;
-}
-`;
 }
 
 class ShaderTransparencyGenericProgram extends BaseShaderProgram {
@@ -192,7 +183,7 @@ class MaterialRender_TransparencyGeneric {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric, private model: ModelRenderer) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyGeneric) {
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_bitmap(1));
         this.textureMapping[2] = textureCache.getTextureMapping(shader.get_bitmap(2));
         this.textureMapping[3] = textureCache.getTextureMapping(shader.get_bitmap(3));
@@ -310,7 +301,7 @@ class MaterialRender_TransparencyChicago {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago, private model: ModelRenderer) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparencyChicago) {
         for (let i = 0; i < 4; i++)
             this.textureMapping[i] = textureCache.getTextureMapping(shader.get_bitmap(i));
 
@@ -650,7 +641,11 @@ if (t_BumpMap.a < 0.5)
                 this.getReflectionSection(fragBody);
             }
         } else {
-            fragBody.push(`vec4 color = vec4(1.0, 0.0, 1.0, 1.0);`);
+            if (this.has_lightmap) {
+                fragBody.push(`vec4 color = texture(SAMPLER_2D(u_Lightmap), v_lightmapUV);`);
+            } else {
+                fragBody.push(`vec4 color = vec4(1.0, 0.0, 1.0, 1.0);`);
+            }
         }
         fragBody.push(`gl_FragDepth = gl_FragCoord.z + 1e-6 * u_BSPIndex;`);
         fragBody.push(`gl_FragColor = vec4(color.rgb, 1.0);`);
@@ -663,26 +658,129 @@ ${fragBody.join('\n')}
     }
 }
 
+class MaterialRender_Environment {
+    private textureMappings: (TextureMapping | null)[] = nArray(8, () => null);
+    private gfxProgram: GfxProgram;
+    private perpendicularColor: vec4;
+    private parallelColor: vec4;
+    public visible = true;
+
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, private bspIndex: number) {
+        this.gfxProgram = cache.createProgram(new ShaderEnvironmentProgram(shader, !!lightmapMapping));
+        const perpendicular = this.shader.perpendicular_color;
+        this.perpendicularColor = vec4.fromValues(perpendicular.r, perpendicular.g, perpendicular.b, this.shader.perpendicular_brightness);
+        perpendicular.free();
+        const parallel = this.shader.parallel_color;
+        this.parallelColor = vec4.fromValues(parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
+        parallel.free();
+        this.textureMappings = [
+            textureCache.getTextureMapping(this.shader.get_base_bitmap()),
+            lightmapMapping,
+            textureCache.getTextureMapping(this.shader.get_bump_map()),
+            textureCache.getTextureMapping(this.shader.get_primary_detail_bitmap()),
+            textureCache.getTextureMapping(this.shader.get_secondary_detail_bitmap()),
+            textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap()),
+            this.shader && this.shader.has_reflection_cube_map ? textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null,
+        ];
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
+
+        let offs = renderInst.allocateUniformBuffer(ShaderEnvironmentProgram.ub_ShaderParams, 3 * 16);
+        let mapped = renderInst.mapUniformBufferF32(ShaderEnvironmentProgram.ub_ShaderParams);
+        offs += fillVec4v(mapped, offs, this.perpendicularColor);
+        offs += fillVec4v(mapped, offs, this.parallelColor);
+        offs += fillVec4(mapped, offs, this.bspIndex);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.shader.free();
+    }
+}
+
 class LightmapRenderer {
-    public lightmapMaterialRenderers: LightmapMaterialRenderer[];
-    public inputLayout: GfxInputLayout;
-    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | undefined) {
-        this.inputLayout = this.getInputLayout();
-        this.lightmapMaterialRenderers = mgr.get_lightmap_materials(lightmap).map(material => {
-            return new LightmapMaterialRenderer(this.device, this.textureCache, renderCache, material, this.inputLayout, this.mgr, this.bsp, this.trisBuf, lightmapTex!, this.bspIndex);
+    public materials: LightmapMaterial[];
+    public materialRenderers: (MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[];
+    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null) {
+        this.materials = [];
+        this.materialRenderers = [];
+        mgr.get_lightmap_materials(lightmap).forEach(material => {
+            const shader = this.mgr.get_material_shaders(material)[0];
+            if (shader instanceof _wasm!.HaloShaderEnvironment) {
+                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, bspIndex));
+            } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader));
+            } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader));
+            } else {
+                this.materialRenderers.push(null);
+            }
+            this.materials.push(new LightmapMaterial(renderCache, mgr, bsp, material, trisBuf));
         });
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
-        this.lightmapMaterialRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
+        this.materialRenderers.forEach((materialRenderer, i) => {
+            const renderInst = renderInstManager.newRenderInst();
+
+            if (!materialRenderer) {
+                return;
+            }
+
+            materialRenderer.setOnRenderInst(renderInst);
+            this.materials[i].setOnRenderInst(renderInst);
+
+            renderInstManager.submitRenderInst(renderInst);
+        });
     }
 
     public destroy(device: GfxDevice) {
-        this.lightmapMaterialRenderers.forEach(r => r.destroy(device));
-        device.destroyInputLayout(this.inputLayout);
+        this.materials.forEach(r => r.destroy(device));
+    }
+}
+
+class LightmapMaterial {
+    private vertexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private indexCount = 0;
+    private lightmapVertexBuffer: GfxBuffer;
+    private modelMatrix: mat4;
+    private indexOffset: number;
+
+    constructor(cache: GfxRenderCache, mgr: HaloSceneManager, bsp: HaloBSP, public material: HaloMaterial, private indexBuffer: GfxBuffer) {
+        this.inputLayout = this.getInputLayout(cache);
+        this.modelMatrix = mat4.create();
+        this.vertexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, bsp).buffer);
+        this.lightmapVertexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, mgr.get_material_lightmap_data(this.material, bsp).buffer);
+        this.indexCount = this.material.get_num_indices();
+        this.indexOffset = this.material.get_index_offset();
+
+        this.inputState = cache.device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0 },
+            { buffer: this.lightmapVertexBuffer, byteOffset: 0 },
+        ], { buffer: this.indexBuffer, byteOffset: 0 })
     }
 
-    private getInputLayout(): GfxInputLayout {
+    public setOnRenderInst(renderInst: GfxRenderInst) {
+        let offs = renderInst.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
+        const mapped = renderInst.mapUniformBufferF32(BaseProgram.ub_ModelParams);
+        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
+
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.indexCount, this.indexOffset);
+    }
+
+    public destroy(device: GfxDevice) {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyInputState(this.inputState);
+        this.material.free();
+    }
+
+    private getInputLayout(cache: GfxRenderCache): GfxInputLayout {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
         const vec3fSize = 3 * 4;
         const vec2fSize = 2 * 4;
@@ -698,7 +796,7 @@ class LightmapRenderer {
             { byteStride: vec3fSize + vec2fSize, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         let indexBufferFormat: GfxFormat = GfxFormat.U16_R;
-        return this.device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        return cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     }
 }
 
@@ -769,9 +867,9 @@ class ModelRenderer {
             if (shader instanceof _wasm!.HaloShaderModel) {
                 this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, this));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
-                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, this));
+                this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
-                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, this));
+                this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader));
             } else {
                 this.materialRenderers.push(null);
             }
@@ -865,7 +963,7 @@ class BSPRenderer {
         this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
         const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
-            let lightmapTex: TextureMapping | undefined;
+            let lightmapTex: TextureMapping | null = null;
             if (lightmapsBitmap && lightmap.get_bitmap_index() !== 65535) {
                 lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.get_bitmap_index());
             }
@@ -899,97 +997,6 @@ class BSPRenderer {
         this.sceneryRenderers.forEach(r => r.destroy(device));
         this.skyboxRenderers.forEach(r => r.destroy(device));
         device.destroyBuffer(this.trisBuf);
-    }
-}
-
-class LightmapMaterialRenderer {
-    public vertsBuf: GfxBuffer;
-    public lightmapVertsBuf: GfxBuffer;
-    public inputState: GfxInputState;
-    public textureMapping: TextureMapping | null;
-    public bumpMapping: TextureMapping | null;
-    public primaryDetailMapping: TextureMapping | null;
-    public secondaryDetailMapping: TextureMapping | null;
-    public microDetailMapping: TextureMapping | null;
-    public reflectionCubeMapping: TextureMapping | null;
-    public program: GfxProgram;
-    public shader: HaloShaderEnvironment | undefined;
-    public perpendicularColor: vec4;
-    public parallelColor: vec4;
-    public modelMatrix: mat4;
-    public numIndices: number;
-    public indexOffset: number;
-
-    constructor(device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public material: HaloMaterial, public inputLayout: GfxInputLayout, public mgr: HaloSceneManager, public bsp: HaloBSP, public trisBuf: GfxBuffer, public lightmapMapping: TextureMapping | null, public bspIndex: number) {
-        this.vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_vertex_data(this.material, this.bsp).buffer);
-        this.modelMatrix = mat4.create();
-        this.lightmapVertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mgr.get_material_lightmap_data(this.material, this.bsp).buffer);
-        this.shader = mgr.get_material_shader(this.material);
-        this.perpendicularColor = vec4.create();
-        this.parallelColor = vec4.create();
-        if (this.shader) {
-            this.textureMapping = this.textureCache.getTextureMapping(this.shader.get_base_bitmap());
-            this.bumpMapping = this.textureCache.getTextureMapping(this.shader.get_bump_map());
-            this.primaryDetailMapping = this.textureCache.getTextureMapping(this.shader.get_primary_detail_bitmap());
-            this.secondaryDetailMapping = this.textureCache.getTextureMapping(this.shader.get_secondary_detail_bitmap());
-            this.microDetailMapping = this.textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap());
-            this.reflectionCubeMapping = this.shader && this.shader.has_reflection_cube_map ? this.textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null;
-            const perpendicular = this.shader.perpendicular_color;
-            vec4.set(this.perpendicularColor, perpendicular.r, perpendicular.g, perpendicular.b, this.shader.perpendicular_brightness);
-            perpendicular.free();
-            const parallel = this.shader.parallel_color;
-            vec4.set(this.parallelColor, parallel.r, parallel.g, parallel.b, this.shader.parallel_brightness);
-            parallel.free();
-        }
-        this.program = renderCache.createProgram(new ShaderEnvironmentProgram(this.shader, !!this.lightmapMapping));
-        this.numIndices = this.material.get_num_indices();
-        this.indexOffset = this.material.get_index_offset();
-
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertsBuf, byteOffset: 0 },
-            { buffer: this.lightmapVertsBuf, byteOffset: 0 },
-        ], { buffer: this.trisBuf, byteOffset: 0 })
-    }
-
-    public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
-
-        let offs = template.allocateUniformBuffer(ShaderEnvironmentProgram.ub_ShaderParams, 3 * 16);
-        let mapped = template.mapUniformBufferF32(ShaderEnvironmentProgram.ub_ShaderParams);
-        if (this.shader) {
-            offs += fillVec4v(mapped, offs, this.perpendicularColor);
-            offs += fillVec4v(mapped, offs, this.parallelColor);
-            offs += fillVec4(mapped, offs, this.bspIndex);
-        }
-
-        {
-            let offs = template.allocateUniformBuffer(BaseProgram.ub_ModelParams, 16);
-            const mapped = template.mapUniformBufferF32(BaseProgram.ub_ModelParams);
-            offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
-        }
-
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setGfxProgram(this.program);
-        renderInst.setSamplerBindingsFromTextureMappings([
-            this.textureMapping,
-            this.lightmapMapping,
-            this.bumpMapping,
-            this.primaryDetailMapping,
-            this.secondaryDetailMapping,
-            this.microDetailMapping,
-            this.reflectionCubeMapping,
-        ])
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.numIndices, this.indexOffset);
-        renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.vertsBuf);
-        device.destroyBuffer(this.lightmapVertsBuf);
-        device.destroyInputState(this.inputState);
     }
 }
 

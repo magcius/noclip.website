@@ -55,13 +55,16 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
         case wasm().BitmapFormat.Dxt1: return GfxFormat.BC1;
         case wasm().BitmapFormat.Dxt3: return GfxFormat.BC2;
         case wasm().BitmapFormat.Dxt5: return GfxFormat.BC3;
-        case wasm().BitmapFormat.X8r8g8b8: return GfxFormat.U8_RGBA_NORM;
-        case wasm().BitmapFormat.A8r8g8b8: return GfxFormat.U8_RGBA_NORM;
-        case wasm().BitmapFormat.A8: return GfxFormat.U8_RGBA_NORM;
         case wasm().BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
-        case wasm().BitmapFormat.P8: return GfxFormat.U8_RGBA_NORM;
-        case wasm().BitmapFormat.P8Bump: return GfxFormat.U8_RGBA_NORM;
-        case wasm().BitmapFormat.Y8: return GfxFormat.U8_RGBA_NORM;
+        // formats we convert to U8_RGBA_NORM
+        case wasm().BitmapFormat.X8r8g8b8:
+        case wasm().BitmapFormat.A8r8g8b8:
+        case wasm().BitmapFormat.A8:
+        case wasm().BitmapFormat.P8:
+        case wasm().BitmapFormat.P8Bump:
+        case wasm().BitmapFormat.Y8:
+        case wasm().BitmapFormat.A8y8:
+            return GfxFormat.U8_RGBA_NORM;
         default:
             throw new Error(`couldn't recognize bitmap format ${wasm().BitmapFormat[format]}`);
     }
