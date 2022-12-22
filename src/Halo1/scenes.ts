@@ -1,7 +1,7 @@
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
 import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, } from '../../rust/pkg/index';
-import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
+import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
@@ -532,17 +532,17 @@ class MaterialRender_TransparencyGeneric {
         this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
     }
 
-    private setupMapTransform(i: number, t: number): mat4 {
+    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
         const handler = this.animationHandlers[i];
         if (handler) {
-            handler.setTransform(this.mapTransform, t);
+            handler.setTransform(this.mapTransform, t, baseMapTransform);
         } else {
             mat4.identity(this.mapTransform);
         }
         return this.mapTransform;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -552,10 +552,10 @@ class MaterialRender_TransparencyGeneric {
 
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
         const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time, baseMapTransform));
     }
 
     public destroy(device: GfxDevice): void {
@@ -659,17 +659,17 @@ class MaterialRender_TransparencyChicago {
         this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
     }
 
-    private setupMapTransform(i: number, t: number): mat4 {
+    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
         const handler = this.animationHandlers[i];
         if (handler) {
-            handler.setTransform(this.mapTransform, t);
+            handler.setTransform(this.mapTransform, t, baseMapTransform);
         } else {
             mat4.identity(this.mapTransform);
         }
         return this.mapTransform;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -679,10 +679,10 @@ class MaterialRender_TransparencyChicago {
 
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
         const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time, baseMapTransform));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time, baseMapTransform));
     }
 
     public destroy(device: GfxDevice): void {
@@ -727,7 +727,7 @@ class TextureAnimationHandler {
         };
     }
 
-    public setTransform(out: mat4, t: number) {
+    public setTransform(out: mat4, t: number, baseMapTransform: ReadonlyMat4 | null) {
         // TODO: Spark/Noise
         computeModelMatrixS(out, this.u.baseScale, this.v.baseScale);
         const translation = vec3.fromValues(this.u.baseOffset, this.v.baseOffset, 0);
@@ -745,6 +745,8 @@ class TextureAnimationHandler {
                 break;
         }
         setMatrixTranslation(out, translation);
+        if (baseMapTransform !== null)
+            mat4.mul(out, out, baseMapTransform);
     }
 }
 
@@ -796,7 +798,7 @@ class MaterialRender_Model {
     public sortKeyBase: number = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel, private model: ModelRenderer) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderModel) {
         this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap());
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_detail_bitmap());
         if (shader.has_reflection_cube_map)
@@ -807,14 +809,17 @@ class MaterialRender_Model {
         this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
         const d = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
 
-        offs += fillMatrix4x2(d, offs, this.model.baseMapTransform);
+        if (baseMapTransform !== null)
+            offs += fillMatrix4x2(d, offs, baseMapTransform);
+        else
+            offs += fillMatrix4x2(d, offs, mat4.create());
     }
 
     public destroy(device: GfxDevice): void {
@@ -1093,7 +1098,7 @@ class LightmapRenderer {
                 return;
             }
 
-            materialRenderer.setOnRenderInst(renderInst, mainView);
+            materialRenderer.setOnRenderInst(renderInst, mainView, null);
             this.materials[i].setOnRenderInst(renderInst);
 
             renderInstManager.submitRenderInst(renderInst);
@@ -1228,7 +1233,7 @@ class ModelRenderer {
         const shaders = mgr.get_model_shaders(this.model);
         shaders.forEach(shader => {
             if (shader instanceof _wasm!.HaloShaderModel) {
-                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, this));
+                this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
@@ -1266,7 +1271,7 @@ class ModelRenderer {
 
             const renderInst = renderInstManager.newRenderInst();
             part.setOnRenderInst(renderInst);
-            materialRenderer.setOnRenderInst(renderInst, mainView);
+            materialRenderer.setOnRenderInst(renderInst, mainView, this.baseMapTransform);
 
             // TODO: Part AABB?
             renderInst.sortKey = materialRenderer.sortKeyBase;
