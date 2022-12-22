@@ -1,6 +1,6 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderInput, ShaderAlphaInput, ShaderOutputFunction, ShaderOutput, ShaderOutputMapping } from '../../rust/pkg/index';
+import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, } from '../../rust/pkg/index';
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
@@ -78,6 +78,8 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x4 u_ViewMatrix;
     vec3 u_PlayerPos;
+    vec4 u_FogColor;
+    vec4 u_FogDistances;
 };
 
 layout(std140) uniform ub_ModelParams {
@@ -114,6 +116,18 @@ varying vec3 v_Position;
 
     public static includes = `
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+    float t_DistanceWorld = distance(t_PositionWorld.xyz, u_PlayerPos.xyz);
+    float t_FogFactor = saturate(invlerp(u_FogDistances.x, u_FogDistances.y, t_DistanceWorld));
+    t_FogFactor = min(t_FogFactor, u_FogColor.a);
+
+    // Square the fog factor to better approximate fixed-function HW (which happens all in clip space)
+    t_FogFactor *= t_FogFactor;
+
+    t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
+}
 `;
 
     public static header = `
@@ -459,8 +473,14 @@ function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlend
             blendSrcFactor: GfxBlendFactor.One,
             blendDstFactor: GfxBlendFactor.One,
         });
+    } else if (fn === _wasm!.FramebufferBlendFunction.AlphaMultiplyAdd) {
+        setAttachmentStateSimple(dst, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.One,
+        });
     } else {
-        throw "whoops";
+        throw new Error(`unsupported blend mode ${_wasm!.FramebufferBlendFunction[fn]}`)
     }
 }
 
@@ -566,8 +586,8 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
             fragBody.push(`current = scratch;`)
         })
 
-        fragBody.push(`gl_FragColor = current;`);
-
+        fragBody.push(`CalcFog(current, v_Position);`)
+        fragBody.push(`gl_FragColor = current;`)
         return `
 ${BaseShaderProgram.header}
 
@@ -609,38 +629,16 @@ class MaterialRender_TransparencyChicago {
     }
 }
 
-class ShaderModelProgram extends BaseProgram {
-    public static ub_ShaderParams = 2;
-
-    public static a_Pos = 0;
-    public static a_Norm = 1;
-    public static a_Binorm = 2;
-    public static a_Tangent = 3;
-    public static a_TexCoord = 4;
-
-    public static varying = `
-varying vec2 v_UV;
-varying vec3 v_Normal;
-varying vec3 v_Binormal;
-varying vec3 v_Tangent;
-varying vec3 v_Position;
-`;
-
-    public static includes = `
-${GfxShaderLibrary.saturate}
-`;
-
+class ShaderModelProgram extends BaseShaderProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
     Mat4x2 u_BaseMapTransform;
 };
 `;
 
-    public static header = `
-${BaseProgram.common}
+    public static override header = `
+${BaseShaderProgram.header}
 ${ShaderModelProgram.BindingsDefinition}
-${ShaderModelProgram.includes}
-${ShaderModelProgram.varying}
 `;
 
     constructor(shader: HaloShaderModel) {
@@ -675,6 +673,7 @@ void mainVS() {
 
         fragBody.push(`
 vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), v_UV).rgba;
+CalcFog(t_BaseTexture, v_Position);
 gl_FragColor.rgba = t_BaseTexture.rgba;
 if (t_BaseTexture.a < 0.5)
     discard;
@@ -722,18 +721,11 @@ class MaterialRender_Model {
     }
 }
 
-class ShaderEnvironmentProgram extends BaseProgram {
-    public static ub_ShaderParams = 2;
-
-    public static a_Pos = 0;
-    public static a_Norm = 1;
-    public static a_Binorm = 2;
-    public static a_Tangent = 3;
-    public static a_TexCoord = 4;
+class ShaderEnvironmentProgram extends BaseShaderProgram {
     public static a_IncidentLight = 5;
     public static a_LightmapTexCoord = 6;
 
-    public static varying = `
+    public static override varying = `
 varying vec2 v_UV;
 varying vec2 v_lightmapUV;
 varying vec3 v_Normal;
@@ -743,8 +735,8 @@ varying vec3 v_Position;
 varying vec3 v_IncidentLight;
 `;
 
-    public static includes = `
-${GfxShaderLibrary.saturate}
+    public static override includes = `
+${BaseShaderProgram.includes}
 
 vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
     return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
@@ -761,7 +753,7 @@ layout(std140) uniform ub_ShaderParams {
 #define u_BSPIndex (u_Misc.x)
 `;
 
-    public static header = `
+    public static override header = `
 ${BaseProgram.common}
 ${ShaderEnvironmentProgram.BindingsDefinition}
 ${ShaderEnvironmentProgram.includes}
@@ -800,9 +792,9 @@ void mainVS() {
     }
 
     private getDetailSection(fragBody: String[]): void {
-        fragBody.push(`vec2 primaryUV = v_UV * ${this.shader!.primary_detail_bitmap_scale.toFixed(2)};`)
+        fragBody.push(`vec2 primaryUV = v_UV * ${glslGenerateFloat(this.shader!.primary_detail_bitmap_scale)};`)
         fragBody.push(`vec4 primaryDetail = texture(SAMPLER_2D(u_PrimaryDetailTexture), primaryUV);`)
-        fragBody.push(`vec2 secondaryUV = v_UV * ${this.shader!.secondary_detail_bitmap_scale.toFixed(2)};`)
+        fragBody.push(`vec2 secondaryUV = v_UV * ${glslGenerateFloat(this.shader!.secondary_detail_bitmap_scale)};`)
         fragBody.push(`vec4 secondaryDetail = texture(SAMPLER_2D(u_SecondaryDetailTexture), secondaryUV);`)
         switch (this.shader!.shader_environment_type) {
             case _wasm!.ShaderEnvironmentType.Normal:
@@ -834,7 +826,7 @@ void mainVS() {
     }
 
     private getMicroDetailSection(fragBody: String[]): void {
-        fragBody.push(`vec2 microUV = v_UV * ${this.shader!.micro_detail_bitmap_scale.toFixed(2)};`)
+        fragBody.push(`vec2 microUV = v_UV * ${glslGenerateFloat(this.shader!.micro_detail_bitmap_scale)};`)
         fragBody.push(`vec4 microDetail = texture(SAMPLER_2D(u_MicroDetailTexture), microUV);`)
         switch (this.shader!.shader_environment_type) {
             case _wasm!.ShaderEnvironmentType.Normal:
@@ -887,7 +879,7 @@ color.rgb = saturate(color.rgb + finalColor * specularReflectionMask);
             fragBody.push(`
 vec4 base = texture(SAMPLER_2D(u_Texture), v_UV);
 vec4 color = base;
-vec2 t_BumpTexCoord = v_UV * ${this.shader!.bump_map_scale.toFixed(2)};
+vec2 t_BumpTexCoord = v_UV * ${glslGenerateFloat(this.shader!.bump_map_scale)};
 vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Bumpmap), t_BumpTexCoord) - 1.0;
 vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 `);
@@ -926,6 +918,8 @@ if (t_BumpMap.a < 0.5)
                 fragBody.push(`vec4 color = vec4(1.0, 0.0, 1.0, 1.0);`);
             }
         }
+
+        fragBody.push(`CalcFog(color, v_Position);`)
         fragBody.push(`gl_FragDepth = gl_FragCoord.z + 1e-6 * u_BSPIndex;`);
         fragBody.push(`gl_FragColor = vec4(color.rgb, 1.0);`);
         this.frag = `
@@ -985,7 +979,7 @@ class LightmapRenderer {
     public materialRenderers: (MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[];
     public visible = true;
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null) {
         this.materials = [];
         this.materialRenderers = [];
         mgr.get_lightmap_materials(lightmap).forEach(material => {
@@ -1145,7 +1139,7 @@ class ModelRenderer {
     public isSkybox: boolean = false;
     public visible = true;
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4) {
         const shaders = mgr.get_model_shaders(this.model);
         shaders.forEach(shader => {
             if (shader instanceof _wasm!.HaloShaderModel) {
@@ -1215,7 +1209,7 @@ class SceneryRenderer {
     public modelRenderers: ModelRenderer[];
     public model: HaloModel;
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
         this.model = mgr.get_scenery_model(this.scenery)!;
         this.modelRenderers = this.instances.map(instance => {
             const instModelMatrix = mat4.create();
@@ -1224,7 +1218,7 @@ class SceneryRenderer {
                 instance.position.x + this.scenery.origin_offset.x,
                 instance.position.y + this.scenery.origin_offset.y,
                 instance.position.z + this.scenery.origin_offset.z);
-            return new ModelRenderer(this.device, this.textureCache, renderCache, this.bsp, this.mgr, this.model, instModelMatrix);
+            return new ModelRenderer(this.textureCache, renderCache, this.mgr, this.model, instModelMatrix);
         });
     }
 
@@ -1240,46 +1234,25 @@ class SceneryRenderer {
 class BSPRenderer {
     public trisBuf: GfxBuffer;
     public lightmapRenderers: LightmapRenderer[];
-    public sceneryRenderers: SceneryRenderer[];
-    public skyboxRenderers: ModelRenderer[];
 
-    constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number) {
-        this.trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
+    constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number) {
+        this.trisBuf = makeStaticDataBuffer(renderCache.device, GfxBufferUsage.Index, mgr.get_bsp_indices(this.bsp).buffer);
         const lightmapsBitmap = this.bsp.get_lightmaps_bitmap();
         this.lightmapRenderers = mgr.get_bsp_lightmaps(this.bsp).map(lightmap => {
             let lightmapTex: TextureMapping | null = null;
             if (lightmapsBitmap && lightmap.get_bitmap_index() !== 65535) {
                 lightmapTex = this.textureCache.getTextureMapping(lightmapsBitmap!, lightmap.get_bitmap_index());
             }
-            return new LightmapRenderer(this.device, this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex);
-        });
-        const sceneryInstances: HaloSceneryInstance[] = mgr.get_scenery_instances();
-        this.sceneryRenderers = mgr.get_scenery_palette().map((scenery, i) => {
-            const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
-            return new SceneryRenderer(this.device, this.textureCache, renderCache, this.bsp, this.mgr, scenery, instances);
-        });
-        this.skyboxRenderers = [];
-        mgr.get_skies().map(sky => {
-            const modelMatrix = mat4.create();
-            const skyModel = sky.get_model();
-            if (skyModel) {
-                const model = new ModelRenderer(this.device, this.textureCache, renderCache, bsp, mgr, skyModel, modelMatrix);
-                model.isSkybox = true;
-                this.skyboxRenderers.push(model);
-            }
+            return new LightmapRenderer(this.textureCache, renderCache, this.trisBuf, this.bsp, this.mgr, this.bspIndex, lightmap, lightmapTex);
         });
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
         this.lightmapRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
-        this.sceneryRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
-        this.skyboxRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
     }
 
     public destroy(device: GfxDevice) {
         this.lightmapRenderers.forEach(r => r.destroy(device));
-        this.sceneryRenderers.forEach(r => r.destroy(device));
-        this.skyboxRenderers.forEach(r => r.destroy(device));
         device.destroyBuffer(this.trisBuf);
     }
 }
@@ -1325,6 +1298,11 @@ class HaloScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     public textureCache: TextureCache;
     public bspRenderers: BSPRenderer[];
+    public sceneryRenderers: SceneryRenderer[];
+    public skyboxRenderer: ModelRenderer | undefined;
+    public activeSky: HaloSky;
+    public fogColor: vec4;
+    public fogDistances: vec4;
     private mainView = new View();
 
     constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
@@ -1340,6 +1318,23 @@ class HaloScene implements Viewer.SceneGfx {
             wrapT: GfxWrapMode.Repeat,
         });
         this.textureCache = new TextureCache(this.device, gfxSampler, this.mgr, bitmapReader);
+        const sceneryInstances: HaloSceneryInstance[] = mgr.get_scenery_instances();
+        this.sceneryRenderers = mgr.get_scenery_palette().map((scenery, i) => {
+            const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
+            return new SceneryRenderer(this.textureCache, this.renderHelper.renderCache, this.mgr, scenery, instances);
+        });
+        // for now, just choose the first skybox. eventually we'll want to switch between them depending on the current BSP
+        this.activeSky = mgr.get_skies()[0];
+        const color = this.activeSky.outdoor_fog_color;
+        this.fogColor = vec4.fromValues(color.r, color.g, color.b, this.activeSky.outdoor_fog_max_density);
+        color.free();
+        this.fogDistances = vec4.fromValues(this.activeSky.outdoor_fog_start_distance, this.activeSky.outdoor_fog_opaque_distance, 0, 0);
+        const modelMatrix = mat4.create();
+        const skyModel = this.activeSky.get_model();
+        if (skyModel) {
+            this.skyboxRenderer = new ModelRenderer(this.textureCache, this.renderHelper.renderCache, mgr, skyModel, modelMatrix);
+            this.skyboxRenderer.isSkybox = true;
+        }
     }
 
     public adjustCameraController(c: CameraController) {
@@ -1347,7 +1342,7 @@ class HaloScene implements Viewer.SceneGfx {
     }
 
     public addBSP(bsp: HaloBSP, bspIndex: number) {
-        this.bspRenderers.push(new BSPRenderer(this.device, this.textureCache, this.renderHelper.renderCache, bsp, this.mgr, bspIndex));
+        this.bspRenderers.push(new BSPRenderer(this.textureCache, this.renderHelper.renderCache, bsp, this.mgr, bspIndex));
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1361,10 +1356,16 @@ class HaloScene implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, this.mainView.clipFromViewMatrix);
         offs += fillMatrix4x4(mapped, offs, this.mainView.viewFromWorldMatrix);
         offs += fillVec3v(mapped, offs, this.mainView.cameraPos);
+        offs += fillVec4v(mapped, offs, this.fogColor);
+        offs += fillVec4v(mapped, offs, this.fogDistances);
 
         this.bspRenderers.forEach((r, i) => {
             r.prepareToRender(this.renderHelper.renderInstManager, this.mainView);
         })
+        this.sceneryRenderers.forEach(r => r.prepareToRender(this.renderHelper.renderInstManager, this.mainView));
+        if (this.skyboxRenderer) {
+            this.skyboxRenderer.prepareToRender(this.renderHelper.renderInstManager, this.mainView)
+        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -1400,6 +1401,10 @@ class HaloScene implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.bspRenderers.forEach(r => r.destroy(device));
         this.textureCache.destroy(device);
+        this.sceneryRenderers.forEach(r => r.destroy(device));
+        if (this.skyboxRenderer) {
+            this.skyboxRenderer.destroy(device);
+        }
         this.renderHelper.destroy();
     }
 }
@@ -1450,7 +1455,7 @@ const sceneDescs = [
     new HaloSceneDesc("sidewinder", "sidewinder"),
     new HaloSceneDesc("timberland", "timberland"),
     new HaloSceneDesc("wizard", "wizard"),
-    new HaloSceneDesc("a10", "a10"),
+    new HaloSceneDesc("a10", "a10"), // the BSPs don't all play nice here
     new HaloSceneDesc("a30", "a30"),
     new HaloSceneDesc("a50", "a50"),
     new HaloSceneDesc("b30", "b30"),

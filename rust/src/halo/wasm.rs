@@ -65,6 +65,14 @@ pub struct HaloSky {
 
 #[wasm_bindgen]
 impl HaloSky {
+    #[wasm_bindgen(getter)] pub fn outdoor_fog_color(&self) -> ColorRGB { self.inner.outdoor_fog_color }
+    #[wasm_bindgen(getter)] pub fn outdoor_fog_max_density(&self) -> f32 { self.inner.outdoor_fog_max_density }
+    #[wasm_bindgen(getter)] pub fn outdoor_fog_start_distance(&self) -> f32 { self.inner.outdoor_fog_start_distance }
+    #[wasm_bindgen(getter)] pub fn outdoor_fog_opaque_distance(&self) -> f32 { self.inner.outdoor_fog_opaque_distance }
+    #[wasm_bindgen(getter)] pub fn indoor_fog_color(&self) -> ColorRGB { self.inner.indoor_fog_color }
+    #[wasm_bindgen(getter)] pub fn indoor_fog_max_density(&self) -> f32 { self.inner.indoor_fog_max_density }
+    #[wasm_bindgen(getter)] pub fn indoor_fog_start_distance(&self) -> f32 { self.inner.indoor_fog_start_distance }
+    #[wasm_bindgen(getter)] pub fn indoor_fog_opaque_distance(&self) -> f32 { self.inner.indoor_fog_opaque_distance }
     pub fn get_model(&self) -> Option<HaloModel> {
         self.model.as_ref().map(|model| HaloModel { inner: model.clone() })
     }
