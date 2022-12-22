@@ -1,6 +1,6 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, } from '../../rust/pkg/index';
+import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, } from '../../rust/pkg/index';
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
@@ -21,6 +21,7 @@ import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { TextureAnimation } from '../kh2fm/map';
 
 /**
  * todo:
@@ -113,6 +114,7 @@ layout(binding = ${BaseProgram.u_MultipurposeMap}) uniform sampler2D u_Multipurp
 
     public static CalcFog = `
 void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+    return; // broken???
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_PlayerPos.xyz);
     float t_FogFactor = saturate(invlerp(u_FogDistances.x, u_FogDistances.y, t_DistanceWorld));
     t_FogFactor = min(t_FogFactor, u_FogColor.a);
@@ -598,7 +600,7 @@ class MaterialRender_TransparencyChicago {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private gfxProgram: GfxProgram;
     private mapTransform: mat4;
-    private maps: (HaloShaderTransparentChicagoMap | undefined)[];
+    private animationHandlers: (TextureAnimationHandler | undefined)[];
     public sortKeyBase: number = 0;
     public visible = true;
 
@@ -609,26 +611,26 @@ class MaterialRender_TransparencyChicago {
         this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyChicagoProgram(shader));
         this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
-        this.maps = [
+        const maps = [
             this.shader.get_map(0),
             this.shader.get_map(1),
             this.shader.get_map(2),
             this.shader.get_map(3),
         ];
+        this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
     }
 
     private setupMapTransform(i: number, t: number): mat4 {
-        const map = this.maps[i];
-        if (map) {
-            computeModelMatrixS(this.mapTransform, map.map_u_scale, map.map_v_scale);
-            mat4.translate(this.mapTransform, this.mapTransform, vec3.fromValues(map.map_u_offset, map.map_v_offset, 1));
+        const handler = this.animationHandlers[i];
+        if (handler) {
+            handler.setTransform(this.mapTransform, t);
         } else {
             mat4.identity(this.mapTransform);
         }
         return this.mapTransform;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -639,15 +641,77 @@ class MaterialRender_TransparencyChicago {
         // XXX(jstpierre): Have to allocate something...
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
         const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, 0));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, 0));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, 0));
-        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, 0));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time));
     }
 
     public destroy(device: GfxDevice): void {
         this.shader.free();
     }
+}
+
+class TextureAnimationHandler {
+    private u: TextureAnimationFunction;
+    private v: TextureAnimationFunction;
+    private rotation: TextureAnimationFunction;
+    constructor(map: HaloShaderTransparentGenericMap | HaloShaderTransparentChicagoMap) {
+        this.u = {
+            fn: map.u_animation_function,
+            scale: map.u_animation_scale,
+            period: map.u_animation_period,
+            phase: map.u_animation_phase,
+            baseScale: map.map_u_scale,
+            baseOffset: map.map_u_offset,
+            baseRotation: 0,
+            center: null,
+        };
+        this.v = {
+            fn: map.v_animation_function,
+            scale: map.v_animation_scale,
+            period: map.v_animation_period,
+            phase: map.v_animation_phase,
+            baseScale: map.map_v_scale,
+            baseOffset: map.map_v_offset,
+            baseRotation: 0,
+            center: null,
+        };
+        this.rotation = {
+            fn: map.rotation_animation_function,
+            scale: map.rotation_animation_scale,
+            period: map.rotation_animation_period,
+            phase: map.rotation_animation_phase,
+            baseScale: 0,
+            baseOffset: 0,
+            baseRotation: map.map_rotation,
+            center: [map.rotation_animation_center.x, map.rotation_animation_center.y],
+        };
+    }
+
+    public setTransform(out: mat4, t: number) {
+        computeModelMatrixS(out, this.u.baseScale, this.v.baseScale);
+        const translation = vec3.fromValues(this.u.baseOffset, this.v.baseOffset, 0);
+        const slideConstant = 0.000005;
+        if (this.u.fn === _wasm!.AnimationFunction.Slide) {
+            translation[0] += t * slideConstant;
+        }
+        if (this.v.fn === _wasm!.AnimationFunction.Slide) {
+            translation[1] += t * slideConstant;
+        }
+        mat4.translate(out, out, translation);
+    }
+}
+
+interface TextureAnimationFunction {
+    fn: AnimationFunction;
+    scale: number;
+    period: number; // in seconds
+    phase: number;
+    baseScale: number,
+    baseOffset: number,
+    baseRotation: number,
+    center: [number, number] | null;
 }
 
 class ShaderModelProgram extends BaseProgram {
@@ -984,7 +1048,7 @@ class LightmapRenderer {
                 return;
             }
 
-            materialRenderer.setOnRenderInst(renderInst);
+            materialRenderer.setOnRenderInst(renderInst, mainView);
             this.materials[i].setOnRenderInst(renderInst);
 
             renderInstManager.submitRenderInst(renderInst);
@@ -1157,7 +1221,7 @@ class ModelRenderer {
 
             const renderInst = renderInstManager.newRenderInst();
             part.setOnRenderInst(renderInst);
-            materialRenderer.setOnRenderInst(renderInst);
+            materialRenderer.setOnRenderInst(renderInst, mainView);
 
             // TODO: Part AABB?
             renderInst.sortKey = materialRenderer.sortKeyBase;
@@ -1256,6 +1320,7 @@ class View {
     // aka projectionMatrix
     public clipFromViewMatrix = mat4.create();
     public cameraPos = vec3.create();
+    public time: number;
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
@@ -1263,9 +1328,10 @@ class View {
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
     }
 
-    public setupFromCamera(camera: Camera): void {
-        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromHaloSpace);
-        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
+    public setupFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
+        mat4.mul(this.viewFromWorldMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromHaloSpace);
+        mat4.copy(this.clipFromViewMatrix, viewerInput.camera.projectionMatrix);
+        this.time = viewerInput.time;
         this.finishSetup();
     }
 }
@@ -1325,7 +1391,7 @@ class HaloScene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        this.mainView.setupFromCamera(viewerInput.camera);
+        this.mainView.setupFromViewerInput(viewerInput);
 
         let offs = template.allocateUniformBuffer(BaseProgram.ub_SceneParams, 32 + 12);
         const mapped = template.mapUniformBufferF32(BaseProgram.ub_SceneParams);
