@@ -628,13 +628,13 @@ layout(std140) uniform ub_ShaderParams {
     private getColorFunction(out: string, current: string, next: string, fn: ShaderTransparentChicagoColorFunction): string {
         switch (fn) {
             case _wasm!.ShaderTransparentChicagoColorFunction.Current:
-                return ``;
+                return `${out} = ${current};`;
             case _wasm!.ShaderTransparentChicagoColorFunction.NextMap:
                 return `${out} = ${next};`
             case _wasm!.ShaderTransparentChicagoColorFunction.Multiply:
                 return `${out} = ${current} * ${next};`;
             case _wasm!.ShaderTransparentChicagoColorFunction.DoubleMultiply:
-                return `${next} = 2.0 * ${current} * ${next};`;
+                return `${out} = 2.0 * ${current} * ${next};`;
             case _wasm!.ShaderTransparentChicagoColorFunction.Add:
                 return `${out} = ${current} + ${next};`;
             default:
