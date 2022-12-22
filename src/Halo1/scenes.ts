@@ -1385,6 +1385,7 @@ class SceneryRenderer {
 
     public destroy(device: GfxDevice) {
         this.modelRenderers.forEach(m => m.destroy(device));
+        this.scenery.free();
     }
 }
 
@@ -1459,9 +1460,9 @@ class HaloScene implements Viewer.SceneGfx {
     public bspRenderers: BSPRenderer[];
     public sceneryRenderers: SceneryRenderer[];
     public skyboxRenderer: ModelRenderer | undefined;
-    public activeSky: HaloSky;
-    public fogColor: vec4;
-    public fogDistances: vec4;
+    public activeSky: HaloSky | undefined;
+    public fogColor = vec4.create();
+    public fogDistances = vec4.create();
     private mainView = new View();
 
     constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
@@ -1482,17 +1483,20 @@ class HaloScene implements Viewer.SceneGfx {
             const instances = sceneryInstances.filter(instance => instance.scenery_type === i);
             return new SceneryRenderer(this.textureCache, this.renderHelper.renderCache, this.mgr, scenery, instances);
         });
+
         // for now, just choose the first skybox. eventually we'll want to switch between them depending on the current BSP
         this.activeSky = mgr.get_skies()[0];
-        const color = this.activeSky.outdoor_fog_color;
-        this.fogColor = vec4.fromValues(color.r, color.g, color.b, this.activeSky.outdoor_fog_max_density);
-        color.free();
-        this.fogDistances = vec4.fromValues(this.activeSky.outdoor_fog_start_distance, this.activeSky.outdoor_fog_opaque_distance, 0, 0);
-        const modelMatrix = mat4.create();
-        const skyModel = this.activeSky.get_model();
-        if (skyModel) {
-            this.skyboxRenderer = new ModelRenderer(this.textureCache, this.renderHelper.renderCache, mgr, skyModel, modelMatrix);
-            this.skyboxRenderer.isSkybox = true;
+        if (this.activeSky !== undefined) {
+            const color = this.activeSky.outdoor_fog_color;
+            vec4.set(this.fogColor, color.r, color.g, color.b, this.activeSky.outdoor_fog_max_density);
+            color.free();
+            vec4.set(this.fogDistances, this.activeSky.outdoor_fog_start_distance, this.activeSky.outdoor_fog_opaque_distance, 0, 0);
+            const modelMatrix = mat4.create();
+            const skyModel = this.activeSky.get_model();
+            if (skyModel) {
+                this.skyboxRenderer = new ModelRenderer(this.textureCache, this.renderHelper.renderCache, mgr, skyModel, modelMatrix);
+                this.skyboxRenderer.isSkybox = true;
+            }
         }
     }
 
@@ -1565,6 +1569,9 @@ class HaloScene implements Viewer.SceneGfx {
             this.skyboxRenderer.destroy(device);
         }
         this.renderHelper.destroy();
+        if (this.activeSky)
+            this.activeSky.free();
+        this.mgr.free();
     }
 }
 
@@ -1580,7 +1587,11 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         wasm.init_panic_hook();
         const bitmapReader = await context.dataShare.ensureObject(`${pathBase}/BitmapReader`, async () => {
             const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
-            return wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
+            const bitmapReader = wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
+            bitmapReader.destroy = () => { // hax!!
+                bitmapReader.free();
+            };
+            return bitmapReader;
         });
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
@@ -1595,7 +1606,7 @@ const id = 'Halo';
 const name = 'Halo';
 
 const sceneDescs = [
-    new HaloSceneDesc("bloodgulch", "Blood Gulch"),
+    new HaloSceneDesc("bloodgulch", "bloodgulch"),
     new HaloSceneDesc("beavercreek", "beavercreek"),
     new HaloSceneDesc("boardingaction", "boardingaction"),
     new HaloSceneDesc("carousel", "carousel"),
