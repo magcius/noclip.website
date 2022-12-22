@@ -1316,9 +1316,11 @@ class ModelRenderer {
 class ModelPartData {
     public indexCount = 0;
     public shaderIndex: number;
+    public origIndex: number;
 
     constructor(private part: HaloModelPart, public indexStart: number) {
         this.shaderIndex = part.shader_index;
+        this.origIndex = (part as any).index;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -1340,8 +1342,12 @@ class ModelData {
     constructor(cache: GfxRenderCache, mgr: HaloSceneManager, private model: HaloModel) {
         // TODO(jstpierre): Do this draw combining in Rust?
         const parts = mgr.get_model_parts(this.model) as HaloModelPart[];
+        parts.forEach((part, i) => {
+            (part as any).index = i;
+        });
 
         // Group draws that are the same shader.
+        // TODO(jstpierre): We can't group parts that are transparent shaders... but for now we'll pretend.
         parts.sort((a, b) => {
             return a.shader_index - b.shader_index;
         });
@@ -1393,6 +1399,10 @@ class ModelData {
 
         this.inputLayout = this.getInputLayout(cache);
         this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+
+        this.parts.sort((a, b) => {
+            return a.origIndex - b.origIndex;
+        });
     }
 
     private getInputLayout(cache: GfxRenderCache): GfxInputLayout {
