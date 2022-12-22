@@ -445,6 +445,7 @@ ${genOutputAlpha(stage.output_ab_cd_mux_sum_alpha, `ABCD.a`)}
         }
 
         fragBody.push(`gl_FragColor = r0.rgba;`);
+        fragBody.push(`CalcFog(gl_FragColor, v_Position);`);
 
         return `
 void mainPS() {
