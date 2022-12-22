@@ -13,7 +13,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation } from '../MathHelpers';
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
@@ -21,7 +21,6 @@ import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { TextureAnimation } from '../kh2fm/map';
 
 /**
  * todo:
@@ -691,8 +690,6 @@ class MaterialRender_TransparencyChicago {
     }
 }
 
-function defaultTo1(v: number) { return v === 0 ? 1 : v;}
-
 class TextureAnimationHandler {
     private u: TextureAnimationFunction;
     private v: TextureAnimationFunction;
@@ -700,28 +697,28 @@ class TextureAnimationHandler {
     constructor(map: HaloShaderTransparentGenericMap | HaloShaderTransparentChicagoMap) {
         this.u = {
             fn: map.u_animation_function,
-            scale: defaultTo1(map.u_animation_scale),
-            period: defaultTo1(map.u_animation_period),
+            scale: map.u_animation_scale,
+            period: map.u_animation_period,
             phase: map.u_animation_phase,
-            baseScale: defaultTo1(map.map_u_scale),
+            baseScale: map.map_u_scale,
             baseOffset: map.map_u_offset,
             baseRotation: 0,
             center: null,
         };
         this.v = {
             fn: map.v_animation_function,
-            scale: defaultTo1(map.v_animation_scale),
-            period: defaultTo1(map.v_animation_period),
+            scale: map.v_animation_scale,
+            period: map.v_animation_period,
             phase: map.v_animation_phase,
-            baseScale: defaultTo1(map.map_v_scale),
+            baseScale: map.map_v_scale,
             baseOffset: map.map_v_offset,
             baseRotation: 0,
             center: null,
         };
         this.rotation = {
             fn: map.rotation_animation_function,
-            scale: defaultTo1(map.rotation_animation_scale),
-            period: defaultTo1(map.rotation_animation_period),
+            scale: map.rotation_animation_scale,
+            period: map.rotation_animation_period,
             phase: map.rotation_animation_phase,
             baseScale: 0,
             baseOffset: 0,
@@ -747,7 +744,7 @@ class TextureAnimationHandler {
                 translation[1] += (tSecs / this.v.period) * this.v.scale;
                 break;
         }
-        mat4.translate(out, out, translation);
+        setMatrixTranslation(out, translation);
     }
 }
 
