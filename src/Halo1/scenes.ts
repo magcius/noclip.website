@@ -61,6 +61,7 @@ class BaseProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
     public static ub_BSPParams = 2;
+    public static ub_ShaderParams = 2;
 
     public static u_Texture = 0;
     public static u_Lightmap = 1;
@@ -70,6 +71,20 @@ class BaseProgram extends DeviceProgram {
     public static u_MicroDetailTexture = 5;
     public static u_ReflectionCubeMap = 6;
     public static u_MultipurposeMap = 7;
+
+    public static a_Pos = 0;
+    public static a_Norm = 1;
+    public static a_Binorm = 2;
+    public static a_Tangent = 3;
+    public static a_TexCoord = 4;
+
+    public static varying = `
+varying vec2 v_UV;
+varying vec3 v_Normal;
+varying vec3 v_Binormal;
+varying vec3 v_Tangent;
+varying vec3 v_Position;
+`;
 
     public static common = `
 precision mediump float;
@@ -95,29 +110,8 @@ layout(binding = ${BaseProgram.u_MicroDetailTexture}) uniform sampler2D u_MicroD
 layout(binding = ${BaseProgram.u_ReflectionCubeMap}) uniform samplerCube u_ReflectionCubeMap;
 layout(binding = ${BaseProgram.u_MultipurposeMap}) uniform sampler2D u_MultipurposeMap;
 `;
-}
 
-class BaseShaderProgram extends BaseProgram {
-    public static ub_ShaderParams = 2;
-
-    public static a_Pos = 0;
-    public static a_Norm = 1;
-    public static a_Binorm = 2;
-    public static a_Tangent = 3;
-    public static a_TexCoord = 4;
-
-    public static varying = `
-varying vec2 v_UV;
-varying vec3 v_Normal;
-varying vec3 v_Binormal;
-varying vec3 v_Tangent;
-varying vec3 v_Position;
-`;
-
-    public static includes = `
-${GfxShaderLibrary.saturate}
-${GfxShaderLibrary.invlerp}
-
+    public static CalcFog = `
 void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_PlayerPos.xyz);
     float t_FogFactor = saturate(invlerp(u_FogDistances.x, u_FogDistances.y, t_DistanceWorld));
@@ -130,20 +124,16 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 }
 `;
 
-    public static header = `
-${BaseProgram.common}
-${BaseShaderProgram.includes}
-${BaseShaderProgram.varying}
+    public static vertexAttrs = `
+layout(location = ${BaseProgram.a_Pos}) attribute vec3 a_Position;
+layout(location = ${BaseProgram.a_Norm}) attribute vec3 a_Normal;
+layout(location = ${BaseProgram.a_Binorm}) attribute vec3 a_Binormal;
+layout(location = ${BaseProgram.a_Tangent}) attribute vec3 a_Tangent;
+layout(location = ${BaseProgram.a_TexCoord}) in vec2 a_TexCoord;
 `;
 
     public override vert = `
-${BaseShaderProgram.header}
-layout(location = ${BaseShaderProgram.a_Pos}) attribute vec3 a_Position;
-layout(location = ${BaseShaderProgram.a_Norm}) attribute vec3 a_Normal;
-layout(location = ${BaseShaderProgram.a_Binorm}) attribute vec3 a_Binormal;
-layout(location = ${BaseShaderProgram.a_Tangent}) attribute vec3 a_Tangent;
-layout(location = ${BaseShaderProgram.a_TexCoord}) in vec2 a_TexCoord;
-
+${BaseProgram.vertexAttrs}
 vec4 toWorldCoord(vec4 x) {
     return Mul(u_ModelMatrix, x);
 }
@@ -157,11 +147,23 @@ void mainVS() {
     v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
 }
 `;
+
+    constructor(includes: string[]) {
+        super();
+        const baseIncludes: string[] = [
+            GfxShaderLibrary.saturate,
+            GfxShaderLibrary.invlerp,
+            BaseProgram.common,
+            BaseProgram.CalcFog,
+            BaseProgram.varying,
+        ];
+        this.both = baseIncludes.concat(includes).join('\n');
+    }
 }
 
-class ShaderTransparencyGenericProgram extends BaseShaderProgram {
+class ShaderTransparencyGenericProgram extends BaseProgram {
     constructor(public shader: HaloShaderTransparencyGeneric) {
-        super()
+        super([])
         this.frag = this.generateFragSection();
     }
 
@@ -445,8 +447,6 @@ ${genOutputAlpha(stage.output_ab_cd_mux_sum_alpha, `ABCD.a`)}
         fragBody.push(`gl_FragColor = r0.rgba;`);
 
         return `
-${BaseShaderProgram.header}
-
 void mainPS() {
 ${fragBody.join('\n')}
 }
@@ -521,26 +521,19 @@ class MaterialRender_TransparencyGeneric {
     }
 }
 
-class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
+class ShaderTransparencyChicagoProgram extends BaseProgram {
+    public static BindingsDefinition = `
+layout(std140) uniform ub_ShaderParams {
+    Mat4x2 u_MapTransform0;
+    Mat4x2 u_MapTransform1;
+    Mat4x2 u_MapTransform2;
+    Mat4x2 u_MapTransform3;
+};
+`;
+
     constructor(public shader: HaloShaderTransparencyChicago) {
-        super()
+        super([ShaderTransparencyChicagoProgram.BindingsDefinition])
         this.frag = this.generateFragSection();
-    }
-
-    private vec2Literal(x: number, y: number): string {
-        return `vec2(${glslGenerateFloat(x)}, ${glslGenerateFloat(y)})`;
-    }
-
-    private getMapUVTransform(map: HaloShaderTransparentChicagoMap): string {
-        let scale, offset;
-        if (map) {
-            scale = this.vec2Literal(map.map_u_scale, map.map_v_scale);
-            offset = this.vec2Literal(map.map_u_offset, map.map_v_offset);
-        } else {
-            scale = this.vec2Literal(0, 0);
-            offset = this.vec2Literal(0, 0);
-        }
-        return `v_UV * ${scale} + ${offset}`;
     }
 
     private getColorFunction(out: string, current: string, next: string, fn: ShaderTransparentChicagoColorFunction): string {
@@ -569,10 +562,14 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
             }
         }
         const fragBody: string[] = [
-            `vec4 t0 = texture(SAMPLER_2D(u_Texture), ${this.getMapUVTransform(maps[0])});`,
-            `vec4 t1 = texture(SAMPLER_2D(u_Lightmap), ${this.getMapUVTransform(maps[1])});`,
-            `vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), ${this.getMapUVTransform(maps[2])});`,
-            `vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), ${this.getMapUVTransform(maps[3])});`,
+            `vec2 uv0 = Mul(u_MapTransform0, vec4(v_UV, 1.0, 1.0));`,
+            `vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));`,
+            `vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));`,
+            `vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));`,
+            `vec4 t0 = texture(SAMPLER_2D(u_Texture), uv0);`,
+            `vec4 t1 = texture(SAMPLER_2D(u_Lightmap), uv1);`,
+            `vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), uv2);`,
+            `vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), uv3);`,
         ];
 
         fragBody.push(`vec4 scratch;`)
@@ -586,11 +583,9 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
             fragBody.push(`current = scratch;`)
         })
 
-        fragBody.push(`CalcFog(current, v_Position);`)
         fragBody.push(`gl_FragColor = current;`)
+        fragBody.push(`CalcFog(gl_FragColor, v_Position);`)
         return `
-${BaseShaderProgram.header}
-
 void mainPS() {
 ${fragBody.join('\n')}
 }
@@ -601,6 +596,8 @@ ${fragBody.join('\n')}
 class MaterialRender_TransparencyChicago {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private gfxProgram: GfxProgram;
+    private mapTransform: mat4;
+    private maps: (HaloShaderTransparentChicagoMap | undefined)[];
     public sortKeyBase: number = 0;
     public visible = true;
 
@@ -608,8 +605,26 @@ class MaterialRender_TransparencyChicago {
         for (let i = 0; i < 4; i++)
             this.textureMapping[i] = textureCache.getTextureMapping(shader.get_bitmap(i));
 
+        this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyChicagoProgram(shader));
         this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+        this.maps = [
+            this.shader.get_map(0),
+            this.shader.get_map(1),
+            this.shader.get_map(2),
+            this.shader.get_map(3),
+        ];
+    }
+
+    private setupMapTransform(i: number, t: number): mat4 {
+        const map = this.maps[i];
+        if (map) {
+            computeModelMatrixS(this.mapTransform, map.map_u_scale, map.map_v_scale);
+            mat4.translate(this.mapTransform, this.mapTransform, vec3.fromValues(map.map_u_offset, map.map_v_offset, 1));
+        } else {
+            mat4.identity(this.mapTransform);
+        }
+        return this.mapTransform;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -621,7 +636,12 @@ class MaterialRender_TransparencyChicago {
         renderInst.setMegaStateFlags(megaStateFlags);
 
         // XXX(jstpierre): Have to allocate something...
-        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4);
+        let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 4 * 8);
+        const mapped = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(0, 0));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, 0));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, 0));
+        offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, 0));
     }
 
     public destroy(device: GfxDevice): void {
@@ -629,59 +649,30 @@ class MaterialRender_TransparencyChicago {
     }
 }
 
-class ShaderModelProgram extends BaseShaderProgram {
+class ShaderModelProgram extends BaseProgram {
     public static BindingsDefinition = `
 layout(std140) uniform ub_ShaderParams {
     Mat4x2 u_BaseMapTransform;
 };
 `;
 
-    public static override header = `
-${BaseShaderProgram.header}
-${ShaderModelProgram.BindingsDefinition}
-`;
-
-    constructor(shader: HaloShaderModel) {
-        super();
+    constructor(public shader: HaloShaderModel) {
+        super([ShaderModelProgram.BindingsDefinition]);
         this.frag = this.generateFragSection();
     }
-
-    public override vert = `
-${ShaderModelProgram.header}
-layout(location = ${ShaderModelProgram.a_Pos}) attribute vec3 a_Position;
-layout(location = ${ShaderModelProgram.a_Norm}) attribute vec3 a_Normal;
-layout(location = ${ShaderModelProgram.a_Binorm}) attribute vec3 a_Binormal;
-layout(location = ${ShaderModelProgram.a_Tangent}) attribute vec3 a_Tangent;
-layout(location = ${ShaderModelProgram.a_TexCoord}) in vec2 a_TexCoord;
-
-vec4 toWorldCoord(vec4 x) {
-    return Mul(u_ModelMatrix, x);
-}
-
-void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, toWorldCoord(vec4(a_Position, 1.0))));
-    v_UV = Mul(u_BaseMapTransform, vec4(a_TexCoord.xy, 1.0, 1.0)).xy;
-    v_Normal = normalize(toWorldCoord(vec4(a_Normal.xyz, 0.0)).xyz);
-    v_Binormal = normalize(toWorldCoord(vec4(a_Binormal.xyz, 0.0)).xyz);
-    v_Tangent = normalize(toWorldCoord(vec4(a_Tangent.xyz, 0.0)).xyz);
-    v_Position = toWorldCoord(vec4(a_Position.xyz, 1.0)).xyz;
-}
-`;
 
     private generateFragSection(): string {
         const fragBody: string[] = [];
 
         fragBody.push(`
 vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), v_UV).rgba;
-CalcFog(t_BaseTexture, v_Position);
 gl_FragColor.rgba = t_BaseTexture.rgba;
+CalcFog(gl_FragColor, v_Position);
 if (t_BaseTexture.a < 0.5)
     discard;
 `);
 
         return `
-${ShaderModelProgram.header}
-
 void mainPS() {
 ${fragBody.join('\n')}
 }
@@ -721,23 +712,16 @@ class MaterialRender_Model {
     }
 }
 
-class ShaderEnvironmentProgram extends BaseShaderProgram {
+class ShaderEnvironmentProgram extends BaseProgram {
     public static a_IncidentLight = 5;
     public static a_LightmapTexCoord = 6;
 
     public static override varying = `
-varying vec2 v_UV;
 varying vec2 v_lightmapUV;
-varying vec3 v_Normal;
-varying vec3 v_Binormal;
-varying vec3 v_Tangent;
-varying vec3 v_Position;
 varying vec3 v_IncidentLight;
 `;
 
-    public static override includes = `
-${BaseShaderProgram.includes}
-
+    public static CalcTangentToWorld = `
 vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
     return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
 }
@@ -753,15 +737,7 @@ layout(std140) uniform ub_ShaderParams {
 #define u_BSPIndex (u_Misc.x)
 `;
 
-    public static override header = `
-${BaseProgram.common}
-${ShaderEnvironmentProgram.BindingsDefinition}
-${ShaderEnvironmentProgram.includes}
-${ShaderEnvironmentProgram.varying}
-`;
-
     public override vert = `
-${ShaderEnvironmentProgram.header}
 layout(location = ${ShaderEnvironmentProgram.a_Pos}) attribute vec3 a_Position;
 layout(location = ${ShaderEnvironmentProgram.a_Norm}) attribute vec3 a_Normal;
 layout(location = ${ShaderEnvironmentProgram.a_Binorm}) attribute vec3 a_Binormal;
@@ -787,7 +763,7 @@ void mainVS() {
 `;
 
     constructor(public shader: HaloShaderEnvironment | undefined, public has_lightmap: boolean) {
-        super();
+        super([ShaderEnvironmentProgram.CalcTangentToWorld, ShaderEnvironmentProgram.varying, ShaderEnvironmentProgram.BindingsDefinition]);
         this.generateFragmentShader();
     }
 
@@ -919,11 +895,10 @@ if (t_BumpMap.a < 0.5)
             }
         }
 
-        fragBody.push(`CalcFog(color, v_Position);`)
         fragBody.push(`gl_FragDepth = gl_FragCoord.z + 1e-6 * u_BSPIndex;`);
         fragBody.push(`gl_FragColor = vec4(color.rgb, 1.0);`);
+        fragBody.push(`CalcFog(gl_FragColor, v_Position);`)
         this.frag = `
-${ShaderEnvironmentProgram.header}
 void mainPS() {
 ${fragBody.join('\n')}
 }

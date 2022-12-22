@@ -416,21 +416,10 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut mgr = MapManager::new(read_map("bloodgulch.map")).unwrap();
-        let scenario = match mgr.get_scenario().unwrap().data {
-            TagData::Scenario(s) => s.clone(),
-            _ => unreachable!(),
-        };
-        for sky in scenario.skies.items.as_ref().unwrap() {
-            let sky_hdr = dbg!(mgr.resolve_dependency(&sky).unwrap());
-            let sky = dbg!(mgr.read_tag(&sky_hdr).unwrap());
-            let sky_data = match sky.data { TagData::Sky(s) => s.clone(), _ => unreachable!() };
-            let model_hdr = dbg!(mgr.resolve_dependency(&sky_data.model).unwrap());
-            let model = dbg!(mgr.read_tag(&model_hdr).unwrap());
-            let model_data = match model.data { TagData::GbxModel(m) => m.clone(), _ => unreachable!() };
-            for dependency in model_data.shaders.items.as_ref().unwrap() {
-                let shader_hdr = dbg!(mgr.resolve_dependency(&dependency.shader).unwrap());
-                let shader = dbg!(mgr.read_tag(&shader_hdr));
+        let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
+        for hdr in mgr.tag_headers.clone() {
+            if hdr.path == "levels\\b30\\shaders\\waves" {
+                dbg!(mgr.read_tag(&hdr));
             }
         }
     }
