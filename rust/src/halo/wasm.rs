@@ -206,7 +206,7 @@ impl HaloShaderTransparentChicagoMap {
 pub struct HaloShaderTransparencyChicago {
     inner: ShaderTransparentChicago,
     maps: Vec<HaloShaderTransparentChicagoMap>,
-    bitmaps: Vec<Bitmap>,
+    bitmaps: Vec<Option<Bitmap>>,
 }
 
 #[wasm_bindgen]
@@ -225,7 +225,13 @@ impl HaloShaderTransparencyChicago {
     #[wasm_bindgen(getter)] pub fn lens_flare_spacing(&self) -> f32 { self.inner.lens_flare_spacing }
 
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
-        self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
+        match self.bitmaps.get(i) {
+            Some(maybe_bitmap) => match maybe_bitmap {
+                Some(b) => Some(HaloBitmap { inner: b.clone() }),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     pub fn get_map(&self, i: usize) -> Option<HaloShaderTransparentChicagoMap> {
@@ -557,7 +563,7 @@ impl HaloSceneManager {
                         let mut maps = Vec::new();
                         let mut bitmaps = Vec::new();
                         for chicago_map in s.maps.items.as_ref().unwrap() {
-                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map));
                             maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
                         }
                         JsValue::from(HaloShaderTransparencyChicago {
@@ -748,7 +754,7 @@ impl HaloSceneManager {
                     let mut maps = Vec::new();
                     let mut bitmaps = Vec::new();
                     for chicago_map in s.maps.items.as_ref().unwrap() {
-                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map));
                         maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
                     }
                     result.push(&JsValue::from(HaloShaderTransparencyChicago {
