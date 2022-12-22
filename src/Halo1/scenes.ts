@@ -1711,17 +1711,6 @@ const id = 'Halo';
 const name = 'Halo';
 
 const sceneDescs = [
-    "Campaign",
-    new HaloSceneDesc("a10", "Pillar of Autumn", [0, 1, 2, 3, 4, 5, 6, 7], FogSettings.Disabled), // the BSPs don't all play nice here
-    new HaloSceneDesc("a30", "Halo"),
-    new HaloSceneDesc("a50", "Truth and Reconciliation"),
-    new HaloSceneDesc("b30", "The Silent Cartographer"),
-    new HaloSceneDesc("b40", "Assault on the Control Room"),
-    new HaloSceneDesc("c10", "343 Guilty Spark"),
-    new HaloSceneDesc("c20", "The Library", [], FogSettings.Indoor),
-    new HaloSceneDesc("c40", "Two Betrayals"),
-    new HaloSceneDesc("d20", "Keyes"),
-    new HaloSceneDesc("d40", "The Maw"),
     "Multiplayer",
     new HaloSceneDesc("bloodgulch", "Blood Gulch"),
     new HaloSceneDesc("beavercreek", "Battle Creek"),
@@ -1742,6 +1731,17 @@ const sceneDescs = [
     new HaloSceneDesc("sidewinder", "Sidewinder"),
     new HaloSceneDesc("timberland", "Timberland"),
     new HaloSceneDesc("wizard", "Wizard"),
+    "Campaign",
+    new HaloSceneDesc("a10", "Pillar of Autumn", [0, 1, 2, 3, 4, 5, 6, 7], FogSettings.Disabled), // the BSPs don't all play nice here
+    new HaloSceneDesc("a30", "Halo"),
+    new HaloSceneDesc("a50", "Truth and Reconciliation"),
+    new HaloSceneDesc("b30", "The Silent Cartographer"),
+    new HaloSceneDesc("b40", "Assault on the Control Room"),
+    new HaloSceneDesc("c10", "343 Guilty Spark"),
+    new HaloSceneDesc("c20", "The Library", [], FogSettings.Indoor),
+    new HaloSceneDesc("c40", "Two Betrayals"),
+    new HaloSceneDesc("d20", "Keyes"),
+    new HaloSceneDesc("d40", "The Maw"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: false };
