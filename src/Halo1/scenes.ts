@@ -1,13 +1,13 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
+import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -177,6 +177,24 @@ ${fragBody.join('\n')}
     }
 }
 
+function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlendFunction) {
+    if (fn === _wasm!.FramebufferBlendFunction.AlphaBlend) {
+        setAttachmentStateSimple(dst, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+    } else if (fn === _wasm!.FramebufferBlendFunction.Add) {
+        setAttachmentStateSimple(dst, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.One,
+            blendDstFactor: GfxBlendFactor.One,
+        });
+    } else {
+        throw "whoops";
+    }
+}
+
 class MaterialRender_TransparencyGeneric {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private gfxProgram: GfxProgram;
@@ -202,11 +220,7 @@ class MaterialRender_TransparencyGeneric {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         const megaStateFlags = { depthWrite: false };
-        setAttachmentStateSimple(megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
+        setBlendMode(megaStateFlags, this.shader.framebuffer_blend_function);
         renderInst.setMegaStateFlags(megaStateFlags);
 
         // XXX(jstpierre): Have to allocate something...
@@ -314,11 +328,7 @@ class MaterialRender_TransparencyChicago {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         const megaStateFlags = { depthWrite: false };
-        setAttachmentStateSimple(megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        });
+        setBlendMode(megaStateFlags, this.shader.framebuffer_blend_function);
         renderInst.setMegaStateFlags(megaStateFlags);
 
         // XXX(jstpierre): Have to allocate something...
