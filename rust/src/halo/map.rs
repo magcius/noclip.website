@@ -108,6 +108,34 @@ impl MapManager {
                 let mut shader = ShaderTransparentGeneric::deserialize(&mut self.reader.data)?;
                 shader.extra_layers.read_items(&mut self.reader.data, offset)?;
                 shader.maps.read_items(&mut self.reader.data, offset)?;
+                shader.stages.read_items(&mut self.reader.data, offset)?;
+
+                if shader.stages.count == 0 {
+                    let mut fallback: Vec<ShaderTransparentGenericStage> = Vec::new();
+                    fallback.push(ShaderTransparentGenericStage {
+                        flags: 0,
+                        color0_source: FunctionSource::None,
+                        color0_animation_function: AnimationFunction::Zero,
+                        color0_animation_period: 0.0,
+                        color0_animation_lower_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                        color1: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                        input_a: ShaderInput::Texture0Color, input_a_mapping: ShaderMapping::SignedIdentity,
+                        input_b: ShaderInput::One, input_b_mapping: ShaderMapping::SignedIdentity,
+                        input_c: ShaderInput::Zero, input_c_mapping: ShaderMapping::SignedIdentity,
+                        input_d: ShaderInput::Zero, input_d_mapping: ShaderMapping::SignedIdentity,
+                        input_a_alpha: ShaderAlphaInput::Texture0Alpha, input_a_mapping_alpha: ShaderMapping::SignedIdentity,
+                        input_b_alpha: ShaderAlphaInput::One, input_b_mapping_alpha: ShaderMapping::SignedIdentity,
+                        input_c_alpha: ShaderAlphaInput::Zero, input_c_mapping_alpha: ShaderMapping::SignedIdentity,
+                        input_d_alpha: ShaderAlphaInput::Zero, input_d_mapping_alpha: ShaderMapping::SignedIdentity,
+
+                        output_ab_function: ShaderOutputFunction::Multiply, output_cd_function: ShaderOutputFunction::Multiply,
+                        output_ab: ShaderOutput::Scratch0, output_cd: ShaderOutput::Discard, output_ab_cd_mux_sum: ShaderOutput::Discard,
+                        output_ab_alpha: ShaderOutput::Scratch0, output_cd_alpha: ShaderOutput::Discard, output_ab_cd_mux_sum_alpha: ShaderOutput::Discard,
+                        output_mapping_color: ShaderOutputMapping::Identity, output_mapping_alpha: ShaderOutputMapping::Identity,
+                    });
+                    shader.stages.items = Some(fallback);
+                    shader.stages.count = 1;
+                }
                 TagData::ShaderTransparentGeneric(shader)
             },
             TagClass::Scenery => {
@@ -377,12 +405,8 @@ mod tests {
 
     use super::*;
 
-    fn read_bloodgulch() -> Vec<u8> {
-        std::fs::read("test_data/bloodgulch.map").unwrap()
-    }
-
     fn read_map(path: &str) -> Vec<u8> {
-        std::fs::read(&format!("../data/halo/{}", path)).unwrap()
+        std::fs::read(&format!("../data/Halo1/maps/{}", path)).unwrap()
     }
 
     fn read_bitmaps() -> Vec<u8> {

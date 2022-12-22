@@ -318,10 +318,10 @@ pub struct ShaderTransparentGenericStage {
     pub input_d_mapping: ShaderMapping,
     pub output_ab: ShaderOutput,
     pub output_ab_function: ShaderOutputFunction,
-    pub output_bc: ShaderOutput,
+    pub output_cd: ShaderOutput,
     pub output_cd_function: ShaderOutputFunction,
     pub output_ab_cd_mux_sum: ShaderOutput,
-    pub output_mapping_color: ShaderOutputMappingColor,
+    pub output_mapping_color: ShaderOutputMapping,
     pub input_a_alpha: ShaderAlphaInput,
     pub input_a_mapping_alpha: ShaderMapping, 
     pub input_b_alpha: ShaderAlphaInput,
@@ -333,7 +333,7 @@ pub struct ShaderTransparentGenericStage {
     pub output_ab_alpha: ShaderOutput,
     pub output_cd_alpha: ShaderOutput,
     pub output_ab_cd_mux_sum_alpha: ShaderOutput,
-    pub output_mapping_alpha: ShaderOutputMappingColor,
+    pub output_mapping_alpha: ShaderOutputMapping,
 }
 
 impl Deserialize for ShaderTransparentGenericStage {
@@ -356,10 +356,10 @@ impl Deserialize for ShaderTransparentGenericStage {
         let input_d_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_ab = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_ab_function = ShaderOutputFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
-        let output_bc = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_cd = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_cd_function = ShaderOutputFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_ab_cd_mux_sum = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
-        let output_mapping_color = ShaderOutputMappingColor::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        let output_mapping_color = ShaderOutputMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let input_a_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let input_a_mapping_alpha = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let input_b_alpha = ShaderAlphaInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
@@ -371,52 +371,21 @@ impl Deserialize for ShaderTransparentGenericStage {
         let output_ab_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_cd_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_ab_cd_mux_sum_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
-        let output_mapping_alpha = ShaderOutputMappingColor::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
-        Ok(ShaderTransparentGenericStage { flags, color0_source, color0_animation_function, color0_animation_period, color0_animation_lower_bound, color1, input_a, input_a_mapping, input_b, input_b_mapping, input_c, input_c_mapping, input_d, input_d_mapping, output_ab, output_ab_function, output_bc, output_cd_function, output_ab_cd_mux_sum, output_mapping_color, input_a_alpha, input_a_mapping_alpha, input_b_alpha, input_b_mapping_alpha, input_c_alpha, input_c_mapping_alpha, input_d_alpha, input_d_mapping_alpha, output_ab_alpha, output_cd_alpha, output_ab_cd_mux_sum_alpha, output_mapping_alpha })
+        let output_mapping_alpha = ShaderOutputMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
+        Ok(ShaderTransparentGenericStage { flags, color0_source, color0_animation_function, color0_animation_period, color0_animation_lower_bound, color1, input_a, input_a_mapping, input_b, input_b_mapping, input_c, input_c_mapping, input_d, input_d_mapping, output_ab, output_ab_function, output_cd, output_cd_function, output_ab_cd_mux_sum, output_mapping_color, input_a_alpha, input_a_mapping_alpha, input_b_alpha, input_b_mapping_alpha, input_c_alpha, input_c_mapping_alpha, input_d_alpha, input_d_mapping_alpha, output_ab_alpha, output_cd_alpha, output_ab_cd_mux_sum_alpha, output_mapping_alpha })
     }
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
-pub enum ShaderAlphaInput {
-    Zero = 0,
-    One = 1,
-    OneHalf = 2,
-    NegativeOne = 3,
-    NegativeOneHalf = 4,
-    Texture0Alpha = 5,
-    Texture1Alpha = 6,
-    Texture2Alpha = 7,
-    Texture3Alpha = 8,
-    VertexColor0Alpha = 9,
-    VertexColor1Alpha = 10,
-    Scratch0Alpha = 11,
-    Scratch1Alpha = 12,
-    Constant0Alpha = 13,
-    Constant1Alpha = 14,
-    Texture0Blue = 15,
-    Texture1Blue = 16,
-    Texture2Blue = 17,
-    Texture3Blue = 18,
-    Vertexcolor0Blue = 19,
-    Vertexcolor1Blue = 20,
-    Scratch0Blue = 21,
-    Scratch1Blue = 22,
-    Constant0Blue = 23,
-    Constant1Blue = 24,
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Copy, Clone, TryFromPrimitive)]
-#[repr(u16)]
-pub enum ShaderOutputMappingColor {
-    ColorIdentity = 0,
-    ColorScaleByHalf = 1,
-    ColorScaleByTwo = 2,
-    ColorScaleByFour = 3,
-    ColorBiasByHalf = 4,
-    ColorExpandNormal = 5,
+pub enum ShaderOutputMapping {
+    Identity = 0,
+    ScaleByHalf = 1,
+    ScaleByTwo = 2,
+    ScaleByFour = 3,
+    BiasByHalf = 4,
+    ExpandNormal = 5,
 }
 
 #[wasm_bindgen]
@@ -431,15 +400,15 @@ pub enum ShaderOutputFunction {
 #[derive(Debug, Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
 pub enum ShaderOutput {
-    AlphaDiscard = 0,
-    AlphaScratchAlpha0FinalAlpha = 1,
-    AlphaScratchAlpha1 = 2,
-    AlphaVertexAlpha0Fog = 3,
-    AlphaVertexAlpha1 = 4,
-    AlphaMapAlpha0 = 5,
-    AlphaMapAlpha1 = 6,
-    AlphaMapAlpha2 = 7,
-    AlphaMapAlpha3 = 8,
+    Discard = 0,
+    Scratch0 = 1,
+    Scratch1 = 2,
+    VertexColor0 = 3,
+    VertexColor1 = 4,
+    Texture0 = 5,
+    Texture1 = 6,
+    Texture2 = 7,
+    Texture3 = 8,
 }
 
 #[wasm_bindgen]
@@ -465,26 +434,57 @@ pub enum ShaderInput {
     OneHalf = 0x2,
     NegativeOne = 0x3,
     NegativeOneHalf = 0x4,
-    MapColor0 = 0x5,
-    MapColor1 = 0x6,
-    MapColor2 = 0x7,
-    MapColor3 = 0x8,
-    VertexColor0DiffuseLight = 0x9,
-    VertexColor1FadePerpendicular = 0xA,
-    ScratchColor0 = 0xB,
-    ScratchColor1 = 0xC,
-    ConstantColor0 = 0xD,
-    ConstantColor1 = 0xE,
-    MapAlpha0 = 0xF,
-    MapAlpha1 = 0x10,
-    MapAlpha2 = 0x11,
-    MapAlpha3 = 0x12,
-    VertexAlpha0FadeNone = 0x13,
-    VertexAlpha0FadePerpendicular = 0x14,
-    ScratchAlpha0 = 0x15,
-    ScratchAlpha1 = 0x16,
-    ConstantAlpha0 = 0x17,
-    ConstantAlpha1 = 0x18,
+    Texture0Color = 0x5,
+    Texture1Color = 0x6,
+    Texture2Color = 0x7,
+    Texture3Color = 0x8,
+    VertexColor0Color = 0x9,
+    VertexColor1Color = 0xA,
+    Scratch0Color = 0xB,
+    Scratch1Color = 0xC,
+    Constant0Color = 0xD,
+    Constant1Color = 0xE,
+    Texture0Alpha = 0xF,
+    Texture1Alpha = 0x10,
+    Texture2Alpha = 0x11,
+    Texture3Alpha = 0x12,
+    VertexColor0Alpha = 0x13,
+    VertexColor1Alpha = 0x14,
+    Scratch0Alpha = 0x15,
+    Scratch1Alpha = 0x16,
+    Constant0Alpha = 0x17,
+    Constant1Alpha = 0x18,
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
+pub enum ShaderAlphaInput {
+    Zero = 0,
+    One = 1,
+    OneHalf = 2,
+    NegativeOne = 3,
+    NegativeOneHalf = 4,
+    Texture0Alpha = 5,
+    Texture1Alpha = 6,
+    Texture2Alpha = 7,
+    Texture3Alpha = 8,
+    VertexColor0Alpha = 9,
+    VertexColor1Alpha = 10,
+    Scratch0Alpha = 11,
+    Scratch1Alpha = 12,
+    Constant0Alpha = 13,
+    Constant1Alpha = 14,
+    Texture0Blue = 15,
+    Texture1Blue = 16,
+    Texture2Blue = 17,
+    Texture3Blue = 18,
+    VertexColor0Blue = 19,
+    VertexColor1Blue = 20,
+    Scratch0Blue = 21,
+    Scratch1Blue = 22,
+    Constant0Blue = 23,
+    Constant1Blue = 24,
 }
 
 #[wasm_bindgen]

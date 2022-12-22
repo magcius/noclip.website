@@ -1,6 +1,6 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
+import { FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderInput, ShaderAlphaInput, ShaderOutputFunction, ShaderOutput, ShaderOutputMapping } from '../../rust/pkg/index';
 import { Camera, CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
@@ -164,8 +164,271 @@ class ShaderTransparencyGenericProgram extends BaseShaderProgram {
 vec4 t1 = texture(SAMPLER_2D(u_Lightmap), v_UV);
 vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), v_UV);
 vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), v_UV);
-gl_FragColor = t0;
+vec4 r0 = vec4(0.0, 0.0, 0.0, t0.a);
+vec4 r1 = vec4(0.0, 0.0, 0.0, 0.0);
+vec4 v0 = vec4(0.0, 0.0, 0.0, 0.0); // TODO(jstpierre): Vertex lighting
+vec4 v1 = vec4(0.0, 0.0, 0.0, 0.0); // TODO(jstpierre): Vertex lighting
+
+vec4 A, B, C, D;
+vec4 AB, CD, ABCD;
 `);
+
+        function genInputColor(input: ShaderInput): string { // vec3
+            if (input === _wasm!.ShaderInput.Zero)
+                return `vec3(0.0)`;
+            else if (input === _wasm!.ShaderInput.One)
+                return `vec3(1.0)`;
+            else if (input === _wasm!.ShaderInput.OneHalf)
+                return `vec3(0.5)`;
+            else if (input === _wasm!.ShaderInput.NegativeOne)
+                return `vec3(-1.0)`;
+            else if (input === _wasm!.ShaderInput.NegativeOneHalf)
+                return `vec3(-0.5)`;
+            else if (input === _wasm!.ShaderInput.Texture0Color)
+                return `t0.rgb`;
+            else if (input === _wasm!.ShaderInput.Texture1Color)
+                return `t1.rgb`;
+            else if (input === _wasm!.ShaderInput.Texture2Color)
+                return `t2.rgb`;
+            else if (input === _wasm!.ShaderInput.Texture3Color)
+                return `t3.rgb`;
+            else if (input === _wasm!.ShaderInput.VertexColor0Color)
+                return `v0.rgb`;
+            else if (input === _wasm!.ShaderInput.VertexColor1Color)
+                return `v1.rgb`;
+            else if (input === _wasm!.ShaderInput.Scratch0Color)
+                return `r0.rgb`;
+            else if (input === _wasm!.ShaderInput.Scratch1Color)
+                return `r1.rgb`;
+            else if (input === _wasm!.ShaderInput.Constant0Color)
+                return `vec3(0.0)`; // TODO(jstpierre): Constant stage color
+            else if (input === _wasm!.ShaderInput.Constant1Color)
+                return `vec3(0.0)`; // TODO(jstpierre): Constant stage color
+            else if (input === _wasm!.ShaderInput.Texture0Alpha)
+                return `t0.aaa`;
+            else if (input === _wasm!.ShaderInput.Texture1Alpha)
+                return `t1.aaa`;
+            else if (input === _wasm!.ShaderInput.Texture2Alpha)
+                return `t2.aaa`;
+            else if (input === _wasm!.ShaderInput.Texture3Alpha)
+                return `t3.aaa`;
+            else if (input === _wasm!.ShaderInput.VertexColor0Alpha)
+                return `v0.aaa`;
+            else if (input === _wasm!.ShaderInput.VertexColor1Alpha)
+                return `v1.aaa`;
+            else if (input === _wasm!.ShaderInput.Scratch0Alpha)
+                return `r0.aaa`;
+            else if (input === _wasm!.ShaderInput.Scratch1Alpha)
+                return `r1.aaa`;
+            else if (input === _wasm!.ShaderInput.Constant0Alpha)
+                return `vec3(0.0)`; // TODO(jstpierre): Constant stage alpha
+            else if (input === _wasm!.ShaderInput.Constant1Alpha)
+                return `vec3(0.0)`; // TODO(jstpierre): Constant stage alpha
+            else
+                throw "whoops";
+        }
+
+        function genInputAlpha(input: ShaderAlphaInput): string { // float
+            if (input === _wasm!.ShaderAlphaInput.Zero)
+                return `0.0`;
+            else if (input === _wasm!.ShaderAlphaInput.One)
+                return `1.0`;
+            else if (input === _wasm!.ShaderAlphaInput.OneHalf)
+                return `0.5`;
+            else if (input === _wasm!.ShaderAlphaInput.NegativeOne)
+                return `-1.0`;
+            else if (input === _wasm!.ShaderAlphaInput.NegativeOneHalf)
+                return `-0.5`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture0Alpha)
+                return `t0.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture1Alpha)
+                return `t1.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture2Alpha)
+                return `t2.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture3Alpha)
+                return `t3.a`;
+            else if (input === _wasm!.ShaderAlphaInput.VertexColor0Alpha)
+                return `v0.a`;
+            else if (input === _wasm!.ShaderAlphaInput.VertexColor1Alpha)
+                return `v1.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Scratch0Alpha)
+                return `r0.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Scratch1Alpha)
+                return `r1.a`;
+            else if (input === _wasm!.ShaderAlphaInput.Constant0Alpha)
+                return `0.0`; // TODO(jstpierre): Constant stage alpha
+            else if (input === _wasm!.ShaderAlphaInput.Constant1Alpha)
+                return `0.0`; // TODO(jstpierre): Constant stage alpha
+            else if (input === _wasm!.ShaderAlphaInput.Texture0Blue)
+                return `t0.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture1Blue)
+                return `t1.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture2Blue)
+                return `t2.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Texture3Blue)
+                return `t3.b`;
+            else if (input === _wasm!.ShaderAlphaInput.VertexColor0Blue)
+                return `v0.b`;
+            else if (input === _wasm!.ShaderAlphaInput.VertexColor1Blue)
+                return `v1.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Scratch0Blue)
+                return `r0.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Scratch1Blue)
+                return `r1.b`;
+            else if (input === _wasm!.ShaderAlphaInput.Constant0Blue)
+                return `0.0`; // TODO(jstpierre): Constant stage blue
+            else if (input === _wasm!.ShaderAlphaInput.Constant1Blue)
+                return `0.0`; // TODO(jstpierre): Constant stage blue
+            else
+                throw "whoops";
+        }
+
+        function genMapping(input: string, mapping: ShaderMapping, color: boolean): string {
+            const constructor = color ? `vec3` : ``;
+            if (mapping === _wasm!.ShaderMapping.UnsignedIdentity)
+                return `max(${input}, ${constructor}(0.0))`;
+            else if (mapping === _wasm!.ShaderMapping.UnsignedInvert)
+                return `${constructor}(1.0) - saturate(${input})`;
+            else if (mapping === _wasm!.ShaderMapping.ExpandNormal)
+                return `${constructor}(2.0) * max(${input}, ${constructor}(0.0)) - ${constructor}(1.0)`;
+            else if (mapping === _wasm!.ShaderMapping.ExpandNegate)
+                return `${constructor}(-2.0) * max(${input}, ${constructor}(0.0)) + ${constructor}(1.0)`;
+            else if (mapping === _wasm!.ShaderMapping.HalfbiasNormal)
+                return `max(${input}, ${constructor}(0.0)) - ${constructor}(0.5)`;
+            else if (mapping === _wasm!.ShaderMapping.HalfbiasNormal)
+                return `max(${input}, ${constructor}(0.0)) - ${constructor}(0.5)`;
+            else if (mapping === _wasm!.ShaderMapping.SignedIdentity)
+                return `${input}`;
+            else if (mapping === _wasm!.ShaderMapping.SignedNegate)
+                return `-${input}`;
+            else
+                throw "whoops";
+        }
+
+        function genInput(colorInput: ShaderInput, colorMapping: ShaderMapping, alphaInput: ShaderAlphaInput, alphaMapping: ShaderMapping): string {
+            const color = genMapping(genInputColor(colorInput), colorMapping, true);
+            const alpha = genMapping(genInputAlpha(alphaInput), alphaMapping, false);
+            return `vec4(${color}, ${alpha})`;
+        }
+
+        function genOutputFunction(func: ShaderOutputFunction, a: string, b: string): string {
+            if (func === _wasm!.ShaderOutputFunction.DotProduct)
+                return `dot(${a}, ${b})`;
+            else if (func === _wasm!.ShaderOutputFunction.Multiply)
+                return `(${a} * ${b})`;
+            else
+                throw "whoops";
+        }
+
+        function genMux(mux: boolean, ab: string, cd: string): string {
+            return mux ? `(r0.a >= 0.5) ? ${cd} : ${ab}` : `${ab} + ${cd}`;
+        }
+
+        function genOutputMapping(mapping: ShaderOutputMapping, v: string): string {
+            if (mapping === _wasm!.ShaderOutputMapping.Identity)
+                return `${v}`;
+            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByHalf)
+                return `${v} * 0.5`;
+            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByTwo)
+                return `${v} * 2.0`;
+            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByFour)
+                return `${v} * 4.0`;
+            else if (mapping === _wasm!.ShaderOutputMapping.BiasByHalf)
+                return `${v} - 0.5`;
+            else if (mapping === _wasm!.ShaderOutputMapping.ExpandNormal)
+                return `(${v} - 0.5) * 2.0`;
+            else
+                throw "whoops";
+        }
+
+        function genOutputColor(output: ShaderOutput, v: string): string {
+            if (output === _wasm!.ShaderOutput.Discard)
+                return ``;
+            else if (output === _wasm!.ShaderOutput.Scratch0)
+                return `r0.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Scratch1)
+                return `r1.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.VertexColor0)
+                return `v0.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.VertexColor1)
+                return `v1.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture0)
+                return `t0.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture1)
+                return `t1.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture2)
+                return `t2.rgb = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture3)
+                return `t3.rgb = ${v};`;
+            else
+                throw "whoops";
+        }
+
+        function genOutputAlpha(output: ShaderOutput, v: string): string {
+            if (output === _wasm!.ShaderOutput.Discard)
+                return ``;
+            else if (output === _wasm!.ShaderOutput.Scratch0)
+                return `r0.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Scratch1)
+                return `r1.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.VertexColor0)
+                return `v0.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.VertexColor1)
+                return `v1.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture0)
+                return `t0.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture1)
+                return `t1.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture2)
+                return `t2.a = ${v};`;
+            else if (output === _wasm!.ShaderOutput.Texture3)
+                return `t3.a = ${v};`;
+            else
+                throw "whoops";
+        }
+
+        for (let i=0; i<8; i++) {
+            const stage = this.shader.get_stage(i);
+            if (!stage) continue;
+
+            fragBody.push(`
+// Stage ${i}
+A = ${genInput(stage.input_a, stage.input_a_mapping, stage.input_a_alpha, stage.input_a_mapping_alpha)};
+B = ${genInput(stage.input_b, stage.input_b_mapping, stage.input_b_alpha, stage.input_b_mapping_alpha)};
+C = ${genInput(stage.input_c, stage.input_c_mapping, stage.input_c_alpha, stage.input_c_mapping_alpha)};
+D = ${genInput(stage.input_d, stage.input_d_mapping, stage.input_d_alpha, stage.input_d_mapping_alpha)};
+
+AB.rgb = ${genOutputFunction(stage.output_ab_function, `A.rgb`, `B.rgb`)};
+AB.a   = A.a * B.a;
+
+CD.rgb = ${genOutputFunction(stage.output_cd_function, `C.rgb`, `D.rgb`)};
+CD.a   = C.a * D.a;
+
+ABCD.rgb = ${genMux(!!(stage.flags & 0x01), `AB.rgb`, `CD.rgb`)};
+ABCD.a   = ${genMux(!!(stage.flags & 0x02), `AB.a`, `CD.a`)};
+ABCD.rgba = clamp(ABCD.rgba, -1.0, 1.0);
+
+AB.rgb = ${genOutputMapping(stage.output_mapping_color, `AB.rgb`)};
+CD.rgb = ${genOutputMapping(stage.output_mapping_color, `CD.rgb`)};
+ABCD.rgb = ${genOutputMapping(stage.output_mapping_color, `ABCD.rgb`)};
+
+AB.a = ${genOutputMapping(stage.output_mapping_alpha, `AB.a`)};
+CD.a = ${genOutputMapping(stage.output_mapping_alpha, `CD.a`)};
+ABCD.a = ${genOutputMapping(stage.output_mapping_alpha, `ABCD.a`)};
+
+${genOutputColor(stage.output_ab,       `AB.rgb`)}
+${genOutputAlpha(stage.output_ab_alpha, `AB.a`)}
+
+${genOutputColor(stage.output_cd,       `CD.rgb`)}
+${genOutputAlpha(stage.output_cd_alpha, `CD.a`)}
+
+${genOutputColor(stage.output_ab_cd_mux_sum, `ABCD.rgb`)}
+${genOutputAlpha(stage.output_ab_cd_mux_sum_alpha, `ABCD.a`)}
+`);
+            stage.free();
+        }
+
+        fragBody.push(`gl_FragColor = r0.rgba;`);
 
         return `
 ${BaseShaderProgram.header}
@@ -183,6 +446,12 @@ function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlend
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        });
+    } else if (fn === _wasm!.FramebufferBlendFunction.Multiply) {
+        setAttachmentStateSimple(dst, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.Dst,
+            blendDstFactor: GfxBlendFactor.Zero,
         });
     } else if (fn === _wasm!.FramebufferBlendFunction.Add) {
         setAttachmentStateSimple(dst, {
@@ -297,7 +566,7 @@ class ShaderTransparencyChicagoProgram extends BaseShaderProgram {
             fragBody.push(`current = scratch;`)
         })
 
-        fragBody.push(`gl_FragColor = current;`)
+        fragBody.push(`gl_FragColor = current;`);
 
         return `
 ${BaseShaderProgram.header}
@@ -714,6 +983,8 @@ class MaterialRender_Environment {
 class LightmapRenderer {
     public materials: LightmapMaterial[];
     public materialRenderers: (MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[];
+    public visible = true;
+
     constructor(public device: GfxDevice, public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null) {
         this.materials = [];
         this.materialRenderers = [];
@@ -733,6 +1004,9 @@ class LightmapRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        if (!this.visible)
+            return;
+
         this.materialRenderers.forEach((materialRenderer, i) => {
             const renderInst = renderInstManager.newRenderInst();
 

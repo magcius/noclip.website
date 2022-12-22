@@ -274,9 +274,52 @@ impl HaloShaderTransparentGenericMap {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
+pub struct HaloShaderTransparentGenericStage {
+    inner: ShaderTransparentGenericStage,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparentGenericStage {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn color0_source(&self) -> FunctionSource { self.inner.color0_source }
+    #[wasm_bindgen(getter)] pub fn color0_animation_function(&self) -> AnimationFunction { self.inner.color0_animation_function }
+    #[wasm_bindgen(getter)] pub fn color0_animation_period(&self) -> f32 { self.inner.color0_animation_period }
+    // #[wasm_bindgen(getter)] pub fn color0_animation_lower_bound(&self) -> ColorARGB { self.inner.color0_animation_lower_bound }
+    // #[wasm_bindgen(getter)] pub fn color1(&self) -> ColorARGB { self.inner.color1 }
+    #[wasm_bindgen(getter)] pub fn input_a(&self) -> ShaderInput { self.inner.input_a }
+    #[wasm_bindgen(getter)] pub fn input_a_mapping(&self) -> ShaderMapping { self.inner.input_a_mapping }
+    #[wasm_bindgen(getter)] pub fn input_b(&self) -> ShaderInput { self.inner.input_b }
+    #[wasm_bindgen(getter)] pub fn input_b_mapping(&self) -> ShaderMapping { self.inner.input_b_mapping }
+    #[wasm_bindgen(getter)] pub fn input_c(&self) -> ShaderInput { self.inner.input_c }
+    #[wasm_bindgen(getter)] pub fn input_c_mapping(&self) -> ShaderMapping { self.inner.input_c_mapping }
+    #[wasm_bindgen(getter)] pub fn input_d(&self) -> ShaderInput { self.inner.input_d }
+    #[wasm_bindgen(getter)] pub fn input_d_mapping(&self) -> ShaderMapping { self.inner.input_d_mapping }
+    #[wasm_bindgen(getter)] pub fn output_ab(&self) -> ShaderOutput { self.inner.output_ab }
+    #[wasm_bindgen(getter)] pub fn output_ab_function(&self) -> ShaderOutputFunction { self.inner.output_ab_function }
+    #[wasm_bindgen(getter)] pub fn output_cd(&self) -> ShaderOutput { self.inner.output_cd }
+    #[wasm_bindgen(getter)] pub fn output_cd_function(&self) -> ShaderOutputFunction { self.inner.output_cd_function }
+    #[wasm_bindgen(getter)] pub fn output_ab_cd_mux_sum(&self) -> ShaderOutput { self.inner.output_ab_cd_mux_sum }
+    #[wasm_bindgen(getter)] pub fn output_mapping_color(&self) -> ShaderOutputMapping { self.inner.output_mapping_color }
+    #[wasm_bindgen(getter)] pub fn input_a_alpha(&self) -> ShaderAlphaInput { self.inner.input_a_alpha }
+    #[wasm_bindgen(getter)] pub fn input_a_mapping_alpha(&self) -> ShaderMapping { self.inner.input_a_mapping_alpha }
+    #[wasm_bindgen(getter)] pub fn input_b_alpha(&self) -> ShaderAlphaInput { self.inner.input_b_alpha }
+    #[wasm_bindgen(getter)] pub fn input_b_mapping_alpha(&self) -> ShaderMapping { self.inner.input_b_mapping_alpha }
+    #[wasm_bindgen(getter)] pub fn input_c_alpha(&self) -> ShaderAlphaInput { self.inner.input_c_alpha }
+    #[wasm_bindgen(getter)] pub fn input_c_mapping_alpha(&self) -> ShaderMapping { self.inner.input_c_mapping_alpha }
+    #[wasm_bindgen(getter)] pub fn input_d_alpha(&self) -> ShaderAlphaInput { self.inner.input_d_alpha }
+    #[wasm_bindgen(getter)] pub fn input_d_mapping_alpha(&self) -> ShaderMapping { self.inner.input_d_mapping_alpha }
+    #[wasm_bindgen(getter)] pub fn output_ab_alpha(&self) -> ShaderOutput { self.inner.output_ab_alpha }
+    #[wasm_bindgen(getter)] pub fn output_cd_alpha(&self) -> ShaderOutput { self.inner.output_cd_alpha }
+    #[wasm_bindgen(getter)] pub fn output_ab_cd_mux_sum_alpha(&self) -> ShaderOutput { self.inner.output_ab_cd_mux_sum_alpha }
+    #[wasm_bindgen(getter)] pub fn output_mapping_alpha(&self) -> ShaderOutputMapping { self.inner.output_mapping_alpha }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct HaloShaderTransparencyGeneric {
     inner: ShaderTransparentGeneric,
     maps: Vec<HaloShaderTransparentGenericMap>,
+    stages: Vec<HaloShaderTransparentGenericStage>,
     bitmaps: Vec<Bitmap>,
 }
 
@@ -297,6 +340,14 @@ impl HaloShaderTransparencyGeneric {
 
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
         self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
+    }
+
+    pub fn get_map(&self, i: usize) -> Option<HaloShaderTransparentGenericMap> {
+        self.maps.get(i).cloned()
+    }
+
+    pub fn get_stage(&self, i: usize) -> Option<HaloShaderTransparentGenericStage> {
+        self.stages.get(i).cloned()
     }
 }
 
@@ -549,13 +600,18 @@ impl HaloSceneManager {
                     TagData::ShaderTransparentGeneric(s) => {
                         let mut maps = Vec::new();
                         let mut bitmaps = Vec::new();
+                        let mut stages = Vec::new();
                         for chicago_map in s.maps.items.as_ref().unwrap() {
                             bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
                             maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
                         }
+                        for stage in s.stages.items.as_ref().unwrap() {
+                            stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
+                        }
                         JsValue::from(HaloShaderTransparencyGeneric {
                             maps,
                             bitmaps,
+                            stages,
                             inner: s,
                         })
                     },
@@ -740,13 +796,18 @@ impl HaloSceneManager {
                 TagData::ShaderTransparentGeneric(s) => {
                     let mut maps = Vec::new();
                     let mut bitmaps = Vec::new();
+                    let mut stages = Vec::new();
                     for chicago_map in s.maps.items.as_ref().unwrap() {
                         bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
                         maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
                     }
+                    for stage in s.stages.items.as_ref().unwrap() {
+                        stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
+                    }
                     result.push(&JsValue::from(HaloShaderTransparencyGeneric {
                         maps,
                         bitmaps,
+                        stages,
                         inner: s,
                     }));
                 },
