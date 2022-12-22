@@ -147,6 +147,7 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): 1 | 2 | 
     case FormatTypeFlags.U16:
     case FormatTypeFlags.S16:
     case FormatTypeFlags.F16:
+    case FormatTypeFlags.U16_PACKED_565:
         return 2;
     case FormatTypeFlags.U8:
     case FormatTypeFlags.S8:
