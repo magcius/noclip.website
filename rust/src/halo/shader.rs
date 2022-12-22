@@ -307,6 +307,7 @@ pub struct ShaderTransparentGenericStage {
     pub color0_animation_function: AnimationFunction,
     pub color0_animation_period: f32,
     pub color0_animation_lower_bound: ColorARGB,
+    pub color0_animation_upper_bound: ColorARGB,
     pub color1: ColorARGB,
     pub input_a: ShaderInput,
     pub input_a_mapping: ShaderMapping,
@@ -345,6 +346,7 @@ impl Deserialize for ShaderTransparentGenericStage {
         let color0_animation_function = AnimationFunction::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let color0_animation_period = data.read_f32::<LittleEndian>()?;
         let color0_animation_lower_bound = ColorARGB::deserialize(data)?;
+        let color0_animation_upper_bound = ColorARGB::deserialize(data)?;
         let color1 = ColorARGB::deserialize(data)?;
         let input_a = ShaderInput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let input_a_mapping = ShaderMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
@@ -372,7 +374,7 @@ impl Deserialize for ShaderTransparentGenericStage {
         let output_cd_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_ab_cd_mux_sum_alpha = ShaderOutput::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
         let output_mapping_alpha = ShaderOutputMapping::try_from_primitive(data.read_u16::<LittleEndian>()?)?;
-        Ok(ShaderTransparentGenericStage { flags, color0_source, color0_animation_function, color0_animation_period, color0_animation_lower_bound, color1, input_a, input_a_mapping, input_b, input_b_mapping, input_c, input_c_mapping, input_d, input_d_mapping, output_ab, output_ab_function, output_cd, output_cd_function, output_ab_cd_mux_sum, output_mapping_color, input_a_alpha, input_a_mapping_alpha, input_b_alpha, input_b_mapping_alpha, input_c_alpha, input_c_mapping_alpha, input_d_alpha, input_d_mapping_alpha, output_ab_alpha, output_cd_alpha, output_ab_cd_mux_sum_alpha, output_mapping_alpha })
+        Ok(ShaderTransparentGenericStage { flags, color0_source, color0_animation_function, color0_animation_period, color0_animation_lower_bound, color0_animation_upper_bound, color1, input_a, input_a_mapping, input_b, input_b_mapping, input_c, input_c_mapping, input_d, input_d_mapping, output_ab, output_ab_function, output_cd, output_cd_function, output_ab_cd_mux_sum, output_mapping_color, input_a_alpha, input_a_mapping_alpha, input_b_alpha, input_b_mapping_alpha, input_c_alpha, input_c_mapping_alpha, input_d_alpha, input_d_mapping_alpha, output_ab_alpha, output_cd_alpha, output_ab_cd_mux_sum_alpha, output_mapping_alpha })
     }
 }
 

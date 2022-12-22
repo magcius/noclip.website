@@ -43,10 +43,10 @@ pub fn convert_a8_data(input: &[u8]) -> Vec<u8> {
 pub fn convert_a8y8_data(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(input.len() * 2);
     for i in (0..input.len()).step_by(2) {
-        result.push(input[i+1]);
-        result.push(input[i+1]);
-        result.push(input[i+1]);
         result.push(input[i]);
+        result.push(input[i]);
+        result.push(input[i]);
+        result.push(input[i+1]);
     }
     result
 }

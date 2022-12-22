@@ -118,6 +118,7 @@ impl MapManager {
                         color0_animation_function: AnimationFunction::Zero,
                         color0_animation_period: 0.0,
                         color0_animation_lower_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                        color0_animation_upper_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
                         color1: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
                         input_a: ShaderInput::Texture0Color, input_a_mapping: ShaderMapping::SignedIdentity,
                         input_b: ShaderInput::One, input_b_mapping: ShaderMapping::SignedIdentity,
@@ -430,6 +431,16 @@ mod tests {
             for dependency in model_data.shaders.items.as_ref().unwrap() {
                 let shader_hdr = dbg!(mgr.resolve_dependency(&dependency.shader).unwrap());
                 let shader = dbg!(mgr.read_tag(&shader_hdr));
+            }
+        }
+    }
+
+    #[test]
+    fn test_waves() {
+        let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
+        for hdr in mgr.tag_headers.clone() {
+            if hdr.path == "levels\\b30\\shaders\\waves" {
+                dbg!(mgr.read_tag(&hdr));
             }
         }
     }

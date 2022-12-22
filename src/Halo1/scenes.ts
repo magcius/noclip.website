@@ -295,8 +295,8 @@ vec4 AB, CD, ABCD;
                 return `${constructor}(-2.0) * max(${input}, ${constructor}(0.0)) + ${constructor}(1.0)`;
             else if (mapping === _wasm!.ShaderMapping.HalfbiasNormal)
                 return `max(${input}, ${constructor}(0.0)) - ${constructor}(0.5)`;
-            else if (mapping === _wasm!.ShaderMapping.HalfbiasNormal)
-                return `max(${input}, ${constructor}(0.0)) - ${constructor}(0.5)`;
+            else if (mapping === _wasm!.ShaderMapping.HalfbiasNegate)
+                return `-max(${input}, ${constructor}(0.0)) + ${constructor}(0.5)`;
             else if (mapping === _wasm!.ShaderMapping.SignedIdentity)
                 return `${input}`;
             else if (mapping === _wasm!.ShaderMapping.SignedNegate)
@@ -326,17 +326,17 @@ vec4 AB, CD, ABCD;
 
         function genOutputMapping(mapping: ShaderOutputMapping, v: string): string {
             if (mapping === _wasm!.ShaderOutputMapping.Identity)
-                return `${v}`;
+                return ``;
             else if (mapping === _wasm!.ShaderOutputMapping.ScaleByHalf)
-                return `${v} * 0.5`;
+                return `${v} = ${v} * 0.5;`;
             else if (mapping === _wasm!.ShaderOutputMapping.ScaleByTwo)
-                return `${v} * 2.0`;
+                return `${v} = ${v} * 2.0;`;
             else if (mapping === _wasm!.ShaderOutputMapping.ScaleByFour)
-                return `${v} * 4.0`;
+                return `${v} = ${v} * 4.0;`;
             else if (mapping === _wasm!.ShaderOutputMapping.BiasByHalf)
-                return `${v} - 0.5`;
+                return `${v} = ${v} - 0.5;`;
             else if (mapping === _wasm!.ShaderOutputMapping.ExpandNormal)
-                return `(${v} - 0.5) * 2.0`;
+                return `${v} = (${v} - 0.5) * 2.0;`;
             else
                 throw "whoops";
         }
@@ -408,13 +408,13 @@ ABCD.rgb = ${genMux(!!(stage.flags & 0x01), `AB.rgb`, `CD.rgb`)};
 ABCD.a   = ${genMux(!!(stage.flags & 0x02), `AB.a`, `CD.a`)};
 ABCD.rgba = clamp(ABCD.rgba, -1.0, 1.0);
 
-AB.rgb = ${genOutputMapping(stage.output_mapping_color, `AB.rgb`)};
-CD.rgb = ${genOutputMapping(stage.output_mapping_color, `CD.rgb`)};
-ABCD.rgb = ${genOutputMapping(stage.output_mapping_color, `ABCD.rgb`)};
+${genOutputMapping(stage.output_mapping_color, `AB.rgb`)}
+${genOutputMapping(stage.output_mapping_color, `CD.rgb`)}
+${genOutputMapping(stage.output_mapping_color, `ABCD.rgb`)}
 
-AB.a = ${genOutputMapping(stage.output_mapping_alpha, `AB.a`)};
-CD.a = ${genOutputMapping(stage.output_mapping_alpha, `CD.a`)};
-ABCD.a = ${genOutputMapping(stage.output_mapping_alpha, `ABCD.a`)};
+${genOutputMapping(stage.output_mapping_alpha, `AB.a`)}
+${genOutputMapping(stage.output_mapping_alpha, `CD.a`)}
+${genOutputMapping(stage.output_mapping_alpha, `ABCD.a`)}
 
 ${genOutputColor(stage.output_ab,       `AB.rgb`)}
 ${genOutputAlpha(stage.output_ab_alpha, `AB.a`)}
