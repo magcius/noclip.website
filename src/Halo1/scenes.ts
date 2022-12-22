@@ -64,15 +64,6 @@ class BaseProgram extends DeviceProgram {
     public static ub_BSPParams = 2;
     public static ub_ShaderParams = 2;
 
-    public static u_Texture = 0;
-    public static u_Lightmap = 1;
-    public static u_Bumpmap = 2;
-    public static u_PrimaryDetailTexture = 3;
-    public static u_SecondaryDetailTexture = 4;
-    public static u_MicroDetailTexture = 5;
-    public static u_ReflectionCubeMap = 6;
-    public static u_MultipurposeMap = 7;
-
     public static a_Pos = 0;
     public static a_Norm = 1;
     public static a_Binorm = 2;
@@ -102,14 +93,14 @@ layout(std140) uniform ub_ModelParams {
     Mat4x4 u_ModelMatrix;
 };
 
-layout(binding = ${BaseProgram.u_Texture}) uniform sampler2D u_Texture;
-layout(binding = ${BaseProgram.u_Lightmap}) uniform sampler2D u_Lightmap;
-layout(binding = ${BaseProgram.u_Bumpmap}) uniform sampler2D u_Bumpmap;
-layout(binding = ${BaseProgram.u_PrimaryDetailTexture}) uniform sampler2D u_PrimaryDetailTexture;
-layout(binding = ${BaseProgram.u_SecondaryDetailTexture}) uniform sampler2D u_SecondaryDetailTexture;
-layout(binding = ${BaseProgram.u_MicroDetailTexture}) uniform sampler2D u_MicroDetailTexture;
-layout(binding = ${BaseProgram.u_ReflectionCubeMap}) uniform samplerCube u_ReflectionCubeMap;
-layout(binding = ${BaseProgram.u_MultipurposeMap}) uniform sampler2D u_MultipurposeMap;
+layout(binding = 0) uniform sampler2D u_Texture0;
+layout(binding = 1) uniform sampler2D u_Texture1;
+layout(binding = 2) uniform sampler2D u_Texture2;
+layout(binding = 3) uniform sampler2D u_Texture3;
+layout(binding = 4) uniform sampler2D u_Texture4;
+layout(binding = 5) uniform sampler2D u_Texture5;
+layout(binding = 6) uniform sampler2D u_Texture6;
+layout(binding = 7) uniform samplerCube u_TextureCube;
 `;
 
     public static CalcFog = `
@@ -190,16 +181,16 @@ vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));
 vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
 `);
         if (this.shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
-            fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture), uv0);`);
+            fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
         } else {
             fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
-            fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_ReflectionCubeMap), t_EyeWorld);`);
+            fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_TextureCube), t_EyeWorld);`);
         }
 
         fragBody.push(`
-vec4 t1 = texture(SAMPLER_2D(u_Lightmap), uv1);
-vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), uv2);
-vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), uv3);
+vec4 t1 = texture(SAMPLER_2D(u_Texture1), uv1);
+vec4 t2 = texture(SAMPLER_2D(u_Texture2), uv2);
+vec4 t3 = texture(SAMPLER_2D(u_Texture3), uv3);
 vec4 r0 = vec4(0.0, 0.0, 0.0, t0.a);
 vec4 r1 = vec4(0.0, 0.0, 0.0, 0.0);
 vec4 v0 = vec4(0.0, 0.0, 0.0, 0.0); // TODO(jstpierre): Vertex lighting
@@ -538,7 +529,7 @@ class MaterialRender_TransparencyGeneric {
         if (shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
             this.textureMapping[0] = textureCache.getTextureMapping(shader.get_bitmap(0));
         } else {
-            this.textureMapping[6] = textureCache.getTextureMapping(shader.get_bitmap(0));
+            this.textureMapping[7] = textureCache.getTextureMapping(shader.get_bitmap(0));
         }
         const maps = [
             this.shader.get_map(0),
@@ -655,10 +646,10 @@ layout(std140) uniform ub_ShaderParams {
             `vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));`,
             `vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));`,
             `vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));`,
-            `vec4 t0 = texture(SAMPLER_2D(u_Texture), uv0);`,
-            `vec4 t1 = texture(SAMPLER_2D(u_Lightmap), uv1);`,
-            `vec4 t2 = texture(SAMPLER_2D(u_Bumpmap), uv2);`,
-            `vec4 t3 = texture(SAMPLER_2D(u_PrimaryDetailTexture), uv3);`,
+            `vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`,
+            `vec4 t1 = texture(SAMPLER_2D(u_Texture1), uv1);`,
+            `vec4 t2 = texture(SAMPLER_2D(u_Texture2), uv2);`,
+            `vec4 t3 = texture(SAMPLER_2D(u_Texture3), uv3);`,
         ];
 
         fragBody.push(`vec4 scratch;`)
@@ -827,7 +818,7 @@ layout(std140) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), Mul(u_BaseMapTransform, vec4(v_UV, 1.0, 1.0))).rgba;
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture0), Mul(u_BaseMapTransform, vec4(v_UV, 1.0, 1.0))).rgba;
 gl_FragColor.rgba = t_BaseTexture.rgba;
 CalcFog(gl_FragColor, v_Position);
 `);
@@ -858,7 +849,7 @@ class MaterialRender_Model {
         this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap());
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_detail_bitmap());
         if (shader.has_reflection_cube_map)
-            this.textureMapping[6] = textureCache.getTextureMapping(shader.get_reflection_cube_map());
+            this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_cube_map());
         this.textureMapping[5] = textureCache.getTextureMapping(shader.get_multipurpose_map());
 
         this.gfxProgram = cache.createProgram(new ShaderModelProgram(shader));
@@ -948,9 +939,9 @@ void mainVS() {
 
     private getDetailSection(fragBody: String[]): void {
         fragBody.push(`vec2 primaryUV = v_UV * ${glslGenerateFloat(this.shader!.primary_detail_bitmap_scale)};`)
-        fragBody.push(`vec4 primaryDetail = texture(SAMPLER_2D(u_PrimaryDetailTexture), primaryUV);`)
+        fragBody.push(`vec4 primaryDetail = texture(SAMPLER_2D(u_Texture3), primaryUV);`)
         fragBody.push(`vec2 secondaryUV = v_UV * ${glslGenerateFloat(this.shader!.secondary_detail_bitmap_scale)};`)
-        fragBody.push(`vec4 secondaryDetail = texture(SAMPLER_2D(u_SecondaryDetailTexture), secondaryUV);`)
+        fragBody.push(`vec4 secondaryDetail = texture(SAMPLER_2D(u_Texture4), secondaryUV);`)
         switch (this.shader!.shader_environment_type) {
             case _wasm!.ShaderEnvironmentType.Normal:
                 fragBody.push(`vec4 blendedDetail = mix(secondaryDetail, primaryDetail, secondaryDetail.a);`)
@@ -982,7 +973,7 @@ void mainVS() {
 
     private getMicroDetailSection(fragBody: String[]): void {
         fragBody.push(`vec2 microUV = v_UV * ${glslGenerateFloat(this.shader!.micro_detail_bitmap_scale)};`)
-        fragBody.push(`vec4 microDetail = texture(SAMPLER_2D(u_MicroDetailTexture), microUV);`)
+        fragBody.push(`vec4 microDetail = texture(SAMPLER_2D(u_Texture5), microUV);`)
         switch (this.shader!.shader_environment_type) {
             case _wasm!.ShaderEnvironmentType.Normal:
                 fragBody.push(`float specularReflectionMask = blendedDetail.a * base.a * microDetail.a;`)
@@ -1017,7 +1008,7 @@ void mainVS() {
     private getReflectionSection(fragBody: String[]): void {
         fragBody.push(`
 vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
-vec3 reflectionColor = texture(SAMPLER_CUBE(u_ReflectionCubeMap, N.xyz)).xyz;
+vec3 reflectionColor = texture(SAMPLER_CUBE(u_TextureCube, N.xyz)).xyz;
 vec3 specularColor = pow(reflectionColor, vec3(8.0));
 float diffuseReflection = pow(dot(t_NormalWorld, t_EyeWorld), 2.0);
 float attenuation = mix(u_ReflectionParallelColor.a, u_ReflectionPerpendicularColor.a, diffuseReflection);
@@ -1032,10 +1023,10 @@ color.rgb = saturate(color.rgb + finalColor * specularReflectionMask);
         let fragBody = [];
         if (this.shader) {
             fragBody.push(`
-vec4 base = texture(SAMPLER_2D(u_Texture), v_UV);
+vec4 base = texture(SAMPLER_2D(u_Texture0), v_UV);
 vec4 color = base;
 vec2 t_BumpTexCoord = v_UV * ${glslGenerateFloat(this.shader!.bump_map_scale)};
-vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Bumpmap), t_BumpTexCoord) - 1.0;
+vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture2), t_BumpTexCoord) - 1.0;
 vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 `);
 
@@ -1047,7 +1038,7 @@ vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
 
             if (this.has_lightmap) {
                 fragBody.push(`
-vec3 t_LightmapSample = texture(SAMPLER_2D(u_Lightmap), v_lightmapUV).rgb;
+vec3 t_LightmapSample = texture(SAMPLER_2D(u_Texture1), v_lightmapUV).rgb;
 float t_Variance = dot(v_IncidentLight.rgb, v_IncidentLight.rgb);
 float t_BumpAtten = (dot(v_IncidentLight, t_NormalWorld) * t_Variance) + (1.0 - t_Variance);
 color.rgb *= t_LightmapSample * t_BumpAtten;
@@ -1068,7 +1059,7 @@ if (t_BumpMap.a < 0.5)
             }
         } else {
             if (this.has_lightmap) {
-                fragBody.push(`vec4 color = texture(SAMPLER_2D(u_Lightmap), v_lightmapUV);`);
+                fragBody.push(`vec4 color = texture(SAMPLER_2D(u_Texture1), v_lightmapUV);`);
             } else {
                 fragBody.push(`vec4 color = vec4(1.0, 0.0, 1.0, 1.0);`);
             }
@@ -1108,6 +1099,7 @@ class MaterialRender_Environment {
             textureCache.getTextureMapping(this.shader.get_primary_detail_bitmap()),
             textureCache.getTextureMapping(this.shader.get_secondary_detail_bitmap()),
             textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap()),
+            null,
             this.shader && this.shader.has_reflection_cube_map ? textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null,
         ];
 
@@ -1430,8 +1422,8 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // 3
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // 4
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // 5
-        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },// 6
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // 7
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // 6
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, }, // 7
     ] },
 ];
 
