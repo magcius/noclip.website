@@ -12,7 +12,7 @@ import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
 import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
@@ -550,7 +550,7 @@ class MaterialRender_TransparencyGeneric {
 
         this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyGenericProgram(shader));
-        this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+        this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
 
         for (let i = 0; i < 8; i++) {
             const stage = this.shader.get_stage(i);
@@ -696,7 +696,7 @@ class MaterialRender_TransparencyChicago {
 
         this.mapTransform = mat4.create();
         this.gfxProgram = cache.createProgram(new ShaderTransparencyChicagoProgram(shader));
-        this.sortKeyBase = makeSortKeyOpaque(SortKey.Translucent, this.gfxProgram.ResourceUniqueId);
+        this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
         const maps = [
             this.shader.get_map(0),
             this.shader.get_map(1),
@@ -706,14 +706,19 @@ class MaterialRender_TransparencyChicago {
         this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
     }
 
-    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
+    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): ReadonlyMat4 {
+        const dst = this.mapTransform;
         const handler = this.animationHandlers[i];
         if (handler) {
-            handler.setTransform(this.mapTransform, t, baseMapTransform);
+            handler.setTransform(dst, t, baseMapTransform);
+            if (baseMapTransform !== null)
+                mat4.mul(dst, baseMapTransform, dst);
+        } else if (baseMapTransform !== null) {
+            mat4.copy(dst, baseMapTransform);
         } else {
-            mat4.identity(this.mapTransform);
+            mat4.identity(dst);
         }
-        return this.mapTransform;
+        return dst;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
@@ -792,8 +797,6 @@ class TextureAnimationHandler {
                 break;
         }
         setMatrixTranslation(out, translation);
-        if (baseMapTransform !== null)
-            mat4.mul(out, out, baseMapTransform);
     }
 }
 
@@ -824,12 +827,17 @@ layout(std140) uniform ub_ShaderParams {
         const fragBody: string[] = [];
 
         fragBody.push(`
-vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), v_UV).rgba;
+vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture), Mul(u_BaseMapTransform, vec4(v_UV, 1.0, 1.0))).rgba;
 gl_FragColor.rgba = t_BaseTexture.rgba;
 CalcFog(gl_FragColor, v_Position);
+`);
+
+        if (!(this.shader.flags & 0x04)) { // "not alpha tested"
+            fragBody.push(`
 if (t_BaseTexture.a < 0.5)
     discard;
 `);
+        }
 
         return `
 void mainPS() {
@@ -842,6 +850,7 @@ ${fragBody.join('\n')}
 class MaterialRender_Model {
     private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     public sortKeyBase: number = 0;
     public visible = true;
 
@@ -854,11 +863,19 @@ class MaterialRender_Model {
 
         this.gfxProgram = cache.createProgram(new ShaderModelProgram(shader));
         this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
+
+        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+        if (!!(this.shader.flags & 0x02)) { // "two sided"
+            this.megaStateFlags.cullMode = GfxCullMode.None;
+        } else {
+            this.megaStateFlags.cullMode = GfxCullMode.Back;
+        }
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
 
         let offs = renderInst.allocateUniformBuffer(ShaderModelProgram.ub_ShaderParams, 16);
         const d = renderInst.mapUniformBufferF32(ShaderModelProgram.ub_ShaderParams);
@@ -1073,6 +1090,7 @@ class MaterialRender_Environment {
     private gfxProgram: GfxProgram;
     private perpendicularColor: vec4;
     private parallelColor: vec4;
+    public sortKeyBase = 0;
     public visible = true;
 
     constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, private bspIndex: number) {
@@ -1092,6 +1110,8 @@ class MaterialRender_Environment {
             textureCache.getTextureMapping(this.shader.get_micro_detail_bitmap()),
             this.shader && this.shader.has_reflection_cube_map ? textureCache.getTextureMapping(this.shader.get_reflection_cube_map()) : null,
         ];
+
+        this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
@@ -1149,6 +1169,8 @@ class LightmapRenderer {
 
             materialRenderer.setOnRenderInst(renderInst, mainView, null);
             this.materials[i].setOnRenderInst(renderInst);
+
+            renderInst.sortKey = materialRenderer.sortKeyBase;
 
             renderInstManager.submitRenderInst(renderInst);
         });
@@ -1347,6 +1369,7 @@ class ModelRenderer {
 class SceneryRenderer {
     public modelRenderers: ModelRenderer[];
     public model: HaloModel;
+    public visible = true;
 
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public scenery: HaloScenery, public instances: HaloSceneryInstance[]) {
         this.model = mgr.get_scenery_model(this.scenery)!;
@@ -1362,6 +1385,9 @@ class SceneryRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
+        if (!this.visible)
+            return;
+
         this.modelRenderers.forEach(m => m.prepareToRender(renderInstManager, mainView));
     }
 
