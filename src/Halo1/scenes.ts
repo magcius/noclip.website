@@ -10,10 +10,10 @@ import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation, Vec3UnitZ } from '../MathHelpers';
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
@@ -25,9 +25,8 @@ import { Color, colorCopy, colorNewCopy, White } from '../Color';
 
 /**
  * todo:
- *   * decals/glowing elements/purple textures
- *   * fog
- *   * water
+ *   * decals/glowing elements/selfillum
+ *   * planar fog
  */
 
 const noclipSpaceFromHaloSpace = mat4.fromValues(
@@ -1014,14 +1013,13 @@ class MaterialRender_TransparencyWater {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
-        // ugly ugly ugly
         if (!!(this.shader.flags & 0x02)) { // color modulates background
             const renderInst = renderInstManager.newRenderInst();
 
             renderInst.setGfxProgram(this.waterModulateBackgroundProgram);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-            const megaStateFlags = { depthWrite: false };
+            const megaStateFlags = { depthWrite: false, cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW };
             setAttachmentStateSimple(megaStateFlags, {
                 blendMode: GfxBlendMode.Add,
                 blendSrcFactor: GfxBlendFactor.Dst,
@@ -1032,7 +1030,6 @@ class MaterialRender_TransparencyWater {
             // have to allocate something
             let offs = renderInst.allocateUniformBuffer(ShaderTransparencyWaterProgram.ub_ShaderParams, 4);
 
-            renderInst.sortKey = this.sortKeyBase;
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -1040,7 +1037,7 @@ class MaterialRender_TransparencyWater {
         renderInst.setGfxProgram(this.waterProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-        const megaStateFlags = { depthWrite: false };
+        const megaStateFlags = { depthWrite: false, cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW };
         setAttachmentStateSimple(megaStateFlags, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
@@ -1233,10 +1230,7 @@ varying vec3 v_IncidentLight;
 layout(std140) uniform ub_ShaderParams {
     vec4 u_ReflectionPerpendicularColor;
     vec4 u_ReflectionParallelColor;
-    vec4 u_Misc;
 };
-
-#define u_BSPIndex (u_Misc.x)
 `;
 
     public override vert = `
@@ -1397,7 +1391,6 @@ if (t_BumpMap.a < 0.5)
             }
         }
 
-        fragBody.push(`gl_FragDepth = gl_FragCoord.z + 1e-6 * u_BSPIndex;`);
         fragBody.push(`gl_FragColor = vec4(color.rgb, 1.0);`);
         fragBody.push(`CalcFog(gl_FragColor, v_Position);`)
         this.frag = `
@@ -1416,7 +1409,7 @@ class MaterialRender_Environment {
     public sortKeyBase = 0;
     public visible = true;
 
-    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, private bspIndex: number, fogEnabled: boolean) {
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderEnvironment, lightmapMapping: TextureMapping | null, fogEnabled: boolean) {
         const prog = new ShaderEnvironmentProgram(shader, !!lightmapMapping);
         prog.setDefineBool('USE_FOG', fogEnabled);
         this.gfxProgram = cache.createProgram(prog);
@@ -1454,7 +1447,6 @@ class MaterialRender_Environment {
         let mapped = renderInst.mapUniformBufferF32(ShaderEnvironmentProgram.ub_ShaderParams);
         offs += fillVec4v(mapped, offs, this.perpendicularColor);
         offs += fillVec4v(mapped, offs, this.parallelColor);
-        offs += fillVec4(mapped, offs, this.bspIndex);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1477,7 +1469,7 @@ class LightmapRenderer {
         mgr.get_lightmap_materials(lightmap).forEach(material => {
             const shader = this.mgr.get_material_shaders(material)[0];
             if (shader instanceof _wasm!.HaloShaderEnvironment) {
-                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, bspIndex, fogEnabled));
+                this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
@@ -1509,6 +1501,7 @@ class LightmapRenderer {
                 return;
 
             const template = renderInstManager.pushTemplateRenderInst();
+            template.sortKey = materialRenderer.sortKeyBase;
 
             this.modelData[i].setOnRenderInst(template);
             materialRenderer.prepareToRender(renderInstManager, mainView, null);
