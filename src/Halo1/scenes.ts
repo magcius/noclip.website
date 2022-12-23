@@ -1,26 +1,26 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, FunctionSource, } from '../../rust/pkg/index';
+import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, FunctionSource, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, } from '../../rust/pkg/index';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation, Vec3UnitZ } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
 import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Color, colorCopy, colorNewCopy, White } from '../Color';
 
 /**
@@ -126,6 +126,12 @@ layout(location = ${BaseProgram.a_Tangent}) attribute vec3 a_Tangent;
 layout(location = ${BaseProgram.a_TexCoord}) in vec2 a_TexCoord;
 `;
 
+    public static CalcTangentToWorld = `
+vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
+}
+`;
+
     public override vert = `
 ${BaseProgram.vertexAttrs}
 vec4 toWorldCoord(vec4 x) {
@@ -149,6 +155,7 @@ void mainVS() {
             GfxShaderLibrary.invlerp,
             BaseProgram.common,
             BaseProgram.CalcFog,
+            BaseProgram.CalcTangentToWorld,
             BaseProgram.varying,
         ];
         this.both = baseIncludes.concat(includes).join('\n');
@@ -565,6 +572,9 @@ class MaterialRender_TransparencyGeneric {
         }
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+    }
+
     private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
         const handler = this.animationHandlers[i];
         if (handler) {
@@ -702,6 +712,9 @@ class MaterialRender_TransparencyChicago {
         this.animationHandlers = maps.map(map => map ? new TextureAnimationHandler(map) : undefined);
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+    }
+
     private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): ReadonlyMat4 {
         const dst = this.mapTransform;
         const handler = this.animationHandlers[i];
@@ -735,6 +748,262 @@ class MaterialRender_TransparencyChicago {
 
     public destroy(device: GfxDevice): void {
         this.shader.free();
+    }
+}
+
+class ShaderTransparencyWaterProgram extends BaseProgram {
+    public static BindingsDefinition = `
+layout(std140) uniform ub_ShaderParams {
+    Mat4x2 u_RippleTransform;
+    vec4 u_PerpendicularTint;
+    vec4 u_ParallelTint;
+};
+`;
+
+    constructor(public shader: HaloShaderTransparentWater) {
+        super([ShaderTransparencyWaterProgram.BindingsDefinition])
+        this.frag = this.generateFragSection();
+    }
+
+    private generateFragSection(): string {
+        const ripples = [];
+        for (let i=0; i<4; i++) {
+            const ripple = this.shader.get_ripple(i);
+            if (ripple)
+                ripples.push(ripple);
+        }
+
+        return `
+void mainPS() {
+    vec4 t_Base = texture(SAMPLER_2D(u_Texture0), v_UV.xy);
+    vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);
+
+    float t_ReflectionAlpha = 1.0;
+    bool alpha_modulates_reflection = ${!!(this.shader.flags & 0x01)};
+    if (alpha_modulates_reflection) {
+        float t_Fresnel = dot(t_EyeWorld, v_Normal);
+        t_ReflectionAlpha *= mix(u_ParallelTint.a, u_PerpendicularTint.a, t_Fresnel);
+        t_ReflectionAlpha *= t_Base.a;
+    }
+
+    vec2 uv = Mul(u_RippleTransform, vec4(v_UV, 1.0, 1.0));
+    vec4 t_BumpMap = 2.0 * texture(SAMPLER_2D(u_Texture1), uv) - 1.0;
+
+    vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
+    vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
+
+    vec3 reflectionColor = texture(SAMPLER_CUBE(u_TextureCube, N.xyz)).xyz;
+    vec3 specularColor = pow(reflectionColor, vec3(8.0));
+
+    vec3 t_MixColor = mix(u_PerpendicularTint.rgb, u_ParallelTint.rgb, 0.5);
+    specularColor = mix(specularColor, reflectionColor, t_MixColor);
+
+    gl_FragColor.rgba = vec4(specularColor, t_ReflectionAlpha);
+    CalcFog(gl_FragColor, v_Position);
+}
+`;
+    }
+}
+
+class RippleAnimation {
+    public angle = 0.0;
+    public velocity = 0.0;
+    public offsetU = 0.0;
+    public offsetV = 0.0;
+    public scale = 0.0;
+    public transform = mat4.create();
+
+    public setFromRipple(ripple: HaloShaderTransparentWaterRipple) {
+        this.angle = ripple.animation_angle();
+        this.velocity = ripple.animation_velocity();
+        this.offsetU = ripple.map_u_offset();
+        this.offsetV = ripple.map_v_offset();
+        this.scale = ripple.map_repeats();
+    }
+
+    public calc(time: number): ReadonlyMat4 {
+        const dst = this.transform;
+
+        dst[0] = this.scale;
+        dst[5] = this.scale;
+
+        const av = Math.sin(this.angle), au = Math.cos(this.angle);
+        const timeSecs = time / 1000;
+        dst[12] = this.offsetU + (this.velocity * au * timeSecs);
+        dst[13] = this.offsetV + (this.velocity * av * timeSecs);
+
+        return dst;
+    }
+}
+
+class ShaderCompositeRippleProgram extends DeviceProgram {
+    public static BindingsDefinition = `
+layout(std140) uniform ub_ShaderParams {
+    Mat4x2 u_MapTransform0;
+    Mat4x2 u_MapTransform1;
+    Mat4x2 u_MapTransform2;
+    Mat4x2 u_MapTransform3;
+    vec4 u_Misc[1];
+};
+`;
+
+    public override vert = `
+${ShaderCompositeRippleProgram.BindingsDefinition}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${ShaderCompositeRippleProgram.BindingsDefinition}
+in vec2 v_TexCoord;
+
+layout(binding = 0) uniform sampler2D u_Texture0;
+layout(binding = 1) uniform sampler2D u_Texture1;
+layout(binding = 2) uniform sampler2D u_Texture2;
+layout(binding = 3) uniform sampler2D u_Texture3;
+
+void mainPS() {
+    vec2 uv0 = Mul(u_MapTransform0, vec4(v_TexCoord, 1.0, 1.0));
+    vec2 uv1 = Mul(u_MapTransform1, vec4(v_TexCoord, 1.0, 1.0));
+    vec2 uv2 = Mul(u_MapTransform2, vec4(v_TexCoord, 1.0, 1.0));
+    vec2 uv3 = Mul(u_MapTransform3, vec4(v_TexCoord, 1.0, 1.0));
+
+    vec4 t_BumpMap0 = 2.0 * texture(SAMPLER_2D(u_Texture0), uv0) - 1.0;
+    vec4 t_BumpMap1 = 2.0 * texture(SAMPLER_2D(u_Texture1), uv1) - 1.0;
+    vec4 t_BumpMap2 = 2.0 * texture(SAMPLER_2D(u_Texture2), uv2) - 1.0;
+    vec4 t_BumpMap3 = 2.0 * texture(SAMPLER_2D(u_Texture3), uv3) - 1.0;
+
+    vec4 t_BumpMap01 = mix(t_BumpMap0, t_BumpMap1, 0.5);
+    vec4 t_BumpMap23 = mix(t_BumpMap2, t_BumpMap3, 0.5);
+    vec4 t_BumpMap = mix(t_BumpMap01, t_BumpMap23, 0.5);
+    t_BumpMap.rgb = mix(t_BumpMap.rgb, vec3(0.0, 0.0, 1.0), u_Misc[0].x);
+    gl_FragColor = vec4(t_BumpMap.rgb * 0.5 + 0.5, 1.0);
+}
+`;
+}
+
+class MaterialRender_TransparencyWater {
+    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
+    private gfxProgram: GfxProgram;
+    private perpendicularTint = vec4.create();
+    private parallelTint = vec4.create();
+    private rippleCompositeProgram: GfxProgram;
+    private rippleCompositeMapping = nArray(4, () => new TextureMapping());
+    private rippleCompositeAnimation: RippleAnimation[] = nArray(4, () => new RippleAnimation());
+
+    private rippleTexture: GfxTexture;
+    private rippleTextureSize: number = 128;
+    private rippleTransformAnimation = new RippleAnimation();
+
+    public sortKeyBase: number = 0;
+    public visible = true;
+
+    constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparentWater, fogEnabled: boolean) {
+        const device = cache.device;
+        this.rippleTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.rippleTextureSize, this.rippleTextureSize, this.shader.ripple_mipmap_levels));
+
+        this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap(), 0, { wrap: false });
+        this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_bitmap());
+
+        this.textureMapping[1] = new TextureMapping();
+        this.textureMapping[1].gfxTexture = this.rippleTexture;
+        this.textureMapping[1].gfxSampler = textureCache.getSampler({ wrap: true });
+
+        this.rippleCompositeProgram = cache.createProgram(new ShaderCompositeRippleProgram());
+
+        const ripple_bitmap = shader.get_ripple_bitmap();
+        for (let i = 0; i < 4; i++) {
+            const ripple = shader.get_ripple(i);
+            if (!ripple)
+                break;
+
+            this.rippleCompositeMapping[i] = textureCache.getTextureMapping(ripple_bitmap, ripple.map_index());
+            this.rippleCompositeAnimation[i].setFromRipple(ripple);
+            ripple.free();
+        }
+
+        this.rippleTransformAnimation.angle = this.shader.ripple_animation_angle;
+        this.rippleTransformAnimation.velocity = this.shader.ripple_animation_velocity;
+        this.rippleTransformAnimation.scale = this.shader.ripple_scale;
+
+        const perpendicular_tint_color = this.shader.view_perpendicular_tint_color;
+        const parallel_tint_color = this.shader.view_parallel_tint_color;
+        vec4.set(this.perpendicularTint, perpendicular_tint_color.r, perpendicular_tint_color.g, perpendicular_tint_color.b, this.shader.view_perpendicular_brightness);
+        vec4.set(this.parallelTint, parallel_tint_color.r, parallel_tint_color.g, parallel_tint_color.b, this.shader.view_parallel_brightness);
+        perpendicular_tint_color.free();
+        parallel_tint_color.free();
+
+        const prog = new ShaderTransparencyWaterProgram(shader);
+        prog.setDefineBool('USE_FOG', fogEnabled);
+        this.gfxProgram = cache.createProgram(prog);
+        this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
+    }
+
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+        // Build normal map
+        const desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        desc.width = this.rippleTextureSize;
+        desc.height = this.rippleTextureSize;
+        desc.numLevels = this.shader.ripple_mipmap_levels;
+        desc.sampleCount = 1;
+        const renderTarget = builder.createRenderTargetID(desc, "Ripple Mipmap");
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 4 }]);
+        template.setInputLayoutAndState(null, null);
+        template.setGfxProgram(this.rippleCompositeProgram);
+        template.setMegaStateFlags(fullscreenMegaState);
+        template.setSamplerBindingsFromTextureMappings(this.rippleCompositeMapping);
+        template.drawPrimitives(3);
+
+        for (let i = 0; i < this.shader.ripple_mipmap_levels; i++) {
+            builder.pushPass((pass) => {
+                pass.setDebugName(`Ripple Mipmap ${i}`);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, renderTarget, i);
+
+                const renderInst = renderInstManager.newRenderInst();
+
+                let offs = renderInst.allocateUniformBuffer(0, 4 * 8 + 4);
+                const d = renderInst.mapUniformBufferF32(0);
+
+                for (let i = 0; i < this.rippleCompositeAnimation.length; i++)
+                    offs += fillMatrix4x2(d, offs, this.rippleCompositeAnimation[i].calc(view.time));
+
+                const fade = this.shader.ripple_mipmap_levels > 1 ? (i / (this.shader.ripple_mipmap_levels - 1)) * this.shader.ripple_mipmap_fade_factor : 0;
+                offs += fillVec4(d, offs, fade);
+
+                pass.exec((passRenderer) => {
+                    renderInst.drawOnPass(cache, passRenderer);
+                });
+            });
+            builder.resolveRenderTargetToExternalTexture(renderTarget, this.rippleTexture, i);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+        const megaStateFlags = { depthWrite: false };
+        setAttachmentStateSimple(megaStateFlags, {
+            blendMode: GfxBlendMode.Add,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.One,
+        });
+        renderInst.setMegaStateFlags(megaStateFlags);
+
+        let offs = renderInst.allocateUniformBuffer(ShaderTransparencyWaterProgram.ub_ShaderParams, 4 * 2 + 4 * 2);
+        const mapped = renderInst.mapUniformBufferF32(ShaderTransparencyWaterProgram.ub_ShaderParams);
+
+        offs += fillMatrix4x2(mapped, offs, this.rippleTransformAnimation.calc(view.time));
+        offs += fillVec4v(mapped, offs, this.perpendicularTint);
+        offs += fillVec4v(mapped, offs, this.parallelTint);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.shader.free();
+        device.destroyTexture(this.rippleTexture);
     }
 }
 
@@ -870,6 +1139,9 @@ class MaterialRender_Model {
         }
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+    }
+
     public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -896,12 +1168,6 @@ class ShaderEnvironmentProgram extends BaseProgram {
     public static override varying = `
 varying vec2 v_lightmapUV;
 varying vec3 v_IncidentLight;
-`;
-
-    public static CalcTangentToWorld = `
-vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
-}
 `;
 
     public static BindingsDefinition = `
@@ -940,7 +1206,7 @@ void mainVS() {
 `;
 
     constructor(public shader: HaloShaderEnvironment | undefined, public has_lightmap: boolean) {
-        super([ShaderEnvironmentProgram.CalcTangentToWorld, ShaderEnvironmentProgram.varying, ShaderEnvironmentProgram.BindingsDefinition]);
+        super([ShaderEnvironmentProgram.varying, ShaderEnvironmentProgram.BindingsDefinition]);
         this.generateFragmentShader();
     }
 
@@ -1115,6 +1381,9 @@ class MaterialRender_Environment {
         this.sortKeyBase = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, this.gfxProgram.ResourceUniqueId);
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+    }
+
     public setOnRenderInst(renderInst: GfxRenderInst): void {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
@@ -1132,15 +1401,15 @@ class MaterialRender_Environment {
     }
 }
 
-type MaterialRender = MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | MaterialRender_Model;
+type MaterialRender = MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | MaterialRender_Model | MaterialRender_TransparencyWater;
 
 class LightmapRenderer {
-    public materials: LightmapMaterial[];
+    public modelData: LightmapModelData[];
     public materialRenderers: (MaterialRender | null)[];
     public visible = true;
 
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null, public fogEnabled: boolean) {
-        this.materials = [];
+        this.modelData = [];
         this.materialRenderers = [];
         mgr.get_lightmap_materials(lightmap).forEach(material => {
             const shader = this.mgr.get_material_shaders(material)[0];
@@ -1150,11 +1419,19 @@ class LightmapRenderer {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
                 this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
+            } else if (shader instanceof _wasm!.HaloShaderTransparentWater) {
+                this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
             }
-            this.materials.push(new LightmapMaterial(renderCache, mgr, bsp, material, trisBuf));
+
+            this.modelData.push(new LightmapModelData(renderCache, mgr, bsp, material, trisBuf));
         });
+    }
+
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+        for (let i = 0; i < this.materialRenderers.length; i++)
+            this.materialRenderers[i]?.pushPasses(cache, builder, renderInstManager, view);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
@@ -1171,7 +1448,7 @@ class LightmapRenderer {
             const renderInst = renderInstManager.newRenderInst();
 
             materialRenderer.setOnRenderInst(renderInst, mainView, null);
-            this.materials[i].setOnRenderInst(renderInst);
+            this.modelData[i].setOnRenderInst(renderInst);
 
             renderInst.sortKey = materialRenderer.sortKeyBase;
 
@@ -1180,11 +1457,11 @@ class LightmapRenderer {
     }
 
     public destroy(device: GfxDevice) {
-        this.materials.forEach(r => r.destroy(device));
+        this.modelData.forEach(r => r.destroy(device));
     }
 }
 
-class LightmapMaterial {
+class LightmapModelData {
     private vertexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
@@ -1491,6 +1768,11 @@ class BSPRenderer {
         });
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+        for (let i = 0; i < this.lightmapRenderers.length; i++)
+            this.lightmapRenderers[i].pushPasses(cache, builder, renderInstManager, view);
+    }
+
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
         this.lightmapRenderers.forEach(r => r.prepareToRender(renderInstManager, mainView));
     }
@@ -1556,16 +1838,7 @@ class HaloScene implements Viewer.SceneGfx {
     constructor(public device: GfxDevice, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader, public fogSettings: FogSettings) {
         this.bspRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
-        const gfxSampler = this.renderHelper.renderCache.createSampler({
-            minFilter: GfxTexFilterMode.Bilinear,
-            magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.Linear,
-            minLOD: 0,
-            maxLOD: 100,
-            wrapS: GfxWrapMode.Repeat,
-            wrapT: GfxWrapMode.Repeat,
-        });
-        this.textureCache = new TextureCache(this.device, gfxSampler, this.mgr, bitmapReader);
+        this.textureCache = new TextureCache(this.renderHelper.renderCache, this.mgr, bitmapReader);
         // for now, just choose the first skybox. eventually we'll want to switch between them depending on the current BSP
         this.activeSky = mgr.get_skies()[0];
         this.setupFogSettings();
@@ -1641,12 +1914,18 @@ class HaloScene implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const cache = this.renderHelper.renderCache;
         viewerInput.camera.setClipPlanes(0.01);
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        this.renderHelper.pushTemplateRenderInst();
+        for (let i = 0; i < this.bspRenderers.length; i++)
+            this.bspRenderers[i].pushPasses(cache, builder, renderInstManager, this.mainView);
+        renderInstManager.popTemplateRenderInst();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');

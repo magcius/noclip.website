@@ -489,7 +489,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private gpuColorAttachments: GPURenderPassColorAttachment[];
     private gpuDepthStencilAttachment: GPURenderPassDepthStencilAttachment;
     private gfxColorAttachment: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private gfxColorAttachmentLevel: number[] = [];
     private gfxColorResolveTo: (GfxTextureSharedP_WebGPU | null)[] = [];
+    private gfxColorResolveToLevel: number[] = [];
     private gfxDepthStencilAttachment: GfxTextureSharedP_WebGPU | null = null;
     private gfxDepthStencilResolveTo: GfxTextureSharedP_WebGPU | null = null;
     private frameCommandEncoder: GPUCommandEncoder | null;
@@ -509,6 +511,14 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             colorAttachments: this.gpuColorAttachments,
             depthStencilAttachment: this.gpuDepthStencilAttachment,
         };
+    }
+
+    private getTextureView(target: GfxTextureSharedP_WebGPU, level: number): GPUTextureView {
+        assert(level < target.numLevels);
+        if (target.numLevels === 1)
+            return target.gpuTextureView;
+        else
+            return target.gpuTexture.createView({ baseMipLevel: level, mipLevelCount: 1 });
     }
 
     private setRenderPassDescriptor(descriptor: GfxRenderPassDescriptor): void {
@@ -532,12 +542,15 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             this.gfxColorAttachment[i] = colorAttachment;
             this.gfxColorResolveTo[i] = colorResolveTo;
 
+            this.gfxColorAttachmentLevel[i] = descriptor.colorAttachmentLevel[i];
+            this.gfxColorResolveToLevel[i] = descriptor.colorResolveToLevel[i];
+
             if (colorAttachment !== null) {
                 if (this.gpuColorAttachments[i] === undefined)
                     this.gpuColorAttachments[i] = {} as GPURenderPassColorAttachment;
 
                 const dstAttachment = this.gpuColorAttachments[i];
-                dstAttachment.view = colorAttachment.gpuTextureView;
+                dstAttachment.view = this.getTextureView(colorAttachment, this.gfxColorAttachmentLevel[i]);
                 const clearColor = descriptor.colorClearColor[i];
                 if (clearColor === 'load') {
                     dstAttachment.loadOp = 'load';
@@ -549,7 +562,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                 dstAttachment.resolveTarget = undefined;
                 if (colorResolveTo !== null) {
                     if (colorAttachment.sampleCount > 1)
-                        dstAttachment.resolveTarget = colorResolveTo.gpuTextureView;
+                        dstAttachment.resolveTarget = this.getTextureView(colorResolveTo, this.gfxColorResolveToLevel[i]);
                     else
                         dstAttachment.storeOp = 'store';
                 }
@@ -706,12 +719,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.popDebugGroup();
     }
 
-    private copyAttachment(dst: GfxTextureSharedP_WebGPU, src: GfxTextureSharedP_WebGPU): void {
+    private copyAttachment(dst: GfxTextureSharedP_WebGPU, dstLevel: number, src: GfxTextureSharedP_WebGPU, srcLevel: number): void {
         assert(src.sampleCount === 1);
-        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture };
-        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture };
-        assert(src.width === dst.width);
-        assert(src.height === dst.height);
+        const srcCopy: GPUImageCopyTexture = { texture: src.gpuTexture, mipLevel: srcLevel };
+        const dstCopy: GPUImageCopyTexture = { texture: dst.gpuTexture, mipLevel: dstLevel };
+        assert((src.width >>> srcLevel) === (dst.width >>> dstLevel));
+        assert((src.height >>> srcLevel) === (dst.height >>> dstLevel));
         assert(!!(src.usage & GPUTextureUsage.COPY_SRC));
         assert(!!(dst.usage & GPUTextureUsage.COPY_DST));
         this.frameCommandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [dst.width, dst.height, 1]);
@@ -726,14 +739,14 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const colorAttachment = this.gfxColorAttachment[i];
             const colorResolveTo = this.gfxColorResolveTo[i];
             if (colorAttachment !== null && colorResolveTo !== null && colorAttachment.sampleCount === 1)
-                this.copyAttachment(colorResolveTo, colorAttachment);
+                this.copyAttachment(colorResolveTo, this.gfxColorAttachmentLevel[i], colorAttachment, this.gfxColorResolveToLevel[i]);
         }
 
         if (this.gfxDepthStencilAttachment !== null && this.gfxDepthStencilResolveTo !== null) {
             if (this.gfxDepthStencilAttachment.sampleCount > 1) {
                 // TODO(jstpierre): MSAA depth resolve (requires shader)
             } else {
-                this.copyAttachment(this.gfxDepthStencilResolveTo, this.gfxDepthStencilAttachment);
+                this.copyAttachment(this.gfxDepthStencilResolveTo, 0, this.gfxDepthStencilAttachment, 0);
             }
         }
 

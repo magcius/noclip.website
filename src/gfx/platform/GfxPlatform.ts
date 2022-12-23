@@ -301,8 +301,10 @@ export interface GfxColor {
 
 export interface GfxRenderPassDescriptor {
     colorAttachment: (GfxRenderTarget | null)[];
+    colorAttachmentLevel: number[];
     colorClearColor: (GfxColor | 'load')[];
     colorResolveTo: (GfxTexture | null)[];
+    colorResolveToLevel: number[];
     colorStore: boolean[];
     depthStencilAttachment: GfxRenderTarget | null;
     depthStencilResolveTo: GfxTexture | null;

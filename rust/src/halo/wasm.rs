@@ -544,7 +544,7 @@ impl HaloShaderTransparentWater {
             .map(|map| HaloBitmap::new(map.clone()))
     }
 
-    pub fn get_stage(&self, i: usize) -> Option<HaloShaderTransparentWaterRipple> {
+    pub fn get_ripple(&self, i: usize) -> Option<HaloShaderTransparentWaterRipple> {
         self.ripples.get(i).cloned()
     }
 }

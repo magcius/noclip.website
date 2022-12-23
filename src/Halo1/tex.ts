@@ -2,11 +2,12 @@
 import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg";
 import { TextureMapping } from "../TextureHolder";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { GfxDevice, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { wasm } from "./scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 function getImageFormatBPP(fmt: GfxFormat): number {
     switch (fmt) {
@@ -135,13 +136,17 @@ function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManage
     return texture;
 }
 
+export interface SamplerSettings {
+    wrap: boolean;
+}
+
 export class TextureCache {
     public textures: Map<string, GfxTexture>;
     public default2DTexture: GfxTexture;
 
-    constructor(public device: GfxDevice, public gfxSampler: GfxSampler, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
+    constructor(private renderCache: GfxRenderCache, public mgr: HaloSceneManager, public bitmapReader: HaloBitmapReader) {
         this.textures = new Map();
-        this.default2DTexture = makeSolidColorTexture2D(this.device, {
+        this.default2DTexture = makeSolidColorTexture2D(renderCache.device, {
             r: 0.5,
             g: 0.5,
             b: 0.5,
@@ -158,16 +163,28 @@ export class TextureCache {
         if (this.textures.has(key)) {
             return this.textures.get(key)!;
         } else {
-            const texture = makeTexture(this.device, bitmap, this.mgr, this.bitmapReader, submap);
+            const texture = makeTexture(this.renderCache.device, bitmap, this.mgr, this.bitmapReader, submap);
             this.textures.set(key, texture);
             return texture;
         }
     }
 
-    public getTextureMapping(bitmap: HaloBitmap | undefined, submap = 0): TextureMapping {
+    public getSampler(samplerSettings: SamplerSettings): GfxSampler {
+        return this.renderCache.createSampler({
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: samplerSettings.wrap ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+            wrapT: samplerSettings.wrap ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+        });
+    }
+
+    public getTextureMapping(bitmap: HaloBitmap | undefined, submap = 0, samplerSettings: SamplerSettings = { wrap: true }): TextureMapping {
         const mapping = new TextureMapping();
         mapping.gfxTexture = this.getTexture(bitmap, submap);
-        mapping.gfxSampler = this.gfxSampler;
+        mapping.gfxSampler = this.getSampler(samplerSettings);
         return mapping;
     }
 
