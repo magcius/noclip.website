@@ -1690,6 +1690,7 @@ enum FogSettings {
 
 class HaloSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public specificBSPs: number[] = [], public fogSettings = FogSettings.Outdoor) {
+        this.id;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -1704,7 +1705,8 @@ class HaloSceneDesc implements Viewer.SceneDesc {
             };
             return bitmapReader;
         });
-        const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${this.id}.map`);
+        const mapName = this.id.split('-')[0];
+        const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${mapName}.map`);
         const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
         const renderer = new HaloScene(device, mapManager, bitmapReader, this.fogSettings);
         let bsps = mapManager.get_bsps();
@@ -1744,11 +1746,12 @@ const sceneDescs = [
     "Campaign",
     new HaloSceneDesc("a10", "Pillar of Autumn", [0, 1, 2, 3, 4, 5, 6, 7], FogSettings.Disabled), // the BSPs don't all play nice here
     new HaloSceneDesc("a30", "Halo"),
-    new HaloSceneDesc("a50", "Truth and Reconciliation"),
+    new HaloSceneDesc("a50-1", "Truth and Reconciliation - Outside", [0]),
+    new HaloSceneDesc("a50-2", "Truth and Reconciliation - Inside", [1, 2, 3]),
     new HaloSceneDesc("b30", "The Silent Cartographer"),
     new HaloSceneDesc("b40", "Assault on the Control Room"),
     new HaloSceneDesc("c10", "343 Guilty Spark"),
-    new HaloSceneDesc("c20", "The Library", [], FogSettings.Indoor),
+    new HaloSceneDesc("c20", "The Library", [], FogSettings.Disabled),
     new HaloSceneDesc("c40", "Two Betrayals"),
     new HaloSceneDesc("d20", "Keyes"),
     new HaloSceneDesc("d40", "The Maw"),
