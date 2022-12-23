@@ -1,6 +1,6 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom}};
 use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use num_enum::{TryFromPrimitive, TryFromPrimitiveError};
 use wasm_bindgen::prelude::*;
 
 pub type Result<T> = std::result::Result<T, MapReaderError>;
@@ -105,8 +105,8 @@ impl Deserialize for TagDataOffset {
 
 #[derive(Debug, Clone)]
 pub struct Plane3D {
-    norm: Vector3D,
-    w: f32, // distance from origin (along normal)
+    pub norm: Vector3D,
+    pub w: f32, // distance from origin (along normal)
 }
 
 impl Deserialize for Plane3D {
@@ -189,8 +189,8 @@ impl Deserialize for Point2D {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Point2DInt {
-    x: i16,
-    y: i16,
+    pub x: i16,
+    pub y: i16,
 }
 
 impl Deserialize for Point2DInt {

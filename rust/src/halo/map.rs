@@ -1,5 +1,5 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom, TryInto}};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom}};
+use num_enum::{TryFromPrimitive};
 
 use crate::halo::common::*;
 use crate::halo::util::*;
@@ -54,8 +54,8 @@ impl MapManager {
     pub fn read_map_u16s(&mut self, offset: u64, length: usize) -> Result<Vec<u16>> {
         self.reader.data.seek(SeekFrom::Start(offset))?;
         let mut buf = vec![0; length];
-        for i in 0..length {
-            buf[i] = self.reader.data.read_u16::<LittleEndian>()?;
+        for n in buf.iter_mut() {
+            *n = self.reader.data.read_u16::<LittleEndian>()?;
         }
         Ok(buf)
     }
@@ -111,29 +111,30 @@ impl MapManager {
                 shader.stages.read_items(&mut self.reader.data, offset)?;
 
                 if shader.stages.count == 0 {
-                    let mut fallback: Vec<ShaderTransparentGenericStage> = Vec::new();
-                    fallback.push(ShaderTransparentGenericStage {
-                        flags: 0,
-                        color0_source: FunctionSource::None,
-                        color0_animation_function: AnimationFunction::Zero,
-                        color0_animation_period: 0.0,
-                        color0_animation_lower_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-                        color0_animation_upper_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-                        color1: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-                        input_a: ShaderInput::Texture0Color, input_a_mapping: ShaderMapping::SignedIdentity,
-                        input_b: ShaderInput::One, input_b_mapping: ShaderMapping::SignedIdentity,
-                        input_c: ShaderInput::Zero, input_c_mapping: ShaderMapping::SignedIdentity,
-                        input_d: ShaderInput::Zero, input_d_mapping: ShaderMapping::SignedIdentity,
-                        input_a_alpha: ShaderAlphaInput::Texture0Alpha, input_a_mapping_alpha: ShaderMapping::SignedIdentity,
-                        input_b_alpha: ShaderAlphaInput::One, input_b_mapping_alpha: ShaderMapping::SignedIdentity,
-                        input_c_alpha: ShaderAlphaInput::Zero, input_c_mapping_alpha: ShaderMapping::SignedIdentity,
-                        input_d_alpha: ShaderAlphaInput::Zero, input_d_mapping_alpha: ShaderMapping::SignedIdentity,
+                    let fallback: Vec<ShaderTransparentGenericStage> = vec![
+                        ShaderTransparentGenericStage {
+                            flags: 0,
+                            color0_source: FunctionSource::None,
+                            color0_animation_function: AnimationFunction::Zero,
+                            color0_animation_period: 0.0,
+                            color0_animation_lower_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                            color0_animation_upper_bound: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                            color1: ColorARGB{ r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                            input_a: ShaderInput::Texture0Color, input_a_mapping: ShaderMapping::SignedIdentity,
+                            input_b: ShaderInput::One, input_b_mapping: ShaderMapping::SignedIdentity,
+                            input_c: ShaderInput::Zero, input_c_mapping: ShaderMapping::SignedIdentity,
+                            input_d: ShaderInput::Zero, input_d_mapping: ShaderMapping::SignedIdentity,
+                            input_a_alpha: ShaderAlphaInput::Texture0Alpha, input_a_mapping_alpha: ShaderMapping::SignedIdentity,
+                            input_b_alpha: ShaderAlphaInput::One, input_b_mapping_alpha: ShaderMapping::SignedIdentity,
+                            input_c_alpha: ShaderAlphaInput::Zero, input_c_mapping_alpha: ShaderMapping::SignedIdentity,
+                            input_d_alpha: ShaderAlphaInput::Zero, input_d_mapping_alpha: ShaderMapping::SignedIdentity,
 
-                        output_ab_function: ShaderOutputFunction::Multiply, output_cd_function: ShaderOutputFunction::Multiply,
-                        output_ab: ShaderOutput::Scratch0, output_cd: ShaderOutput::Discard, output_ab_cd_mux_sum: ShaderOutput::Discard,
-                        output_ab_alpha: ShaderOutput::Scratch0, output_cd_alpha: ShaderOutput::Discard, output_ab_cd_mux_sum_alpha: ShaderOutput::Discard,
-                        output_mapping_color: ShaderOutputMapping::Identity, output_mapping_alpha: ShaderOutputMapping::Identity,
-                    });
+                            output_ab_function: ShaderOutputFunction::Multiply, output_cd_function: ShaderOutputFunction::Multiply,
+                            output_ab: ShaderOutput::Scratch0, output_cd: ShaderOutput::Discard, output_ab_cd_mux_sum: ShaderOutput::Discard,
+                            output_ab_alpha: ShaderOutput::Scratch0, output_cd_alpha: ShaderOutput::Discard, output_ab_cd_mux_sum_alpha: ShaderOutput::Discard,
+                            output_mapping_color: ShaderOutputMapping::Identity, output_mapping_alpha: ShaderOutputMapping::Identity,
+                        }
+                    ];
                     shader.stages.items = Some(fallback);
                     shader.stages.count = 1;
                 }
@@ -172,10 +173,9 @@ impl MapManager {
     }
 
     pub fn get_scenario(&mut self) -> Result<Tag> {
-        let header = self.tag_headers.iter().find(|header| match header.primary_class {
-            TagClass::Scenario => true,
-            _ => false,
-        }).unwrap().clone();
+        let header = self.tag_headers.iter()
+            .find(|header| matches!(header.primary_class, TagClass::Scenario))
+            .unwrap().clone();
         self.read_tag(&header)
     }
 
@@ -189,7 +189,7 @@ impl MapManager {
         if let TagData::Scenario(scenario) = &tag.data {
             if let Some(bsp_references) = &scenario.structure_bsp_references.items {
                 let bsp_refs_and_headers: Vec<(&ScenarioStructureBSPReference, TagHeader)> = bsp_references.iter()
-                    .map(|bsp_ref| (bsp_ref, self.resolve_dependency(&bsp_ref.structure_bsp).unwrap().clone()))
+                    .map(|bsp_ref| (bsp_ref, self.resolve_dependency(&bsp_ref.structure_bsp).unwrap()))
                     .collect();
                 let mut result = Vec::new();
                 for (bsp_ref, mut header) in bsp_refs_and_headers {
@@ -205,22 +205,19 @@ impl MapManager {
                 }
                 return Ok(result);
             }
-            return Err(MapReaderError::InvalidTag(format!("scenario has no bsp references")))
+            return Err(MapReaderError::InvalidTag("scenario has no bsp references".to_string()))
         }
         Err(MapReaderError::InvalidTag(format!("expected scenario tag, got {:?}", tag.header.primary_class)))
     }
 
     pub fn get_bitmaps(&mut self) -> Result<Vec<Tag>> {
         let bitmap_headers: Vec<TagHeader> = self.tag_headers.iter()
-            .filter(|header| match header.primary_class {
-                TagClass::Bitmap => true,
-                _ => false,
-            })
+            .filter(|header| matches!(header.primary_class, TagClass::Bitmap))
             .cloned()
             .collect();
         let mut result = Vec::new();
         for hdr in &bitmap_headers {
-            result.push(self.read_tag(&hdr)?);
+            result.push(self.read_tag(hdr)?);
         }
         Ok(result)
     }
@@ -235,7 +232,7 @@ impl ResourceMapReader {
         ResourceMapReader { data: Cursor::new(data) }
     }
 
-    fn read_header(&mut self) -> Result<ResourcesHeader> {
+    pub fn read_header(&mut self) -> Result<ResourcesHeader> {
         ResourcesHeader::deserialize(&mut self.data)
     }
 }
@@ -285,7 +282,7 @@ pub struct Header {
 }
 
 #[derive(Debug, Copy, Clone)]
-enum ResourceType {
+pub enum ResourceType {
     Bitmaps = 0x1,
     Sounds = 0x2,
     Localization = 0x3,
@@ -293,18 +290,18 @@ enum ResourceType {
 
 #[derive(Debug)]
 pub struct ResourcesHeader {
-    resource_type: ResourceType,
-    paths_offset: Pointer,
-    resources_offset: Pointer,
-    resource_count: u32,
+    pub resource_type: ResourceType,
+    pub paths_offset: Pointer,
+    pub resources_offset: Pointer,
+    pub resource_count: u32,
 }
 
 #[derive(Debug)]
 pub struct ResourceHeader {
-    path_offset: Pointer,
-    size: u32,
-    data_offset: Pointer,
-    path: Option<String>,
+    pub path_offset: Pointer,
+    pub size: u32,
+    pub data_offset: Pointer,
+    pub path: Option<String>,
 }
 
 impl Deserialize for ResourceHeader {
@@ -405,18 +402,10 @@ impl Deserialize for TagIndexHeader {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
-
-    use crate::halo::shader;
-
     use super::*;
 
     fn read_map(path: &str) -> Vec<u8> {
         std::fs::read(&format!("../data/Halo1/maps/{}", path)).unwrap()
-    }
-
-    fn read_bitmaps() -> Vec<u8> {
-        std::fs::read("test_data/bitmaps.map").unwrap()
     }
 
     #[test]
@@ -457,7 +446,7 @@ mod tests {
             if name == "bitmaps.map" {
                 continue;
             }
-            let mut mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
+            let mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
             for hdr in &mgr.tag_headers {
                 if hdr.primary_class == TagClass::ShaderTransparentChicagoExtended {
                     dbg!(&hdr);

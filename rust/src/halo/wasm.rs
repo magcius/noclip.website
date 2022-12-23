@@ -1,12 +1,5 @@
-use std::convert::TryInto;
-use std::io::{Seek, Read, SeekFrom};
-use std::sync::Arc;
-
-use js_sys::Float32Array;
-use js_sys::Uint16Array;
+use js_sys::{Uint16Array, Array};
 use wasm_bindgen::prelude::*;
-use js_sys::{Array, Uint8Array};
-use web_sys::console;
 
 use crate::halo::map::*;
 use crate::halo::scenario::*;
@@ -52,7 +45,7 @@ fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8
         BitmapFormat::A8 => convert_a8_data(byte_range),
         BitmapFormat::Y8 => convert_y8_data(byte_range),
         BitmapFormat::A8y8 => convert_a8y8_data(byte_range),
-        _ => Vec::from(&byte_range[..]),
+        _ => Vec::from(byte_range),
     }
 }
 
@@ -234,11 +227,8 @@ impl HaloShaderTransparencyChicago {
 
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
         match self.bitmaps.get(i) {
-            Some(maybe_bitmap) => match maybe_bitmap {
-                Some(b) => Some(HaloBitmap { inner: b.clone() }),
-                _ => None,
-            },
-            _ => None,
+            Some(maybe_bitmap) => maybe_bitmap.as_ref().map(|b| HaloBitmap { inner: b.clone() }),
+            None => None,
         }
     }
 
@@ -724,7 +714,7 @@ impl HaloSceneManager {
     pub fn get_scenery_palette(&mut self) -> Array {
         let scenario_tag = self.mgr.get_scenario().unwrap();
         let scenario = match scenario_tag.data {
-            TagData::Scenario(s) => s.clone(),
+            TagData::Scenario(s) => s,
             _ => unreachable!(),
         };
         let palette = Array::new();
@@ -742,7 +732,7 @@ impl HaloSceneManager {
     pub fn get_scenery_instances(&mut self) -> Array {
         let scenario_tag = self.mgr.get_scenario().unwrap();
         let scenario = match scenario_tag.data {
-            TagData::Scenario(s) => s.clone(),
+            TagData::Scenario(s) => s,
             _ => unreachable!(),
         };
         let instances = Array::new();
@@ -755,7 +745,7 @@ impl HaloSceneManager {
     pub fn get_skies(&mut self) -> Array {
         let result = Array::new();
         let scenario_tag = self.mgr.get_scenario().unwrap();
-        let scenario_data = match scenario_tag.data { TagData::Scenario(s) => s.clone(), _ => unreachable!(), };
+        let scenario_data = match scenario_tag.data { TagData::Scenario(s) => s, _ => unreachable!(), };
         for dependency in scenario_data.skies.items.as_ref().unwrap() {
             let sky_header = self.mgr.resolve_dependency(dependency).unwrap();
             match self.mgr.read_tag(&sky_header).unwrap().data {
@@ -846,8 +836,8 @@ impl HaloSceneManager {
     pub fn get_material_shaders(&mut self, material: &HaloMaterial) -> Array {
         let result = Array::new();
         let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap();
-        match self.mgr.read_tag(&shader_hdr) {
-            Ok(tag) => match tag.data {
+        if let Ok(tag) = self.mgr.read_tag(&shader_hdr) {
+            match tag.data {
                 TagData::ShaderEnvironment(s) => {
                     if s.base_bitmap.path_pointer != 0 {
                         result.push(&JsValue::from(HaloShaderEnvironment {
@@ -907,8 +897,7 @@ impl HaloSceneManager {
                     }));
                 },
                 _ => {},
-            },
-            Err(_) => {},
+            }
         }
         result
     }

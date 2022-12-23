@@ -19,23 +19,23 @@ static P8_PALETTE: &[u8] = &[
 
 pub fn convert_p8_data(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(input.len() * 4);
-    for i in 0..input.len() {
-        let p8_offset = 4 * input[i] as usize;
+    for &px in input {
+        let p8_offset = 4 * px as usize;
         result.push(P8_PALETTE[p8_offset+1]);
         result.push(P8_PALETTE[p8_offset+2]);
         result.push(P8_PALETTE[p8_offset+3]);
         result.push(P8_PALETTE[p8_offset+0]);
     }
-    return result;
+    result
 }
 
 pub fn convert_a8_data(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(input.len() * 4);
-    for i in 0..input.len() {
+    for &a in input {
         result.push(0xFF);
         result.push(0xFF);
         result.push(0xFF);
-        result.push(input[i]);
+        result.push(a);
     }
     result
 }
@@ -53,10 +53,10 @@ pub fn convert_a8y8_data(input: &[u8]) -> Vec<u8> {
 
 pub fn convert_y8_data(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::with_capacity(input.len() * 4);
-    for i in 0..input.len() {
-        result.push(input[i]);
-        result.push(input[i]);
-        result.push(input[i]);
+    for &x in input {
+        result.push(x);
+        result.push(x);
+        result.push(x);
         result.push(0xFF);
     }
     result

@@ -1,15 +1,12 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom}};
 use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
-
 use crate::halo::common::*;
-use crate::halo::util::*;
 use crate::halo::tag::*;
 
 #[derive(Debug, Clone)]
 pub struct SkyAnimations {
-    animation_index: i16,
-    period: f32,
+    pub animation_index: i16,
+    pub period: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +129,6 @@ impl Deserialize for GbxModelPart {
 
 impl Deserialize for GbxModel {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let start = data.position();
         data.seek(SeekFrom::Current(4))?; // Bool32('flags',
         data.seek(SeekFrom::Current(4))?; // SInt32('node_list_checksum'),
         data.seek(SeekFrom::Current(4))?; // Float('superhigh_lod_cutoff', SIDETIP="pixels"),

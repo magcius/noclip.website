@@ -1,6 +1,6 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom}, convert::TryFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use wasm_bindgen::prelude::*;
 
 use crate::halo::common::*;
@@ -338,17 +338,17 @@ impl Deserialize for Bitmap {
         let encoding_format = BitmapEncodingFormat::try_from(data.read_u16::<LittleEndian>()?)?;
         let usage = BitmapUsage::try_from(data.read_u16::<LittleEndian>()?)?;
         let flags = data.read_u16::<LittleEndian>()?;
-        let detail_fade_factor = data.read_f32::<LittleEndian>()?;
-        let sharpen_amount = data.read_f32::<LittleEndian>()?;
-        let bump_height = data.read_f32::<LittleEndian>()?;
-        let sprite_budget_size = BitmapSpriteBudgetSize::try_from(data.read_u16::<LittleEndian>()?)?;
-        let sprite_budget_count = data.read_u16::<LittleEndian>()?;
-        let color_plate_width = data.read_u16::<LittleEndian>()?; // non-cache
-        let color_plate_height = data.read_u16::<LittleEndian>()?; // non-cache
-        let compressed_color_plate_pointer = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
-        let processed_pixel_data = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
-        let blur_filter_size = data.read_f32::<LittleEndian>()?;
-        let alpha_bias = data.read_f32::<LittleEndian>()?;
+        let _detail_fade_factor = data.read_f32::<LittleEndian>()?;
+        let _sharpen_amount = data.read_f32::<LittleEndian>()?;
+        let _bump_height = data.read_f32::<LittleEndian>()?;
+        let _sprite_budget_size = BitmapSpriteBudgetSize::try_from(data.read_u16::<LittleEndian>()?)?;
+        let _sprite_budget_count = data.read_u16::<LittleEndian>()?;
+        let _color_plate_width = data.read_u16::<LittleEndian>()?; // non-cache
+        let _color_plate_height = data.read_u16::<LittleEndian>()?; // non-cache
+        let _compressed_color_plate_pointer = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
+        let _processed_pixel_data = data.read_u32::<LittleEndian>()? as Pointer; // non-cache
+        let _blur_filter_size = data.read_f32::<LittleEndian>()?;
+        let _alpha_bias = data.read_f32::<LittleEndian>()?;
         let mipmap_count = data.read_u16::<LittleEndian>()?;
         let sprite_usage = BitmapSpriteUsage::try_from(data.read_u16::<LittleEndian>()?)?;
         let sprite_spacing = data.read_u16::<LittleEndian>()?;
