@@ -1132,9 +1132,11 @@ class MaterialRender_Environment {
     }
 }
 
+type MaterialRender = MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | MaterialRender_Model;
+
 class LightmapRenderer {
     public materials: LightmapMaterial[];
-    public materialRenderers: (MaterialRender_Environment | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[];
+    public materialRenderers: (MaterialRender | null)[];
     public visible = true;
 
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public trisBuf: GfxBuffer, public bsp: HaloBSP, public mgr: HaloSceneManager, public bspIndex: number, public lightmap: HaloLightmap, public lightmapTex: TextureMapping | null, public fogEnabled: boolean) {
@@ -1241,7 +1243,7 @@ class LightmapMaterial {
 }
 
 class ModelRenderer {
-    private materialRenderers: (MaterialRender_Model | MaterialRender_TransparencyChicago | MaterialRender_TransparencyGeneric | null)[] = [];
+    private materialRenderers: (MaterialRender | null)[] = [];
 
     public baseMapTransform = mat4.create();
 

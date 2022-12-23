@@ -501,6 +501,66 @@ impl HaloShaderEnvironment {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
+pub struct HaloShaderTransparentWaterRipple {
+    inner: ShaderTransparentWaterRipple,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparentWaterRipple {
+    pub fn contribution_factor(&self) -> f32 { self.inner.contribution_factor }
+    pub fn animation_angle(&self) -> f32 { self.inner.animation_angle }
+    pub fn animation_velocity(&self) -> f32 { self.inner.animation_velocity }
+    pub fn map_u_offset(&self) -> f32 { self.inner.map_u_offset }
+    pub fn map_v_offset(&self) -> f32 { self.inner.map_v_offset }
+    pub fn map_repeats(&self) -> u16 { self.inner.map_repeats }
+    pub fn map_index(&self) -> u16 { self.inner.map_index }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct HaloShaderTransparentWater {
+    inner: ShaderTransparentWater,
+    base_bitmap: Bitmap,
+    reflection_bitmap: Option<Bitmap>,
+    ripple_bitmap: Option<Bitmap>,
+    ripples: Vec<HaloShaderTransparentWaterRipple>,
+}
+
+#[wasm_bindgen]
+impl HaloShaderTransparentWater {
+    #[wasm_bindgen(getter)] pub fn flags(&self) -> u16 { self.inner.flags }
+    #[wasm_bindgen(getter)] pub fn view_perpendicular_brightness(&self) -> f32 { self.inner.view_perpendicular_brightness }
+    #[wasm_bindgen(getter)] pub fn view_perpendicular_tint_color(&self) -> ColorRGB { self.inner.view_perpendicular_tint_color }
+    #[wasm_bindgen(getter)] pub fn view_parallel_brightness(&self) -> f32 { self.inner.view_parallel_brightness }
+    #[wasm_bindgen(getter)] pub fn view_parallel_tint_color(&self) -> ColorRGB { self.inner.view_parallel_tint_color }
+    #[wasm_bindgen(getter)] pub fn ripple_animation_angle(&self) -> f32 { self.inner.ripple_animation_angle }
+    #[wasm_bindgen(getter)] pub fn ripple_animation_velocity(&self) -> f32 { self.inner.ripple_animation_velocity }
+    #[wasm_bindgen(getter)] pub fn ripple_scale(&self) -> f32 { self.inner.ripple_scale }
+    #[wasm_bindgen(getter)] pub fn ripple_mipmap_levels(&self) -> u16 { self.inner.ripple_mipmap_levels }
+    #[wasm_bindgen(getter)] pub fn ripple_mipmap_fade_factor(&self) -> f32 { self.inner.ripple_mipmap_fade_factor }
+    #[wasm_bindgen(getter)] pub fn ripple_mipmap_detail_bias(&self) -> f32 { self.inner.ripple_mipmap_detail_bias }
+
+    pub fn get_base_bitmap(&self) -> HaloBitmap {
+        HaloBitmap::new(self.base_bitmap.clone())
+    }
+
+    pub fn get_reflection_bitmap(&self) -> Option<HaloBitmap> {
+        self.reflection_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_ripple_bitmap(&self) -> Option<HaloBitmap> {
+        self.ripple_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
+    }
+
+    pub fn get_stage(&self, i: usize) -> Option<HaloShaderTransparentWaterRipple> {
+        self.ripples.get(i).cloned()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct HaloLightmap {
     inner: BSPLightmap,
 }
@@ -830,6 +890,19 @@ impl HaloSceneManager {
                     result.push(&JsValue::from(HaloShaderTransparencyChicago {
                         maps,
                         bitmaps,
+                        inner: s,
+                    }));
+                },
+                TagData::ShaderTransparentWater(s) => {
+                    let mut ripples = Vec::new();
+                    for ripple in s.ripples.items.as_ref().unwrap() {
+                        ripples.push(HaloShaderTransparentWaterRipple { inner: ripple.clone() });
+                    }
+                    result.push(&JsValue::from(HaloShaderTransparentWater {
+                        base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
+                        reflection_bitmap: self.resolve_bitmap_dependency(&s.reflection_bitmap),
+                        ripple_bitmap: self.resolve_bitmap_dependency(&s.ripple_bitmap),
+                        ripples,
                         inner: s,
                     }));
                 },

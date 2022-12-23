@@ -882,3 +882,121 @@ pub enum ShaderEnvironmentType {
     Blended = 1,
     BlendedBaseSpecular = 2,
 }
+
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentWaterRipple {
+    pub contribution_factor: f32,
+    pub animation_angle: f32,
+    pub animation_velocity: f32,
+    pub map_u_offset: f32,
+    pub map_v_offset: f32,
+    pub map_repeats: u16,
+    pub map_index: u16,
+}
+
+impl Deserialize for ShaderTransparentWaterRipple {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        data.seek(SeekFrom::Current(2 + 2))?;
+        let contribution_factor = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(32))?;
+        let animation_angle = data.read_f32::<LittleEndian>()?;
+        let animation_velocity = data.read_f32::<LittleEndian>()?;
+        let map_u_offset = data.read_f32::<LittleEndian>()?;
+        let map_v_offset = data.read_f32::<LittleEndian>()?;
+        let map_repeats = data.read_u16::<LittleEndian>()?;
+        let map_index = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(16))?;
+        Ok(ShaderTransparentWaterRipple {
+            contribution_factor,
+            animation_angle,
+            animation_velocity,
+            map_u_offset,
+            map_v_offset,
+            map_repeats,
+            map_index,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderTransparentWater {
+    // shader properties
+    pub radiosity_flags: u16,
+    pub radiosity_detail_level: RadiosityDetailLevel,
+    pub radiosity_light_power: f32,
+    pub radiosity_light_color: ColorRGB,
+    pub radiosity_tint_color: ColorRGB,
+
+    pub flags: u16,
+    pub base_bitmap: TagDependency,
+    pub view_perpendicular_brightness: f32,
+    pub view_perpendicular_tint_color: ColorRGB,
+    pub view_parallel_brightness: f32,
+    pub view_parallel_tint_color: ColorRGB,
+    pub reflection_bitmap: TagDependency,
+    pub ripple_animation_angle: f32,
+    pub ripple_animation_velocity: f32,
+    pub ripple_scale: f32,
+    pub ripple_bitmap: TagDependency,
+    pub ripple_mipmap_levels: u16,
+    pub ripple_mipmap_fade_factor: f32,
+    pub ripple_mipmap_detail_bias: f32,
+    pub ripples: Block<ShaderTransparentWaterRipple>, // max of 4
+}
+
+impl Deserialize for ShaderTransparentWater {
+    fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
+        let mut start = data.position();
+        let radiosity_flags = data.read_u16::<LittleEndian>()?;
+        let radiosity_detail_level = RadiosityDetailLevel::try_from(data.read_u16::<LittleEndian>()?)?;
+        let radiosity_light_power = data.read_f32::<LittleEndian>()?;
+        let radiosity_light_color = ColorRGB::deserialize(data)?;
+        let radiosity_tint_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Start(start + 40))?;
+        start = data.position();
+        let flags = dbg!(data.read_u16::<LittleEndian>()?);
+        data.seek(SeekFrom::Current(2 + 32))?;
+        let base_bitmap = dbg!(TagDependency::deserialize(data)?);
+        data.seek(SeekFrom::Current(16))?;
+        let view_perpendicular_brightness = data.read_f32::<LittleEndian>()?;
+        let view_perpendicular_tint_color = ColorRGB::deserialize(data)?;
+        let view_parallel_brightness = data.read_f32::<LittleEndian>()?;
+        let view_parallel_tint_color = ColorRGB::deserialize(data)?;
+        data.seek(SeekFrom::Current(16))?;
+        let reflection_bitmap = TagDependency::deserialize(data)?;
+        data.seek(SeekFrom::Current(16))?;
+        let ripple_animation_angle = data.read_f32::<LittleEndian>()?;
+        let ripple_animation_velocity = data.read_f32::<LittleEndian>()?;
+        let ripple_scale = data.read_f32::<LittleEndian>()?;
+        let ripple_bitmap = TagDependency::deserialize(data)?;
+        let ripple_mipmap_levels = data.read_u16::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(2))?;
+        let ripple_mipmap_fade_factor = data.read_f32::<LittleEndian>()?;
+        let ripple_mipmap_detail_bias = data.read_f32::<LittleEndian>()?;
+        data.seek(SeekFrom::Current(64))?;
+        let ripples: Block<ShaderTransparentWaterRipple> = Block::deserialize(data)?;
+        data.seek(SeekFrom::Current(16))?;
+        Ok(ShaderTransparentWater {
+            radiosity_flags,
+            radiosity_detail_level,
+            radiosity_light_power,
+            radiosity_light_color,
+            radiosity_tint_color,
+            flags,
+            base_bitmap,
+            view_perpendicular_brightness,
+            view_perpendicular_tint_color,
+            view_parallel_brightness,
+            view_parallel_tint_color,
+            reflection_bitmap,
+            ripple_animation_angle,
+            ripple_animation_velocity,
+            ripple_scale,
+            ripple_bitmap,
+            ripple_mipmap_levels,
+            ripple_mipmap_fade_factor,
+            ripple_mipmap_detail_bias,
+            ripples,
+        })
+    }
+}

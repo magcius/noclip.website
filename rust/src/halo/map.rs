@@ -139,8 +139,13 @@ impl MapManager {
                 }
                 TagData::ShaderTransparentGeneric(shader)
             },
+            TagClass::ShaderTransparentWater => {
+                let mut shader = ShaderTransparentWater::deserialize(&mut self.reader.data)?;
+                shader.ripples.read_items(&mut self.reader.data, offset)?;
+                TagData::ShaderTransparentWater(shader)
+            },
             TagClass::Scenery => {
-                let mut scenery = Scenery::deserialize(&mut self.reader.data)?;
+                let scenery = Scenery::deserialize(&mut self.reader.data)?;
                 TagData::Scenery(scenery)
             },
             TagClass::Sky => {
@@ -429,6 +434,16 @@ mod tests {
         let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
         for hdr in mgr.tag_headers.clone() {
             if hdr.path == "levels\\b30\\shaders\\waves" {
+                dbg!(mgr.read_tag(&hdr));
+            }
+        }
+    }
+
+    #[test]
+    fn test_water() {
+        let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
+        for hdr in mgr.tag_headers.clone() {
+            if hdr.path == "levels\\b30\\shaders\\water" {
                 dbg!(mgr.read_tag(&hdr));
             }
         }

@@ -162,6 +162,7 @@ pub enum TagData {
     ShaderModel(ShaderModel),
     ShaderTransparentChicago(ShaderTransparentChicago),
     ShaderTransparentGeneric(ShaderTransparentGeneric),
+    ShaderTransparentWater(ShaderTransparentWater),
     Scenery(Scenery),
     Sky(Sky),
     GbxModel(GbxModel),
