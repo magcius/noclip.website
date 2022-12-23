@@ -2635,16 +2635,17 @@ class RecordingBranding {
         this.elem.style.position = 'absolute';
         this.elem.style.right = '0';
         this.elem.style.bottom = '0';
-        this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+        this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         this.elem.style.borderTopLeftRadius = '8px';
-        this.elem.style.font = '32px Norwester';
+        this.elem.style.font = '24px Din';
+        this.elem.style.fontWeight = '600';
         this.elem.style.color = 'white';
-        this.elem.style.padding = '4px 8px 4px 12px';
+        this.elem.style.padding = '8px 9px 8px 12px';
         this.elem.style.pointerEvents = 'none';
         this.elem.style.textShadow = '0px 0px 10px rgba(0, 0, 0, 0.8)';
         this.elem.style.visibility = 'hidden';
         this.elem.style.userSelect = 'none';
-        this.elem.textContent = 'noclip.website';
+        this.elem.textContent = '[ noclip.website ]';
     }
 
     public v(): void {
