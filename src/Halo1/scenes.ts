@@ -575,17 +575,23 @@ class MaterialRender_TransparencyGeneric {
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
     }
 
-    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): mat4 {
+    private setupMapTransform(i: number, t: number, baseMapTransform: ReadonlyMat4 | null): ReadonlyMat4 {
+        const dst = this.mapTransform;
         const handler = this.animationHandlers[i];
         if (handler) {
-            handler.setTransform(this.mapTransform, t, baseMapTransform);
+            handler.setTransform(dst, t, baseMapTransform);
+            if (baseMapTransform !== null)
+                mat4.mul(dst, baseMapTransform, dst);
+        } else if (baseMapTransform !== null) {
+            mat4.copy(dst, baseMapTransform);
         } else {
-            mat4.identity(this.mapTransform);
+            mat4.identity(dst);
         }
-        return this.mapTransform;
+        return dst;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -607,6 +613,8 @@ class MaterialRender_TransparencyGeneric {
             offs += fillColor(mapped, offs, this.color0[i]);
         for (let i = 0; i < 8; i++)
             offs += fillColor(mapped, offs, this.color1[i]);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -730,7 +738,9 @@ class MaterialRender_TransparencyChicago {
         return dst;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+        const renderInst = renderInstManager.newRenderInst();
+
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
@@ -744,10 +754,26 @@ class MaterialRender_TransparencyChicago {
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(1, view.time, baseMapTransform));
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(2, view.time, baseMapTransform));
         offs += fillMatrix4x2(mapped, offs, this.setupMapTransform(3, view.time, baseMapTransform));
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
         this.shader.free();
+    }
+}
+
+class ShaderTransparencyWaterModulateBackgroundProgram extends BaseProgram {
+    public override frag = `
+void mainPS() {
+    vec4 t_BaseMap = texture(SAMPLER_2D(u_Texture0), v_UV);
+    gl_FragColor.rgba = t_BaseMap;
+    CalcFog(gl_FragColor, v_Position);
+}
+`;
+
+    constructor(public shader: HaloShaderTransparentWater) {
+        super([]);
     }
 }
 
@@ -761,7 +787,7 @@ layout(std140) uniform ub_ShaderParams {
 `;
 
     constructor(public shader: HaloShaderTransparentWater) {
-        super([ShaderTransparencyWaterProgram.BindingsDefinition])
+        super([ShaderTransparencyWaterProgram.BindingsDefinition]);
         this.frag = this.generateFragSection();
     }
 
@@ -882,17 +908,18 @@ void mainPS() {
 }
 
 class MaterialRender_TransparencyWater {
-    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
-    private gfxProgram: GfxProgram;
-    private perpendicularTint = vec4.create();
-    private parallelTint = vec4.create();
+    private rippleTexture: GfxTexture;
+    private rippleTextureSize: number = 128;
     private rippleCompositeProgram: GfxProgram;
     private rippleCompositeMapping = nArray(4, () => new TextureMapping());
     private rippleCompositeAnimation: RippleAnimation[] = nArray(4, () => new RippleAnimation());
 
-    private rippleTexture: GfxTexture;
-    private rippleTextureSize: number = 128;
+    private waterProgram: GfxProgram;
+    private waterModulateBackgroundProgram: GfxProgram;
+    private textureMapping: (TextureMapping | null)[] = nArray(8, () => null);
     private rippleTransformAnimation = new RippleAnimation();
+    private perpendicularTint = vec4.create();
+    private parallelTint = vec4.create();
 
     public sortKeyBase: number = 0;
     public visible = true;
@@ -932,9 +959,14 @@ class MaterialRender_TransparencyWater {
         perpendicular_tint_color.free();
         parallel_tint_color.free();
 
-        const prog = new ShaderTransparencyWaterProgram(shader);
-        prog.setDefineBool('USE_FOG', fogEnabled);
-        this.gfxProgram = cache.createProgram(prog);
+        const prog1 = new ShaderTransparencyWaterProgram(shader);
+        prog1.setDefineBool('USE_FOG', fogEnabled);
+        this.waterProgram = cache.createProgram(prog1);
+
+        const prog2 = new ShaderTransparencyWaterModulateBackgroundProgram(shader);
+        prog2.setDefineBool('USE_FOG', fogEnabled);
+        this.waterModulateBackgroundProgram = cache.createProgram(prog2);
+
         this.sortKeyBase = makeSortKeyTranslucent(SortKey.Translucent);
     }
 
@@ -981,8 +1013,31 @@ class MaterialRender_TransparencyWater {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
-        renderInst.setGfxProgram(this.gfxProgram);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
+        // ugly ugly ugly
+        if (!!(this.shader.flags & 0x02)) { // color modulates background
+            const renderInst = renderInstManager.newRenderInst();
+
+            renderInst.setGfxProgram(this.waterModulateBackgroundProgram);
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+            const megaStateFlags = { depthWrite: false };
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.Dst,
+                blendDstFactor: GfxBlendFactor.Zero,
+            });
+            renderInst.setMegaStateFlags(megaStateFlags);
+
+            // have to allocate something
+            let offs = renderInst.allocateUniformBuffer(ShaderTransparencyWaterProgram.ub_ShaderParams, 4);
+
+            renderInst.sortKey = this.sortKeyBase;
+            renderInstManager.submitRenderInst(renderInst);
+        }
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setGfxProgram(this.waterProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         const megaStateFlags = { depthWrite: false };
@@ -999,6 +1054,7 @@ class MaterialRender_TransparencyWater {
         offs += fillMatrix4x2(mapped, offs, this.rippleTransformAnimation.calc(view.time));
         offs += fillVec4v(mapped, offs, this.perpendicularTint);
         offs += fillVec4v(mapped, offs, this.parallelTint);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1142,7 +1198,8 @@ class MaterialRender_Model {
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -1154,6 +1211,8 @@ class MaterialRender_Model {
             offs += fillMatrix4x2(d, offs, baseMapTransform);
         else
             offs += fillMatrix4x2(d, offs, mat4.create());
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1384,7 +1443,9 @@ class MaterialRender_Environment {
     public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
+        const renderInst = renderInstManager.newRenderInst();
+
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
@@ -1394,6 +1455,8 @@ class MaterialRender_Environment {
         offs += fillVec4v(mapped, offs, this.perpendicularColor);
         offs += fillVec4v(mapped, offs, this.parallelColor);
         offs += fillVec4(mapped, offs, this.bspIndex);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1445,14 +1508,12 @@ class LightmapRenderer {
             if (!materialRenderer.visible)
                 return;
 
-            const renderInst = renderInstManager.newRenderInst();
+            const template = renderInstManager.pushTemplateRenderInst();
 
-            materialRenderer.setOnRenderInst(renderInst, mainView, null);
-            this.modelData[i].setOnRenderInst(renderInst);
+            this.modelData[i].setOnRenderInst(template);
+            materialRenderer.prepareToRender(renderInstManager, mainView, null);
 
-            renderInst.sortKey = materialRenderer.sortKeyBase;
-
-            renderInstManager.submitRenderInst(renderInst);
+            renderInstManager.popTemplateRenderInst();
         });
     }
 
@@ -1566,22 +1627,23 @@ class ModelRenderer {
             if (!materialRenderer.visible)
                 return;
 
-            const renderInst = renderInstManager.newRenderInst();
-            // part.setOnRenderInst(renderInst);
-            part.setOnRenderInst(renderInst);
-            materialRenderer.setOnRenderInst(renderInst, mainView, this.baseMapTransform);
+            const template = renderInstManager.pushTemplateRenderInst();
+            part.setOnRenderInst(template);
 
             // TODO: Part AABB?
-            renderInst.sortKey = materialRenderer.sortKeyBase;
+            template.sortKey = materialRenderer.sortKeyBase;
 
             // XXX(jstpierre): This is a bit ugly... perhaps do skyboxen in a different render pass?
             if (this.isSkybox)
-                renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, SortKey.Skybox);
+                template.sortKey = setSortKeyLayer(template.sortKey, SortKey.Skybox);
 
             getMatrixTranslation(scratchVec3a, this.modelMatrix);
             const depth = computeViewSpaceDepthFromWorldSpacePoint(mainView.viewFromWorldMatrix, scratchVec3a);
-            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
-            renderInstManager.submitRenderInst(renderInst);
+
+            template.sortKey = setSortKeyDepth(template.sortKey, depth);
+            materialRenderer.prepareToRender(renderInstManager, mainView, this.baseMapTransform);
+
+            renderInstManager.popTemplateRenderInst();
         });
 
         renderInstManager.popTemplateRenderInst();
