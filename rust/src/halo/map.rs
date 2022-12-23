@@ -1,5 +1,5 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom, TryInto}};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::{TryFrom}};
+use num_enum::{TryFromPrimitive};
 
 use crate::halo::common::*;
 use crate::halo::util::*;
@@ -140,7 +140,7 @@ impl MapManager {
                 TagData::ShaderTransparentGeneric(shader)
             },
             TagClass::Scenery => {
-                let mut scenery = Scenery::deserialize(&mut self.reader.data)?;
+                let scenery = Scenery::deserialize(&mut self.reader.data)?;
                 TagData::Scenery(scenery)
             },
             TagClass::Sky => {
@@ -230,7 +230,7 @@ impl ResourceMapReader {
         ResourceMapReader { data: Cursor::new(data) }
     }
 
-    fn read_header(&mut self) -> Result<ResourcesHeader> {
+    pub fn read_header(&mut self) -> Result<ResourcesHeader> {
         ResourcesHeader::deserialize(&mut self.data)
     }
 }
@@ -280,7 +280,7 @@ pub struct Header {
 }
 
 #[derive(Debug, Copy, Clone)]
-enum ResourceType {
+pub enum ResourceType {
     Bitmaps = 0x1,
     Sounds = 0x2,
     Localization = 0x3,
@@ -288,18 +288,18 @@ enum ResourceType {
 
 #[derive(Debug)]
 pub struct ResourcesHeader {
-    resource_type: ResourceType,
-    paths_offset: Pointer,
-    resources_offset: Pointer,
-    resource_count: u32,
+    pub resource_type: ResourceType,
+    pub paths_offset: Pointer,
+    pub resources_offset: Pointer,
+    pub resource_count: u32,
 }
 
 #[derive(Debug)]
 pub struct ResourceHeader {
-    path_offset: Pointer,
-    size: u32,
-    data_offset: Pointer,
-    path: Option<String>,
+    pub path_offset: Pointer,
+    pub size: u32,
+    pub data_offset: Pointer,
+    pub path: Option<String>,
 }
 
 impl Deserialize for ResourceHeader {
@@ -400,9 +400,9 @@ impl Deserialize for TagIndexHeader {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
+    
 
-    use crate::halo::shader;
+    
 
     use super::*;
 
@@ -442,7 +442,7 @@ mod tests {
             if name == "bitmaps.map" {
                 continue;
             }
-            let mut mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
+            let mgr = MapManager::new(read_map(&name.to_str().unwrap())).unwrap();
             for hdr in &mgr.tag_headers {
                 if hdr.primary_class == TagClass::ShaderTransparentChicagoExtended {
                     dbg!(&hdr);

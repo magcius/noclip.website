@@ -1,6 +1,6 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom}, convert::TryFrom};
 
-use js_sys::Function;
+
 use wasm_bindgen::prelude::*;
 use byteorder::LittleEndian;
 use byteorder::ReadBytesExt;

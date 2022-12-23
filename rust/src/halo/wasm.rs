@@ -1,12 +1,5 @@
-use std::convert::TryInto;
-use std::io::{Seek, Read, SeekFrom};
-use std::sync::Arc;
-
-use js_sys::Float32Array;
-use js_sys::Uint16Array;
+use js_sys::{Uint16Array, Array};
 use wasm_bindgen::prelude::*;
-use js_sys::{Array, Uint8Array};
-use web_sys::console;
 
 use crate::halo::map::*;
 use crate::halo::scenario::*;

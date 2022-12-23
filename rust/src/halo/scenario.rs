@@ -1,6 +1,6 @@
-use std::{io::{Cursor, Seek, SeekFrom, Read}, convert::TryFrom};
+use std::{io::{Cursor, Seek, SeekFrom}, convert::TryFrom};
 use byteorder::{ReadBytesExt, LittleEndian};
-use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::halo::common::*;
 use crate::halo::util::*;
