@@ -103,7 +103,7 @@ layout(binding = 7) uniform samplerCube u_TextureCube;
 `;
 
     public static CalcFog = `
-void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+float CalcFogFactor(in vec3 t_PositionWorld) {
 #if defined USE_FOG
     float t_DistanceWorld = distance(t_PositionWorld.xyz, u_PlayerPos.xyz);
     float t_FogFactor = saturate(invlerp(u_FogDistances.x, u_FogDistances.y, t_DistanceWorld));
@@ -111,7 +111,15 @@ void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
 
     // Square the fog factor to better approximate fixed-function HW (which happens all in clip space)
     t_FogFactor *= t_FogFactor;
+    return t_FogFactor;
+#else
+    return 0.0;
+#endif
+}
 
+void CalcFog(inout vec4 t_Color, in vec3 t_PositionWorld) {
+#if defined USE_FOG
+    float t_FogFactor = CalcFogFactor(t_PositionWorld);
     t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, t_FogFactor);
 #endif
 }
@@ -765,7 +773,10 @@ class ShaderTransparencyWaterModulateBackgroundProgram extends BaseProgram {
 void mainPS() {
     vec4 t_BaseMap = texture(SAMPLER_2D(u_Texture0), v_UV);
     gl_FragColor.rgba = t_BaseMap;
-    CalcFog(gl_FragColor, v_Position);
+
+    float t_FogFactor = CalcFogFactor(t_PositionWorld);
+    // Since we mul against background, white is transparent
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0), t_FogFactor);
 }
 `;
 
