@@ -206,6 +206,7 @@ impl HaloShaderTransparentChicagoMap {
 #[derive(Debug, Clone)]
 pub struct HaloShaderTransparencyChicago {
     inner: ShaderTransparentChicago,
+    path: String,
     maps: Vec<HaloShaderTransparentChicagoMap>,
     bitmaps: Vec<Option<Bitmap>>,
 }
@@ -224,6 +225,7 @@ impl HaloShaderTransparencyChicago {
     #[wasm_bindgen(getter)] pub fn framebuffer_fade_mode(&self) -> FramebufferFadeMode { self.inner.framebuffer_fade_mode }
     #[wasm_bindgen(getter)] pub fn framebuffer_fade_source(&self) -> FunctionSource { self.inner.framebuffer_fade_source }
     #[wasm_bindgen(getter)] pub fn lens_flare_spacing(&self) -> f32 { self.inner.lens_flare_spacing }
+    #[wasm_bindgen(getter)] pub fn path(&self) -> String { self.path.clone() }
 
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
         match self.bitmaps.get(i) {
@@ -512,6 +514,7 @@ impl HaloShaderTransparentWaterRipple {
 #[derive(Debug, Clone)]
 pub struct HaloShaderTransparentWater {
     inner: ShaderTransparentWater,
+    path: String,
     base_bitmap: Bitmap,
     reflection_bitmap: Option<Bitmap>,
     ripple_bitmap: Option<Bitmap>,
@@ -531,6 +534,7 @@ impl HaloShaderTransparentWater {
     #[wasm_bindgen(getter)] pub fn ripple_mipmap_levels(&self) -> u16 { self.inner.ripple_mipmap_levels }
     #[wasm_bindgen(getter)] pub fn ripple_mipmap_fade_factor(&self) -> f32 { self.inner.ripple_mipmap_fade_factor }
     #[wasm_bindgen(getter)] pub fn ripple_mipmap_detail_bias(&self) -> f32 { self.inner.ripple_mipmap_detail_bias }
+    #[wasm_bindgen(getter)] pub fn path(&self) -> String { self.path.clone() }
 
     pub fn get_base_bitmap(&self) -> HaloBitmap {
         HaloBitmap::new(self.base_bitmap.clone())
@@ -674,9 +678,9 @@ impl HaloSceneManager {
                     let mut maps = Vec::new();
                     let mut bitmaps = Vec::new();
                     let mut stages = Vec::new();
-                    for chicago_map in s.maps.items.as_ref().unwrap() {
-                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
-                        maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
+                    for map in s.maps.items.as_ref().unwrap() {
+                        bitmaps.push(self.resolve_bitmap_dependency(&map.map).unwrap());
+                        maps.push(HaloShaderTransparentGenericMap { inner: map.clone() });
                     }
                     for stage in s.stages.items.as_ref().unwrap() {
                         stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
@@ -697,9 +701,10 @@ impl HaloSceneManager {
                         maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
                     }
                     JsValue::from(HaloShaderTransparencyChicago {
+                        inner: s,
+                        path: shader_hdr.path.clone(),
                         maps,
                         bitmaps,
-                        inner: s,
                     })
                 },
                 TagData::ShaderTransparentWater(s) => {
@@ -708,6 +713,7 @@ impl HaloSceneManager {
                         ripples.push(HaloShaderTransparentWaterRipple { inner: ripple.clone() });
                     }
                     JsValue::from(HaloShaderTransparentWater {
+                        path: shader_hdr.path.clone(),
                         base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
                         reflection_bitmap: self.resolve_bitmap_dependency(&s.reflection_bitmap),
                         ripple_bitmap: self.resolve_bitmap_dependency(&s.ripple_bitmap),

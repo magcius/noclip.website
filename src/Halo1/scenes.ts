@@ -671,19 +671,18 @@ layout(std140) uniform ub_ShaderParams {
             `vec4 t3 = texture(SAMPLER_2D(u_Texture3), uv3);`,
         ];
 
-        fragBody.push(`vec4 scratch;`)
-        fragBody.push(`vec4 current = t0;`)
-        fragBody.push(`vec4 next;`)
+        fragBody.push(`vec4 scratch, next, current = t0;`);
 
-        maps.slice(0, 3).forEach((map, i) => {
-            fragBody.push(`next = t${i+1};`)
+        for (let i = 0; i < maps.length - 1; i++) {
+            const map = maps[i];
+            fragBody.push(`next = t${i + 1};`);
             fragBody.push(this.getColorFunction('scratch.rgb', 'current.rgb', 'next.rgb', map.color_function));
             fragBody.push(this.getColorFunction('scratch.a', 'current.a', 'next.a', map.color_function));
-            fragBody.push(`current = scratch;`)
-        })
+            fragBody.push(`current = scratch;`);
+        }
 
-        fragBody.push(`gl_FragColor = current;`)
-        fragBody.push(`CalcFog(gl_FragColor, v_Position);`)
+        fragBody.push(`gl_FragColor = current;`);
+        fragBody.push(`CalcFog(gl_FragColor, v_Position);`);
         return `
 void mainPS() {
 ${fragBody.join('\n')}
