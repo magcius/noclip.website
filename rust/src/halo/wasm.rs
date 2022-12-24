@@ -317,6 +317,7 @@ impl HaloShaderTransparentGenericStage {
 #[derive(Debug, Clone)]
 pub struct HaloShaderTransparencyGeneric {
     inner: ShaderTransparentGeneric,
+    path: String,
     maps: Vec<HaloShaderTransparentGenericMap>,
     stages: Vec<HaloShaderTransparentGenericStage>,
     bitmaps: Vec<Bitmap>,
@@ -336,6 +337,7 @@ impl HaloShaderTransparencyGeneric {
     #[wasm_bindgen(getter)] pub fn framebuffer_fade_mode(&self) -> FramebufferFadeMode { self.inner.framebuffer_fade_mode }
     #[wasm_bindgen(getter)] pub fn framebuffer_fade_source(&self) -> FunctionSource { self.inner.framebuffer_fade_source }
     #[wasm_bindgen(getter)] pub fn lens_flare_spacing(&self) -> f32 { self.inner.lens_flare_spacing }
+    #[wasm_bindgen(getter)] pub fn path(&self) -> String { self.path.clone() }
 
     pub fn get_bitmap(&self, i: usize) -> Option<HaloBitmap> {
         self.bitmaps.get(i).map(|b| HaloBitmap { inner: b.clone() })
@@ -642,58 +644,97 @@ impl HaloSceneManager {
         HaloSceneManager { mgr }
     }
 
+    fn get_shader(&mut self, shader_hdr: TagHeader) -> JsValue {
+        match self.mgr.read_tag(&shader_hdr) {
+            Ok(tag) => match tag.data {
+                TagData::ShaderEnvironment(s) => {
+                    if s.base_bitmap.path_pointer != 0 {
+                        JsValue::from(HaloShaderEnvironment {
+                            base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
+                            bump_map: self.resolve_bitmap_dependency(&s.bump_map),
+                            primary_detail_bitmap: self.resolve_bitmap_dependency(&s.primary_detail_bitmap),
+                            secondary_detail_bitmap: self.resolve_bitmap_dependency(&s.secondary_detail_bitmap),
+                            micro_detail_bitmap: self.resolve_bitmap_dependency(&s.micro_detail_bitmap),
+                            reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
+                            path: shader_hdr.path.clone(),
+                            inner: s.clone(),
+                        })
+                    } else {
+                        JsValue::NULL
+                    }
+                },
+                TagData::ShaderModel(s) => JsValue::from(HaloShaderModel {
+                    base_bitmap: self.resolve_bitmap_dependency(&s.base_map),
+                    detail_bitmap: self.resolve_bitmap_dependency(&s.detail_map),
+                    multipurpose_map: self.resolve_bitmap_dependency(&s.multipurpose_map),
+                    reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
+                    inner: s,
+                }),
+                TagData::ShaderTransparentGeneric(s) => {
+                    let mut maps = Vec::new();
+                    let mut bitmaps = Vec::new();
+                    let mut stages = Vec::new();
+                    for chicago_map in s.maps.items.as_ref().unwrap() {
+                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
+                        maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
+                    }
+                    for stage in s.stages.items.as_ref().unwrap() {
+                        stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
+                    }
+                    JsValue::from(HaloShaderTransparencyGeneric {
+                        inner: s,
+                        path: shader_hdr.path.clone(),
+                        maps,
+                        bitmaps,
+                        stages,
+                    })
+                },
+                TagData::ShaderTransparentChicago(s) => {
+                    let mut maps = Vec::new();
+                    let mut bitmaps = Vec::new();
+                    for chicago_map in s.maps.items.as_ref().unwrap() {
+                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map));
+                        maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
+                    }
+                    JsValue::from(HaloShaderTransparencyChicago {
+                        maps,
+                        bitmaps,
+                        inner: s,
+                    })
+                },
+                TagData::ShaderTransparentWater(s) => {
+                    let mut ripples = Vec::new();
+                    for ripple in s.ripples.items.as_ref().unwrap() {
+                        ripples.push(HaloShaderTransparentWaterRipple { inner: ripple.clone() });
+                    }
+                    JsValue::from(HaloShaderTransparentWater {
+                        base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
+                        reflection_bitmap: self.resolve_bitmap_dependency(&s.reflection_bitmap),
+                        ripple_bitmap: self.resolve_bitmap_dependency(&s.ripple_bitmap),
+                        ripples,
+                        inner: s,
+                    })
+                },
+                _ => JsValue::NULL,
+            },
+            _ => JsValue::NULL,
+        }
+    }
+
     pub fn get_model_shaders(&mut self, model: &HaloModel) -> Array {
         let result = Array::new();
         for model_shader in model.inner.shaders.items.as_ref().unwrap() {
             // FIXME do we need the permutation value?
-            let shader_header = self.mgr.resolve_dependency(&model_shader.shader).unwrap();
-            let js_value = match self.mgr.read_tag(&shader_header) {
-                Ok(tag) => match tag.data {
-                    TagData::ShaderModel(s) => JsValue::from(HaloShaderModel {
-                        base_bitmap: self.resolve_bitmap_dependency(&s.base_map),
-                        detail_bitmap: self.resolve_bitmap_dependency(&s.detail_map),
-                        multipurpose_map: self.resolve_bitmap_dependency(&s.multipurpose_map),
-                        reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
-                        inner: s,
-                    }),
-                    TagData::ShaderTransparentGeneric(s) => {
-                        let mut maps = Vec::new();
-                        let mut bitmaps = Vec::new();
-                        let mut stages = Vec::new();
-                        for chicago_map in s.maps.items.as_ref().unwrap() {
-                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
-                            maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
-                        }
-                        for stage in s.stages.items.as_ref().unwrap() {
-                            stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
-                        }
-                        JsValue::from(HaloShaderTransparencyGeneric {
-                            maps,
-                            bitmaps,
-                            stages,
-                            inner: s,
-                        })
-                    },
-                    TagData::ShaderTransparentChicago(s) => {
-                        let mut maps = Vec::new();
-                        let mut bitmaps = Vec::new();
-                        for chicago_map in s.maps.items.as_ref().unwrap() {
-                            bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map));
-                            maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
-                        }
-                        JsValue::from(HaloShaderTransparencyChicago {
-                            maps,
-                            bitmaps,
-                            inner: s,
-                        })
-                    },
-                    _ => JsValue::NULL,
-                },
-                _ => JsValue::NULL,
-            };
+            let shader_hdr = self.mgr.resolve_dependency(&model_shader.shader).unwrap();
+            let js_value = self.get_shader(shader_hdr);
             result.push(&js_value);
         }
         result
+    }
+
+    pub fn get_material_shader(&mut self, material: &HaloMaterial) -> JsValue {
+        let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap();
+        self.get_shader(shader_hdr)
     }
 
     pub fn get_model_parts(&mut self, model: &HaloModel) -> Array {
@@ -830,76 +871,6 @@ impl HaloSceneManager {
             TagData::Bitmap(bitmap) => Some(bitmap),
             _ => unreachable!(),
         }
-    }
-
-    // hack to get around returning variable types
-    pub fn get_material_shaders(&mut self, material: &HaloMaterial) -> Array {
-        let result = Array::new();
-        let shader_hdr = self.mgr.resolve_dependency(&material.inner.shader).unwrap();
-        if let Ok(tag) = self.mgr.read_tag(&shader_hdr) {
-            match tag.data {
-                TagData::ShaderEnvironment(s) => {
-                    if s.base_bitmap.path_pointer != 0 {
-                        result.push(&JsValue::from(HaloShaderEnvironment {
-                            base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
-                            bump_map: self.resolve_bitmap_dependency(&s.bump_map),
-                            primary_detail_bitmap: self.resolve_bitmap_dependency(&s.primary_detail_bitmap),
-                            secondary_detail_bitmap: self.resolve_bitmap_dependency(&s.secondary_detail_bitmap),
-                            micro_detail_bitmap: self.resolve_bitmap_dependency(&s.micro_detail_bitmap),
-                            reflection_cube_map: self.resolve_bitmap_dependency(&s.reflection_cube_map),
-                            path: shader_hdr.path.clone(),
-                            inner: s.clone(),
-                        }));
-                    }
-                },
-                TagData::ShaderTransparentGeneric(s) => {
-                    let mut maps = Vec::new();
-                    let mut bitmaps = Vec::new();
-                    let mut stages = Vec::new();
-                    for chicago_map in s.maps.items.as_ref().unwrap() {
-                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map).unwrap());
-                        maps.push(HaloShaderTransparentGenericMap { inner: chicago_map.clone() });
-                    }
-                    for stage in s.stages.items.as_ref().unwrap() {
-                        stages.push(HaloShaderTransparentGenericStage { inner: stage.clone() });
-                    }
-                    result.push(&JsValue::from(HaloShaderTransparencyGeneric {
-                        maps,
-                        bitmaps,
-                        stages,
-                        inner: s,
-                    }));
-                },
-                TagData::ShaderTransparentChicago(s) => {
-                    let mut maps = Vec::new();
-                    let mut bitmaps = Vec::new();
-                    for chicago_map in s.maps.items.as_ref().unwrap() {
-                        bitmaps.push(self.resolve_bitmap_dependency(&chicago_map.map));
-                        maps.push(HaloShaderTransparentChicagoMap { inner: chicago_map.clone() });
-                    }
-                    result.push(&JsValue::from(HaloShaderTransparencyChicago {
-                        maps,
-                        bitmaps,
-                        inner: s,
-                    }));
-                },
-                TagData::ShaderTransparentWater(s) => {
-                    let mut ripples = Vec::new();
-                    for ripple in s.ripples.items.as_ref().unwrap() {
-                        ripples.push(HaloShaderTransparentWaterRipple { inner: ripple.clone() });
-                    }
-                    result.push(&JsValue::from(HaloShaderTransparentWater {
-                        base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
-                        reflection_bitmap: self.resolve_bitmap_dependency(&s.reflection_bitmap),
-                        ripple_bitmap: self.resolve_bitmap_dependency(&s.ripple_bitmap),
-                        ripples,
-                        inner: s,
-                    }));
-                },
-                _ => {},
-            }
-        }
-        result
     }
 
     pub fn get_and_convert_bitmap_data(&mut self, bitmap: &HaloBitmap, submap: usize) -> Vec<u8> {

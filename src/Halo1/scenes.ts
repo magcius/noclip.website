@@ -1,13 +1,15 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, HaloBSP, HaloBitmapReader, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloSky, ShaderOutput, ShaderOutputMapping, ShaderTransparentChicagoColorFunction, ShaderMapping, ShaderOutputFunction, ShaderAlphaInput, ShaderInput, HaloShaderTransparentGenericMap, FunctionSource, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, } from '../../rust/pkg/index';
+import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
 import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
+import { Color, colorCopy, colorNewCopy, White } from '../Color';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
@@ -20,8 +22,6 @@ import { TextureMapping } from '../TextureHolder';
 import { assert, nArray } from '../util';
 import * as Viewer from '../viewer';
 import { TextureCache } from './tex';
-import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { Color, colorCopy, colorNewCopy, White } from '../Color';
 
 /**
  * todo:
@@ -463,7 +463,6 @@ ${genOutputAlpha(stage.output_ab_cd_mux_sum_alpha, `ABCD.a`)}
         }
 
         fragBody.push(`gl_FragColor = r0.rgba;`);
-        fragBody.push(`CalcFog(gl_FragColor, v_Position);`);
 
         return `
 void mainPS() {
@@ -1012,7 +1011,7 @@ class MaterialRender_TransparencyWater {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, view: View, baseMapTransform: ReadonlyMat4 | null): void {
         if (!!(this.shader.flags & 0x02)) { // color modulates background
             const renderInst = renderInstManager.newRenderInst();
 
@@ -1038,11 +1037,20 @@ class MaterialRender_TransparencyWater {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         const megaStateFlags = { depthWrite: false, cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW };
-        setAttachmentStateSimple(megaStateFlags, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.One,
-        });
+        if (baseMapTransform !== null) {
+            // Skybox water doesn't seem to get a blend? WTF? Skybox water in a30
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.One,
+                blendDstFactor: GfxBlendFactor.Zero,
+            });
+        } else {
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.Add,
+                blendSrcFactor: GfxBlendFactor.SrcAlpha,
+                blendDstFactor: GfxBlendFactor.One,
+            });
+        }
         renderInst.setMegaStateFlags(megaStateFlags);
 
         let offs = renderInst.allocateUniformBuffer(ShaderTransparencyWaterProgram.ub_ShaderParams, 4 * 2 + 4 * 2);
@@ -1467,7 +1475,7 @@ class LightmapRenderer {
         this.modelData = [];
         this.materialRenderers = [];
         mgr.get_lightmap_materials(lightmap).forEach(material => {
-            const shader = this.mgr.get_material_shaders(material)[0];
+            const shader = this.mgr.get_material_shader(material);
             if (shader instanceof _wasm!.HaloShaderEnvironment) {
                 this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
@@ -1591,12 +1599,22 @@ class ModelRenderer {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
             } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
                 this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
+            } else if (shader instanceof _wasm!.HaloShaderTransparentWater) {
+                this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
             }
         });
 
         computeModelMatrixS(this.baseMapTransform, this.model.get_base_bitmap_u_scale(), this.model.get_base_bitmap_v_scale());
+    }
+
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.materialRenderers.length; i++)
+            this.materialRenderers[i]?.pushPasses(cache, builder, renderInstManager, view);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
@@ -1792,6 +1810,11 @@ class SceneryRenderer {
         }
     }
 
+    public pushPasses(cache: GfxRenderCache, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, view: View): void {
+        for (let i = 0; i < this.modelRenderers.length; i++)
+            this.modelRenderers[i].pushPasses(cache, builder, renderInstManager, view);
+    }
+
     public prepareToRender(renderInstManager: GfxRenderInstManager, mainView: View): void {
         if (!this.visible)
             return;
@@ -1957,7 +1980,8 @@ class HaloScene implements Viewer.SceneGfx {
 
         this.bspRenderers.forEach((r, i) => {
             r.prepareToRender(this.renderHelper.renderInstManager, this.mainView);
-        })
+        });
+
         this.sceneryRenderers.forEach(r => r.prepareToRender(this.renderHelper.renderInstManager, this.mainView));
         if (this.skyboxRenderer) {
             this.skyboxRenderer.prepareToRender(this.renderHelper.renderInstManager, this.mainView)
@@ -1980,6 +2004,10 @@ class HaloScene implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].pushPasses(cache, builder, renderInstManager, this.mainView);
+        for (let i = 0; i < this.sceneryRenderers.length; i++)
+            this.sceneryRenderers[i].pushPasses(cache, builder, renderInstManager, this.mainView);
+        if (this.skyboxRenderer)
+            this.skyboxRenderer.pushPasses(cache, builder, renderInstManager, this.mainView);
         renderInstManager.popTemplateRenderInst();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');

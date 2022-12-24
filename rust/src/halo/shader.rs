@@ -946,14 +946,13 @@ pub struct ShaderTransparentWater {
 
 impl Deserialize for ShaderTransparentWater {
     fn deserialize(data: &mut Cursor<Vec<u8>>) -> Result<Self> where Self: Sized {
-        let mut start = data.position();
+        let start = data.position();
         let radiosity_flags = data.read_u16::<LittleEndian>()?;
         let radiosity_detail_level = RadiosityDetailLevel::try_from(data.read_u16::<LittleEndian>()?)?;
         let radiosity_light_power = data.read_f32::<LittleEndian>()?;
         let radiosity_light_color = ColorRGB::deserialize(data)?;
         let radiosity_tint_color = ColorRGB::deserialize(data)?;
         data.seek(SeekFrom::Start(start + 40))?;
-        start = data.position();
         let flags = dbg!(data.read_u16::<LittleEndian>()?);
         data.seek(SeekFrom::Current(2 + 32))?;
         let base_bitmap = dbg!(TagDependency::deserialize(data)?);
