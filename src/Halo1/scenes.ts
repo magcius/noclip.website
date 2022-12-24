@@ -774,7 +774,7 @@ void mainPS() {
     vec4 t_BaseMap = texture(SAMPLER_2D(u_Texture0), v_UV);
     gl_FragColor.rgba = t_BaseMap;
 
-    float t_FogFactor = CalcFogFactor(t_PositionWorld);
+    float t_FogFactor = CalcFogFactor(v_Position);
     // Since we mul against background, white is transparent
     gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0), t_FogFactor);
 }
