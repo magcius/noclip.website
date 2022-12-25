@@ -157,12 +157,61 @@ export class J3DFrameCtrl {
     }
 
     public checkPass(frame: number, deltaTimeFrames: number, currentTimeInFrames = this.currentTimeInFrames, speedInFrames = this.speedInFrames): boolean {
-        if (this.loopMode === LoopMode.ONCE || this.loopMode === LoopMode.ONCE_AND_RESET) {
-            const oldTime = currentTimeInFrames, newTime = currentTimeInFrames + (speedInFrames * deltaTimeFrames);
-            return oldTime < frame && newTime >= frame;
+        // https://github.com/zeldaret/tp/blob/master/libs/JSystem/J3DGraphAnimator/J3DAnimation.cpp
+        let oldTime = currentTimeInFrames, newTime = currentTimeInFrames + (speedInFrames * deltaTimeFrames);
+        if (this.loopMode === LoopMode.REPEAT) {
+            if (oldTime < this.startFrame) {
+                while (newTime < this.startFrame) {
+                    if (this.repeatStartFrame - this.startFrame <= 0.0)
+                        break;
+
+                    newTime += this.repeatStartFrame - this.startFrame;
+                }
+
+                return newTime <= frame && this.repeatStartFrame > frame;
+            } else if (this.endFrame <= oldTime) {
+                while (newTime >= this.endFrame) {            
+                    if (this.endFrame - this.repeatStartFrame <= 0.0)
+                        break;
+
+                    newTime -= this.endFrame - this.repeatStartFrame;
+                }
+
+                return this.repeatStartFrame <= frame && newTime > frame;
+            } else if (newTime < this.startFrame) {
+                while (newTime < this.startFrame) {            
+                    if (this.repeatStartFrame - this.startFrame <= 0.0)
+                        break;
+
+                    newTime += this.repeatStartFrame - this.startFrame;
+                }
+
+                return (this.startFrame <= frame && oldTime > frame) || (newTime <= frame && this.repeatStartFrame > frame);
+            } else if (this.endFrame <= newTime) {
+                while (newTime >= this.endFrame) {            
+                    if (this.endFrame - this.repeatStartFrame <= 0.0)
+                        break;
+
+                    newTime -= this.endFrame - this.repeatStartFrame;
+                }
+
+                return (oldTime <= frame && this.endFrame > frame) || (this.repeatStartFrame <= frame && newTime > frame);
+            } else {
+                if (oldTime <= newTime)
+                    return oldTime <= frame && newTime > frame;
+                else
+                    return newTime <= frame && oldTime > frame;
+            }
         } else {
-            // TODO(jstpierre): RE this.
-            return false;
+            if (newTime < this.startFrame)
+                newTime = this.startFrame;
+            else if (newTime >= this.endFrame)
+                newTime = this.endFrame - 0.001;
+
+            if (oldTime <= newTime)
+                return oldTime <= frame && newTime > frame;
+            else
+                return newTime <= frame && frame > oldTime;
         }
     }
 
