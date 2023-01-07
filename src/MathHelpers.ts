@@ -23,10 +23,10 @@ export const Vec3NegZ: ReadonlyVec3  = vec3.fromValues(0, 0, -1);
 
 /**
  * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed
- * to be in radians.
+ * to be in radians. Rotations are applied in X*Y*Z*input order.
  * 
  * This is roughly equivalent to {@link mat4.fromTranslationRotationScale}, but no intermediate
- * to quaternions is necessary.
+ * conversion to quaternions is necessary.
  */
 export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
     const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
@@ -83,7 +83,7 @@ export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number = 
 
 /**
  * Computes a model matrix {@param dst} from given rotation parameters. Rotation is assumed
- * to be in radians.
+ * to be in radians. Rotations are applied in X*Y*Z*input order.
  * 
  * This is equivalent to {@link computeModelMatrixSRT} with the scale parameters set to 1 and the translation set to 0.
  */
@@ -267,24 +267,6 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
-export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: ReadonlyMat4): void {
-    const mx = 1 / Math.hypot(m[0], m[4], m[8]);
-    const my = 1 / Math.hypot(m[1], m[5], m[9]);
-    const mz = 1 / Math.hypot(m[2], m[6], m[10]);
-    dst[0] = m[0] * mx;
-    dst[4] = m[4] * mx;
-    dst[8] = m[8] * mx;
-    dst[1] = m[1] * my;
-    dst[5] = m[5] * my;
-    dst[9] = m[9] * my;
-    dst[2] = m[2] * mz;
-    dst[6] = m[6] * mz;
-    dst[10] = m[10] * mz;
-    dst[12] = 0;
-    dst[13] = 0;
-    dst[14] = 0;
-}
-
 export function computeMatrixWithoutScale(dst: mat4, m: ReadonlyMat4): void {
     const mx = 1 / Math.hypot(m[0], m[4], m[8]);
     const my = 1 / Math.hypot(m[1], m[5], m[9]);
@@ -311,12 +293,29 @@ export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): voi
 }
 
 export function computeMatrixWithoutRotation(dst: mat4, m: ReadonlyMat4, v: vec3 = scratchVec3a): void {
-    const tx = m[12], ty = m[13], tz = m[14];
-    mat4.getScaling(v, dst);
-    mat4.fromScaling(dst, v);
-    dst[12] = tx;
-    dst[13] = ty;
-    dst[14] = tz;
+    const mx = Math.hypot(m[0], m[4], m[8]);
+    const my = Math.hypot(m[1], m[5], m[9]);
+    const mz = Math.hypot(m[2], m[6], m[10]);
+
+    dst[0] = mx;
+    dst[1] = 0.0;
+    dst[2] = 0.0;
+    dst[3] = 0.0;
+
+    dst[4] = 0.0;
+    dst[5] = my;
+    dst[6] = 0.0;
+    dst[7] = 0.0;
+
+    dst[8] = 0.0;
+    dst[9] = 0.0;
+    dst[10] = mz;
+    dst[11] = 0.0;
+
+    dst[12] = m[12];
+    dst[13] = m[13];
+    dst[14] = m[14];
+    dst[15] = 0.0;
 }
 
 export function clamp(v: number, min: number, max: number): number {
@@ -427,7 +426,7 @@ export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: ReadonlyMat
 export function computeUnitSphericalCoordinates(dst: vec3, azimuthal: number, polar: number): void {
     // https://en.wikipedia.org/wiki/Spherical_coordinate_system
     // https://en.wikipedia.org/wiki/List_of_common_coordinate_transformations#From_spherical_coordinates
-    // Wikipedia uses the (wrong) convention of Z-up tho...
+    // Wikipedia uses the convention of Z-up, we use Y-up here.
 
     const sinP = Math.sin(polar);
     dst[0] = sinP * Math.cos(azimuthal);
@@ -743,31 +742,4 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
 
 export function randomRange(a: number, b = -a): number {
     return lerp(a, b, Math.random());
-}
-
-export function calcMatrixSRTInverse(dst: mat4, src: ReadonlyMat4): void {
-    const sx = (src[0]*src[0] + src[4]*src[4] + src[8]*src[8]);
-    const sy = (src[1]*src[1] + src[5]*src[5] + src[9]*src[9]);
-    const sz = (src[2]*src[2] + src[6]*src[6] + src[10]*src[10]);
-
-    // Transpose and scale the upper 3x3
-    dst[0] = src[0] / sx;
-    dst[1] = src[4] / sx;
-    dst[2] = src[8] / sx;
-    dst[3] = 0.0;
-
-    dst[4] = src[1] / sy;
-    dst[5] = src[5] / sy;
-    dst[6] = src[9] / sy;
-    dst[7] = 0.0;
-
-    dst[8] = src[2] / sz;
-    dst[9] = src[6] / sz;
-    dst[10] = src[10] / sz;
-    dst[11] = 0.0;
-
-    dst[12] = -(src[12]*dst[0] + src[13]*dst[4] + src[14]*dst[8]);
-    dst[13] = -(src[12]*dst[1] + src[13]*dst[5] + src[14]*dst[9]);
-    dst[14] = -(src[12]*dst[2] + src[13]*dst[6] + src[14]*dst[10]);
-    dst[15] = 1.0;
 }

@@ -8,7 +8,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR, computeRotationMatrixFromSRTMatrix, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
+import { computeModelMatrixR, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
@@ -123,6 +123,24 @@ function parseSRTFlags(value: string): SRTFlags {
     return flags;
 }
 
+function calcRotMtx(dst: mat4, m: ReadonlyMat4, scale: ReadonlyVec3): void {
+    const mx = 1 / scale[0];
+    const my = 1 / scale[1];
+    const mz = 1 / scale[2];
+    dst[0] = m[0] * mx;
+    dst[4] = m[4] * mx;
+    dst[8] = m[8] * mx;
+    dst[1] = m[1] * my;
+    dst[5] = m[5] * my;
+    dst[9] = m[9] * my;
+    dst[2] = m[2] * mz;
+    dst[6] = m[6] * mz;
+    dst[10] = m[10] * mz;
+    dst[12] = 0;
+    dst[13] = 0;
+    dst[14] = 0;
+}
+
 class ParticleEmitter {
     public baseEmitter: JPA.JPABaseEmitter | null = null;
     public didInit = false;
@@ -153,13 +171,13 @@ class ParticleEmitter {
             this.baseEmitter.setGlobalTranslation(v);
     }
 
-    public setGlobalSRTMatrix(v: ReadonlyMat4): void {
+    public setGlobalSRTMatrix(m: ReadonlyMat4): void {
         if (this.baseEmitter !== null) {
-            getMatrixTranslation(this.baseEmitter.globalTranslation, v);
-            this.baseEmitter.globalScale[0] = Math.hypot(v[0], v[4], v[8]);
-            this.baseEmitter.globalScale[1] = Math.hypot(v[1], v[5], v[9]);
-            this.baseEmitter.globalScale[2] = Math.hypot(v[2], v[6], v[10]);
-            computeRotationMatrixFromSRTMatrix(this.baseEmitter.globalRotation, v);
+            getMatrixTranslation(this.baseEmitter.globalTranslation, m);
+            this.baseEmitter.globalScale[0] = Math.hypot(m[0], m[4], m[8]);
+            this.baseEmitter.globalScale[1] = Math.hypot(m[1], m[5], m[9]);
+            this.baseEmitter.globalScale[2] = Math.hypot(m[2], m[6], m[10]);
+            calcRotMtx(this.baseEmitter.globalRotation, m, this.baseEmitter.globalScale);
         }
     }
 

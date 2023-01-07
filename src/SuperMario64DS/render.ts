@@ -17,7 +17,7 @@ import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitr
 import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
-import { CalcBillboardFlags, calcBillboardMatrix, computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
+import { CalcBillboardFlags, calcBillboardMatrix, computeMatrixWithoutScale } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
@@ -484,7 +484,7 @@ export class BMDModelInstance {
     }
 
     public computeNormalMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        computeRotationMatrixFromSRTMatrix(scratchModelMatrix, this.modelMatrix);
+        computeMatrixWithoutScale(scratchModelMatrix, this.modelMatrix);
 
         this.computeViewMatrix(dst, viewerInput);
         dst[12] = 0;

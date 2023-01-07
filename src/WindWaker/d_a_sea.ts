@@ -2,7 +2,7 @@
 import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp, randomRange } from "../MathHelpers";
+import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
@@ -18,8 +18,6 @@ import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
 import { Plane } from '../Geometry';
 import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent';
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { dfRange, dfShow } from '../DebugFloaters';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
