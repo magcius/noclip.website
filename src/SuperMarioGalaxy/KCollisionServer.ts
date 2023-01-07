@@ -463,22 +463,22 @@ export class KCollisionServer {
             vec3.sub(scratchVec3a, pos, scratchVec3a);
 
             this.loadNormal(scratchVec3b, prism.edgeNormal1Idx);
-            const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
-            if (dotNrm1 < 0.0)
+            const dotNrm1 = vec3.dot(scratchVec3a, scratchVec3b);
+            if (dotNrm1 >= 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.edgeNormal2Idx);
-            const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
-            if (dotNrm2 < 0.0)
+            const dotNrm2 = vec3.dot(scratchVec3a, scratchVec3b);
+            if (dotNrm2 >= 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.edgeNormal3Idx);
-            const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.height;
-            if (dotNrm3 < 0.0)
+            const dotNrm3 = vec3.dot(scratchVec3a, scratchVec3b) - prism.height;
+            if (dotNrm3 >= 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.faceNormalIdx);
-            const dist = -vec3.dot(scratchVec3b, pos);
+            const dist = -vec3.dot(scratchVec3a, scratchVec3b);
 
             const maxDist = thickness * this.prismThickness;
             if (dist < 0.0 || dist > maxDist)
