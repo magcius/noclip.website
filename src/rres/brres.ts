@@ -1198,7 +1198,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const numViewMtx = view.getUint32(infoOffs + 0x1C);
     const needNrmMtxArray = !!view.getUint8(infoOffs + 0x20);
-    const needTexMtxArray = !!view.getUint8(infoOffs + 0x20);
+    const needTexMtxArray = !!view.getUint8(infoOffs + 0x21);
     const isValidBBox = !!view.getUint8(infoOffs + 0x22);
 
     const mtxIdToNodeIdOffs = infoOffs + view.getUint32(infoOffs + 0x24);
