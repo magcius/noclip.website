@@ -413,7 +413,7 @@ mod tests {
         let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
         for hdr in mgr.tag_headers.clone() {
             if hdr.path == "levels\\b30\\shaders\\waves" {
-                dbg!(mgr.read_tag(&hdr));
+                let _ = dbg!(mgr.read_tag(&hdr));
             }
         }
     }
@@ -423,7 +423,7 @@ mod tests {
         let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
         for hdr in mgr.tag_headers.clone() {
             if hdr.path == "levels\\b30\\shaders\\waves" {
-                dbg!(mgr.read_tag(&hdr));
+                let _ = dbg!(mgr.read_tag(&hdr));
             }
         }
     }
@@ -433,11 +433,12 @@ mod tests {
         let mut mgr = MapManager::new(read_map("b30.map")).unwrap();
         for hdr in mgr.tag_headers.clone() {
             if hdr.path == "levels\\b30\\shaders\\water" {
-                dbg!(mgr.read_tag(&hdr));
+                let _ = dbg!(mgr.read_tag(&hdr));
             }
         }
     }
 
+    #[test]
     fn test_shader_counts() {
         use std::collections::HashMap;
         let mut counts: HashMap<TagClass, usize> = HashMap::new();
