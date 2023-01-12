@@ -42,6 +42,7 @@ layout(std140) uniform ub_ShapeParams {
 
 #define u_BaseDiffuse (u_Misc[0].x)
 #define u_BaseAmbient (u_Misc[0].y)
+#define u_Alpha       (u_Misc[0].z)
 
 uniform sampler2D u_TextureDiffuse;
 uniform sampler2D u_TextureShadow;
@@ -78,7 +79,7 @@ void main() {
     float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
 
     gl_FragColor.rgb = t_Illum * t_DiffuseMapColor.rgb;
-    gl_FragColor.a = t_DiffuseMapColor.a;
+    gl_FragColor.a = u_Alpha >= 0.5 ? 1.0 : t_DiffuseMapColor.a;
 
     // Add in the shadow texture
     vec2 t_ShadowTexCoord = ((v_ShadowTexCoord.xy / v_ShadowTexCoord.z) * vec2(0.5)) + vec2(0.5);
@@ -291,7 +292,7 @@ export class FezObjectRenderer {
         offs += fillVec4(d, offs, 1, 1, 0, 0);
         offs += fillVec4(d, offs, 1, 1, 0, 0);
         offs += fillVec4v(d, offs, levelRenderData.shadowTexScaleBias);
-        offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
+        offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 1, 0);
 
         renderInst.drawIndexes(this.geometryData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
