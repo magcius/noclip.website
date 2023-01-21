@@ -17,7 +17,7 @@ import { DataFetcher } from '../DataFetcher';
 import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { TransparentBlack, colorNewFromRGBA, White } from '../Color';
+import { TransparentBlack, colorNewFromRGBA, White} from '../Color';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { SceneContext } from '../SceneBase';
@@ -31,6 +31,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUnifo
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
     public roomRenderers: RoomRenderer[] = [];
+    public environmentSettingsIndex = 0;
     private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
@@ -133,6 +134,45 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
                 this.roomRenderers[i].setShowTextureCoordinates(enableUV.checked);
         };
         renderHacksPanel.contents.appendChild(enableUV.elem);
+
+        const environmentIndexSlider = new UI.Slider();
+        environmentIndexSlider.setRange(0, this.zsi.environmentSettings.length-1, 1);
+        environmentIndexSlider.setLabel("Environment Settings: " + this.environmentSettingsIndex);
+        environmentIndexSlider.setValue(this.environmentSettingsIndex);
+        environmentIndexSlider.onvalue = () => {
+            environmentIndexSlider.setLabel("Environment Settings: " + environmentIndexSlider.getValue());
+            FogFarSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogEnd)
+            FogNearSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogStart)
+            this.setEnvironmentSettingsIndex(environmentIndexSlider.getValue());
+        };
+        renderHacksPanel.contents.appendChild(environmentIndexSlider.elem);
+
+        const FogFarSlider = new UI.Slider();
+        FogFarSlider.setRange(0.0, 15500);
+        FogFarSlider.setLabel(`Fog Far:`);
+        FogFarSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogEnd);
+        FogFarSlider.onvalue = () => {
+            this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogEnd = FogFarSlider.getValue();
+            this.setEnvironmentSettingsIndex(environmentIndexSlider.getValue());
+        };
+        renderHacksPanel.contents.appendChild(FogFarSlider.elem);
+
+        const FogNearSlider = new UI.Slider();
+        FogNearSlider.setRange(0.0, 1000);
+        FogNearSlider.setLabel(`Fog Near:`);
+        FogNearSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogStart);
+        FogNearSlider.onvalue = () => {
+            this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogStart = FogNearSlider.getValue();
+            this.setEnvironmentSettingsIndex(environmentIndexSlider.getValue());
+        };
+        renderHacksPanel.contents.appendChild(FogNearSlider.elem);
+
+        const isFogEnabled = new UI.Checkbox(`Enable Fog`, true);
+        isFogEnabled.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setRenderFog(isFogEnabled.checked);
+        };
+        renderHacksPanel.contents.appendChild(isFogEnabled.elem);
 
         const layersPanel = new UI.LayerPanel(this.roomRenderers);
         return [renderHacksPanel, layersPanel];
@@ -753,10 +793,11 @@ class DataHolder {
 }
 
 class SceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public setupIndex: number = -1) {
+    constructor(public id: string, public name: string, public environmentSettingsIndex: number = 0,  public setupIndex: number = -1) {
     }
 
     private async spawnActorForRoom(device: GfxDevice, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
+        renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`);
         }
@@ -767,6 +808,8 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
+            cmbRenderer.setIsActor(true);
+            
             scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
@@ -788,8 +831,6 @@ class SceneDesc implements Viewer.SceneDesc {
             return a;
         }
 
-        const characterLightScale = 0.5;
-
         // Actor list based on https://wiki.cloudmodding.com/oot/Actor_List/NTSC_1.0
         // and https://wiki.cloudmodding.com/oot/Actor_List_(Variables)
         if (actor.actorId === ActorId.En_Item00) {
@@ -799,7 +840,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const itemId = (actor.variable & 0xFF);
             if (itemId === 0x00 || itemId === 0x01 || itemId === 0x02) { // Rupees
                 const b = buildModel(zar, `item00/model/drop_gi_rupy.cmb`, 0.015);
-                b.setVertexColorScale(characterLightScale);
+                
                 b.modelMatrix[13] += 10;
                 for (let i = 0; i < b.shapeInstances.length; i++)
                     b.shapeInstances[i].visible = false;
@@ -807,10 +848,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[whichShape].visible = true;
             } else if (itemId === 0x03) { // Recovery Heart
                 const b = buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.04);
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (itemId === 0x06) { // Heart Piece ( stuck in the ground a bit ? )
                 const b = buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
-                b.setVertexColorScale(characterLightScale);
+                
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         } else if (actor.actorId === ActorId.Bg_Haka_Trap) {
             const zar = await fetchArchive(`zelda_haka_objects.zar`);
@@ -1088,7 +1129,7 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.Bg_Gate_Shutter) { // kakariko guard gate
             const zar = await fetchArchive(`zelda_spot01_matoyab.zar`);
             const b = buildModel(zar, 'model/c_s01tomegate_model.cmb', 1);  // kakariko guard gate
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Obj_Mure2) {
             const zar = await fetchArchive(`zelda_field_keep.zar`); // grass and rock circles. only the middle one spawns?
             const whichModel = actor.variable & 0xF;
@@ -1098,7 +1139,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, 'model/grass05_model.cmb', 0.4);  // scattered shrubs
             } else if (whichModel === 0x2) {
                 const b = buildModel(zar, 'model/obj_isi01_model.cmb', 0.1);  // circle of rocks
-                b.setVertexColorScale(characterLightScale);
+                
                 b.modelMatrix[13] += 5;
             } else {
                 throw "starschulz";
@@ -1123,7 +1164,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x0200) {
                 const b = buildModel(zar, 'model/c_s06beforewater_modelT.cmb', 1); // water plane
                 b.bindCMAB(parseCMAB(zar, `misc/c_s06beforewater_modelT.cmab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 throw "starschulz";
             }
@@ -1385,13 +1426,13 @@ class SceneDesc implements Viewer.SceneDesc {
             // TODO(jstpierre): Why don't these tree models display correctly?
             if (whichModel === 0x00) { // "Large Tree"
                 const b = buildModel(zar, `model/tree01_model.cmb`, 1.5);
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichModel === 0x01) { // "Medium Tree"
                 const b = buildModel(zar, `model/tree01_model.cmb`, 1);
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichModel === 0x02) { // "Small Tree"
                 const b = buildModel(zar, `model/tree03_model.cmb`, 0.5);
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 console.warn(`Unknown En_Wood02 model ${whichModel}`);
             }
@@ -1418,7 +1459,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_field_keep.zar`);
             const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
             b.modelMatrix[13] += 5;
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Obj_Hana) {
             const zar = await fetchArchive(`zelda_field_keep.zar`);
             const whichModel = actor.variable & 0x03;
@@ -1426,7 +1467,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, `model/flower1_model.cmb`, 0.01);
             } else if (whichModel === 0x01) {
                 const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichModel === 0x02) {
                 buildModel(zar, `model/grass05_model.cmb`, 0.4);
             } else {
@@ -1442,7 +1483,7 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.Obj_Lift) {
                 const zar = await fetchArchive(`zelda_d_lift.zar`);
                 const b = buildModel(zar, `model/lift_l_model.cmb`, 0.1);
-                b.setVertexColorScale(characterLightScale);
+                
         } else if (actor.actorId === ActorId.Bg_Spot07_Taki) {
             const zar = await fetchArchive(`zelda_spot07_object.zar`);
             const b = buildModel(zar, `model/obj_s07taki01_modelT.cmb`, 0.1);
@@ -1463,26 +1504,26 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_km1.zar`);
                 const b = buildModel(zar, `model/kokirimaster.cmb`);
                 b.shapeInstances[2].visible = false;
-                b.setVertexColorScale(characterLightScale);
+                
                 b.bindCSAB(parseCSAB(zar, `anim/km1_ishi_wait.csab`));
             } else if (whichNPC === 0x01) { // Standing girl.
             } else if (whichNPC === 0x02) { // Boxing boy.
                 const zar = await fetchArchive(`zelda_km1.zar`);
                 const b = buildModel(zar, `model/kokirimaster.cmb`);
                 b.shapeInstances[2].visible = false;
-                b.setVertexColorScale(characterLightScale);
+                
                 b.bindCSAB(parseCSAB(zar, `anim/km1_osiete_wait.csab`));
             } else if (whichNPC === 0x03) { // Blocking boy.
             } else if (whichNPC === 0x04) { // Backflipping boy.
                 const zar = await fetchArchive(`zelda_km1.zar`);
                 const b = buildModel(zar, `model/kokirimaster.cmb`);
                 b.shapeInstances[2].visible = false;
-                b.setVertexColorScale(characterLightScale);
+                
                 b.bindCSAB(parseCSAB(zar, `anim/km1_backcyu.csab`));
             } else if (whichNPC === 0x05) { // Sitting girl.
                 const zar = await fetchArchive(`zelda_kw1.zar`);
                 const b = buildModel(zar, `model/kokiripeople.cmb`);
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[2].visible = false;
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1490,7 +1531,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichNPC === 0x06) { // Standing girl.
                 const zar = await fetchArchive(`zelda_kw1.zar`);
                 const b = buildModel(zar, `model/kokiripeople.cmb`);
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[2].visible = false;
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1502,7 +1543,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichNPC === 0x0C) { // Blonde girl.
                 const zar = await fetchArchive(`zelda_kw1.zar`);
                 const b = buildModel(zar, `model/kokiripeople.cmb`);
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[5].visible = false;
                 b.shapeInstances[6].visible = false;
                 b.bindCSAB(parseCSAB(zar, `anim/fad_n_wait.csab`));
@@ -1516,41 +1557,41 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/kokirimaster.cmb`);
                 b.shapeInstances[4].visible = false;
                 b.bindCSAB(parseCSAB(zar, `anim/km1_omise.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichShopkeeper === 0x01) { // Kakariko Potion Shopkeeper
                 // TODO(jstpierre)
             } else if (whichShopkeeper === 0x02) { // Bombchu Shopkeeper
                 const zar = await fetchArchive(`zelda_rs.zar`);
                 const b = buildModel(zar, `model/bomchumaster.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/rs_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
                 const zar = await fetchArchive(`zelda_ds2.zar`);
                 const b = buildModel(zar, `model/drugmaster.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ds2_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichShopkeeper === 0x04) { // Bazaar Shopkeeper
                 const zar = await fetchArchive(`zelda_sh.zar`);
                 const b = buildModel(zar, `model/shotmaster.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/sh_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[1].visible = false;
                 b.shapeInstances[2].visible = false;
             } else if (whichShopkeeper === 0x07) { // Zora Shopkeeper
                 const zar = await fetchArchive(`zelda_masterzoora.zar`);
                 const b = buildModel(zar, `model/zorapeople.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/zo_omise.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichShopkeeper === 0x08) { // Goron Shopkeeper
                 const zar = await fetchArchive(`zelda_mastergolon.zar`);
                 const b = buildModel(zar, `model/goronpeople.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/oF1d_omise.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichShopkeeper === 0x0A) { // Happy Mask Shopkeeper
                 const zar = await fetchArchive(`zelda_os.zar`);
                 const b = buildModel(zar, `model/maskmaster.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/os_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 console.log(whichShopkeeper);
                 throw "Starschulz";
@@ -1558,21 +1599,21 @@ class SceneDesc implements Viewer.SceneDesc {
         } else if (actor.actorId === ActorId.En_Brob) {
             const zar = await fetchArchive('zelda_brob.zar');
             const b = buildModel(zar, `model/brob.cmb`);
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Heishi2) {
             const zar = await fetchArchive(`zelda_sd.zar`);
             const whichGuard = actor.variable & 0xFF;
             if (whichGuard === 0x02) { // Hyrule Castle Guard
                 const b = buildModel(zar, `model/soldier.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichGuard === 0x05) { // Death Mountain Guard
                 const b = buildModel(zar, `model/soldier.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichGuard === 0x06) { // Ceremonial Guards
                 const b = buildModel(zar, `model/soldier2.cmb`);
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 throw "whoops";
             }
@@ -1582,23 +1623,23 @@ class SceneDesc implements Viewer.SceneDesc {
             if (Formation === 0x00) { // Four spinning in circle
                 const b = buildModel(zar, `model/stinga.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ei_swim.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (Formation === 0x01) { // Formation of 3
                 const b = buildModel(zar, `model/stinga.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ei_wait.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (Formation === 0x02) { // Two, under floor
                 const b = buildModel(zar, `model/stinga.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ei_wait.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (Formation === 0x03) { // One under floor
                 const b = buildModel(zar, `model/stinga.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ei_wait.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (Formation === 0x0A) { // Single
                 const b = buildModel(zar, `model/stinga.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ei_swim.csab`)); 
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 throw "whoops";
             }
@@ -1606,248 +1647,248 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_hlc.zar`);
             const b = buildModel(zar, `model/childepona.cmb`, 0.005);
             b.bindCSAB(parseCSAB(zar, `anim/hlc_anim_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ik) {
             const zar = await fetchArchive(`zelda_ik.zar`);
             const b = buildModel(zar, `model/ironknack.cmb`, 0.02);
             b.bindCSAB(parseCSAB(zar, `anim/ironknack_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_GeldB) {
             const zar = await fetchArchive(`zelda_gelb.zar`);
             const b = buildModel(zar, `model/geld.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/geldB_talk.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ge1) {
             const zar = await fetchArchive(`zelda_ge1.zar`);
             const b = buildModel(zar, `model/geldwoman.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/ge1_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ge2) {
             const zar = await fetchArchive(`zelda_gla.zar`);
             const b = buildModel(zar, `model/geldwomanspear.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/geldA_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ssh) {
             const zar = await fetchArchive(`zelda_ssh.zar`);
             const b = buildModel(zar, `model/spiderman.cmb`, 0.03);
             b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Boss_Sst) {
             const zar = await fetchArchive(`zelda_sst.zar`);
             const b = buildModel(zar, `model/bongobongo.cmb`, 0.015);
             b.modelMatrix[14] += -500; // looks nicer offset a bit
             b.bindCSAB(parseCSAB(zar, `anim/ss_wait_open.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             // this is the actor spot for one of his hands, but since there's only one spot in the scene i put 
             // the boss in there instead.
         } else if (actor.actorId === ActorId.En_Go2) {
             const zar = await fetchArchive(`zelda_oF1d.zar`);
             const b = buildModel(zar, `model/goronpeople.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/oF1d_dai_goron_kaii.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Cs) {
             const zar = await fetchArchive(`zelda_cs.zar`);
             const b = buildModel(zar, `model/childstalker.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/cs_matsu03.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Cow) {
             const zar = await fetchArchive('zelda_cow.zar');
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Zo) {
             const zar = await fetchArchive('zelda_zo.zar');
             const b = buildModel(zar, `model/zorapeople.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/zo_riku_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_In) {
             const zar = await fetchArchive('zelda_in.zar');
             const b = buildModel(zar, `model/ingo.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ma1) {
             const zar = await fetchArchive(`zelda_ma1.zar`);
             const b = buildModel(zar, `model/childmalon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ma1_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ma2) {
             const zar = await fetchArchive(`zelda_ma2.zar`);
             const b = buildModel(zar, `model/malon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ma2_shigoto.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Horse_Normal) {
             const zar = await fetchArchive(`zelda_horse_normal.zar`);
             const b = buildModel(zar, `model/normalhorse.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/hn_anim_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ta) {
             const zar = await fetchArchive(`zelda_ta.zar`);
             const b = buildModel(zar, `model/talon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ta_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ds) {
             const zar = await fetchArchive(`zelda_ds.zar`);
             const b = buildModel(zar, `model/magicmaster.cmb`, 0.013);
             b.bindCSAB(parseCSAB(zar, `anim/ds_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Mk) {
             const zar = await fetchArchive(`zelda_mk.zar`);
             const b = buildModel(zar, `model/lakedoctor.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/mk_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Niw_Lady) {
             const zar = await fetchArchive(`zelda_ane.zar`);
             const b = buildModel(zar, `model/chickenlady.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/Ane_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Niw_Girl) {
             const zar = await fetchArchive(`zelda_gr.zar`);
             const b = buildModel(zar, `model/chickengirl.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/gr_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Kakasi) {
             const zar = await fetchArchive(`zelda_ka.zar`);
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Kakasi2) {
             const zar = await fetchArchive(`zelda_ka.zar`);
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Kakasi3) {
             const zar = await fetchArchive(`zelda_ka.zar`);
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Bubble) {
             const zar = await fetchArchive(`zelda_bubble.zar`);
             const b = buildModel(zar, `model/syabom.cmb`, 1);
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Daiku_Kakariko) {
             const zar = await fetchArchive('zelda_daiku.zar');
             const b = buildModel(zar, `model/disciple.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dk2_hanasi.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Daiku) {
             const zar = await fetchArchive('zelda_daiku.zar');
             const b = buildModel(zar, `model/disciple.cmb`);  // variant for Thieves' Hideout
             b.bindCSAB(parseCSAB(zar, `anim/dk2_roya.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Du) {
             const zar = await fetchArchive('zelda_du.zar');
             const b = buildModel(zar, `model/darunia.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Sa) {
             const zar = await fetchArchive(`zelda_sa.zar`);
             const b = buildModel(zar, `model/saria.cmb`);
             // Chosen because she's placed to be sitting down on the wood stump in the Sacred Forest Temple room setup we spawn.
             b.bindCSAB(parseCSAB(zar, `anim/sa_okarina_hanasi_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Skj) {
             const zar = await fetchArchive(`zelda_skj.zar`);
             const b = buildModel(zar, `model/stalkid.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/skeltonJR_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Owl) {
             const zar = await fetchArchive(`zelda_owl.zar`);
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ms) {
             const zar = await fetchArchive(`zelda_ms.zar`);
             const b = buildModel(zar, `model/beanmaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ms_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Okuta) {
             const zar = await fetchArchive(`zelda_oc2.zar`);
             const b = buildModel(zar, `model/octarock.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/oc_float.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ani) {
             const zar = await fetchArchive(`zelda_ani.zar`);
             const b = buildModel(zar, `model/roofman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ani_suwari_wait.csab`));
             b.modelMatrix[13] -= 25;
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Niw) {
             const zar = await fetchArchive(`zelda_nw.zar`);
             const b = buildModel(zar, `model/chicken.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/nw_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Toryo) {
             const zar = await fetchArchive(`zelda_toryo.zar`);
             const b = buildModel(zar, `model/bosshead.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dk1_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Ru2) {
             const zar = await fetchArchive(`zelda_ru2.zar`);
             const b = buildModel(zar, `model/ruto.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ru2_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Nb) {
             const zar = await fetchArchive(`zelda_nb.zar`);
             const b = buildModel(zar, `model/nabooru.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/nb_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Demo_Sa) {
             const zar = await fetchArchive(`zelda_sa.zar`);
             const b = buildModel(zar, `model/saria.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/sa_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Demo_Im) {
             const zar = await fetchArchive(`zelda_im.zar`);
             const b = buildModel(zar, `model/impa.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             // Hide her veil; it's only used in the opening cutscenes.
             b.shapeInstances[9].visible = false;
         } else if (actor.actorId === ActorId.En_Rl) {
             const zar = await fetchArchive(`zelda_rl.zar`);
             const b = buildModel(zar, `model/raul.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/rl_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Zl3) {
             const zar = await fetchArchive(`zelda_zl2.zar`);
             const b = buildModel(zar, `model/zelda.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/ze_a_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Demo_Du) {
             const zar = await fetchArchive(`zelda_du.zar`);
             const b = buildModel(zar, `model/darunia.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Heishi4) {
             const zar = await fetchArchive(`zelda_sd.zar`);
             const b = buildModel(zar, `model/soldier.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Heishi1) {
             const zar = await fetchArchive(`zelda_sd.zar`);
             const b = buildModel(zar, `model/soldier.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Heishi3) {
             const zar = await fetchArchive(`zelda_sd.zar`);
             const b = buildModel(zar, `model/soldier.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Zl4) {
             const zar = await fetchArchive(`zelda_zl4.zar`);
             const b = buildModel(zar, `model/childzelda.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/kozelda_ushiro_wait.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Tg) {
             const zar = await fetchArchive(`zelda_mu.zar`);
             const b = buildModel(zar, `model/couple.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/tg_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Mu) {
             const zar = await fetchArchive(`zelda_mu.zar`);
             const b = buildModel(zar, `model/marketpeople.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/mu_matsu.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
             const whichPalette = actor.variable & 0x000F;
             if (whichPalette === 0x00) {
                 b.setConstantColor(1, colorNewFromRGBA(0.39216, 0.5098, 0.92157));
@@ -1866,7 +1907,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_dog.zar`);
             const b = buildModel(zar, `model/dog.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dog_sit.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Hy) {
             // TODO(jstpierre): verify this with a renderdoc cap
             const whichNPC = (actor.variable & 0x003F);
@@ -1874,17 +1915,17 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_aob.zar`);
                 const b = buildModel(zar, `model/hyliawoman1.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/aob_mastu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichNPC === 0x01) { // "Old man in blue"
                 const zar = await fetchArchive(`zelda_cob.zar`);
                 const b = buildModel(zar, `model/hyliawoman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/cob_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichNPC === 0x02) { // "Bearded man in white & green"
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.setConstantColor(3, White);
                 b.setConstantColor(4, White);
                 for (let i = 5; i < 8; i++)
@@ -1896,7 +1937,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, colorNewFromRGBA(0.21568, 0.21568, 1));
                 b.setConstantColor(4, White);
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_5.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[6].visible = true;
@@ -1906,7 +1947,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
                 b.setConstantColor(3, colorNewFromRGBA(1, 0, 0));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[5].visible = true;
@@ -1916,7 +1957,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, colorNewFromRGBA(0.19608, 0.31373, 0));
                 b.setConstantColor(4, colorNewFromRGBA(0.19608, 0.31373, 0));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_9.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[7].visible = true;
@@ -1924,20 +1965,20 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_bba.zar`);
                 const b = buildModel(zar, `model/hyliaoldwoman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bba_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichNPC === 0x07) { // "Old man in blue"
                 const zar = await fetchArchive(`zelda_bji.zar`);
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji_matsu.csab`));
                 b.setConstantColor(3, White);
                 b.setConstantColor(4, colorNewFromRGBA(0, 0.1968, 0.62745));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[5].visible = false;
             } else if (whichNPC === 0x08) { // "Thin woman in lilac"
                 const zar = await fetchArchive(`zelda_cne.zar`);
                 const b = buildModel(zar, `model/hylialady.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/cne_n_wait.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.setConstantColor(2, colorNewFromRGBA(0.62734, 0.70588, 1));
                 b.setConstantColor(3, colorNewFromRGBA(0.62734, 0.70588, 1));
                 b.setConstantColor(4, colorNewFromRGBA(0.62734, 0.70588, 1));
@@ -1948,7 +1989,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, White);
                 b.setConstantColor(4, colorNewFromRGBA(0.86275, 0, 0.31373));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_13.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 6; i < 12; i++)
                     b.shapeInstances[i].visible = false;
             } else if (whichNPC === 0x0A) { // "Explaining man in blue & white"
@@ -1957,14 +1998,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, White);
                 b.setConstantColor(4, colorNewFromRGBA(0, 0.5098, 0.86275));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_14.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 6; i < 12; i++)
                     b.shapeInstances[i].visible = false;
             } else if (whichNPC === 0x0B) { // "Thin woman in blue & yellow"
                 const zar = await fetchArchive(`zelda_cne.zar`);
                 const b = buildModel(zar, `model/hylialady.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/cne2_15.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.setConstantColor(2, White);
                 b.setConstantColor(3, colorNewFromRGBA(1, 1, 0.39216));
                 b.setConstantColor(4, colorNewFromRGBA(0.27451, 0.62734, 0.90196));
@@ -1975,7 +2016,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.setConstantColor(3, colorNewFromRGBA(1, 0.94118, 0.58824));
                 b.setConstantColor(4, colorNewFromRGBA(0.58824, 0.23529, 0.35294));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_17.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[8].visible = true;
@@ -1985,7 +2026,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
                 b.setConstantColor(3, colorNewFromRGBA(0.78431, 0.70588, 1));
                 b.setConstantColor(4, colorNewFromRGBA(0.78431, 0.70588, 1));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[6].visible = true;
@@ -1995,7 +2036,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_19.csab`));
                 b.setConstantColor(3, White);
                 b.setConstantColor(4, colorNewFromRGBA(0.54901, 1, 0.43137));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[9].visible = true;
@@ -2005,7 +2046,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
                 b.setConstantColor(3, colorNewFromRGBA(0.50980, 0.70577, 1));
                 b.setConstantColor(4, colorNewFromRGBA(0.50980, 0.27450, 0.07843));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
             } else if (whichNPC === 0x13) { // Old man inside Market Potion Shop
@@ -2014,7 +2055,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
                 b.setConstantColor(3, colorNewFromRGBA(0.27450, 0.50980, 0.82352));
                 b.setConstantColor(4, colorNewFromRGBA(0.62754, 0, 0.39215));
-                b.setVertexColorScale(characterLightScale);
+                
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
             } else if (whichNPC === 0x14) { // Man inside Market Bazaar
@@ -2023,7 +2064,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
                 b.setConstantColor(3, colorNewFromRGBA(0, 0.58823, 0.43137));
                 b.setConstantColor(4, colorNewFromRGBA(0.62745, 0.90196, 0));
-                b.setVertexColorScale(characterLightScale);
+                
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
                 b.shapeInstances[6].visible = true;
@@ -2036,7 +2077,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (whichModel === 0x0000) {
                 const b = buildModel(zar, `model/fishmaster.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/fs_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else {
                 console.log(`Unknown fishing model ${whichModel}`);
             }
@@ -2044,13 +2085,13 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_bg.zar`);
             const b = buildModel(zar, `model/boringmaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/bg_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[13] += 10;
         } else if (actor.actorId === ActorId.En_Takara_Man) {
             const zar = await fetchArchive(`zelda_ts.zar`);
             const b = buildModel(zar, `model/lottomaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ts_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[13] += 10;
         } else if (actor.actorId === ActorId.Grezzo_Hintstone) {
             const zar = await fetchArchive(`zelda_hintstone.zar`);
@@ -2061,119 +2102,118 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_hintnuts.zar`);
             const body = buildModel(zar, `model/dekunuts.cmb`);
             body.bindCSAB(parseCSAB(zar, `anim/dnh_wait.csab`));
-            body.setVertexColorScale(characterLightScale);
             body.modelMatrix[13] += 8;
         } else if (actor.actorId === ActorId.En_Shopnuts) {
             const zar = await fetchArchive(`zelda_shopnuts.zar`);
             const b = buildModel(zar, `model/akindonuts.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dnu_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Wf) {
             const zar = await fetchArchive(`zelda_wf.zar`);
             const b = buildModel(zar, `model/wolfos.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/wolfman_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Dekunuts) {
             const zar = await fetchArchive(`zelda_dekunuts.zar`);
             const b = buildModel(zar, `model/okorinuts.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dn_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[13] += 6;
         } else if (actor.actorId === ActorId.En_Am) {
             const zar = await fetchArchive('zelda_am.zar');
             const b = buildModel(zar, `model/amos.cmb`, 0.015);
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Vm) {
             const zar = await fetchArchive('zelda_vm.zar');
             const b = buildModel(zar, `model/beamos.cmb`);
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Crow) {
             const zar = await fetchArchive(`zelda_crow.zar`);
             const b = buildModel(zar, `model/gue.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/df_hover.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Bb) {
             const zar = await fetchArchive(`zelda_bb.zar`);
             const b = buildModel(zar, `model/bubble.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/bb_fly.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Test) {
             const zar = await fetchArchive(`zelda_skelton.zar`);
             const b = buildModel(zar, `model/stalfos.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/skelton_fighting_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Wallmas) {
             const zar = await fetchArchive(`zelda_wm2.zar`);
             const b = buildModel(zar, `model/fallmaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/wm_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Floormas) {
             const zar = await fetchArchive(`zelda_wm2.zar`);
             const b = buildModel(zar, `model/floormaster.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/wm_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_St) {
             const zar = await fetchArchive('zelda_st.zar');
             const b = buildModel(zar, `model/staltula.cmb`, 0.02);
             b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Dodojr) {
             const zar = await fetchArchive('zelda_dodojr.zar');
             const b = buildModel(zar, `model/babydodongo.cmb`, 0.02);
             b.bindCSAB(parseCSAB(zar, `anim/dd_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Dodongo) {
             const zar = await fetchArchive('zelda_dodongo.zar');
             const b = buildModel(zar, `model/dodongo.cmb`, 0.02);
             b.bindCSAB(parseCSAB(zar, `anim/da_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Firefly) {
             const zar = await fetchArchive('zelda_ff.zar');
             const b = buildModel(zar, `model/keith.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/firefly_foot_at.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Fr) {
             const zar = await fetchArchive(`zelda_fr.zar`);
             const b = buildModel(zar, `model/frog.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/wait.csab`));
-            b.setVertexColorScale(characterLightScale); // they all show up as solid black, instead of their color variations
+             // they all show up as solid black, instead of their color variations
         } else if (actor.actorId === ActorId.En_Fu) {
             const zar = await fetchArchive('zelda_fu.zar');
             const b = buildModel(zar, `model/windmillman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/fu_mawasu.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Bw) {
             const zar = await fetchArchive('zelda_bw.zar');
             const b = buildModel(zar, `model/torchsrag.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/bw_aruku.csab`));
             b.bindCMAB(parseCMAB(zar, `Misc/torchsrag.cmab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Bili) {
             const zar = await fetchArchive('zelda_bl.zar');
             const b = buildModel(zar, `model/bili.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/bl_nomral.csab`));
             b.bindCMAB(parseCMAB(zar, `Misc/pt_bili.cmab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Bg_Dy_Yoseizo) {
             const zar = await fetchArchive('zelda_dy_obj.zar');
             const b = buildModel(zar, `model/fairy.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/DY_n_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Anubice_Tag) {
             const zar = await fetchArchive('zelda_av.zar');
             const b = buildModel(zar, `model/anubis.cmb`, 0.015);
             b.bindCSAB(parseCSAB(zar, `anim/av_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Dha) {
             const zar = await fetchArchive('zelda_dh.zar');
             const b = buildModel(zar, `model/deadarm.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/dead_armR_wait_20f.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Dh) {
             const zar = await fetchArchive('zelda_dh.zar');
             const b = buildModel(zar, `model/deadhand.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/dead_hand_wait_20f.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             mat4.rotateY(b.modelMatrix, b.modelMatrix, 90 * MathConstants.DEG_TO_RAD);
         } else if (actor.actorId === ActorId.En_Karebaba) {
             const zar = await fetchArchive('zelda_dekubaba.zar');
@@ -2181,20 +2221,15 @@ class SceneDesc implements Viewer.SceneDesc {
             head.bindCSAB(parseCSAB(zar, `anim/db_P_kougeki.csab`));
             head.modelMatrix[13] += +60;
             head.modelMatrix[14] += +3;
-            head.setVertexColorScale(characterLightScale);
             const bush = buildModel(zar, `model/db_ha_model.cmb`, 0.01);
-            bush.setVertexColorScale(characterLightScale);
             const stem1 = buildModel(zar, `model/db_miki1_model.cmb`, 0.01);
             stem1.modelMatrix[13] += +40;
             mat4.rotateX(stem1.modelMatrix, stem1.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-            stem1.setVertexColorScale(characterLightScale);
             const stem2 = buildModel(zar, `model/db_miki2_model.cmb`, 0.01);
             stem2.modelMatrix[13] += +20;
             mat4.rotateX(stem2.modelMatrix, stem2.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-            stem2.setVertexColorScale(characterLightScale);
             const stem3 = buildModel(zar, `model/db_miki3_model.cmb`, 0.01);
             mat4.rotateX(stem3.modelMatrix, stem3.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-            stem3.setVertexColorScale(characterLightScale);
             // Assembled Deku Baba
         } else if (actor.actorId === ActorId.En_Sw) {
             const zar = await fetchArchive('zelda_st.zar');
@@ -2202,11 +2237,11 @@ class SceneDesc implements Viewer.SceneDesc {
             if (whichSkulltula === 0x0000)  { // Skullwalltula
                 const b = buildModel(zar, `model/staltula.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else { // Golden Skulltula
                 const b = buildModel(zar, `model/staltula_gold.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             }
         } else if (actor.actorId === ActorId.En_Peehat) {
             const zar = await fetchArchive('zelda_ph.zar');
@@ -2214,25 +2249,25 @@ class SceneDesc implements Viewer.SceneDesc {
             if (whichSkulltula === 0x00)  { // Flying Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
                 b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichSkulltula === 0x01) { // PeahatLarva
                 const b = buildModel(zar, `model/peehat_tail.cmb`, 0.05);
-                b.setVertexColorScale(characterLightScale);
+                
             } else if (whichSkulltula === 0xFFFF) { // Burrowed Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
                 b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
-                b.setVertexColorScale(characterLightScale);
+                
             }
         } else if (actor.actorId === ActorId.En_Dekubaba) {
             const zar = await fetchArchive(`zelda_dekubaba.zar`);
             // The Deku Baba lies in hiding...
             const b = buildModel(zar, `model/db_ha_model.cmb`);
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Tite) {
             const zar = await fetchArchive(`zelda_tt.zar`);
             const b = buildModel(zar, `model/tectite.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/tt_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.En_Rd) {
             const zar = await fetchArchive(`zelda_rd.zar`);
             const whichEnemy = (actor.variable >>> 7) & 0x01;
@@ -2248,18 +2283,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive('zelda_goma.zar');
             const b = buildModel(zar, `model/goma.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/go_startdemo02.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[13] += -360;  // offset so it stands on the ground instead of in the cieling
         } else if (actor.actorId === ActorId.Boss_Dodongo) {
             const zar = await fetchArchive(`zelda_kdodongo.zar`);
             const b = buildModel(zar, `model/kingdodongo.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/kd_wait.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
         } else if (actor.actorId === ActorId.Boss_Fd) {
             const zar = await fetchArchive(`zelda_fd.zar`);
             const b = buildModel(zar, `model/valbasiagnd.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/vba_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[13] += -730; // repositioning
             b.modelMatrix[14] += -13;
             b.modelMatrix[12] += 10;
@@ -2268,20 +2303,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_ganon.zar`);
             const b = buildModel(zar, `model/ganondorf.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/G_n_wait.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
             b.shapeInstances[10].visible = false;
             b.shapeInstances[11].visible = false;
         } else if (actor.actorId === ActorId.Boss_Ganondrof) { // phantom ganon, rider and horse
             const zar = await fetchArchive(`zelda_fantomHG.zar`);
             const horse = buildModel(zar, `model/ganonhorse.cmb`);
             horse.bindCSAB(parseCSAB(zar, `anim/hgf_wait.csab`)); 
-            horse.setVertexColorScale(characterLightScale);
             horse.modelMatrix[13] += -639; // stand on the ground
 
             const zar2 = await fetchArchive(`zelda_gnd.zar`);
             const phantom = buildModel(zar2, `model/phantomganon.cmb`);
             phantom.bindCSAB(parseCSAB(zar2, `anim/gnf_Dnormal.csab`));
-            phantom.setVertexColorScale(characterLightScale);
             phantom.modelMatrix[13] += -639; // stand on horse
             phantom.shapeInstances[10].visible = false;
             phantom.shapeInstances[9].visible = false;
@@ -2289,11 +2322,12 @@ class SceneDesc implements Viewer.SceneDesc {
             phantom.shapeInstances[7].visible = false;
             phantom.shapeInstances[6].visible = false;
             phantom.shapeInstances[5].visible = false;
+            phantom.setEnvironmentSettings(renderer.zsi.environmentSettings[2]);
         } else if (actor.actorId === ActorId.Boss_Ganon2) {
             const zar = await fetchArchive(`zelda_ganon2.zar`);
             const b = buildModel(zar, `model/ganon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/gn2_Kwait.csab`)); 
-            b.setVertexColorScale(characterLightScale);
+            
             b.modelMatrix[12] += +500; // these offset ganon out of the rubble and facing center
             mat4.rotateY(b.modelMatrix, b.modelMatrix, 90 * MathConstants.DEG_TO_RAD);
         } else if (actor.actorId === ActorId.Elf_Msg || actor.actorId === ActorId.Elf_Msg2 || actor.actorId === ActorId.En_Wonder_Talk || actor.actorId === ActorId.En_Wonder_Talk2) {
@@ -2418,8 +2452,9 @@ class SceneDesc implements Viewer.SceneDesc {
         this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
         await modelCache.waitForLoad();
+        renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
+        renderer.environmentSettingsIndex = this.environmentSettingsIndex
 
-        renderer.setEnvironmentSettingsIndex(0);
         return renderer;
     }
 }
@@ -2429,133 +2464,133 @@ const name = "The Legend of Zelda: Ocarina of Time 3D";
 // Courses organized by Starschulz
 const sceneDescs = [
     "Kokiri Forest",
-    new SceneDesc("spot04", "Kokiri Forest"),
-    new SceneDesc("ydan", "Inside the Deku Tree"),
-    new SceneDesc("ydan_boss", "Inside the Deku Tree (Boss)"),
-    new SceneDesc("spot10", "Lost Woods"),
-    new SceneDesc("spot05", "Sacred Forest Meadow"),
-    new SceneDesc('bmori1', "Forest Temple"),
-    new SceneDesc("moriboss", "Forest Temple (Boss)"),
-    new SceneDesc("k_home", "Know-It-All Brothers' Home"),
-    new SceneDesc("kokiri", "Kokiri Shop"),
-    new SceneDesc("link", "Link's Home"),
+    new SceneDesc("spot04", "Kokiri Forest", 1),
+    new SceneDesc("ydan", "Inside the Deku Tree", 0),
+    new SceneDesc("ydan_boss", "Inside the Deku Tree (Boss)", 3),
+    new SceneDesc("spot10", "Lost Woods", 1),
+    new SceneDesc("spot05", "Sacred Forest Meadow", 1),
+    new SceneDesc('bmori1', "Forest Temple", 1),
+    new SceneDesc("moriboss", "Forest Temple (Boss)", 2),
+    new SceneDesc("k_home", "Know-It-All Brothers' Home", 1),
+    new SceneDesc("kokiri", "Kokiri Shop", 0),
+    new SceneDesc("link", "Link's Home", 1),
 
     "Kakariko Village",
-    new SceneDesc("spot01", "Kakariko Village"),
-    new SceneDesc("kinsuta", "Skulltula House"),
-    new SceneDesc("labo", "Impa's House"),
-    new SceneDesc("mahouya", "Granny's Potion Shop"),
-    new SceneDesc("shop_drag", "Kakariko Potion Shop"),
-    new SceneDesc("spot02", "Kakariko Graveyard"),
-    new SceneDesc("hut", "Dampe's Hut"),
-    new SceneDesc("hakasitarelay", "Dampe's Grave & Windmill Hut"),
-    new SceneDesc("hakaana_ouke", "Royal Family's Tomb"),
-    new SceneDesc("hakadan", "Shadow Temple"),
-    new SceneDesc("hakadan_boss", "Shadow Temple (Boss)"),
-    new SceneDesc("hakadan_ch", "Bottom of the Well"),
-    new SceneDesc("hakaana", "Heart Piece Grave"),
-    new SceneDesc("kakariko", "Generous Woman's House"),
+    new SceneDesc("spot01", "Kakariko Village", 1),
+    new SceneDesc("kinsuta", "Skulltula House", 0),
+    new SceneDesc("labo", "Impa's House", 0),
+    new SceneDesc("mahouya", "Granny's Potion Shop", 0),
+    new SceneDesc("shop_drag", "Kakariko Potion Shop", 0),
+    new SceneDesc("spot02", "Kakariko Graveyard", 18),
+    new SceneDesc("hut", "Dampe's Hut", 0),
+    new SceneDesc("hakasitarelay", "Dampe's Grave & Windmill Hut", 0),
+    new SceneDesc("hakaana_ouke", "Royal Family's Tomb", 0),
+    new SceneDesc("hakadan", "Shadow Temple", 0),
+    new SceneDesc("hakadan_boss", "Shadow Temple (Boss)", 0),
+    new SceneDesc("hakadan_ch", "Bottom of the Well", 0),
+    new SceneDesc("hakaana", "Heart Piece Grave", 0),
+    new SceneDesc("kakariko", "Generous Woman's House", 0),
 
     "Death Mountain",
-    new SceneDesc("spot16", "Death Mountain"),
-    new SceneDesc("spot17", "Death Mountain Crater"),
-    new SceneDesc("spot18", "Goron City"),
+    new SceneDesc("spot16", "Death Mountain", 1),
+    new SceneDesc("spot17", "Death Mountain Crater", 2),
+    new SceneDesc("spot18", "Goron City", 1),
     new SceneDesc("shop_golon", "Goron Shop"),
-    new SceneDesc("ddan", "Dodongo's Cavern"),
-    new SceneDesc("ddan_boss", "Dodongo's Cavern (Boss)"),
-    new SceneDesc("hidan", "Fire Temple"),
-    new SceneDesc("fire_bs", "Fire Temple (Boss)"),
+    new SceneDesc("ddan", "Dodongo's Cavern", 1),
+    new SceneDesc("ddan_boss", "Dodongo's Cavern (Boss)", 0),
+    new SceneDesc("hidan", "Fire Temple", 0),
+    new SceneDesc("fire_bs", "Fire Temple (Boss)", 1),
 
     "Hyrule Field",
-    new SceneDesc("spot00", "Hyrule Field"),
-    new SceneDesc("spot20", "Lon Lon Ranch"),
-    new SceneDesc("souko", "Talon's House"),
-    new SceneDesc("stable", "Stables"),
-    new SceneDesc("spot99", "Link's Nightmare"),
-    new SceneDesc("spot03", "Zora's River"),
-    new SceneDesc("daiyousei_izumi", "Great Fairy Fountain"),
-    new SceneDesc("yousei_izumi_tate", "Small Fairy Fountain"),
-    new SceneDesc("yousei_izumi_yoko", "Magic Fairy Fountain"),
-    new SceneDesc("kakusiana", "Grottos"),
+    new SceneDesc("spot00", "Hyrule Field", 1),
+    new SceneDesc("spot20", "Lon Lon Ranch", 1),
+    new SceneDesc("souko", "Talon's House", 0),
+    new SceneDesc("stable", "Stables", 0),
+    new SceneDesc("spot99", "Link's Nightmare", 1),
+    new SceneDesc("spot03", "Zora's River", 1),
+    new SceneDesc("daiyousei_izumi", "Great Fairy Fountain", 2),
+    new SceneDesc("yousei_izumi_tate", "Small Fairy Fountain", 0),
+    new SceneDesc("yousei_izumi_yoko", "Magic Fairy Fountain", 0),
+    new SceneDesc("kakusiana", "Grottos", 0),
     // new SceneDesc("hiral_demo", "Cutscene Map"),
 
     "Hyrule Castle / Town",
-    new SceneDesc("spot15", "Hyrule Castle"),
-    new SceneDesc("hairal_niwa", "Castle Courtyard"),
-    new SceneDesc("hairal_niwa_n", "Castle Courtyard (Night)"),
-    new SceneDesc("nakaniwa", "Zelda's Courtyard"),
-    new SceneDesc("entra_day", "Market Entrance (Day)"),
-    new SceneDesc("entra_night", "Market Entrance (Night)"),
-    new SceneDesc("entra_ruins", "Market Entrance (Ruins)"),
-    new SceneDesc("miharigoya", "Lots'o'Pots"),
-    new SceneDesc("market_day", "Market (Day)"),
-    new SceneDesc("market_night", "Market (Night)"),
-    new SceneDesc("market_ruins", "Market (Ruins)"),
-    new SceneDesc("market_alley", "Market Back-Alley (Day)"),
-    new SceneDesc("market_alley_n", "Market Back-Alley (Night)"),
-    new SceneDesc('bowling', "Bombchu Bowling Alley"),
-    new SceneDesc("shop_night", "Bombchu Shop"),
-    new SceneDesc("takaraya", "Treasure Chest Game"),
-    new SceneDesc("kakariko_impa", "Puppy Woman's House"),
-    new SceneDesc("shop_alley", "Market Potion Shop"),
-    new SceneDesc("shop_face", "Happy Mask Shop"),
-    new SceneDesc("syatekijyou", "Shooting Gallery"),
-    new SceneDesc("shrine", "Temple of Time (Outside, Day)"),
-    new SceneDesc("shrine_n", "Temple of Time (Outside, Night)"),
-    new SceneDesc("shrine_r", "Temple of Time (Outside, Adult)"),
-    new SceneDesc("tokinoma", "Temple of Time (Interior)"),
+    new SceneDesc("spot15", "Hyrule Castle", 1),
+    new SceneDesc("hairal_niwa", "Castle Courtyard", 0),
+    new SceneDesc("hairal_niwa_n", "Castle Courtyard (Night)", 3),
+    new SceneDesc("nakaniwa", "Zelda's Courtyard", 1),
+    new SceneDesc("entra_day", "Market Entrance (Day)", 1),
+    new SceneDesc("entra_night", "Market Entrance (Night)", 3),
+    new SceneDesc("entra_ruins", "Market Entrance (Ruins)", 3),
+    new SceneDesc("miharigoya", "Lots'o'Pots", 1),
+    new SceneDesc("market_day", "Market (Day)", 1),
+    new SceneDesc("market_night", "Market (Night)", 7),
+    new SceneDesc("market_ruins", "Market (Ruins)", 1),
+    new SceneDesc("market_alley", "Market Back-Alley (Day)", 1),
+    new SceneDesc("market_alley_n", "Market Back-Alley (Night)", 3),
+    new SceneDesc('bowling', "Bombchu Bowling Alley", 0),
+    new SceneDesc("shop_night", "Bombchu Shop", 0),
+    new SceneDesc("takaraya", "Treasure Chest Game", 0),
+    new SceneDesc("kakariko_impa", "Puppy Woman's House", 0),
+    new SceneDesc("shop_alley", "Market Potion Shop", 0),
+    new SceneDesc("shop_face", "Happy Mask Shop", 0),
+    new SceneDesc("syatekijyou", "Shooting Gallery", 0),
+    new SceneDesc("shrine", "Temple of Time (Outside, Day)", 1),
+    new SceneDesc("shrine_n", "Temple of Time (Outside, Night)", 3),
+    new SceneDesc("shrine_r", "Temple of Time (Outside, Adult)", 1),
+    new SceneDesc("tokinoma", "Temple of Time (Interior)", 2),
     new SceneDesc("kenjyanoma", "Chamber of the Sages", 3),
-    new SceneDesc("shop", 'Bazaar'),
+    new SceneDesc("shop", 'Bazaar', 0),
 
     "Lake Hylia",
-    new SceneDesc("spot06", "Lake Hylia"),
-    new SceneDesc("hylia_labo", "Hylia Lakeside Laboratory"),
-    new SceneDesc("turibori", "Fishing Pond"),
-    new SceneDesc("mizusin", "Water Temple"),
-    new SceneDesc("mizusin_boss", "Water Temple (Boss)"),
+    new SceneDesc("spot06", "Lake Hylia", 1),
+    new SceneDesc("hylia_labo", "Hylia Lakeside Laboratory", 1),
+    new SceneDesc("turibori", "Fishing Pond", 1),
+    new SceneDesc("mizusin", "Water Temple", 0),
+    new SceneDesc("mizusin_boss", "Water Temple (Boss)", 1),
 
     "Zora's Domain",
-    new SceneDesc("spot07", "Zora's Domain"),
-    new SceneDesc("spot08", "Zora's Fountain"),
-    new SceneDesc("zoora", "Zora Shop"),
-    new SceneDesc('bdan', "Jabu-Jabu's Belly"),
-    new SceneDesc('bdan_boss', "Jabu-Jabu's Belly (Boss)"),
-    new SceneDesc("ice_doukutu", "Ice Cavern"),
+    new SceneDesc("spot07", "Zora's Domain", 1),
+    new SceneDesc("spot08", "Zora's Fountain", 1),
+    new SceneDesc("zoora", "Zora Shop", 0),
+    new SceneDesc('bdan', "Jabu-Jabu's Belly", 0),
+    new SceneDesc('bdan_boss', "Jabu-Jabu's Belly (Boss)", 1),
+    new SceneDesc("ice_doukutu", "Ice Cavern", 2),
 
     "Gerudo Desert",
-    new SceneDesc("spot09", "Gerudo Valley"),
-    new SceneDesc("tent", "Carpenter's Tent"),
-    new SceneDesc("spot12", "Gerudo's Fortress"),
-    new SceneDesc("men", "Gerudo Training Grounds"),
-    new SceneDesc("gerudoway", "Thieves' Hideout"),
-    new SceneDesc("spot13", "Haunted Wasteland"),
-    new SceneDesc("spot11", "Desert Colossus"),
-    new SceneDesc("jyasinzou", "Spirit Temple"),
-    new SceneDesc("jyasinzou_boss", "Spirit Temple (Mid-Boss)"),
+    new SceneDesc("spot09", "Gerudo Valley", 1),
+    new SceneDesc("tent", "Carpenter's Tent", 0),
+    new SceneDesc("spot12", "Gerudo's Fortress", 1),
+    new SceneDesc("men", "Gerudo Training Grounds", 0),
+    new SceneDesc("gerudoway", "Thieves' Hideout", 1),
+    new SceneDesc("spot13", "Haunted Wasteland", 9),
+    new SceneDesc("spot11", "Desert Colossus", 1),
+    new SceneDesc("jyasinzou", "Spirit Temple", 1),
+    new SceneDesc("jyasinzou_boss", "Spirit Temple (Mid-Boss)", 0),
 
     "Ganon's Castle",
-    new SceneDesc("ganontika", "Ganon's Castle"),
-    new SceneDesc("ganontikasonogo", "Ganon's Castle (Crumbling)"),
-    new SceneDesc("ganon_tou", "Ganon's Castle (Outside)"),
-    new SceneDesc("ganon", "Ganon's Castle Tower"),
-    new SceneDesc("ganon_sonogo", "Ganon's Castle Tower (Crumbling)"),
-    new SceneDesc("ganon_boss", "Second-To-Last Boss Ganondorf"),
-    new SceneDesc("ganon_demo", "Final Battle Against Ganon"),
-    new SceneDesc("ganon_final", "Ganondorf's Death"),
+    new SceneDesc("ganontika", "Ganon's Castle", 1),
+    new SceneDesc("ganontikasonogo", "Ganon's Castle (Crumbling)", 0),
+    new SceneDesc("ganon_tou", "Ganon's Castle (Outside)", 1),
+    new SceneDesc("ganon", "Ganon's Castle Tower", 1),
+    new SceneDesc("ganon_sonogo", "Ganon's Castle Tower (Crumbling)", 0),
+    new SceneDesc("ganon_boss", "Second-To-Last Boss Ganondorf", 1),
+    new SceneDesc("ganon_demo", "Final Battle Against Ganon", 3),
+    new SceneDesc("ganon_final", "Ganondorf's Death", 2),
 
 	"Master Quest",
-	new SceneDesc("ydan_dd", "Inside the Deku Tree"),
-	new SceneDesc("ddan_dd", "Dodongo's Cavern"),
-	new SceneDesc("bdan_dd", "Jabu-Jabu's Belly"),
-	new SceneDesc("bmori1_dd", "Forest Temple"),
-	new SceneDesc("hidan_dd", "Fire Temple"),
-	new SceneDesc("mizusin_dd", "Water Temple"),
-	new SceneDesc("hakadan_dd", "Shadow Temple"),
-	new SceneDesc("jyasinzou_dd", "Spirit Temple"),
-	new SceneDesc("ganontika_dd", "Ganon's Castle"),
-	new SceneDesc("ice_doukutu_dd", "Ice Cavern"),
-	new SceneDesc("hakadan_ch_dd", "Bottom of the Well"),
-	new SceneDesc("men_dd", "Gerudo Training Grounds"),
+	new SceneDesc("ydan_dd", "Inside the Deku Tree", 0),
+	new SceneDesc("ddan_dd", "Dodongo's Cavern", 1),
+	new SceneDesc("bdan_dd", "Jabu-Jabu's Belly", 0),
+	new SceneDesc("bmori1_dd", "Forest Temple", 1),
+	new SceneDesc("hidan_dd", "Fire Temple", 0),
+	new SceneDesc("mizusin_dd", "Water Temple", 0),
+	new SceneDesc("hakadan_dd", "Shadow Temple", 2),
+	new SceneDesc("jyasinzou_dd", "Spirit Temple", 2),
+	new SceneDesc("ganontika_dd", "Ganon's Castle", 1),
+	new SceneDesc("ice_doukutu_dd", "Ice Cavern", 2),
+	new SceneDesc("hakadan_ch_dd", "Bottom of the Well", 4),
+	new SceneDesc("men_dd", "Gerudo Training Grounds", 0),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

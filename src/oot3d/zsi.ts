@@ -30,7 +30,9 @@ export class ZSIEnvironmentSettings {
     public secondaryLightColor: vec3 = vec3.create();
     public fogColor: vec3 = vec3.create();
     public fogStart: number = 0.0;
+    public fogEnd: number = 0.0;
     public drawDistance: number = 0.0;
+    public isScene: boolean = false;
 
     public copy(o: ZSIEnvironmentSettings): void {
         vec3.copy(this.ambientLightColor, o.ambientLightColor);
@@ -40,7 +42,9 @@ export class ZSIEnvironmentSettings {
         vec3.copy(this.secondaryLightColor, o.secondaryLightColor);
         vec3.copy(this.fogColor, o.fogColor);
         this.fogStart = o.fogStart;
+        this.fogEnd = o.fogEnd;
         this.drawDistance = o.drawDistance;
+        this.isScene = o.isScene;
     }
 }
 
@@ -156,47 +160,59 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
     for (let i = 0; i < nEnvironmentSettings; i++) {
         let setting = new ZSIEnvironmentSettings;
 
-        const drawDistance = view.getFloat32(offs + 0x00, true);
-        const fogStart = view.getFloat32(offs + 0x04, true);
-
-        const mysteryA = view.getUint8(offs + 0x08);
-        const mysteryB = view.getUint8(offs + 0x09);
+        const drawDistance =  version === Version.Majora ? view.getFloat32(offs + 0x1C, true) : view.getFloat32(offs + 0x00, true);
+        const fogEnd = version === Version.Majora ? view.getFloat32(offs + 0x18, true) : view.getFloat32(offs + 0x04, true);
+        const fogStart =  (version === Version.Majora ? view.getUint16(offs + 0x16, true) : view.getUint16(offs + 0x08, true)) & 0x03FF;
 
         const ambientColR = view.getUint8(offs + 0x0A) / 0xFF;
         const ambientColG = view.getUint8(offs + 0x0B) / 0xFF;
         const ambientColB = view.getUint8(offs + 0x0C) / 0xFF;
 
-        const firstDiffuseLightDirX = view.getUint8(offs + 0x0D) / 0xFF;
-        const firstDiffuseLightDirY = view.getUint8(offs + 0x0E) / 0xFF;
-        const firstDiffuseLightDirZ = view.getUint8(offs + 0x0F) / 0xFF;
+        const firstDiffuseLightDirX = view.getInt8(offs + 0x0D) / 0x7F;
+        const firstDiffuseLightDirY = view.getInt8(offs + 0x0E) / 0x7F;
+        const firstDiffuseLightDirZ = view.getInt8(offs + 0x0F) / 0x7F;
 
         const firstDiffuseLightColR = view.getUint8(offs + 0x10) / 0xFF;
         const firstDiffuseLightColG = view.getUint8(offs + 0x11) / 0xFF;
         const firstDiffuseLightColB = view.getUint8(offs + 0x12) / 0xFF;
         
-        const secondDiffuseLightDirX = view.getUint8(offs + 0x13) / 0xFF;
-        const secondDiffuseLightDirY = view.getUint8(offs + 0x14) / 0xFF;
-        const secondDiffuseLightDirZ = view.getUint8(offs + 0x15) / 0xFF;
+        const secondDiffuseLightDirX = view.getInt8(offs + 0x13) / 0x7F;
+        const secondDiffuseLightDirY = view.getInt8(offs + 0x14) / 0x7F;
+        const secondDiffuseLightDirZ = view.getInt8(offs + 0x15) / 0x7F;
         
         const secondDiffuseLightColR = view.getUint8(offs + 0x16) / 0xFF;
         const secondDiffuseLightColG = view.getUint8(offs + 0x17) / 0xFF;
         const secondDiffuseLightColB = view.getUint8(offs + 0x18) / 0xFF;
 
-        const fogColorR = view.getUint8(offs + 0x19) / 0xFF;
-        const fogColorG = view.getUint8(offs + 0x1A) / 0xFF;
-        const fogColorB = view.getUint8(offs + 0x1B) / 0xFF;
-        offs += 0x1C;
+        const fogColorR = (version === Version.Majora ? view.getUint8(offs + 0x12) : view.getUint8(offs + 0x19)) / 0xFF;
+        const fogColorG = (version === Version.Majora ? view.getUint8(offs + 0x13) : view.getUint8(offs + 0x1A)) / 0xFF;
+        const fogColorB = (version === Version.Majora ? view.getUint8(offs + 0x14) : view.getUint8(offs + 0x1B)) / 0xFF;
+        
+        offs += (version === Version.Majora) ? 0x20 : 0x1C;
 
         setting.drawDistance = drawDistance;
-
-        // TODO(quade): actually figure out what we're supposed to do with these values
-        setting.fogStart = fogStart >= drawDistance ? drawDistance - fogStart : fogStart;
+        setting.fogStart = (fogStart >= 996) ? 996: fogStart;
+        setting.fogEnd = (fogEnd >= 12800) ? version === Version.Majora ? 3000 : 5000 : fogEnd;
         setting.ambientLightColor = vec3.fromValues(ambientColR, ambientColG, ambientColB);
         setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
         setting.primaryLightColor = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
         setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
         setting.secondaryLightColor = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
         setting.fogColor = vec3.fromValues(fogColorR, fogColorG, fogColorB);
+
+        //HACK(M-1) Until I figure how to handle "outdoor lighting"
+        if(vec3.equals(setting.primaryLightDir, [0, 0, 0]) && vec3.equals(setting.secondaryLightDir, [0, 0, 0])){
+            setting.primaryLightDir = vec3.fromValues(0.5, 0.5, 0.5);
+            setting.secondaryLightDir = vec3.fromValues(-0.5, -0.5, -0.5);
+            setting.primaryLightColor = vec3.fromValues(1, 1, 1);
+            setting.secondaryLightColor = vec3.fromValues(0, 0, 0);
+        }
+        if(vec3.equals(setting.fogColor, [0,0,0])){
+            setting.fogColor = vec3.fromValues(0.5, 0.5, 0.5)
+        }
+        if(vec3.equals(setting.ambientLightColor, [0,0,0])){
+            setting.ambientLightColor = vec3.fromValues(0.5, 0.5, 0.5)
+        }
 
         environmentSettings.push(setting);
     }
