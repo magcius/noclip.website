@@ -213,6 +213,10 @@ export interface Material {
     renderFlags: GfxMegaStateDescriptor;
     isTransparent: boolean;
     polygonOffset: number;
+    isVertexLightingEnabled: boolean;
+    isFogEnabled: boolean;
+    diffuseColor: Color;
+    ambientColor: Color;
 }
 
 export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -262,8 +266,9 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     for (let i = 0; i < materialCount; i++) {
         const isFragmentLightingEnabled = !!view.getUint8(offs + 0x00);
         const isVertexLightingEnabled = !!view.getUint8(offs + 0x01);
-        const isHemisphereLightingEnabled = !!view.getUint8(offs + 0x02);
-        const isHemisphereOcclusionEnabled = !!view.getUint8(offs + 0x03);
+        //(M-1): Hack until fog is implemented for Luigi's Mansion
+        const isFogEnabled = (cmb.version === Version.LuigisMansion) ? false : !!view.getUint8(offs + 0x02);
+        const isBlendEnabled = !!view.getUint8(offs + 0x03);
 
         const cullModeFlags = view.getUint8(offs + 0x04);
         assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);
@@ -349,33 +354,33 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const isReflectionEnabled = !!view.getUint8(offs + 0xEF);
 
         // Fragment lighting table.
-        const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
-        // assert(view.getUint8(offs + 0xF1) === 0xFF); // Padding?
-        const reflectanceRSamplerInput = view.getUint16(offs + 0xF2, true);
-        const reflectanceRSamplerScale = view.getUint32(offs + 0xF4, true);
+        const distibution0SamplerIsAbs = !!view.getUint8(offs + 0xF0);
+        const distibution0SamplerIndex = view.getInt8(offs + 0xF1);
+        const distibution0SamplerInput = view.getUint16(offs + 0xF2, true);
+        const distibution0SamplerScale = view.getUint32(offs + 0xF4, true);
 
-        const reflectanceGSamplerIsAbs = !!view.getUint8(offs + 0xF8);
-        // assert(view.getUint8(offs + 0xF9) === 0xFF); // Padding?
-        const reflectanceGSamplerInput = view.getUint16(offs + 0xFA, true);
-        const reflectanceGSamplerScale = view.getUint32(offs + 0xFC, true);
+        const distibution1SamplerIsAbs = !!view.getUint8(offs + 0xF8);
+        const distibution1SamplerIndex = view.getInt8(offs + 0xF9);
+        const distibution1SamplerInput = view.getUint16(offs + 0xFA, true);
+        const distibution1SamplerScale = view.getUint32(offs + 0xFC, true);
 
-        const reflectanceBSamplerIsAbs = !!view.getUint8(offs + 0x100);
-        // assert(view.getUint8(offs + 0x101) === 0xFF); // Padding?
-        const reflectanceBSamplerInput = view.getUint16(offs + 0x102, true);
-        const reflectanceBSamplerScale = view.getUint32(offs + 0x104, true);
+        const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0x100);
+        const reflectanceRSamplerIndex = view.getInt8(offs + 0x101);
+        const reflectanceRSamplerInput = view.getUint16(offs + 0x102, true);
+        const reflectanceRSamplerScale = view.getUint32(offs + 0x104, true);
 
-        const distibution0SamplerIsAbs = !!view.getUint8(offs + 0x108);
-        // assert(view.getUint8(offs + 0x109) === 0xFF); // Padding?
-        const distibution0SamplerInput = view.getUint16(offs + 0x10A, true);
-        const distibution0SamplerScale = view.getUint32(offs + 0x10C, true);
+        const reflectanceGSamplerIsAbs = !!view.getUint8(offs + 0x108);
+        const reflectanceGSamplerIndex = view.getInt8(offs + 0x109);
+        const reflectanceGSamplerInput = view.getUint16(offs + 0x10A, true);
+        const reflectanceGSamplerScale = view.getUint32(offs + 0x10C, true);
 
-        const distibution1SamplerIsAbs = !!view.getUint8(offs + 0x110);
-        // assert(view.getUint8(offs + 0x111) === 0xFF); // Padding?
-        const distibution1SamplerInput = view.getUint16(offs + 0x112, true);
-        const distibution1SamplerScale = view.getUint32(offs + 0x114, true);
+        const reflectanceBSamplerIsAbs = !!view.getUint8(offs + 0x110);
+        const reflectanceBSamplerIndex = view.getInt8(offs + 0x111);
+        const reflectanceBSamplerInput = view.getUint16(offs + 0x112, true);
+        const reflectanceBSamplerScale = view.getUint32(offs + 0x114, true);
 
         const fresnelSamplerIsAbs = !!view.getUint8(offs + 0x118);
-        // assert(view.getUint8(offs + 0x119) === 0xFF); // Padding?
+        const fresnelSamplerIndex = view.getInt8(offs + 0x110);
         const fresnelSamplerInput = view.getUint16(offs + 0x11A, true);
         const fresnelSamplerScale = view.getUint32(offs + 0x11C, true);
 
@@ -472,7 +477,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
-        cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
+        cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset, isVertexLightingEnabled, isFogEnabled, ambientColor, diffuseColor });
 
         offs += 0x15C;
 
@@ -723,6 +728,7 @@ export class Sepd {
     public boneWeights!: SepdVertexAttrib;
 
     public boneDimension: number;
+    public useVertexColors: boolean;
 }
 
 // "Separate Data Shape"
@@ -767,6 +773,9 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
         return { start, scale, dataType, mode, constant };
     }
 
+    let bitIdx = cmb.version !== Version.Ocarina ? 3 : 2;
+
+    sepd.useVertexColors = ((flags >> bitIdx) & 1) !== 0;
     sepd.position = readVertexAttrib();
     sepd.normal = readVertexAttrib();
 
@@ -782,6 +791,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     // take you to the next dimension, the
     sepd.boneDimension = view.getUint16(sepdArrIdx + 0x00, true);
+
     sepdArrIdx += 0x04;
 
     for (let i = 0; i < count; i++) {

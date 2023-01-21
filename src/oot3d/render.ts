@@ -10,7 +10,7 @@ import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
@@ -70,6 +70,13 @@ class DMPProgram extends DeviceProgram {
     public static a_BoneWeights = 8;
 
     public static BindingsDefinition = `
+
+struct DirectionalLight {
+    vec4 DiffuseColor;
+    vec4 AmbientColor;
+    vec4 Direction;
+};
+
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -77,12 +84,24 @@ layout(std140) uniform ub_SceneParams {
 
 // Expected to change with each material.
 layout(std140) uniform ub_MaterialParams {
+    vec4 u_MatDiffuseColor;
+    vec4 u_MatAmbientColor;
+    vec4 u_MaterialFlags;
+    DirectionalLight u_SceneLights[2];
+    vec4 u_fogColor;
+    vec4 u_fogStartEnd;
+
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
     vec4 u_MatMisc[1];
 };
 
 // xyz are used by GenerateTextureCoord
+#define u_FogStart         (u_fogStartEnd.x)
+#define u_FogEnd           (u_fogStartEnd.y)
+#define u_IsVertexLighting (u_MaterialFlags.x)
+#define u_IsFogEnabled     (u_MaterialFlags.y)
+#define u_RenderFog        (u_MaterialFlags.z)
 #define u_DepthOffset      (u_MatMisc[0].w)
 
 layout(std140) uniform ub_PrmParams {
@@ -155,7 +174,6 @@ uniform sampler2D u_Texture2;
     private generateVertexColorAccess(): string {
         if (!this.materialHacks.vertexColorsEnabled)
             return `vec4(0.5, 0.5, 0.5, 1.0)`;
-
         return `v_Color`;
     }
 
@@ -262,7 +280,6 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 
-in vec3 v_FogColor;
 in vec3 v_Normal;
 in float v_Depth;
 
@@ -281,9 +298,15 @@ void main() {
     #ifdef USE_UV
         t_ResultColor.rgba = vec4(v_TexCoord0.xy, 1.0, 1.0);
     #endif
+    
+    if(u_IsFogEnabled > 0.0 && u_RenderFog > 0.0)
+    {
+        //(M-1): Hack for now
+        float t_FogFactor = smoothstep(u_FogStart - v_Depth, u_FogEnd + v_Depth, v_Depth);
+        t_ResultColor.rgb = mix(t_ResultColor.rgb, u_fogColor.rgb, t_FogFactor);
+    }
 
     gl_FragColor = t_ResultColor;
-
     gl_FragDepth = gl_FragCoord.z + u_DepthOffset;
 }
 `;
@@ -312,7 +335,6 @@ out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
 
-out vec3 v_FogColor;
 out vec3 v_Normal;
 out float v_Depth;
 
@@ -417,18 +439,33 @@ void main() {
     vec3 t_ModelNormal = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Normal, 0.0)).xyz;
     v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
 
-    if (u_UseVertexColor > 0.0)
-        v_Color = a_Color;
-    else
-        v_Color = vec4(1.0);
-
     v_Depth = gl_Position.w;
+
+    if(u_IsVertexLighting > 0.0)
+    {
+        vec4 t_VertexLightingColor = vec4(0);
+        for (int i = 0; i < 2; i++) {
+            vec4 t_Diffuse = u_SceneLights[i].DiffuseColor * u_MatDiffuseColor;
+			vec4 t_Ambient = u_SceneLights[i].AmbientColor * u_MatAmbientColor;
+			float t_LightDir = max(dot(u_SceneLights[i].Direction.xyz, v_Normal.xyz), 0.0);
+			t_VertexLightingColor += vec4((t_Diffuse * t_LightDir + t_Ambient).xyz, t_Diffuse.w);
+        }
+
+        if (u_UseVertexColor > 0.0)
+            v_Color = t_VertexLightingColor * a_Color;
+        else
+            v_Color = t_VertexLightingColor;
+    }
+    else
+    {
+        v_Color = u_MatDiffuseColor;
+        if (u_UseVertexColor > 0.0)
+            v_Color = a_Color;
+    }
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
-
-    v_Color.rgb *= VERTEX_COLOR_SCALE;
 
     v_TexCoord0 = CalcTextureCoord(0);
     v_TexCoord1 = CalcTextureCoord(1);
@@ -462,6 +499,8 @@ class MaterialInstance {
 
     private vertexNormalsEnabled: boolean = false;
     private uvEnabled: boolean = false;
+    private isActor: boolean = false;
+    private renderFog: boolean = true;
     private vertexColorScale = 1;
     private program: DMPProgram | null = null;
     private gfxProgram: GfxProgram | null = null;
@@ -526,8 +565,18 @@ class MaterialInstance {
         this.createProgram();
     }
 
+    public setRenderFog(isFogEnabled: boolean): void {
+        this.renderFog = isFogEnabled;
+        this.createProgram();
+    }
+
     public setVertexColorScale(n: number): void {
         this.vertexColorScale = n;
+        this.createProgram();
+    }
+
+    public setIsActor(n: boolean): void {
+        this.isActor = n;
         this.createProgram();
     }
 
@@ -562,7 +611,7 @@ class MaterialInstance {
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, template: GfxRenderInst, textureHolder: CtrTextureHolder): void {
-        let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4+4*6+4*3*3);
+        let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4*3 + 4+4*6+4*3*3 + 4*3*2 + 4*2);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer);
         template.setMegaStateFlags(this.material.renderFlags);
@@ -572,6 +621,33 @@ class MaterialInstance {
         template.setGfxProgram(this.gfxProgram);
 
         const mapped = template.mapUniformBufferF32(DMPProgram.ub_MaterialParams);
+
+        offs += fillColor(mapped, offs, this.material.diffuseColor)
+        offs += fillColor(mapped, offs, this.material.ambientColor)
+        offs += fillVec4(mapped, offs, this.material.isVertexLightingEnabled ? 1:0, this.material.isFogEnabled? 1:0, this.renderFog ? 1:0)
+
+        if(this.isActor)
+        {
+
+            offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightColor, 1)
+            offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
+            offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightDir);
+            offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightColor, 1);
+            offs += fillVec4(mapped, offs, 0, 0, 0, 1);
+            offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightDir);
+        }
+        else
+        {
+            offs += fillVec4(mapped, offs, 0, 0, 0, 1)
+            offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
+            offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightDir);
+            offs += fillVec4(mapped, offs, 0, 0, 0, 1)
+            offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
+            offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightDir);
+        }
+
+        offs += fillVec3v(mapped, offs, this.environmentSettings.fogColor, 0)
+        offs += fillVec4(mapped, offs, this.environmentSettings.fogStart, this.environmentSettings.fogEnd)
 
         for (let i = 0; i < 6; i++) {
             if (this.colorAnimators[i]) {
@@ -714,7 +790,7 @@ class SepdData {
         bindVertexAttrib(DMPProgram.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
 
-        this.useVertexColor = vatr.colorByteOffset >= 0;
+        this.useVertexColor = sepd.useVertexColors;
         bindVertexAttrib(DMPProgram.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
         bindVertexAttrib(DMPProgram.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
         bindVertexAttrib(DMPProgram.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
@@ -934,6 +1010,16 @@ export class CmbInstance {
             this.materialInstances[i].setVertexColorScale(n);
     }
 
+    public setRenderFog(isFogEnabled: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setRenderFog(isFogEnabled);
+    }
+
+    public setIsActor(n: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setIsActor(n);
+    }
+
     private updateBoneMatrices(): void {
         for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
             const bone = this.cmbData.cmb.bones[i];
@@ -1099,6 +1185,15 @@ export class RoomRenderer {
             this.transparentMesh.setEnvironmentSettings(environmentSettings);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
+    }
+
+    public setRenderFog(isFogEnabled: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setRenderFog(isFogEnabled);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setRenderFog(isFogEnabled);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setRenderFog(isFogEnabled);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {

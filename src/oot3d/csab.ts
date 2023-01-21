@@ -68,12 +68,12 @@ export interface CSAB extends AnimationBase {
     boneToAnimationTable: Int16Array;
 }
 
-function parseTrackOcarina(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
+function parseTrackOcarina(version: Version, isRotationInt16: boolean, buffer: ArrayBufferSlice): AnimationTrack {
     const view = buffer.createDataView();
 
     const type = view.getUint32(0x00, true);
     const numKeyframes = view.getUint32(0x04, true);
-    const unk1 = view.getUint32(0x08, true);
+    const timeStart = view.getUint32(0x08, true);
     const timeEnd = view.getUint32(0x0C, true) + 1;
 
     let keyframeTableIdx: number = 0x10;
@@ -89,13 +89,28 @@ function parseTrackOcarina(version: Version, buffer: ArrayBufferSlice): Animatio
         return { type, frames };
     } else if (type === AnimationTrackType.HERMITE) {
         const frames: AnimationKeyframeHermite[] = [];
-        for (let i = 0; i < numKeyframes; i++) {
-            const time = view.getUint32(keyframeTableIdx + 0x00, true);
-            const value = view.getFloat32(keyframeTableIdx + 0x04, true);
-            const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
-            const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
-            keyframeTableIdx += 0x10;
-            frames.push({ time, value, tangentIn, tangentOut });
+        if(isRotationInt16)
+        {
+            //TODO(M-1) Figure out int16 rotations
+            for (let i = 0; i < numKeyframes; i++) {
+                const time = view.getUint16(keyframeTableIdx + 0x00, true);
+                const value = (view.getInt16(keyframeTableIdx + 0x02, true));
+                const tangentIn = (view.getInt16(keyframeTableIdx + 0x04, true));
+                const tangentOut = (view.getInt16(keyframeTableIdx + 0x6, true));
+                keyframeTableIdx += 0x8;
+                frames.push({ time, value, tangentIn, tangentOut });
+            }
+        }
+        else
+        {
+            for (let i = 0; i < numKeyframes; i++) {
+                const time = view.getUint32(keyframeTableIdx + 0x00, true);
+                const value = view.getFloat32(keyframeTableIdx + 0x04, true);
+                const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
+                const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
+                keyframeTableIdx += 0x10;
+                frames.push({ time, value, tangentIn, tangentOut });
+            }
         }
         return { type, frames, timeEnd };
     } else {
@@ -121,7 +136,7 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): Animation
         let keyframeTableIdx: number = 0x0C;
         for (let i = 0; i < numKeyframes; i++) {
             const time = i;
-            const value = view.getInt16(keyframeTableIdx + 0x00, true) * scale - bias;
+            const value = view.getUint16(keyframeTableIdx + 0x00, true) * scale - bias;
             keyframeTableIdx += 0x02;
             frames.push({ time, value });
         }
@@ -131,9 +146,9 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): Animation
     }
 }
 
-function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
+function parseTrack(version: Version, isRotationInt16: boolean, buffer: ArrayBufferSlice): AnimationTrack {
     if (version === Version.Ocarina)
-        return parseTrackOcarina(version, buffer);
+        return parseTrackOcarina(version, isRotationInt16, buffer);
     else if (version === Version.Majora)
         return parseTrackMajora(version, buffer);
     else
@@ -146,6 +161,7 @@ function parseAnod(version: Version, buffer: ArrayBufferSlice): AnimationNode {
 
     assert(readString(buffer, 0x00, 0x04, false) === 'anod');
     const boneIndex = view.getUint16(0x04, true);
+    const isRotationInt16 = !!view.getUint16(0x06, true);
 
     const translationXOffs = view.getUint16(0x08, true);
     const translationYOffs = view.getUint16(0x0A, true);
@@ -158,15 +174,15 @@ function parseAnod(version: Version, buffer: ArrayBufferSlice): AnimationNode {
     const scaleZOffs = view.getUint16(0x18, true);
     assert(view.getUint16(0x1A, true) === 0x00);
 
-    const translationX = translationXOffs !== 0 ? parseTrack(version, buffer.slice(translationXOffs)) : null;
-    const translationY = translationYOffs !== 0 ? parseTrack(version, buffer.slice(translationYOffs)) : null;
-    const translationZ = translationZOffs !== 0 ? parseTrack(version, buffer.slice(translationZOffs)) : null;
-    const rotationX = rotationXOffs !== 0 ? parseTrack(version, buffer.slice(rotationXOffs)) : null;
-    const rotationY = rotationYOffs !== 0 ? parseTrack(version, buffer.slice(rotationYOffs)) : null;
-    const rotationZ = rotationZOffs !== 0 ? parseTrack(version, buffer.slice(rotationZOffs)) : null;
-    const scaleX = scaleXOffs !== 0 ? parseTrack(version, buffer.slice(scaleXOffs)) : null;
-    const scaleY = scaleYOffs !== 0 ? parseTrack(version, buffer.slice(scaleYOffs)) : null;
-    const scaleZ = scaleZOffs !== 0 ? parseTrack(version, buffer.slice(scaleZOffs)) : null;
+    const translationX = translationXOffs !== 0 ? parseTrack(version, false, buffer.slice(translationXOffs)) : null;
+    const translationY = translationYOffs !== 0 ? parseTrack(version, false, buffer.slice(translationYOffs)) : null;
+    const translationZ = translationZOffs !== 0 ? parseTrack(version, false,  buffer.slice(translationZOffs)) : null;
+    const rotationX = rotationXOffs !== 0 ? parseTrack(version, isRotationInt16, buffer.slice(rotationXOffs)) : null;
+    const rotationY = rotationYOffs !== 0 ? parseTrack(version, isRotationInt16, buffer.slice(rotationYOffs)) : null;
+    const rotationZ = rotationZOffs !== 0 ? parseTrack(version, isRotationInt16, buffer.slice(rotationZOffs)) : null;
+    const scaleX = scaleXOffs !== 0 ? parseTrack(version, false, buffer.slice(scaleXOffs)) : null;
+    const scaleY = scaleYOffs !== 0 ? parseTrack(version, false, buffer.slice(scaleYOffs)) : null;
+    const scaleZ = scaleZOffs !== 0 ? parseTrack(version, false, buffer.slice(scaleZOffs)) : null;
 
     return { boneIndex, translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ };
 }
