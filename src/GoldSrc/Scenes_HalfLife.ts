@@ -13,13 +13,16 @@ export class HalfLifeSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {
-        const wad = parseWAD(await sceneContext.dataFetcher.fetchData(`${pathBase}/valve/halflife.wad`));
         const renderer = new GoldSrcRenderer(device);
-        renderer.textureCache.addWAD(wad);
 
         const bspData = await sceneContext.dataFetcher.fetchData(`${pathBase}/valve/maps/${this.id}.bsp`);
         const bspFile = new BSPFile(bspData);
         renderer.textureCache.addBSP(bspFile);
+
+        await Promise.all(bspFile.getWadList().map(async (v) => {
+            const wad = parseWAD(await sceneContext.dataFetcher.fetchData(`${pathBase}/${v}`));
+            renderer.textureCache.addWAD(wad);
+        }));
 
         const bspRenderer = new BSPRenderer(renderer.renderHelper.renderCache, renderer.textureCache, bspFile);
         renderer.bspRenderers.push(bspRenderer);

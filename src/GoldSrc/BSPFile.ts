@@ -3,7 +3,8 @@ import { ReadonlyVec4, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile";
-import { assert, readString } from "../util";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT";
+import { assert, decodeString, readString } from "../util";
 
 const enum LumpType {
     ENTITIES = 0,
@@ -54,9 +55,26 @@ export interface Surface {
     lightmapData: SurfaceLightmapData[];
 }
 
+export interface BSPEntity {
+    classname: string;
+    [k: string]: string;
+}
+
+function parseEntitiesLump(str: string): BSPEntity[] {
+    const p = new ValveKeyValueParser(str);
+    const entities: BSPEntity[] = [];
+    while (p.hastok()) {
+        entities.push(pairs2obj(p.unit() as VKFPair[]) as BSPEntity);
+        p.skipwhite();
+    }
+    return entities;
+}
+
 export class BSPFile {
     public version: number;
 
+    private entitiesStr: string; // For debugging.
+    public entities: BSPEntity[] = [];
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
     public surfaces: Surface[] = [];
@@ -75,6 +93,10 @@ export class BSPFile {
             const size = view.getUint32(idx + 0x04, true);
             return buffer.subarray(offs, size);
         }
+
+        // Parse out entities.
+        this.entitiesStr = decodeString(getLumpData(LumpType.ENTITIES));
+        this.entities = parseEntitiesLump(this.entitiesStr);
 
         function readVec4(view: DataView, offs: number): vec4 {
             const x = view.getFloat32(offs + 0x00, true);
@@ -267,5 +289,20 @@ export class BSPFile {
 
         this.vertexData = vertexData.buffer as ArrayBuffer;
         this.indexData = indexData.buffer as ArrayBuffer;
+    }
+
+    public getWadList(): string[] {
+        const worldspawn = this.entities[0];
+        assert(worldspawn.classname === 'worldspawn');
+
+        const wad = worldspawn.wad;
+        return wad.split(';').map((v) => {
+            // Replace the initial mount name.
+            assert(v.startsWith('\\'));
+            const x = v.split('\\');
+            x.shift();
+            x.shift();
+            return x.join('/');
+        });
     }
 }

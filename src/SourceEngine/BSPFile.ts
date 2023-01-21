@@ -1910,7 +1910,6 @@ export class BSPFile {
     }
 }
 
-// This is in the same file because it also parses keyfiles, even though it's not material-related.
 export interface BSPEntity {
     classname: string;
     [k: string]: string;
