@@ -3844,12 +3844,12 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const indTextureMode: IndTextureMode = view.getUint8(tableIdx + 0x10);
             const indTextureMtxID = view.getUint8(tableIdx + 0x11);
 
-            const p00 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x12));
-            const p01 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x14));
-            const p02 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x16));
-            const p10 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x18));
-            const p11 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x1A));
-            const p12 = JPAConvertFixToFloat(view.getFloat32(tableIdx + 0x1C));
+            const p00 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x12));
+            const p01 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x14));
+            const p02 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x16));
+            const p10 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x18));
+            const p11 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x1A));
+            const p12 = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x1C));
             const scale = Math.pow(2, view.getInt8(tableIdx + 0x1E));
             const indTextureMtx = new Float32Array([
                 p00*scale, p01*scale, p02*scale, scale,
