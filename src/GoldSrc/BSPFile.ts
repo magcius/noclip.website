@@ -303,6 +303,12 @@ export class BSPFile {
             x.shift();
             x.shift();
             return x.join('/');
+        }).filter((v) => {
+            // remove non-existent files
+            if (v === 'valve/sample.wad')
+                return false;
+
+            return true;
         });
     }
 }
