@@ -313,7 +313,7 @@ float G1V(float NoV, float k) {
     return 1.0 / (NoV * (1.0 - k) + k);
 }
 
-void CalcDirectionalLight(out LightResult t_Result, in SurfaceLightParams t_SurfaceLightParams, in DirectionalLight t_Light) {
+void CalcDirectionalLight(inout LightResult t_Result, in SurfaceLightParams t_SurfaceLightParams, in DirectionalLight t_Light) {
     vec3 N = t_SurfaceLightParams.SurfaceNormal.xyz;
     // Surface point to light
     vec3 L = normalize(-t_Light.Direction.xyz);
@@ -376,6 +376,9 @@ void CalcDirectionalLight(out LightResult t_Result, in SurfaceLightParams t_Surf
 }
 
 void CalcEnvLight(out LightResult t_Result, in SurfaceLightParams t_SurfaceLightParams) {
+    t_Result.DiffuseColor = vec3(0.0);
+    t_Result.SpecularColor = vec3(0.0);
+
     for (int i = 0; i < 2; i++) {
         EnvLightParam t_EnvLightParam = u_EnvLightParams[i];
 
