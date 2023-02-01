@@ -178,7 +178,11 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
         for (let i = 0; i < this.cmbRenderers.length; i++)
+        {
+            this.cmbRenderers[i].setIsActor(true)
+            this.cmbRenderers[i].setRenderFog(false)
             this.cmbRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
