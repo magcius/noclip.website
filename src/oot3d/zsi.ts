@@ -23,15 +23,16 @@ export class ZSIRoomSetup {
 }
 
 export class ZSIEnvironmentSettings {
-    public ambientLightColor: vec3 = vec3.fromValues(0.5, 0.5, 0.5);
-    public primaryLightDir: vec3 = vec3.fromValues(-0.007874016, -0.047244094, 0.8976378);
-    public primaryLightColor: vec3 = vec3.fromValues(0.8, 0.8, 0.8);
-    public secondaryLightDir: vec3 = vec3.fromValues(-0.19685039, 0.79527557, -0.496063);
+    public ambientLightColor: vec3 = vec3.create();
+    public primaryLightDir: vec3 = vec3.create();
+    public primaryLightColor: vec3 = vec3.create();
+    public secondaryLightDir: vec3 = vec3.create();
     public secondaryLightColor: vec3 = vec3.create();
-    public fogColor: vec3 = vec3.fromValues(0.5, 0.5, 0.5);
-    public fogStart: number = 996.0;
-    public fogEnd: number = 12800.0;
-    public drawDistance: number = 20000.0;
+    public fogColor: vec3 = vec3.create();
+    public fogStart: number = 0.0;
+    public fogEnd: number = 0.0;
+    public drawDistance: number = 0.0;
+    public isScene: boolean = false;
 
     public copy(o: ZSIEnvironmentSettings): void {
         vec3.copy(this.ambientLightColor, o.ambientLightColor);
@@ -43,6 +44,7 @@ export class ZSIEnvironmentSettings {
         this.fogStart = o.fogStart;
         this.fogEnd = o.fogEnd;
         this.drawDistance = o.drawDistance;
+        this.isScene = o.isScene;
     }
 }
 
