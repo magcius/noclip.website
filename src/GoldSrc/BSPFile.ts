@@ -237,8 +237,8 @@ export class BSPFile {
                 vertexData[dstOffsVertex++] = 0;
                 vertexData[dstOffsVertex++] = 0;
 
-                minTexCoordS = Math.min(minTexCoordS, texCoordS);
-                minTexCoordT = Math.min(minTexCoordT, texCoordT);
+                minTexCoordS = Math.min(minTexCoordS, Math.round(texCoordS));
+                minTexCoordT = Math.min(minTexCoordT, Math.round(texCoordT));
                 maxTexCoordS = Math.max(maxTexCoordS, texCoordS);
                 maxTexCoordT = Math.max(maxTexCoordT, texCoordT);
             }
@@ -264,8 +264,8 @@ export class BSPFile {
                 const texCoordS = vertexData[offs++];
                 const texCoordT = vertexData[offs++];
 
-                const lightmapCoordS = lightmapData.pagePosX + (texCoordS - Math.floor(minTexCoordS)) / 16;
-                const lightmapCoordT = lightmapData.pagePosY + (texCoordT - Math.floor(minTexCoordT)) / 16;
+                const lightmapCoordS = lightmapData.pagePosX + (texCoordS - Math.floor(minTexCoordS) + 8) / 16;
+                const lightmapCoordT = lightmapData.pagePosY + (texCoordT - Math.floor(minTexCoordT) + 8) / 16;
                 vertexData[offs++] = lightmapCoordS;
                 vertexData[offs++] = lightmapCoordT;
             }
