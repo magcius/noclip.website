@@ -258,8 +258,8 @@ export class BSPFile {
             assert(this.lightmapPackerPage.allocate(lightmapData));
 
             // Fill in UV
-            for (let i = 0; i < numedges; i++) {
-                let offs = dstOffsVertexBase + (i * 7) + 3;
+            for (let j = 0; j < numedges; j++) {
+                let offs = dstOffsVertexBase + (j * 7) + 3;
 
                 const texCoordS = vertexData[offs++];
                 const texCoordT = vertexData[offs++];
