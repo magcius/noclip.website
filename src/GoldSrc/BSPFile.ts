@@ -264,8 +264,8 @@ export class BSPFile {
                 const texCoordS = vertexData[offs++];
                 const texCoordT = vertexData[offs++];
 
-                const lightmapCoordS = lightmapData.pagePosX + (texCoordS - Math.floor(minTexCoordS)) / 16;
-                const lightmapCoordT = lightmapData.pagePosY + (texCoordT - Math.floor(minTexCoordT)) / 16;
+                const lightmapCoordS = lightmapData.pagePosX + ((texCoordS - Math.floor(minTexCoordS)) / 16) + 0.5;
+                const lightmapCoordT = lightmapData.pagePosY + ((texCoordT - Math.floor(minTexCoordT)) / 16) + 0.5;
                 vertexData[offs++] = lightmapCoordS;
                 vertexData[offs++] = lightmapCoordT;
             }
