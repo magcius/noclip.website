@@ -28,7 +28,7 @@ export class BlockCollection {
 
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/${tabPath}`),
+            dataFetcher.fetchData(`${pathBase}/${tabPath}`, { allow404: true }),
             dataFetcher.fetchData(`${pathBase}/${binPath}`, { allow404: true }),
         ]);
         self.tab = tab.createDataView();
