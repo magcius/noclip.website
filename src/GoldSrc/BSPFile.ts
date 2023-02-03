@@ -243,8 +243,9 @@ export class BSPFile {
                 maxTexCoordT = Math.max(maxTexCoordT, texCoordT);
             }
 
-            const surfaceW = Math.ceil((maxTexCoordS / 16)) - Math.floor(minTexCoordS / 16) + 1;
-            const surfaceH = Math.ceil((maxTexCoordT / 16)) - Math.floor(minTexCoordT / 16) + 1;
+            const lightmapScale = 1 / 16;
+            const surfaceW = Math.ceil((maxTexCoordS * lightmapScale)) - Math.floor(minTexCoordS * lightmapScale) + 1;
+            const surfaceH = Math.ceil((maxTexCoordT * lightmapScale)) - Math.floor(minTexCoordT * lightmapScale) + 1;
 
             const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * 3);
             const samples = lightofs !== 0xFFFFFFFF ? lighting.subarray(lightofs, lightmapSamplesSize).createTypedArray(Uint8Array) : null;
@@ -264,10 +265,10 @@ export class BSPFile {
                 const texCoordS = vertexData[offs++];
                 const texCoordT = vertexData[offs++];
 
-                const lightmapCoordS = lightmapData.pagePosX + ((texCoordS - Math.floor(minTexCoordS)) / 16) + 0.5;
-                const lightmapCoordT = lightmapData.pagePosY + ((texCoordT - Math.floor(minTexCoordT)) / 16) + 0.5;
-                vertexData[offs++] = lightmapCoordS;
-                vertexData[offs++] = lightmapCoordT;
+                const lightmapCoordS = (texCoordS * lightmapScale) - Math.floor(minTexCoordS * lightmapScale) + 0.5;
+                const lightmapCoordT = (texCoordT * lightmapScale) - Math.floor(minTexCoordT * lightmapScale) + 0.5;
+                vertexData[offs++] = lightmapData.pagePosX + lightmapCoordS;
+                vertexData[offs++] = lightmapData.pagePosY + lightmapCoordT;
             }
 
             const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
