@@ -223,8 +223,8 @@ export class BSPFile {
                 const py = vertexes[vertIndex * 3 + 1];
                 const pz = vertexes[vertIndex * 3 + 2];
 
-                const texCoordS = px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3];
-                const texCoordT = px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3];
+                const texCoordS = Math.fround(px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3]);
+                const texCoordT = Math.fround(px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3]);
 
                 vertexData[dstOffsVertex++] = px;
                 vertexData[dstOffsVertex++] = py;
