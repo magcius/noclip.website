@@ -965,7 +965,7 @@ class TessSphere {
         this.textureMapping[0].gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
         });

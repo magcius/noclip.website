@@ -1,6 +1,5 @@
 
 // Code ported and subsequently butchered from https://github.com/halogenica/FezViewer
-import { vec3 } from 'gl-matrix';
 import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { makeTextureFromXNA_Texture2D } from './Texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -32,7 +31,7 @@ export class TrilesetData {
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
 

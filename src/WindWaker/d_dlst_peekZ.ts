@@ -112,7 +112,7 @@ void main() {
             this.depthSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minLOD: 0,

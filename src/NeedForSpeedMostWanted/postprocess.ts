@@ -33,7 +33,7 @@ export class NfsPostProcessing {
         const gfxSampler = renderHelper.renderInstManager.gfxRenderCache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp
         });

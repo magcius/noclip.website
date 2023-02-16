@@ -157,7 +157,7 @@ export class TextureArray extends TextureMapping {
         this.gfxSampler = device.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.Linear : GfxMipFilterMode.NoMip,
+            mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 1000,
             wrapS: GfxWrapMode.Repeat,

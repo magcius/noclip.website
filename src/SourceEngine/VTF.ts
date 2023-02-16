@@ -370,14 +370,16 @@ export class VTF {
         const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.Point : GfxTexFilterMode.Bilinear;
         const minFilter = texFilter;
         const magFilter = texFilter;
+        const nomip = !!(this.flags & VTFFlags.NOMIP);
+        const maxLOD = nomip ? 0 : undefined;
         const forceTrilinear = true;
-        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NoMip : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+        const mipFilter = (nomip && (forceTrilinear || !!(this.flags & VTFFlags.TRILINEAR))) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
 
         const canSupportAnisotropy = texFilter === GfxTexFilterMode.Bilinear && mipFilter === GfxMipFilterMode.Linear;
         const maxAnisotropy = canSupportAnisotropy ? 16 : 1;
         this.gfxSampler = cache.createSampler({
             wrapS, wrapT, minFilter, magFilter, mipFilter,
-            maxAnisotropy,
+            minLOD: 0, maxLOD, maxAnisotropy,
         });
     }
 

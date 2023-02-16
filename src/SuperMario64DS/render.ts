@@ -193,7 +193,7 @@ class MaterialData {
             this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,

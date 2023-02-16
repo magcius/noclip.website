@@ -530,7 +530,7 @@ export class NjsActionInstance {
 function translateTextureFilter(filter: Ninja.FILTER_MODE): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
         case Ninja.FILTER_MODE.POINT:
-            return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Linear];
         case Ninja.FILTER_MODE.BILINEAR:
             return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         case Ninja.FILTER_MODE.TRILINEAR:

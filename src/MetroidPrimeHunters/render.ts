@@ -78,7 +78,7 @@ class MaterialInstance {
             this.gfxSampler = device.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: parseMPHTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseMPHTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,

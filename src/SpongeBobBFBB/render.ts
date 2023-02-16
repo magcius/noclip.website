@@ -91,7 +91,7 @@ export class TextureData {
         this.gfxSampler = device.createSampler({
             magFilter: this.filter,
             minFilter: this.filter,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 1000,
             wrapS: this.wrapS,

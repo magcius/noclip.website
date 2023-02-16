@@ -1956,7 +1956,7 @@ class TextureData {
             wrapT: translateCM(texture.cmt),
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
 

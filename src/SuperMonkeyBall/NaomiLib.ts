@@ -311,7 +311,7 @@ class MaterialInst {
             wrapT,
             minFilter: texFilter,
             magFilter: texFilter,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 0,
         });

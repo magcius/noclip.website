@@ -926,7 +926,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Filtering');
 
@@ -935,7 +935,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             compareMode: GfxCompareMode.Always,
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Comparison');
@@ -1063,7 +1063,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuSampler = this.device.createSampler({
             addressModeU: translateWrapMode(descriptor.wrapS),
             addressModeV: translateWrapMode(descriptor.wrapT),
-            // TODO(jstpierre): Expose this as a sampler parameter.
             addressModeW: translateWrapMode(descriptor.wrapQ ?? descriptor.wrapS),
             lodMinClamp,
             lodMaxClamp,

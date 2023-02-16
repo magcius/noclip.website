@@ -554,7 +554,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
         // probably not correct, will need to research bitmap flags
@@ -563,7 +563,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
     }

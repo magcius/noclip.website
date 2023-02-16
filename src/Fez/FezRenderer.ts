@@ -308,7 +308,6 @@ export class BackgroundPlaneRenderer {
     private rawScale = vec2.create();
     private xTextureRepeat = false;
     private yTextureRepeat = false;
-    private clampTexture = false;
     private sampler: GfxSampler;
 
     constructor(device: GfxDevice, backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
@@ -343,7 +342,6 @@ export class BackgroundPlaneRenderer {
 
         this.xTextureRepeat = backgroundPlane.xTextureRepeat;
         this.yTextureRepeat = backgroundPlane.yTextureRepeat;
-        this.clampTexture = backgroundPlane.clampTexture;
 
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
@@ -356,7 +354,7 @@ export class BackgroundPlaneRenderer {
             wrapT: this.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
 

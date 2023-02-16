@@ -77,7 +77,7 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Tex
         wrapT: translateCM(texture.tile.cmT),
         minFilter: GfxTexFilterMode.Point,
         magFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.NoMip,
+        mipFilter: GfxMipFilterMode.Nearest,
         minLOD: 0, maxLOD: 0,
     });
 }

@@ -40,7 +40,7 @@ export class TevLayerInst {
             wrapT: translateWrapModeGfx(wrapT),
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: maxLod === 0 ? GfxMipFilterMode.NoMip : GfxMipFilterMode.Linear,
+            mipFilter: maxLod === 0 ? GfxMipFilterMode.Nearest : GfxMipFilterMode.Linear,
             minLOD: 0,
             maxLOD: maxLod,
         });

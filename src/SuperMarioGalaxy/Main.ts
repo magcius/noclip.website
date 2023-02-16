@@ -91,7 +91,7 @@ class SpecialTextureBinder {
         this.clampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             maxLOD: 100,
             minLOD: 0,
             wrapS: GfxWrapMode.Clamp,
