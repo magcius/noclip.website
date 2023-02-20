@@ -1,10 +1,11 @@
 
 import { ReadonlyVec4, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { AABB } from "../Geometry";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT";
-import { assert, decodeString, readString } from "../util";
+import { assert, decodeString, ensureInList, readString } from "../util";
 
 const enum LumpType {
     ENTITIES = 0,
@@ -48,6 +49,12 @@ export interface SurfaceLightmapData {
     pagePosY: number;
 }
 
+export interface Model {
+    bbox: AABB;
+    headnode: number[];
+    surfaces: number[];
+}
+
 export interface Surface {
     texName: string;
     startIndex: number;
@@ -74,13 +81,14 @@ export class BSPFile {
     public version: number;
 
     private entitiesStr: string; // For debugging.
+    public models: Model[] = [];
     public entities: BSPEntity[] = [];
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
     public surfaces: Surface[] = [];
     public extraTexData: ArrayBufferSlice[] = [];
     public lightmapPackerPage = new LightmapPackerPage(2048, 2048);
-
+    
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
         this.version = view.getUint32(0x00, true);
@@ -171,6 +179,36 @@ export class BSPFile {
 
         faces.sort((a, b) => a.texName.localeCompare(b.texName));
 
+        const models = getLumpData(LumpType.MODELS).createDataView();
+        const faceToModelIdx: number[] = [];
+        for (let idx = 0x00; idx < models.byteLength; idx += 0x40) {
+            const minX = models.getFloat32(idx + 0x00, true);
+            const minY = models.getFloat32(idx + 0x04, true);
+            const minZ = models.getFloat32(idx + 0x08, true);
+            const maxX = models.getFloat32(idx + 0x0C, true);
+            const maxY = models.getFloat32(idx + 0x10, true);
+            const maxZ = models.getFloat32(idx + 0x14, true);
+            const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+
+            const originX = models.getFloat32(idx + 0x18, true);
+            const originY = models.getFloat32(idx + 0x1C, true);
+            const originZ = models.getFloat32(idx + 0x20, true);
+
+            const headnode0 = models.getUint32(idx + 0x24, true);
+            const headnode1 = models.getUint32(idx + 0x28, true);
+            const headnode2 = models.getUint32(idx + 0x2C, true);
+            const headnode3 = models.getUint32(idx + 0x30, true);
+            const headnode: number[] = [headnode0, headnode1, headnode2, headnode3];
+            const visleafs = models.getUint32(idx + 0x34, true);
+            const firstface = models.getUint32(idx + 0x38, true);
+            const numfaces = models.getUint32(idx + 0x3C, true);
+
+            const modelIndex = this.models.length;
+            for (let i = firstface; i < firstface + numfaces; i++)
+                faceToModelIdx[i] = modelIndex;
+            this.models.push({ bbox, headnode, surfaces: [] });
+        }
+
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
@@ -206,10 +244,11 @@ export class BSPFile {
 
                 if (face.texName !== prevFace.texName)
                     canMerge = false;
+                else if (faceToModelIdx[prevFace.index] !== faceToModelIdx[face.index])
+                    canMerge = false;
 
                 if (canMerge)
                     mergeSurface = this.surfaces[this.surfaces.length - 1];
-                // TODO(jstpierre): models
             }
 
             const m = texinfoa[face.texinfo].textureMapping;
@@ -280,6 +319,11 @@ export class BSPFile {
                 surface = { texName: face.texName, startIndex: dstOffsIndex, indexCount: 0, lightmapData: [] };
                 this.surfaces.push(surface);
             }
+
+            const surfaceIndex = this.surfaces.length - 1;
+
+            const model = this.models[faceToModelIdx[face.index]];
+            ensureInList(model.surfaces, surfaceIndex);
 
             surface.lightmapData.push(lightmapData);
             surface.indexCount += indexCount;

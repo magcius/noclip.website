@@ -162,3 +162,8 @@ export function setBitFlagEnabled(v: number, mask: number, enabled: boolean): nu
 export function mod(a: number, b: number): number {
     return (a + b) % b;
 }
+
+export function ensureInList<T>(L: T[], v: T): void {
+    if (!L.includes(v))
+        L.push(v);
+}

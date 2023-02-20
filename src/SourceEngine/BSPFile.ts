@@ -2,7 +2,7 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
-import { readString, assert, nArray, decodeString } from "../util";
+import { readString, assert, nArray, decodeString, ensureInList } from "../util";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
@@ -756,11 +756,6 @@ export class LightmapPacker {
 export interface Cubemap {
     pos: vec3;
     filename: string;
-}
-
-function ensureInList<T>(L: T[], v: T): void {
-    if (!L.includes(v))
-        L.push(v);
 }
 
 class ResizableArrayBuffer {
