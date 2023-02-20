@@ -888,7 +888,6 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
-        // TODO(jstpierre): Optimize this so we don't repeat this CSE.
         const texScale = this.stageUsesSimpleCoords(stage) ? `` : ` * TextureInvScale(${stage.texMap})`;
         return this.generateTextureSample(stage.texMap, `t_TexCoord${texScale}`);
     }
@@ -1090,27 +1089,23 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     private generateTevTexCoordIndirectMtx(stage: TevStage): string {
         const indTexCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
+        const indTexMtxIdx = ((stage.indTexMatrix) & 0x03) - 1;
 
         switch (stage.indTexMatrix) {
-        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
-        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
-        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._0:
+        case GX.IndTexMtxID._1:
+        case GX.IndTexMtxID._2:
+            return `Mul(u_IndTexMtx[${indTexMtxIdx}], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
-            // This assumes scale_exp is 0.
-            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
-            // This assumes scale_exp is 0.
-            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
-        // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
-            console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
-            return `${indTexCoord}.xy`;
+            throw "whoops";
         }
     }
 
