@@ -33,7 +33,7 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData
     const paletteFormat: GX.TexPalette = view.getUint8(0x09);
     const paletteCount: number = view.getUint16(0x0A);
     const paletteOffs: number = view.getUint32(0x0C);
-    const maxAnisotropy: GX.Anisotropy = view.getUint32(0x13);
+    const maxAnisotropy: GX.Anisotropy = view.getUint8(0x13);
     const minFilter: GX.TexFilter = view.getUint8(0x14);
     const magFilter: GX.TexFilter = view.getUint8(0x15);
     const minLOD: number = view.getInt8(0x16) * 1/8;
