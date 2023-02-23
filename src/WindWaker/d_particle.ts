@@ -19,6 +19,7 @@ import { dGlobals } from "./zww_scenes";
 import * as GX from '../gx/gx_enum';
 import { ColorKind } from "../gx/gx_render";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -371,6 +372,9 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
     }
 
     public override draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+        for (let j = 0; j < emitter.aliveParticlesBase.length; j++)
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), this.globals.camera.clipFromWorldMatrix, emitter.aliveParticlesBase[j].position);
+
         // There should always be a multiple of three particles, with how we emit them.
         const trackCount = (emitter.aliveParticlesBase.length / 3) | 0;
         if (trackCount < 2)

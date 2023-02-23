@@ -75,7 +75,8 @@ function createTexture(r: DisplayListRegisters, data: ArrayBufferSlice, name: st
     const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
     const magFilter: GX.TexFilter = (mode0 >>> 4) & 0x01;
     const minFilter: GX.TexFilter = minFilterTable[(mode0 >>> 5) & 0x07];
-    const lodBias = (mode0 >>> 9) & 0x05;
+    const lodBias = ((mode0 >>> 9) & 0x05) * 32.0;
+    const maxAnisotropy = (mode0 >>> 19) & 0x03;
     const mode1 = r.bp[GX.BPRegister.TX_SETMODE1_I0_ID];
     const minLOD = (mode1 >>> 0) & 0xF;
     const maxLOD = (mode1 >>> 8) & 0xF;
@@ -91,7 +92,7 @@ function createTexture(r: DisplayListRegisters, data: ArrayBufferSlice, name: st
         paletteData: null,
         wrapS, wrapT,
         minFilter, magFilter,
-        minLOD, maxLOD, lodBias,
+        minLOD, maxLOD, lodBias, maxAnisotropy,
     };
 
     return texture;

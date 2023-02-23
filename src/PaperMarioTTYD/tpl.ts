@@ -16,6 +16,7 @@ export interface TPLTexture extends GX_Texture.TextureInputGX {
     edgeLOD: number;
     minLOD: number;
     maxLOD: number;
+    maxAnisotropy: GX.Anisotropy;
     paletteFormat: GX.TexPalette;
     paletteData: ArrayBufferSlice | null;
 }
@@ -55,6 +56,7 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const edgeLOD = view.getUint8(textureOffs + 0x20);
         const minLOD = view.getUint8(textureOffs + 0x21);
         const maxLOD = view.getUint8(textureOffs + 0x22);
+        const maxAnisotropy = GX.Anisotropy._1;
 
         // TODO(jstpierre): Is this right?
         const mipCount = (maxLOD - minLOD) + 1;
@@ -75,7 +77,7 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         textures.push({
             name, mipCount, data, width, height, format,
             wrapS, wrapT, minFilter, magFilter,
-            lodBias, edgeLOD, minLOD, maxLOD,
+            lodBias, edgeLOD, minLOD, maxLOD, maxAnisotropy,
             paletteFormat, paletteData,
         });
     }

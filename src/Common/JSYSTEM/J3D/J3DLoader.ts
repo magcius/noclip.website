@@ -1158,6 +1158,7 @@ export interface TEX1_Sampler {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
+    maxAnisotropy: GX.Anisotropy;
     textureDataIndex: number;
 }
 
@@ -1213,6 +1214,7 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
             minLOD: btiTexture.minLOD,
             maxLOD: btiTexture.maxLOD,
             lodBias: btiTexture.lodBias,
+            maxAnisotropy: btiTexture.maxAnisotropy,
             textureDataIndex,
         };
         samplers.push(sampler);

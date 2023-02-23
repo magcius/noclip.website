@@ -251,6 +251,19 @@ export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMod
     }
 }
 
+export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
+    switch (anisotropy) {
+    case GX.Anisotropy._1:
+        return 1;
+    case GX.Anisotropy._2:
+        return 2;
+    case GX.Anisotropy._4:
+        return 4;
+    default:
+        throw "whoops";
+    }
+}
+
 export class GXTextureHolder<TextureType extends GX_Texture.TextureInputGX = GX_Texture.TextureInputGX> extends TextureHolder<TextureType> {
     protected loadTexture(device: GfxDevice, texture: TextureType): LoadedTexture | null {
         // Don't add textures without data.

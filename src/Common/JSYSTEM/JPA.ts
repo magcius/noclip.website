@@ -465,7 +465,7 @@ export class JPACData {
                 minFilter: GX.TexFilter.LINEAR,
                 magFilter: GX.TexFilter.LINEAR,
                 data: new ArrayBufferSlice(imgData.buffer),
-                lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1,
+                lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1, maxAnisotropy: GX.Anisotropy._1,
                 paletteData: null,
                 paletteFormat: GX.TexPalette.IA8,
             };

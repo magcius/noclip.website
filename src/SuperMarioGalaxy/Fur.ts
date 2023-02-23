@@ -204,6 +204,7 @@ function createFurDensityMap(mapDensity: ReadonlyVec4, mapThickness: ReadonlyVec
         magFilter: GX.TexFilter.LINEAR,
         data: new ArrayBufferSlice(data.buffer),
         lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1,
+        maxAnisotropy: GX.Anisotropy._1,
         paletteData: null,
         paletteFormat: GX.TexPalette.IA8,
     };
