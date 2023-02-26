@@ -373,7 +373,7 @@ export class VTF {
         const nomip = !!(this.flags & VTFFlags.NOMIP);
         const maxLOD = nomip ? 0 : undefined;
         const forceTrilinear = true;
-        const mipFilter = (nomip && (forceTrilinear || !!(this.flags & VTFFlags.TRILINEAR))) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+        const mipFilter = (!nomip && (forceTrilinear || !!(this.flags & VTFFlags.TRILINEAR))) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
 
         const canSupportAnisotropy = texFilter === GfxTexFilterMode.Bilinear && mipFilter === GfxMipFilterMode.Linear;
         const maxAnisotropy = canSupportAnisotropy ? 16 : 1;
