@@ -495,6 +495,14 @@ export class MDL0ModelInstance {
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
     }
 
+    public getNodeToWorldMatrixRefernce(nodeName : string): mat4 {
+        const nodes = this.mdl0Model.mdl0.nodes;
+        for (let i = 0; i < nodes.length; i++)
+            if (nodes[i].name === nodeName)
+                return this.instanceStateData.jointToWorldMatrixArray[nodes[i].mtxId];
+        throw "could not find node";
+    }
+
     public setSortKeyLayer(layer: number): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setSortKeyLayer(layer);
