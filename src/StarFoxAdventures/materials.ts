@@ -854,10 +854,12 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
+    // Perturbed normals, e.g. the Arwing
     private addNBTTextureStage(): number { // Returns scale to use for nbtTexCoord
         const indStage = this.mb.genIndTexStage();
-        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+            mat4SetValue(dst, 0, 3, 0.125); // The matrix scale must be stored in the first row's w
         });
         const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
