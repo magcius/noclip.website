@@ -358,6 +358,8 @@ export abstract class ScrollSelect implements Widget {
                     this.isDragging = false;
                 };
                 outer.onmouseover = (e) => {
+                    if (e.buttons === 0)
+                        this.isDragging = false;
                     if (this.isDragging)
                         outer.focus();
                 };
