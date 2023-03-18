@@ -11,7 +11,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/he
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
-import { assert, nArray, assertExists } from "../util";
+import { assert, nArray, assertExists, setBitFlagEnabled } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
@@ -245,6 +245,8 @@ class ModelTreeLeafInstance {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private sortKey: number;
+    public modelMatrix = mat4.create();
+    private flags: number = 0;
 
     constructor(device: GfxDevice, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
         this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
@@ -355,18 +357,29 @@ class ModelTreeLeafInstance {
         this.texAnimGroup = groupId;
     }
 
-    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance | null {
         if (this.modelTreeLeaf.id === modelId)
             return this;
         return null;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+    public findModelNodeInstance(modelId: number): ModelTreeLeafInstance | null {
+        return this.findModelLeafInstance(modelId);
+    }
+
+    public resetModelMatrix(): void {
+        if (!!(this.flags & 0x01)) {
+            this.flags = setBitFlagEnabled(this.flags, 0x01, false);
+            mat4.identity(this.modelMatrix);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], parentMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
         let depth = -1;
-        bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
+        bboxScratch.transform(this.modelTreeLeaf.bbox, parentMatrix);
         if (viewerInput.camera.frustum.contains(bboxScratch))
             depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch));
         else
@@ -385,7 +398,9 @@ class ModelTreeLeafInstance {
         let offs = template.allocateUniformBuffer(PaperMario64Program.ub_DrawParams, 12 + 8*2);
         const mappedF32 = template.mapUniformBufferF32(PaperMario64Program.ub_DrawParams);
 
-        mat4.mul(modelViewScratch, viewerInput.camera.viewMatrix, modelMatrix);
+        mat4.mul(modelViewScratch, viewerInput.camera.viewMatrix, parentMatrix);
+        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
+        this.flags |= 0x01;
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         if (this.textureEnvironment !== null) {
@@ -460,14 +475,32 @@ class ModelTreeLeafInstance {
 }
 
 class ModelTreeGroupInstance {
-    private modelMatrixScratch = mat4.create();
+    public modelMatrix = mat4.create();
+    private worldMatrix = mat4.create();
 
     constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[], private name = group.name) {
+        mat4.copy(this.modelMatrix, this.group.modelMatrix);
     }
 
-    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+    public resetModelMatrix(): void {
+    }
+
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance | null {
         for (let i = 0; i < this.children.length; i++) {
-            const m = this.children[i].findModelInstance(modelId);
+            const m = this.children[i].findModelLeafInstance(modelId);
+            if (m !== null)
+                return m;
+        }
+
+        return null;
+    }
+
+    public findModelNodeInstance(modelId: number): ModelTreeNodeInstance | null {
+        if (this.group.id === modelId)
+            return this;
+
+        for (let i = 0; i < this.children.length; i++) {
+            const m = this.children[i].findModelNodeInstance(modelId);
             if (m !== null)
                 return m;
         }
@@ -480,10 +513,10 @@ class ModelTreeGroupInstance {
             this.children[i].setVisible(v);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        mat4.mul(this.modelMatrixScratch, modelMatrix, this.group.modelMatrix);
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], parentMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        mat4.mul(this.worldMatrix, parentMatrix, this.modelMatrix);
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, texAnimGroups, this.modelMatrixScratch, viewerInput);
+            this.children[i].prepareToRender(device, renderInstManager, texAnimGroups, this.worldMatrix, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -539,16 +572,23 @@ export class PaperMario64ModelTreeRenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance {
+        return assertExists(this.modelTreeRootInstance.findModelLeafInstance(modelId));
+    }
+
+    public findModelInstance(modelId: number): ModelTreeNodeInstance | null {
+        return this.modelTreeRootInstance.findModelNodeInstance(modelId);
+    }
+
     public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
-        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
-        modelInstance.setTexAnimEnabled(enabled);
+        this.findModelLeafInstance(modelId).setTexAnimEnabled(enabled);
     }
 
     public setModelTexAnimGroup(modelId: number, groupId: number): void {
         if (!this.texAnimGroup[groupId])
             this.texAnimGroup[groupId] = new TexAnimGroup();
 
-        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
+        const modelInstance = this.findModelLeafInstance(modelId);
         modelInstance.setTexAnimGroup(groupId);
         modelInstance.setTexAnimEnabled(true);
     }
@@ -558,8 +598,8 @@ export class PaperMario64ModelTreeRenderer {
             this.texAnimGroup[groupId] = new TexAnimGroup();
 
         const m = this.texAnimGroup[groupId].tileMatrix[tileId];
-        m[12] = transS;
-        m[13] = transT;
+        m[12] = transS / 0x400;
+        m[13] = transT / -0x400;
     }
 
     public destroy(device: GfxDevice): void {

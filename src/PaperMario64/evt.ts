@@ -1,14 +1,9 @@
 
-// https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/ttydasm/ttydasm.cpp
-// https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt
-
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { MathConstants } from "../MathHelpers";
-import { hexzero0x, hexzero, decodeString, readString, assert, nullify } from "../util";
-import { WorldRenderer } from "./render";
+import { assert, hexzero, hexzero0x } from "../util";
 
 enum op {
-	END = 0x01,
+    END = 0x01,
 
     end_evt,
     lbl,
@@ -16,22 +11,8 @@ enum op {
     do,
     while,
     do_break,
-    do_continue,
     wait_frm,
     wait_msec,
-    halt,
-    if_str_equal,
-    if_str_not_equal,
-    if_str_small,
-    if_str_large,
-    if_str_small_equal,
-    if_str_large_equal,
-    iff_equal,
-    iff_not_equal,
-    iff_small,
-    iff_large,
-    iff_small_equal,
-    iff_large_equal,
     if_equal,
     if_not_equal,
     if_small,
@@ -82,7 +63,6 @@ enum op {
     readf3,
     readf4,
     readf_n,
-    // NOTE: spm adds clampint in here
     set_user_wrk,
     set_user_flg,
     alloc_user_wrk,
@@ -90,25 +70,18 @@ enum op {
     andi,
     or,
     ori,
-    set_frame_from_msec,
-    set_msec_from_frame,
-    set_ram,
-    set_ramf,
-    get_ram,
-    get_ramf,
-    setr,
-    setrf,
-    getr,
-    getrf,
     user_func,
     run_evt,
     run_evt_id,
     run_child_evt,
+    bind_trigger, // unofficial name
+    unbind,       // unofficial name
     delete_evt,
     restart_evt,
     set_pri,
     set_spd,
     set_type,
+    bind_padlock, // unofficial name
     stop_all,
     start_all,
     stop_other,
@@ -117,50 +90,15 @@ enum op {
     start_id,
     chk_evt,
     inline_evt,
-    inline_evt_id,
     end_inline,
     brother_evt,
-    brother_evt_id,
     end_brother,
     debug_put_msg,
-    debug_msg_clear,
     debug_put_reg,
-    debug_name,
-    debug_rem,
-    debug_bp,
-}
-
-interface evt_sym {
-    name: string;
-    filename: string;
-}
-
-export class evt_map {
-    private symbols = new Map<number, evt_sym>();
-
-    constructor(buffer: ArrayBufferSlice) {
-        const text = decodeString(buffer);
-        const lines = text.split('\n');
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            // not a symbol
-            if (!line.startsWith('8'))
-                continue;
-
-            const [addrStr, , , , name, filename] = line.split(' ');
-            const addr = parseInt(addrStr, 16);
-            this.symbols.set(addr, { name, filename });
-        }
-    }
-
-    public getSymbol(addr: number): evt_sym | null {
-        return nullify(this.symbols.get(addr));
-    }
 }
 
 export class evt_handler {
-    public get_user_func_sym(addr: number): evt_sym | null {
+    public get_user_func_sym(addr: number): string | null {
         return null;
     }
 
@@ -181,7 +119,7 @@ class mapentry {
     }
 
     public getUint32(addr: number): number {
-        assert(addr >= this.base && addr <= this.base + this.view.byteLength);
+        assert(addr >= this.base && addr <= this.base + this.buf.byteLength);
         return this.view.getUint32(addr - this.base);
     }
 }
@@ -205,9 +143,9 @@ export class rommap {
 }
 
 // records execution state for one evt
-const enum evt_state { running, waitonexpr, waitonfrm, waitonevt, userfuncblock, stopped, end, }
+export const enum evt_state { running, waitonfrm, waitonevt, userfuncblock, stopped, end, }
 
-const enum evt_user_func_ret { advance, block, stop, }
+export const enum evt_user_func_ret { advance, block, stop, }
 
 interface evt_loop_record {
     pc: number;
@@ -218,15 +156,15 @@ interface evt_switch_record {
     operand: number | null;
 }
 
-class evt_exec {
+export class evt_exec {
     public state = evt_state.running;
-    public waitonexpr: number | null = null;
     public waitonfrm: number | null = null;
     public waitonevtid: number | null = null;
     public uf: Uint32Array;
     public uw: Float32Array;
     public lf: Uint8Array = new Uint8Array(512);
     public lw: Float32Array = new Float32Array(512);
+    public funcwork: Float32Array = new Float32Array(4);
     public typeMask: number = 0xEF;
 
     public opcode: op;
@@ -240,6 +178,10 @@ class evt_exec {
         this.entryAddress = this.pc;
     }
 
+    public is_initial_call(): boolean {
+        return this.state !== evt_state.userfuncblock;
+    }
+
     public copy(o: evt_exec): void {
         this.uf = o.uf;
         this.uw = o.uw;
@@ -250,9 +192,9 @@ class evt_exec {
 }
 
 export class evtmgr {
-    private view: DataView;
     private evt: evt_exec[] = [];
     private evtid = 0;
+    private time = 0;
 
     public gswf: Uint8Array = new Uint8Array(65535);
     public lswf: Float32Array = new Float32Array(512);
@@ -262,11 +204,6 @@ export class evtmgr {
     public gw: Float32Array = new Float32Array(512);
 
     constructor(private handler: evt_handler, private map: rommap) {
-    }
-
-    public disasm(addr: number): void {
-        const disasm = new evt_disasm_ctx(this.handler, this.map);
-        disasm.disasm(addr);
     }
 
     public evtnew(addr: number, parent: evt_exec | null = null): evt_exec {
@@ -280,6 +217,11 @@ export class evtmgr {
         return evt;
     }
 
+    public disasm(addr: number): void {
+        const disasm = new evt_disasm_ctx(this.handler, this.map);
+        disasm.disasm(addr);
+    }
+
     private evtgetbyid(id: number): evt_exec | null {
         for (let i = 0; i < this.evt.length; i++)
             if (this.evt[i].id === id)
@@ -288,13 +230,12 @@ export class evtmgr {
     }
 
     private evtdecode(evt: evt_exec): void {
-        const header = evt.entry.getUint32(evt.pc);
-        evt.opcode = this.handler.op_decode(header & 0xFFFF);
-        evt.paramCount = (header >>> 16) & 0xFFFF;
+        evt.opcode = this.handler.op_decode(evt.entry.getUint32(evt.pc + 0x00));
+        evt.paramCount = evt.entry.getUint32(evt.pc + 0x04);
     }
 
     private evtnextpc(evt: evt_exec): number {
-        return evt.pc + 0x04 + evt.paramCount * 0x04;
+        return evt.pc + 0x08 + evt.paramCount * 0x04;
     }
 
     private evtadv(evt: evt_exec): void {
@@ -304,7 +245,7 @@ export class evtmgr {
 
     private evt_raw_arg(evt: evt_exec, i: number): number {
         assert(i < evt.paramCount);
-        return evt.entry.getUint32(evt.pc + 0x04 + 0x04 * i);
+        return evt.entry.getUint32(evt.pc + 0x08 + 0x04 * i);
     }
 
     public evt_set_arg(evt: evt_exec, i: number, v: number): void {
@@ -317,13 +258,9 @@ export class evtmgr {
         return this.evtevalexpr(evt, expr);
     }
 
-    public evt_eval_string_arg(evt: evt_exec, i: number): string {
-        return this.getstr(this.evt_eval_arg(evt, i));
-    }
-
     private evtevalexpr(evt: evt_exec, uexpr: number): number {
         const expr = (uexpr | 0);
-        if (expr <= -250000000)
+        if (expr <= -270000000)
             return uexpr; // addr
         else if (expr >= -230000000 && expr <= -210000000)
             return (expr - -230000000) / 1024.0; // float imm
@@ -398,13 +335,6 @@ export class evtmgr {
         }
     }
 
-    private getstr(addr: number): string {
-        const entry = this.map.ref(addr);
-        if (entry === null)
-            return "";
-        return readString(entry.buf, addr - entry.base, 0xFF, true);
-    }
-
     private switch_get_cur_operand(evt: evt_exec): number {
         return evt.switchRecord[0].operand!;
     }
@@ -451,7 +381,7 @@ export class evtmgr {
 
         let count = 1;
         while (true) {
-            if (evt.opcode >= op.if_str_equal && evt.opcode <= op.if_not_flag)
+            if (evt.opcode >= op.if_equal && evt.opcode <= op.if_not_flag)
                 ++count;
             else if (evt.opcode === op.end_if)
                 --count;
@@ -477,7 +407,7 @@ export class evtmgr {
             if (evt.opcode === op.else && count === 1)
                 break;
 
-            if (evt.opcode >= op.if_str_equal && evt.opcode <= op.if_not_flag)
+            if (evt.opcode >= op.if_equal && evt.opcode <= op.if_not_flag)
                 ++count;
             else if (evt.opcode === op.end_if)
                 --count;
@@ -518,6 +448,9 @@ export class evtmgr {
     private op_goto(evt: evt_exec, needle: number): void {
         // Look for lbl
 
+        evt.pc = evt.entryAddress;
+        this.evtdecode(evt);
+
         while (true) {
             let found = false;
 
@@ -537,10 +470,10 @@ export class evtmgr {
     private execone(evt: evt_exec): void {
         this.evtdecode(evt);
         const oldpc = evt.pc;
-        let nextpc: number | null = this.evtnextpc(evt);
+        let nextpc = this.evtnextpc(evt);
 
         if (evt.debug)
-            console.log(hexzero(evt.pc, 8), op[evt.opcode]);
+            console.log(evt.id, hexzero(evt.pc, 8), op[evt.opcode]);
 
         // Dispatch opcode.
         switch (evt.opcode) {
@@ -564,9 +497,6 @@ export class evtmgr {
         case op.do_break: {
             this.do_go_break(evt);
         } break;
-        case op.do_continue: {
-            this.do_go_start(evt);
-        } break;
         case op.while: {
             const loopRecord = evt.loopRecord[0]!;
             if (loopRecord.count === null || loopRecord.count-- > 0)
@@ -582,52 +512,32 @@ export class evtmgr {
             evt.state = evt_state.waitonfrm;
             evt.waitonfrm = this.evt_eval_arg(evt, 0) * (60/1000);
         } break;
-        case op.halt: {
-            evt.state = evt_state.waitonexpr;
-            evt.waitonexpr = this.evt_raw_arg(evt, 0);
-        } break;
-        case op.if_str_equal: {
-            const op0 = this.evt_eval_string_arg(evt, 0);
-            const op1 = this.evt_eval_string_arg(evt, 1);
-            this.op_if(evt, op0 === op1);
-        } break;
-        case op.if_str_not_equal: {
-            const op0 = this.evt_eval_string_arg(evt, 0);
-            const op1 = this.evt_eval_string_arg(evt, 1);
-            this.op_if(evt, op0 !== op1);
-        } break;
-        case op.if_equal:
-        case op.iff_equal: {
+        case op.if_equal: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 === op1);
         } break;
-        case op.if_not_equal:
-        case op.iff_not_equal: {
+        case op.if_not_equal: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 !== op1);
         } break;
-        case op.if_small:
-        case op.iff_small: {
+        case op.if_small: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 < op1);
         } break;
-        case op.if_large:
-        case op.iff_large: {
+        case op.if_large: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 > op1);
         } break;
-        case op.if_small_equal:
-        case op.iff_small_equal: {
+        case op.if_small_equal: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 <= op1);
         } break;
-        case op.if_large_equal:
-        case op.iff_large_equal: {
+        case op.if_large_equal: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
             this.op_if(evt, op0 >= op1);
@@ -755,7 +665,7 @@ export class evtmgr {
                 // we passed
             } else {
                 // we failed, look for case_end
-                while (!(evt.opcode === op.case_end || evt.opcode === op.end_switch))
+                while (evt.opcode !== op.case_end)
                     this.evtadv(evt);
             }
         } break;
@@ -821,6 +731,14 @@ export class evtmgr {
             this.evt_set_arg(evt, 2, 0);
             this.evt_set_arg(evt, 3, 0);
         } break;
+        case op.set_user_flg:
+        case op.set_user_wrk:
+            // TODO
+            break;
+        case op.alloc_user_wrk: {
+            const size = this.evt_eval_arg(evt, 0);
+            evt.uw = new Float32Array(size);
+        } break;
         case op.and: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
@@ -840,22 +758,6 @@ export class evtmgr {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_raw_arg(evt, 1);
             this.evt_set_arg(evt, 0, op0 | op1);
-        } break;
-        case op.set_frame_from_msec: {
-            const msec = this.evt_eval_arg(evt, 1);
-            this.evt_set_arg(evt, 0, msec * 60/1000);
-        } break;
-        case op.set_msec_from_frame: {
-            const frame = this.evt_eval_arg(evt, 1);
-            this.evt_set_arg(evt, 0, frame * 1000/60);
-        } break;
-        case op.setr:
-        case op.setrf: {
-            // TODO
-        } break;
-        case op.getr:
-        case op.getrf: {
-            // TODO
         } break;
         case op.user_func: {
             const func_addr = this.evt_eval_arg(evt, 0);
@@ -881,6 +783,11 @@ export class evtmgr {
             evt.waitonevtid = subevt.id;
             evt.state = evt_state.waitonevt;
         } break;
+        case op.bind_trigger:
+        case op.unbind:
+        case op.bind_padlock:
+            // no implementation right now
+            break;
         case op.delete_evt: {
             const id = this.evt_eval_arg(evt, 0);
             const subevt = this.evtgetbyid(id);
@@ -920,21 +827,11 @@ export class evtmgr {
         } break;
         case op.inline_evt: {
             const subevt = this.evtnew(nextpc, evt);
-            this.scanend(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
-        } break;
-        case op.inline_evt_id: {
-            const subevt = this.evtnew(nextpc, evt);
-            this.scanend(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
-            this.evt_set_arg(evt, 0, subevt.id);
+            this.scanend(evt, [op.inline_evt], op.end_inline);
         } break;
         case op.brother_evt: {
             const subevt = this.evtnew(nextpc, evt);
-            this.scanend(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
-        } break;
-        case op.brother_evt_id: {
-            const subevt = this.evtnew(nextpc, evt);
-            this.scanend(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
-            this.evt_set_arg(evt, 0, subevt.id);
+            this.scanend(evt, [op.brother_evt], op.end_brother);
         } break;
         case op.debug_put_msg:
         case op.debug_put_reg: {
@@ -964,19 +861,26 @@ export class evtmgr {
             const subevt = this.evtgetbyid(evt.waitonevtid!);
             if (subevt === null || subevt.state === evt_state.end)
                 evt.state = evt_state.running;
-        } else if (evt.state === evt_state.waitonexpr) {
-            if (this.evtevalexpr(evt, evt.waitonexpr!) === 0)
-                evt.state = evt_state.running;
         }
     }
 
-    public exec(): void {
+    private exec(): void {
         for (let i = 0; i < this.evt.length; i++)
             this.execevt(this.evt[i]);
     }
+
+    public update(dt: number): void {
+        this.time += dt;
+
+        const FPS = 1000/30;
+        while (this.time >= FPS) {
+            this.exec();
+            this.time -= FPS;
+        }
+    }
 }
 
-const enum evt_disasm_ptype { user_func, str, evt, }
+const enum evt_disasm_ptype { dec, hex, user_func, evt, }
 interface evt_disasm_opcode_tbl_entry {
     t: evt_disasm_ptype[];
     varargs: boolean;
@@ -987,7 +891,6 @@ function opt(t: evt_disasm_ptype[], varargs = false): evt_disasm_opcode_tbl_entr
 }
 
 const evt_disasm_opcode_tbl: { [o: number]: evt_disasm_opcode_tbl_entry } = {
-    [op.if_str_equal]:  opt([evt_disasm_ptype.str, evt_disasm_ptype.str]),
     [op.user_func]:     opt([evt_disasm_ptype.user_func], true),
     [op.run_child_evt]: opt([evt_disasm_ptype.evt]),
     [op.run_evt]:       opt([evt_disasm_ptype.evt]),
@@ -1008,30 +911,12 @@ export class evt_disasm_ctx {
         if (type === evt_disasm_ptype.user_func) {
             const sym = this.handler.get_user_func_sym(addr);
             if (sym !== null)
-                return `${sym.filename}/${sym.name}`;
+                return sym;
         }
 
-        const entry = this.map.ref(addr);
-        if (type === evt_disasm_ptype.evt && entry !== null) {
+        if (type === evt_disasm_ptype.evt) {
             const sub = this.disasm_sub_maybe(addr);
             return sub.name;
-        }
-
-        if (type === evt_disasm_ptype.str && entry !== null) {
-            const str = readString(entry.buf, addr - entry.base, 0xFF, true);
-            return `"${str}"`;
-        }
-
-        // Try to guess.
-        if (type === undefined && entry !== null) {
-            let str: string | null = null;
-            try {
-                str = readString(entry.buf, addr - entry.base, 0xFF, true);
-            } catch(e) {
-            }
-
-            if (str !== null && (str.length > 3 && str.split('').every((c) => c.charCodeAt(0) > 0x20 && c.charCodeAt(0) <= 0x7F)))
-                return `"${str}"`;
         }
 
         return `$${hexzero0x(addr, 8)}`;
@@ -1039,7 +924,7 @@ export class evt_disasm_ctx {
 
     private disasm_expr(uexpr: number, type: evt_disasm_ptype): string {
         const expr = (uexpr | 0);
-        if (expr <= -250000000)
+        if (expr <= -270000000)
             return this.disasm_addr(uexpr, type);
         else if (expr >= -230000000 && expr <= -210000000)
             return `${(expr - -230000000) / 1024.0}`;
@@ -1063,6 +948,8 @@ export class evt_disasm_ctx {
             return `GW(${expr - -50000000})`;
         else if (expr >= -30000000 && expr < -20000000)
             return `LW(${expr - -30000000})`;
+        else if (type === evt_disasm_ptype.hex)
+            return `${hexzero0x(expr)}`;
         else
             return `${expr}`;
     }
@@ -1085,9 +972,8 @@ export class evt_disasm_ctx {
         }
 
         while (true) {
-            const header = entry.getUint32(pc);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
+            const opcode = entry.getUint32(pc + 0x00);
+            const paramCount = entry.getUint32(pc + 0x04);
 
             if ((opcode === op.end_if) || opcode === op.else || opcode === op.while || opcode === op.end_switch || opcode === op.end_inline || opcode === op.end_brother)
                 popIndent();
@@ -1095,7 +981,7 @@ export class evt_disasm_ctx {
             const pcs = hexzero(pc, 8);
             S += `${pcs}  ${indent}  ${op[opcode]}`;
 
-            pc += 0x04;
+            pc += 0x08;
             const tbl = evt_disasm_opcode_tbl[opcode];
             let ptype: evt_disasm_ptype[] = [];
             if (tbl !== undefined) {
@@ -1117,7 +1003,7 @@ export class evt_disasm_ctx {
             if (opcode === op.END)
                 break;
 
-            if ((opcode >= op.if_str_equal && opcode <= op.if_not_flag) || opcode === op.else || opcode === op.do || opcode === op.switch || opcode === op.inline_evt || opcode === op.inline_evt_id || opcode === op.brother_evt || opcode === op.brother_evt_id)
+            if ((opcode >= op.if_equal && opcode <= op.if_not_flag) || opcode === op.else || opcode === op.do || opcode === op.switch || opcode === op.inline_evt || opcode === op.brother_evt)
                 pushIndent();
         }
 
@@ -1142,98 +1028,5 @@ export class evt_disasm_ctx {
         for (let i = 0; i < this.sub.length; i++)
             S += `${this.sub[i].res}\n\n`;
         console.log(S);
-    }
-}
-
-export class evt_handler_ttyd extends evt_handler {
-    private mapfile: evt_map;
-
-    constructor(mapFileData: ArrayBufferSlice, private renderer: WorldRenderer) {
-        super();
-        this.mapfile = new evt_map(mapFileData);
-    }
-
-    public override user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
-        if (addr === 0x805bea21) {
-            // HACK: fix for tou_01
-            mgr.evt_set_arg(evt, 1, 1);
-            return evt_user_func_ret.advance;
-        }
-
-        const sym = this.mapfile.getSymbol(addr);
-        if (sym === null)
-            return evt_user_func_ret.advance;
-
-        if (sym.name === 'evt_sub_get_language') {
-            // 0 = Japanese, 1 = English, 2 = German, 3 = French, 4 = Spanish, 5 = Italian
-            mgr.evt_set_arg(evt, 1, 1);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_sub_get_sincos') {
-            const theta = mgr.evt_eval_arg(evt, 1) * MathConstants.DEG_TO_RAD;
-            mgr.evt_set_arg(evt, 2, Math.sin(theta));
-            mgr.evt_set_arg(evt, 3, Math.cos(theta));
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_map_playanim') {
-            const animName = mgr.evt_eval_string_arg(evt, 1);
-            this.renderer.playAnimationName(animName);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_mapobj_flag_onoff') {
-            const recurse = mgr.evt_eval_arg(evt, 1);
-            const v = mgr.evt_eval_arg(evt, 2);
-            const name = mgr.evt_eval_string_arg(evt, 3);
-            const flag = mgr.evt_eval_arg(evt, 4);
-            const mapObj = this.renderer.getMapObj(name);
-            if (mapObj !== null)
-                mapObj.setFlag(flag, !!v, !!recurse);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_mapobj_rotate') {
-            const flag = mgr.evt_eval_arg(evt, 1);
-            const name = mgr.evt_eval_string_arg(evt, 2);
-            const rx = mgr.evt_eval_arg(evt, 3);
-            const ry = mgr.evt_eval_arg(evt, 4);
-            const rz = mgr.evt_eval_arg(evt, 5);
-            const mapObj = this.renderer.getMapObj(name);
-            if (mapObj !== null)
-                mapObj.rotate(rx, ry, rz);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_mapobj_scale') {
-            const flag = mgr.evt_eval_arg(evt, 1);
-            const name = mgr.evt_eval_string_arg(evt, 2);
-            const sx = mgr.evt_eval_arg(evt, 3);
-            const sy = mgr.evt_eval_arg(evt, 4);
-            const sz = mgr.evt_eval_arg(evt, 5);
-            const mapObj = this.renderer.getMapObj(name);
-            if (mapObj !== null)
-                mapObj.scale(sx, sy, sz);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_mapobj_trans') {
-            const flag = mgr.evt_eval_arg(evt, 1);
-            const name = mgr.evt_eval_string_arg(evt, 2);
-            const tx = mgr.evt_eval_arg(evt, 3);
-            const ty = mgr.evt_eval_arg(evt, 4);
-            const tz = mgr.evt_eval_arg(evt, 5);
-            const mapObj = this.renderer.getMapObj(name);
-            if (mapObj !== null)
-                mapObj.trans(tx, ty, tz);
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_mobj_save_blk') {
-            const mobjName = mgr.evt_eval_string_arg(evt, 1);
-            const x = mgr.evt_eval_arg(evt, 2);
-            const y = mgr.evt_eval_arg(evt, 3);
-            const z = mgr.evt_eval_arg(evt, 4);
-            const evtEntry = mgr.evt_eval_arg(evt, 5);
-            const mobj = this.renderer.spawnMOBJ(mobjName, 'MOBJ_SaveBlock');
-            mobj.setPosition(x, y, z);
-            mobj.setAnim('S_1');
-            return evt_user_func_ret.advance;
-        } else if (sym.name === 'evt_npc_glide_position') {
-            return evt_user_func_ret.stop;
-        }
-
-        return evt_user_func_ret.advance;
-    }
-
-    public override get_user_func_sym(addr: number): evt_sym | null {
-        return this.mapfile.getSymbol(addr);
     }
 }

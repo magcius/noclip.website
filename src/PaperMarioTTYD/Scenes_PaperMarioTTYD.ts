@@ -8,7 +8,7 @@ import { SceneContext } from '../SceneBase';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { linkREL } from './REL';
-import { evtmgr, evt_disasm_ctx, evt_handler_ttyd } from './evt';
+import { evtmgr, evt_disasm_ctx, evt_handler_ttyd, rommap } from './evt';
 import * as AnimGroup from './AnimGroup';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
 import { Green, Magenta } from '../Color';
@@ -66,49 +66,12 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
 
             const handler = new evt_handler_ttyd(mapFile, renderer);
-
-            const disasm = new evt_disasm_ctx(handler, rel, this.relBaseAddress!, this.relEntry!);
-            disasm.disasm();
-
-            renderer.evtctx = new evtmgr(handler, rel, this.relBaseAddress!, this.relEntry!);
+            const map = new rommap();
+            map.map(this.relBaseAddress!, rel);
+            renderer.evtmgr = new evtmgr(handler, map);
+            renderer.evtmgr.evtnew(this.relEntry!);
+            renderer.evtmgr.disasm(this.relEntry!);
         }
-
-        /*
-        const agd1 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt');
-        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd1);
-        computeModelMatrixS(agi1.modelMatrix, 100);
-        mat4.translate(agi1.modelMatrix, agi1.modelMatrix, [-20, 0, 0]);
-        renderer.animGroupInstances.push(agi1);
-
-        const agd2 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt_n');
-        const agi2 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd2);
-        computeModelMatrixS(agi2.modelMatrix, 100);
-        renderer.animGroupInstances.push(agi2);
-
-        const label = document.createElement('div');
-        label.style.font = '32pt monospace';
-        label.style.position = 'absolute';
-        label.style.bottom = '48px';
-        label.style.right = '16px';
-        label.style.color = 'white';
-        label.style.textShadow = '0px 0px 4px black';
-        label.textContent = '(none)';
-        context.uiContainer.appendChild(label);
-
-        let i = 0;
-        setInterval(() => {
-            let a = agd1.animGroup.anims[i++];
-            if (a === undefined) {
-                label.textContent = '(done)';
-                return;
-            }
-            while (agd2.animGroup.anims.find((g) => g.name === a.name.slice(4)) === undefined)
-                a = agd1.animGroup.anims[i++];
-            agi1.playAnimation(a.name);
-            agi2.playAnimation(a.name.slice(4));
-            label.textContent = a.name;
-        }, 2000);
-        */
 
         return renderer;
     }

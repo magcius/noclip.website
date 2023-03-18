@@ -524,7 +524,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     public animGroupCache: AnimGroupDataCache | null = null;
     public mobj: MOBJ[] = [];
 
-    public evtctx: evtmgr | null = null;
+    public evtmgr: evtmgr | null = null;
 
     constructor(private device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         super(device);
@@ -585,8 +585,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.evtctx !== null)
-            this.evtctx.exec();
+        if (this.evtmgr !== null)
+            this.evtmgr.exec();
 
         viewerInput.camera.setClipPlanes(1, 32768);
 

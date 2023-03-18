@@ -1,18 +1,21 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import * as MapShape from './map_shape';
 import * as Tex from './tex';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { OpaqueBlack, Color } from '../Color';
+import { OpaqueBlack, Color, colorNewFromRGBA } from '../Color';
 import * as BYML from '../byml';
-import { ScriptExecutor } from './script';
+import { evtmgr, evt_exec, evt_handler, evt_user_func_ret, rommap } from './evt';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { assert, mod } from '../util';
+import { mat4 } from 'gl-matrix';
+import { MathConstants, scaleMatrix } from '../MathHelpers';
 
 const pathBase = `pm64`;
 
@@ -22,11 +25,11 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public textureHolder = new PaperMario64TextureHolder();
     public modelTreeRenderers: PaperMario64ModelTreeRenderer[] = [];
     public bgTextureRenderer: BackgroundBillboardRenderer | null = null;
-    public scriptExecutor: ScriptExecutor | null = null;
+    public evtmgr: evtmgr | null = null;
 
     public renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, public name: string) {
         this.renderHelper = new GfxRenderHelper(device);
         this.attachmentClearDescriptor = makeAttachmentClearDescriptor(OpaqueBlack);
     }
@@ -38,8 +41,8 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
-        if (this.scriptExecutor !== null)
-            this.scriptExecutor.stepTime(viewerInput.time);
+        if (this.evtmgr !== null)
+            this.evtmgr.update(viewerInput.deltaTime);
         if (this.bgTextureRenderer !== null)
             this.bgTextureRenderer.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
@@ -83,21 +86,12 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
             this.modelTreeRenderers[i].destroy(device);
     }
 
-    // ScriptHost
     public setBGColor(color: Color): void {
         this.attachmentClearDescriptor = makeAttachmentClearDescriptor(color);
     }
 
-    public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
-        this.modelTreeRenderers[0].setModelTexAnimGroupEnabled(modelId, enabled);
-    }
-
-    public setModelTexAnimGroup(modelId: number, groupId: number): void {
-        this.modelTreeRenderers[0].setModelTexAnimGroup(modelId, groupId);
-    }
-
-    public setTexAnimGroup(groupId: number, tileId: number, transS: number, transT: number): void {
-        this.modelTreeRenderers[0].setTexAnimGroup(groupId, tileId, transS, transT);
+    public getWorld(): PaperMario64ModelTreeRenderer {
+        return this.modelTreeRenderers[0];
     }
 }
 
@@ -116,6 +110,161 @@ type Arc = {
     BGTexFile: ArrayBufferSlice,
 }
 
+const mapOverlayAddr = 0x80240000;
+
+export class evt_handler_pm64 extends evt_handler {
+    public level_user_func: ((mgr: evtmgr, evt: evt_exec, addr: number) => evt_user_func_ret) | null = null;
+
+    constructor(private renderer: PaperMario64Renderer) {
+        super();
+
+        if (this.renderer.name === 'iwa_10')
+            this.level_user_func = this.user_func_iwa_10;
+    }
+
+    public override get_user_func_sym(addr: number): string | null {
+        if (addr === 0x802ca828) return `SetCamPerspective`;
+        if (addr === 0x802cab18) return `SetCamViewport`;
+        if (addr === 0x802cad98) return `SetCamBGColor`;
+        if (addr === 0x802c9208) return `EnableTexPanning`;
+        if (addr === 0x802c9000) return `SetTexPanner`;
+        if (addr === 0x802c9364) return `SetTexPanOffset`;
+        if (addr === 0x802c8b60) return `TranslateModel`;
+        if (addr === 0x802c8c64) return `RotateModel`;
+        if (addr === 0x802c8d88) return `ScaleModel`;
+        return null;
+    }
+
+    private user_func_iwa_10(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+        if (addr === 0x80240000) {
+            // GetClockHandAngles
+            if (evt.lw[15] > 720)
+                evt.lw[15] = 0;
+
+            evt.lw[0] = evt.lw[15] * 6;
+            evt.lw[1] = evt.lw[15] / 2;
+            return evt_user_func_ret.advance;
+        }
+
+        return evt_user_func_ret.advance;
+    }
+
+    public override user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+        if (addr === 0x802ca828) {
+            // SetCamPerspective
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802cab18) {
+            // SetCamViewport
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802cad98) {
+            // SetCamBGColor
+            assert(evt.paramCount === 5);
+            const camId = mgr.evt_eval_arg(evt, 1);
+            const r = mgr.evt_eval_arg(evt, 2) / 0xFF;
+            const g = mgr.evt_eval_arg(evt, 3) / 0xFF;
+            const b = mgr.evt_eval_arg(evt, 4) / 0xFF;
+            const color = colorNewFromRGBA(r, g, b);
+            this.renderer.setBGColor(color);
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c9208) {
+            // EnableTexPanning
+            assert(evt.paramCount === 3);
+            const modelId = mgr.evt_eval_arg(evt, 1);
+            const enabled = !!mgr.evt_eval_arg(evt, 2);
+            this.renderer.getWorld().setModelTexAnimGroupEnabled(modelId, enabled);
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c9000) {
+            // SetTexPanner
+            assert(evt.paramCount === 3);
+            const modelId = mgr.evt_eval_arg(evt, 1);
+            const groupId = mgr.evt_eval_arg(evt, 2);
+            this.renderer.getWorld().setModelTexAnimGroup(modelId, groupId);
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c9364) {
+            // SetTexPanOffset
+            assert(evt.paramCount === 5);
+            const groupId = mgr.evt_eval_arg(evt, 1);
+            const tileId = mgr.evt_eval_arg(evt, 2);
+            const transS = mgr.evt_eval_arg(evt, 3);
+            const transT = mgr.evt_eval_arg(evt, 4);
+            this.renderer.getWorld().setTexAnimGroup(groupId, tileId, transS, transT);
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c8b60) {
+            // TranslateModel
+            const modelId = mgr.evt_eval_arg(evt, 1);
+            const x = mgr.evt_eval_arg(evt, 2);
+            const y = mgr.evt_eval_arg(evt, 3);
+            const z = mgr.evt_eval_arg(evt, 4);
+            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+            if (modelInstance !== null) {
+                modelInstance.resetModelMatrix();
+                mat4.translate(modelInstance.modelMatrix, modelInstance.modelMatrix, [x, y, z]);
+            }
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c8c64) {
+            // RotateModel
+            const modelId = mgr.evt_eval_arg(evt, 1);
+            const angle = mgr.evt_eval_arg(evt, 2);
+            const x = mgr.evt_eval_arg(evt, 3);
+            const y = mgr.evt_eval_arg(evt, 4);
+            const z = mgr.evt_eval_arg(evt, 5);
+            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+            if (modelInstance !== null) {
+                modelInstance.resetModelMatrix();
+                mat4.rotate(modelInstance.modelMatrix, modelInstance.modelMatrix, angle * MathConstants.DEG_TO_RAD, [x, y, z]);
+            }
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802c8d88) {
+            // ScaleModel
+            const modelId = mgr.evt_eval_arg(evt, 1);
+            const x = mgr.evt_eval_arg(evt, 2);
+            const y = mgr.evt_eval_arg(evt, 3);
+            const z = mgr.evt_eval_arg(evt, 4);
+            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+            if (modelInstance !== null) {
+                modelInstance.resetModelMatrix();
+                scaleMatrix(modelInstance.modelMatrix, modelInstance.modelMatrix, x, y, z);
+            }
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x802402e0) {
+            // UpdateTexturePanSmooth
+            for (let i = 0; i < 4; i++)
+                evt.lw[9 + i] = mod(evt.lw[9 + i] + evt.lw[1 + i], 0x20000);
+            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
+            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
+            return evt_user_func_ret.block;
+        } else if (addr === 0x80240404) {
+            // UpdateTexturePanStepped
+            if (evt.is_initial_call())
+                evt.funcwork.fill(0);
+
+            for (let i = 0; i < 4; i++) {
+                if (evt.funcwork[i] === 0)
+                    evt.lw[9 + i] = mod(evt.lw[9 + i] + evt.lw[1 + i], 0x20000);
+
+                if (evt.funcwork[i]++ >= evt.lw[5 + i])
+                    evt.funcwork[i] = 0;
+            }
+
+            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
+            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
+            return evt_user_func_ret.block;
+        } else if (addr === 0x802ce160) {
+            // GetNpcAnimation
+            mgr.evt_set_arg(evt, 2, 0);
+            return evt_user_func_ret.advance;
+        } else if (addr === 0x8024030c) {
+            mgr.evt_set_arg(evt, 2, 0);
+            return evt_user_func_ret.advance;
+        }
+
+        if (this.level_user_func !== null)
+            return this.level_user_func(mgr, evt, addr);
+
+        return evt_user_func_ret.advance;
+    }
+}
+
 class PaperMario64SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -125,7 +274,7 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
         const arcData = await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`);
         
         const arc: Arc = BYML.parse(arcData, BYML.FileType.CRG1);
-        const renderer = new PaperMario64Renderer(device);
+        const renderer = new PaperMario64Renderer(device, arc.Name);
 
         const tex = Tex.parseTextureArchive(arc.TexFile);
         renderer.textureHolder.addTextureArchive(device, tex);
@@ -141,9 +290,16 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
         const modelTreeRenderer = new PaperMario64ModelTreeRenderer(device, tex, renderer.textureHolder, mapShape.rootNode);
         renderer.modelTreeRenderers.push(modelTreeRenderer);
 
-        const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
-        scriptExecutor.startFromHeader(arc.HeaderAddr);
-        renderer.scriptExecutor = scriptExecutor;
+        const mapOverlay = arc.ROMOverlayData.createDataView();
+        const mapSettingsOffs = (arc.HeaderAddr - mapOverlayAddr);
+        const mainScriptAddr = mapOverlay.getUint32(mapSettingsOffs + 0x10);
+
+        const handler = new evt_handler_pm64(renderer);
+        const map = new rommap();
+        map.map(mapOverlayAddr, arc.ROMOverlayData);
+        renderer.evtmgr = new evtmgr(handler, map);
+        renderer.evtmgr.evtnew(mainScriptAddr);
+        renderer.evtmgr.disasm(mainScriptAddr);
 
         return renderer;
     }
@@ -413,7 +569,7 @@ const sceneDescs = [
     "Shy Guy's Toybox",
     new PaperMario64SceneDesc('omo_03', 'Blue Station'),
     new PaperMario64SceneDesc('omo_13', 'Blue Station Left Wing'),
-    new PaperMario64SceneDesc('omo_01', 'Shy Guy playroom'),
+    new PaperMario64SceneDesc('omo_01', 'Shy Guy Playroom'),
     new PaperMario64SceneDesc('omo_04', 'Blue Station Right Wing'),
     new PaperMario64SceneDesc('omo_06', 'Pink Station'),
     new PaperMario64SceneDesc('omo_17', 'Pink Station Left Wing'),
