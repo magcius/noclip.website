@@ -224,7 +224,7 @@ enum RenderMode {
     OPA, XLU, DEC
 }
 
-const modelViewScratch = mat4.create();
+const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 const bboxScratch = new AABB();
 class ModelTreeLeafInstance {
@@ -379,7 +379,10 @@ class ModelTreeLeafInstance {
             return;
 
         let depth = -1;
-        bboxScratch.transform(this.modelTreeLeaf.bbox, parentMatrix);
+        mat4.mul(scratchMatrix, parentMatrix, this.modelMatrix);
+        bboxScratch.transform(this.modelTreeLeaf.bbox, scratchMatrix);
+        this.flags |= 0x01;
+
         if (viewerInput.camera.frustum.contains(bboxScratch))
             depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch));
         else
@@ -398,10 +401,8 @@ class ModelTreeLeafInstance {
         let offs = template.allocateUniformBuffer(PaperMario64Program.ub_DrawParams, 12 + 8*2);
         const mappedF32 = template.mapUniformBufferF32(PaperMario64Program.ub_DrawParams);
 
-        mat4.mul(modelViewScratch, viewerInput.camera.viewMatrix, parentMatrix);
-        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
-        this.flags |= 0x01;
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, scratchMatrix);
 
         if (this.textureEnvironment !== null) {
             this.computeTextureMatrix(texMatrixScratch, texAnimGroups, 0);

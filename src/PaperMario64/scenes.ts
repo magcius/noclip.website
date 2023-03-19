@@ -112,155 +112,205 @@ type Arc = {
 
 const mapOverlayAddr = 0x80240000;
 
+type user_func = (mgr: evtmgr, evt: evt_exec) => evt_user_func_ret;
+
 export class evt_handler_pm64 extends evt_handler {
-    public level_user_func: ((mgr: evtmgr, evt: evt_exec, addr: number) => evt_user_func_ret) | null = null;
+    public user_func_tbl = new Map<number, user_func>();
 
     constructor(private renderer: PaperMario64Renderer) {
         super();
 
-        if (this.renderer.name === 'iwa_10')
-            this.level_user_func = this.user_func_iwa_10;
-    }
+        this.register(0x802c8b60, this.TranslateModel);
+        this.register(0x802c8c64, this.RotateModel);
+        this.register(0x802c8d88, this.ScaleModel);
+        this.register(0x802c9000, this.SetTexPanner);
+        this.register(0x802c9208, this.EnableTexPanning);
+        this.register(0x802c9364, this.SetTexPanOffset);
+        this.register(0x802cad98, this.SetCamBGColor);
+        this.register(0x802ce160, this.GetNpcAnimation);
 
-    public override get_user_func_sym(addr: number): string | null {
-        if (addr === 0x802ca828) return `SetCamPerspective`;
-        if (addr === 0x802cab18) return `SetCamViewport`;
-        if (addr === 0x802cad98) return `SetCamBGColor`;
-        if (addr === 0x802c9208) return `EnableTexPanning`;
-        if (addr === 0x802c9000) return `SetTexPanner`;
-        if (addr === 0x802c9364) return `SetTexPanOffset`;
-        if (addr === 0x802c8b60) return `TranslateModel`;
-        if (addr === 0x802c8c64) return `RotateModel`;
-        if (addr === 0x802c8d88) return `ScaleModel`;
-        return null;
-    }
-
-    private user_func_iwa_10(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
-        if (addr === 0x80240000) {
-            // GetClockHandAngles
-            if (evt.lw[15] > 720)
-                evt.lw[15] = 0;
-
-            evt.lw[0] = evt.lw[15] * 6;
-            evt.lw[1] = evt.lw[15] / 2;
-            return evt_user_func_ret.advance;
+        if (this.renderer.name === 'mac_03') {
+            this.register(0x802402e0, this.GetClockHandAngles);
+        } else if (this.renderer.name === 'mac_05') {
+            this.register(0x80240000, this.UpdateTexturePanSmooth);
+            this.register(0x80240124, this.UpdateTexturePanStepped);
+            this.register(0x8024030c, this.CosInterpMinMax);
+        } else if (this.renderer.name === 'iwa_10') {
+            this.register(0x80240000, this.GetClockHandAngles);
+        } else if (this.renderer.name === 'iwa_11') {
+            this.register(0x80240020, this.CosInterpMinMax);
+            this.register(0x802401b0, this.iwa_11_GetSmallWheelsAngle.bind(this));
+            this.register(0x80240208, this.iwa_11_GetLargeWheelsAngle.bind(this));
+        } else {
+            // level defaults-ish
+            this.register(0x802402e0, this.UpdateTexturePanSmooth);
+            this.register(0x80240404, this.UpdateTexturePanStepped);
         }
+    }
 
+    private register(addr: number, func: user_func): void {
+        this.user_func_tbl.set(addr, func.bind(this));
+    }
+
+    private SetCamBGColor(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        assert(evt.paramCount === 5);
+        const camId = mgr.evt_eval_arg(evt, 1);
+        const r = mgr.evt_eval_arg(evt, 2) / 0xFF;
+        const g = mgr.evt_eval_arg(evt, 3) / 0xFF;
+        const b = mgr.evt_eval_arg(evt, 4) / 0xFF;
+        const color = colorNewFromRGBA(r, g, b);
+        this.renderer.setBGColor(color);
         return evt_user_func_ret.advance;
     }
 
-    public override user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
-        if (addr === 0x802ca828) {
-            // SetCamPerspective
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802cab18) {
-            // SetCamViewport
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802cad98) {
-            // SetCamBGColor
-            assert(evt.paramCount === 5);
-            const camId = mgr.evt_eval_arg(evt, 1);
-            const r = mgr.evt_eval_arg(evt, 2) / 0xFF;
-            const g = mgr.evt_eval_arg(evt, 3) / 0xFF;
-            const b = mgr.evt_eval_arg(evt, 4) / 0xFF;
-            const color = colorNewFromRGBA(r, g, b);
-            this.renderer.setBGColor(color);
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c9208) {
-            // EnableTexPanning
-            assert(evt.paramCount === 3);
-            const modelId = mgr.evt_eval_arg(evt, 1);
-            const enabled = !!mgr.evt_eval_arg(evt, 2);
-            this.renderer.getWorld().setModelTexAnimGroupEnabled(modelId, enabled);
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c9000) {
-            // SetTexPanner
-            assert(evt.paramCount === 3);
-            const modelId = mgr.evt_eval_arg(evt, 1);
-            const groupId = mgr.evt_eval_arg(evt, 2);
-            this.renderer.getWorld().setModelTexAnimGroup(modelId, groupId);
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c9364) {
-            // SetTexPanOffset
-            assert(evt.paramCount === 5);
-            const groupId = mgr.evt_eval_arg(evt, 1);
-            const tileId = mgr.evt_eval_arg(evt, 2);
-            const transS = mgr.evt_eval_arg(evt, 3);
-            const transT = mgr.evt_eval_arg(evt, 4);
-            this.renderer.getWorld().setTexAnimGroup(groupId, tileId, transS, transT);
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c8b60) {
-            // TranslateModel
-            const modelId = mgr.evt_eval_arg(evt, 1);
-            const x = mgr.evt_eval_arg(evt, 2);
-            const y = mgr.evt_eval_arg(evt, 3);
-            const z = mgr.evt_eval_arg(evt, 4);
-            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
-            if (modelInstance !== null) {
-                modelInstance.resetModelMatrix();
-                mat4.translate(modelInstance.modelMatrix, modelInstance.modelMatrix, [x, y, z]);
-            }
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c8c64) {
-            // RotateModel
-            const modelId = mgr.evt_eval_arg(evt, 1);
-            const angle = mgr.evt_eval_arg(evt, 2);
-            const x = mgr.evt_eval_arg(evt, 3);
-            const y = mgr.evt_eval_arg(evt, 4);
-            const z = mgr.evt_eval_arg(evt, 5);
-            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
-            if (modelInstance !== null) {
-                modelInstance.resetModelMatrix();
-                mat4.rotate(modelInstance.modelMatrix, modelInstance.modelMatrix, angle * MathConstants.DEG_TO_RAD, [x, y, z]);
-            }
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802c8d88) {
-            // ScaleModel
-            const modelId = mgr.evt_eval_arg(evt, 1);
-            const x = mgr.evt_eval_arg(evt, 2);
-            const y = mgr.evt_eval_arg(evt, 3);
-            const z = mgr.evt_eval_arg(evt, 4);
-            const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
-            if (modelInstance !== null) {
-                modelInstance.resetModelMatrix();
-                scaleMatrix(modelInstance.modelMatrix, modelInstance.modelMatrix, x, y, z);
-            }
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x802402e0) {
-            // UpdateTexturePanSmooth
-            for (let i = 0; i < 4; i++)
+    private EnableTexPanning(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        assert(evt.paramCount === 3);
+        const modelId = mgr.evt_eval_arg(evt, 1);
+        const enabled = !!mgr.evt_eval_arg(evt, 2);
+        this.renderer.getWorld().setModelTexAnimGroupEnabled(modelId, enabled);
+        return evt_user_func_ret.advance;
+    }
+
+    private SetTexPanner(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        assert(evt.paramCount === 3);
+        const modelId = mgr.evt_eval_arg(evt, 1);
+        const groupId = mgr.evt_eval_arg(evt, 2);
+        this.renderer.getWorld().setModelTexAnimGroup(modelId, groupId);
+        return evt_user_func_ret.advance;
+    }
+
+    private SetTexPanOffset(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        assert(evt.paramCount === 5);
+        const groupId = mgr.evt_eval_arg(evt, 1);
+        const tileId = mgr.evt_eval_arg(evt, 2);
+        const transS = mgr.evt_eval_arg(evt, 3);
+        const transT = mgr.evt_eval_arg(evt, 4);
+        this.renderer.getWorld().setTexAnimGroup(groupId, tileId, transS, transT);
+        return evt_user_func_ret.advance;
+    }
+
+    private TranslateModel(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        const modelId = mgr.evt_eval_arg(evt, 1);
+        const x = mgr.evt_eval_arg(evt, 2);
+        const y = mgr.evt_eval_arg(evt, 3);
+        const z = mgr.evt_eval_arg(evt, 4);
+        const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+        if (modelInstance !== null) {
+            modelInstance.resetModelMatrix();
+            mat4.translate(modelInstance.modelMatrix, modelInstance.modelMatrix, [x, y, z]);
+        }
+        return evt_user_func_ret.advance;
+    }
+
+    private RotateModel(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        // RotateModel
+        const modelId = mgr.evt_eval_arg(evt, 1);
+        const angle = mgr.evt_eval_arg(evt, 2);
+        const x = mgr.evt_eval_arg(evt, 3);
+        const y = mgr.evt_eval_arg(evt, 4);
+        const z = mgr.evt_eval_arg(evt, 5);
+        const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+        if (modelInstance !== null) {
+            modelInstance.resetModelMatrix();
+            mat4.rotate(modelInstance.modelMatrix, modelInstance.modelMatrix, angle * MathConstants.DEG_TO_RAD, [x, y, z]);
+        }
+        return evt_user_func_ret.advance;
+    }
+
+    private ScaleModel(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        // ScaleModel
+        const modelId = mgr.evt_eval_arg(evt, 1);
+        const x = mgr.evt_eval_arg(evt, 2);
+        const y = mgr.evt_eval_arg(evt, 3);
+        const z = mgr.evt_eval_arg(evt, 4);
+        const modelInstance = this.renderer.getWorld().findModelInstance(modelId);
+        if (modelInstance !== null) {
+            modelInstance.resetModelMatrix();
+            scaleMatrix(modelInstance.modelMatrix, modelInstance.modelMatrix, x, y, z);
+        }
+        return evt_user_func_ret.advance;
+    }
+
+    private GetNpcAnimation(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        mgr.evt_set_arg(evt, 2, 0);
+        return evt_user_func_ret.advance;
+    }
+
+    private UpdateTexturePanSmooth(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        for (let i = 0; i < 4; i++)
+            evt.lw[9 + i] = mod(evt.lw[9 + i] + evt.lw[1 + i], 0x20000);
+        this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
+        this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
+        return evt_user_func_ret.block;
+    }
+
+    private UpdateTexturePanStepped(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        if (evt.is_initial_call())
+            evt.funcwork.fill(0);
+
+        for (let i = 0; i < 4; i++) {
+            if (evt.funcwork[i] === 0)
                 evt.lw[9 + i] = mod(evt.lw[9 + i] + evt.lw[1 + i], 0x20000);
-            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
-            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
-            return evt_user_func_ret.block;
-        } else if (addr === 0x80240404) {
-            // UpdateTexturePanStepped
-            if (evt.is_initial_call())
-                evt.funcwork.fill(0);
 
-            for (let i = 0; i < 4; i++) {
-                if (evt.funcwork[i] === 0)
-                    evt.lw[9 + i] = mod(evt.lw[9 + i] + evt.lw[1 + i], 0x20000);
-
-                if (evt.funcwork[i]++ >= evt.lw[5 + i])
-                    evt.funcwork[i] = 0;
-            }
-
-            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
-            this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
-            return evt_user_func_ret.block;
-        } else if (addr === 0x802ce160) {
-            // GetNpcAnimation
-            mgr.evt_set_arg(evt, 2, 0);
-            return evt_user_func_ret.advance;
-        } else if (addr === 0x8024030c) {
-            mgr.evt_set_arg(evt, 2, 0);
-            return evt_user_func_ret.advance;
+            if (evt.funcwork[i]++ >= evt.lw[5 + i])
+                evt.funcwork[i] = 0;
         }
 
-        if (this.level_user_func !== null)
-            return this.level_user_func(mgr, evt, addr);
+        this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 0, evt.lw[9], evt.lw[10]);
+        this.renderer.getWorld().setTexAnimGroup(evt.lw[0], 1, evt.lw[11], evt.lw[12]);
+        return evt_user_func_ret.block;
+    }
 
+    private CosInterpMinMax(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        let time = mgr.evt_eval_arg(evt, 1);
+        // const value = mgr.evt_eval_arg(evt, 2);
+        const min = mgr.evt_eval_arg(evt, 3);
+        const max = mgr.evt_eval_arg(evt, 4);
+        const duration = mgr.evt_eval_arg(evt, 5);
+        const onlyOnce = mgr.evt_eval_arg(evt, 6);
+        const phase = mgr.evt_eval_arg(evt, 7);
+
+        if (onlyOnce && duration < time) {
+            time = duration;
+            mgr.evt_set_arg(evt, 1, duration);
+        }
+
+        const delta = (max - min) * 0.5;
+        mgr.evt_set_arg(evt, 2, (min + delta) - (delta * Math.cos(((time * Math.PI) / duration) + phase)));
+        return evt_user_func_ret.advance;
+    }
+
+    private GetClockHandAngles(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        // GetClockHandAngles
+        if (evt.lw[15] > 720)
+            evt.lw[15] = 0;
+
+        evt.lw[0] = evt.lw[15] * 6;
+        evt.lw[1] = evt.lw[15] / 2;
+        return evt_user_func_ret.advance;
+    }
+
+    private iwa_11_GetSmallWheelsAngle(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        evt.lw[0] = evt.lw[2] * -2.4;
+        return evt_user_func_ret.advance;
+    }
+
+    private iwa_11_GetLargeWheelsAngle(mgr: evtmgr, evt: evt_exec): evt_user_func_ret {
+        evt.lw[0] = evt.lw[2] * -2.4 * 0.6;
+        return evt_user_func_ret.advance;
+    }
+
+    public override get_user_func_sym(addr: number): string | null {
+        const func = this.user_func_tbl.get(addr);
+        if (func === undefined)
+            return null;
+        return func.name.replace('bound ', '');
+    }
+
+    public override user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+        const func = this.user_func_tbl.get(addr);
+        if (func !== undefined)
+            return func(mgr, evt);
         return evt_user_func_ret.advance;
     }
 }
@@ -430,7 +480,7 @@ const sceneDescs = [
     new PaperMario64SceneDesc('iwa_03', 'Mt. Rugged 4'),
     new PaperMario64SceneDesc('iwa_04', 'Mt. Rugged Bridge'),
     new PaperMario64SceneDesc('iwa_10', 'Mt. Rugged Station'),
-    new PaperMario64SceneDesc('iwa_11', 'Dry Dry Railroad line'),
+    new PaperMario64SceneDesc('iwa_11', 'Dry Dry Railroad Line'),
 
     "Dry Dry Outpost",
     new PaperMario64SceneDesc('dro_01', 'West Dry Dry Outpost'),

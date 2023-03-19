@@ -262,27 +262,27 @@ export class evtmgr {
         const expr = (uexpr | 0);
         if (expr <= -270000000)
             return uexpr; // addr
-        else if (expr >= -230000000 && expr <= -210000000)
+        else if (expr <= -220000000)
             return (expr - -230000000) / 1024.0; // float imm
-        else if (expr >= -210000000 && expr < -200000000)
+        else if (expr < -200000000)
             return evt.uf[expr - -210000000];
-        else if (expr >= -190000000 && expr < -180000000)
+        else if (expr < -180000000)
             return evt.uw[expr - -190000000];
-        else if (expr >= -170000000 && expr < -160000000)
+        else if (expr < -160000000)
             return this.gsw[expr - -170000000];
-        else if (expr >= -150000000 && expr < -140000000)
+        else if (expr < -140000000)
             return this.lsw[expr - -150000000];
-        else if (expr >= -130000000 && expr < -120000000)
+        else if (expr < -120000000)
             return this.gswf[expr - -130000000];
-        else if (expr >= -110000000 && expr < -100000000)
+        else if (expr < -100000000)
             return this.lswf[expr - -110000000];
-        else if (expr >= -90000000 && expr < -80000000)
+        else if (expr < -80000000)
             return this.gf[expr - -90000000];
-        else if (expr >= -70000000 && expr < -60000000)
+        else if (expr < -60000000)
             return evt.lf[expr - -70000000];
-        else if (expr >= -50000000 && expr < -40000000)
+        else if (expr < -40000000)
             return this.gw[expr - -50000000];
-        else if (expr >= -30000000 && expr < -20000000)
+        else if (expr < -20000000)
             return evt.lw[expr - -30000000];
         else
             return expr; // imm
@@ -290,25 +290,25 @@ export class evtmgr {
 
     private evtset(evt: evt_exec, uexpr: number, v: number): void {
         const expr = (uexpr | 0);
-        if (expr >= -210000000 && expr < -200000000)
+        if (expr < -200000000)
             evt.uf[expr - -210000000] = v;
-        else if (expr >= -190000000 && expr < -180000000)
+        else if (expr < -180000000)
             evt.uw[expr - -190000000] = v;
-        else if (expr >= -170000000 && expr < -160000000)
+        else if (expr < -160000000)
             this.gsw[expr - -170000000] = v;
-        else if (expr >= -150000000 && expr < -140000000)
+        else if (expr < -140000000)
             this.lsw[expr - -150000000] = v;
-        else if (expr >= -130000000 && expr < -120000000)
+        else if (expr < -120000000)
             this.gswf[expr - -130000000] = v;
-        else if (expr >= -110000000 && expr < -100000000)
+        else if (expr < -100000000)
             this.lswf[expr - -110000000] = v;
-        else if (expr >= -90000000 && expr < -80000000)
+        else if (expr < -80000000)
             this.gf[expr - -90000000] = v;
-        else if (expr >= -70000000 && expr < -60000000)
+        else if (expr < -60000000)
             evt.lf[expr - -70000000] = v;
-        else if (expr >= -50000000 && expr < -40000000)
+        else if (expr < -40000000)
             this.gw[expr - -50000000] = v;
-        else if (expr >= -30000000 && expr < -20000000)
+        else if (expr < -20000000)
             evt.lw[expr - -30000000] = v;
         else
             throw "whoops";
@@ -926,27 +926,27 @@ export class evt_disasm_ctx {
         const expr = (uexpr | 0);
         if (expr <= -270000000)
             return this.disasm_addr(uexpr, type);
-        else if (expr >= -230000000 && expr <= -210000000)
+        else if (expr <= -220000000)
             return `${(expr - -230000000) / 1024.0}`;
-        else if (expr >= -210000000 && expr < -200000000)
+        else if (expr < -200000000)
             return `UF(${expr - -210000000})`;
-        else if (expr >= -190000000 && expr < -180000000)
+        else if (expr < -180000000)
             return `UW(${expr - -190000000})`;
-        else if (expr >= -170000000 && expr < -160000000)
+        else if (expr < -160000000)
             return `GSW(${expr - -170000000})`;
-        else if (expr >= -150000000 && expr < -140000000)
+        else if (expr < -140000000)
             return `LSW(${expr - -150000000})`;
-        else if (expr >= -130000000 && expr < -120000000)
+        else if (expr < -120000000)
             return `GSWF(${expr - -130000000})`;
-        else if (expr >= -110000000 && expr < -100000000)
+        else if (expr < -100000000)
             return `LSWF(${expr - -110000000})`;
-        else if (expr >= -90000000 && expr < -80000000)
+        else if (expr < -80000000)
             return `GF(${expr - -90000000})`;
-        else if (expr >= -70000000 && expr < -60000000)
+        else if (expr < -60000000)
             return `LF(${expr - -70000000})`;
-        else if (expr >= -50000000 && expr < -40000000)
+        else if (expr < -40000000)
             return `GW(${expr - -50000000})`;
-        else if (expr >= -30000000 && expr < -20000000)
+        else if (expr < -20000000)
             return `LW(${expr - -30000000})`;
         else if (type === evt_disasm_ptype.hex)
             return `${hexzero0x(expr)}`;
