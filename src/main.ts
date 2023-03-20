@@ -92,6 +92,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { assertExists, assert } from './util';
+import { loadRustLib } from './rustlib';
 import { DataFetcher } from './DataFetcher';
 import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
@@ -298,6 +299,8 @@ class Main {
         this.toplevel.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
+
+        await loadRustLib();
 
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {

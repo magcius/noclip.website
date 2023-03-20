@@ -5,6 +5,7 @@ import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
+import { rust } from "../../rustlib";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -1769,8 +1770,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    const { glsl_compile } = await import('../../../rust/pkg/index');
-    return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, rust!.glsl_compile);
 }
 
 export function gfxDeviceGetImpl_WebGPU(gfxDevice: GfxDevice): GfxImplP_WebGPU {

@@ -18,6 +18,7 @@
 
 import { assert, readString } from '../../util';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { rust } from '../../rustlib';
 
 // Simple software version for environments without WebAssembly.
 export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -74,21 +75,12 @@ export class Yaz0DecompressorWASM {
     }
 }
 
-export function decompressSync(d: Yaz0DecompressorWASM, srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-    return d.decompress(srcBuffer);
-}
-
 let _decompressor: Yaz0DecompressorWASM | null = null;
 
-export async function getWASM(): Promise<Yaz0DecompressorWASM> {
+export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     if (_decompressor === null) {
-        const { yaz0dec } = await import('../../../rust/pkg/index');
-        _decompressor = new Yaz0DecompressorWASM(yaz0dec);
+        _decompressor = new Yaz0DecompressorWASM(rust!.yaz0dec);
     }
 
-    return _decompressor;
-}
-
-export async function decompress(srcBuffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
-    return decompressSync(await getWASM(), srcBuffer);
+    return _decompressor.decompress(srcBuffer);
 }
