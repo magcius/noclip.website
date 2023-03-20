@@ -95,37 +95,16 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export interface JKRDecompressor {
-    decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice;
+function decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
+    if (type === JKRCompressionType.Yaz0)
+        return Yaz0.decompress(src);
+    else if (type === JKRCompressionType.Yay0)
+        return Yay0.decompress(src);
+    else
+        throw "whoops";
 }
 
-export class JKRDecompressorSW {
-    public decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
-        if (type === JKRCompressionType.Yaz0)
-            return Yaz0.decompressSW(src);
-        else if (type === JKRCompressionType.Yay0)
-            return Yay0.decompress(src);
-        else
-            throw "whoops";
-    }
-}
-
-export class JKRDecompressorWASM {
-    public decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
-        if (type === JKRCompressionType.Yaz0)
-            return Yaz0.decompress(src);
-        else if (type === JKRCompressionType.Yay0)
-            return Yay0.decompress(src);
-        else
-            throw "whoops";
-    }
-}
-
-export async function getJKRDecompressor(): Promise<JKRDecompressor> {
-    return new JKRDecompressorWASM();
-}
-
-export function parse(buffer: ArrayBufferSlice, name: string = '', decompressor: JKRDecompressor | null = null): JKRArchive {
+export function parse(buffer: ArrayBufferSlice, name: string = ''): JKRArchive {
     const view = buffer.createDataView();
 
     const magic = readString(buffer, 0x00, 0x04);
@@ -196,8 +175,8 @@ export function parse(buffer: ArrayBufferSlice, name: string = '', decompressor:
                     compressionType = (flags & JKRFileAttr.CompressionType) ? JKRCompressionType.Yaz0 : JKRCompressionType.Yay0;
 
                 // Only decompress if we're expecting it.
-                if (compressionType !== JKRCompressionType.None && decompressor !== null) {
-                    fileBuffer = decompressor.decompress(rawFileBuffer, compressionType) as NamedArrayBufferSlice;
+                if (compressionType !== JKRCompressionType.None) {
+                    fileBuffer = decompress(rawFileBuffer, compressionType) as NamedArrayBufferSlice;
                 } else {
                     fileBuffer = rawFileBuffer as NamedArrayBufferSlice;
                 }

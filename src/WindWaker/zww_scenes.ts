@@ -49,6 +49,7 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/G
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -810,7 +811,7 @@ export class ModelCache {
     public currentStage: string;
     public onloadedcallback: (() => void) | null = null;
 
-    constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private decompressor: RARC.JKRDecompressor) {
+    constructor(public device: GfxDevice, private dataFetcher: DataFetcher) {
         this.cache = new GfxRenderCache(device);
     }
 
@@ -856,9 +857,9 @@ export class ModelCache {
         } });
 
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
-            buffer = this.decompressor.decompress(buffer, RARC.JKRCompressionType.Yaz0);
+            buffer = Yaz0.decompress(buffer);
 
-        const rarc = RARC.parse(buffer, '', this.decompressor);
+        const rarc = RARC.parse(buffer, '');
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }
@@ -1000,8 +1001,7 @@ class SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
-            const yaz0Decompressor = await RARC.getJKRDecompressor();
-            return new ModelCache(context.device, context.dataFetcher, yaz0Decompressor);
+            return new ModelCache(context.device, context.dataFetcher);
         });
 
         modelCache.onloadedcallback = null;
