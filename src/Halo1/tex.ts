@@ -5,9 +5,9 @@ import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
-import { wasm } from "./scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { rust } from "../rustlib";
 
 function getImageFormatBPP(fmt: GfxFormat): number {
     switch (fmt) {
@@ -24,21 +24,21 @@ function isimageFormatCompressed(format: GfxFormat): boolean {
 
 function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
     switch (format) {
-        case wasm().BitmapFormat.Dxt1: return GfxFormat.BC1;
-        case wasm().BitmapFormat.Dxt3: return GfxFormat.BC2;
-        case wasm().BitmapFormat.Dxt5: return GfxFormat.BC3;
-        case wasm().BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
+        case rust!.BitmapFormat.Dxt1: return GfxFormat.BC1;
+        case rust!.BitmapFormat.Dxt3: return GfxFormat.BC2;
+        case rust!.BitmapFormat.Dxt5: return GfxFormat.BC3;
+        case rust!.BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
         // formats we convert to U8_RGBA_NORM
-        case wasm().BitmapFormat.X8r8g8b8:
-        case wasm().BitmapFormat.A8r8g8b8:
-        case wasm().BitmapFormat.A8:
-        case wasm().BitmapFormat.P8:
-        case wasm().BitmapFormat.P8Bump:
-        case wasm().BitmapFormat.Y8:
-        case wasm().BitmapFormat.A8y8:
+        case rust!.BitmapFormat.X8r8g8b8:
+        case rust!.BitmapFormat.A8r8g8b8:
+        case rust!.BitmapFormat.A8:
+        case rust!.BitmapFormat.P8:
+        case rust!.BitmapFormat.P8Bump:
+        case rust!.BitmapFormat.Y8:
+        case rust!.BitmapFormat.A8y8:
             return GfxFormat.U8_RGBA_NORM;
         default:
-            throw new Error(`couldn't recognize bitmap format ${wasm().BitmapFormat[format]}`);
+            throw new Error(`couldn't recognize bitmap format ${rust!.BitmapFormat[format]}`);
     }
 }
 
@@ -61,9 +61,9 @@ function getImageFormatByteLength(fmt: GfxFormat, width: number, height: number)
 }
 
 function getTextureDimension(type: number): GfxTextureDimension {
-    if (type === wasm().BitmapDataType.CubeMap)
+    if (type === rust!.BitmapDataType.CubeMap)
         return GfxTextureDimension.Cube;
-    else if (type === wasm().BitmapDataType.Tex2D)
+    else if (type === rust!.BitmapDataType.Tex2D)
         return GfxTextureDimension.n2D;
     else
         throw "whoops";
