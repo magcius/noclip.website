@@ -5,6 +5,7 @@ import { BRTI } from "./bntx";
 import { GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture";
 import { assert } from "../util";
+import { rust } from "../rustlib";
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
@@ -115,16 +116,15 @@ export interface SwizzledSurface {
 }
 
 export async function deswizzle(swizzledSurface: SwizzledSurface): Promise<Uint8Array> {
-    const { tegra_deswizzle, CompressionType } = await import("../../rust/pkg/index");
     const { buffer, channelFormat, width, height, blockHeightLog2 } = swizzledSurface;
     const compressionType =
-        channelFormat === ChannelFormat.Bc1 ? CompressionType.Bc1 :
-        channelFormat === ChannelFormat.Bc2 ? CompressionType.Bc2 :
-        channelFormat === ChannelFormat.Bc3 ? CompressionType.Bc3 :
-        channelFormat === ChannelFormat.Bc4 ? CompressionType.Bc4 :
-        channelFormat === ChannelFormat.Bc5 ? CompressionType.Bc5 :
+        channelFormat === ChannelFormat.Bc1 ? rust!.CompressionType.Bc1 :
+        channelFormat === ChannelFormat.Bc2 ? rust!.CompressionType.Bc2 :
+        channelFormat === ChannelFormat.Bc3 ? rust!.CompressionType.Bc3 :
+        channelFormat === ChannelFormat.Bc4 ? rust!.CompressionType.Bc4 :
+        channelFormat === ChannelFormat.Bc5 ? rust!.CompressionType.Bc5 :
         undefined!;
-    return tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2);
+    return rust!.tegra_deswizzle(buffer.createTypedArray(Uint8Array), compressionType, width, height, blockHeightLog2);
 }
 
 export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfaceSW {
