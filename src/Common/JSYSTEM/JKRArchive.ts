@@ -111,12 +111,9 @@ export class JKRDecompressorSW {
 }
 
 export class JKRDecompressorWASM {
-    constructor(private yaz0: Yaz0.Yaz0DecompressorWASM) {
-    }
-
     public decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
         if (type === JKRCompressionType.Yaz0)
-            return Yaz0.decompressSync(this.yaz0, src);
+            return Yaz0.decompress(src);
         else if (type === JKRCompressionType.Yay0)
             return Yay0.decompress(src);
         else
@@ -125,8 +122,7 @@ export class JKRDecompressorWASM {
 }
 
 export async function getJKRDecompressor(): Promise<JKRDecompressor> {
-    const yaz0 = await Yaz0.getWASM();
-    return new JKRDecompressorWASM(yaz0);
+    return new JKRDecompressorWASM();
 }
 
 export function parse(buffer: ArrayBufferSlice, name: string = '', decompressor: JKRDecompressor | null = null): JKRArchive {

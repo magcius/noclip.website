@@ -42,14 +42,14 @@ function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedA
     });
 }
 
-export function decompressArbitraryFile(buffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
+export function decompressArbitraryFile(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const magic = readString(buffer, 0x00, 0x04);
     if (magic === 'Yaz0')
         return Yaz0.decompress(buffer);
     else if (magic.charCodeAt(0) === 0x10 || magic.charCodeAt(0) === 0x11)
-        return Promise.resolve(CX.decompress(buffer));
+        return CX.decompress(buffer);
     else
-        return Promise.resolve(buffer);
+        return buffer;
 }
 
 async function loadArbitraryFile(context: SceneContext, buffer: ArrayBufferSlice): Promise<SceneGfx> {
