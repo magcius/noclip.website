@@ -3586,11 +3586,11 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const texAnmCalcFlags = view.getUint8(tableIdx + 0x22);
             const colorAnmCalcFlags = view.getUint8(tableIdx + 0x23);
 
-            const texIdxLoopOfstMask = (!!(texAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
-            const colorLoopOfstMask = (!!(colorAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
+            const texIdxLoopOfstMask = !!((texAnmCalcFlags >>> 0) & 0x01) ? 0xFFFF : 0x0000;
+            const isGlblTexAnm       = !!((texAnmCalcFlags >>> 1) & 0x01);
 
-            const isGlblTexAnm = !!(texAnmCalcFlags & 0x02);
-            const isGlblClrAnm = !!(colorAnmCalcFlags & 0x02);
+            const colorLoopOfstMask  = !!((colorAnmCalcFlags >>> 0) & 0x01) ? 0xFFFF : 0x0000;
+            const isGlblClrAnm       = !!((colorAnmCalcFlags >>> 1) & 0x01);
 
             const shapeType: ShapeType = view.getUint8(tableIdx + 0x24);
             const dirType: DirType = view.getUint8(tableIdx + 0x25);
@@ -3637,7 +3637,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const texIdx = view.getUint8(tableIdx + 0x4F);
 
             let texIdxAnimData: Uint8Array | null = null;
-            if (!!(texAnimFlags & 0x01)) {
+            if (!!((texAnimFlags >>> 0) & 0x01)) {
                 const texIdxAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x12);
                 const texIdxAnimDataCount = view.getUint8(tableIdx + 0x4E);
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, texIdxAnimDataOffs, texIdxAnimDataCount, Endianness.BIG_ENDIAN);
@@ -3649,14 +3649,14 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const colorEnvAnimFlags = view.getUint8(tableIdx + 0x61);
 
             let colorPrmAnimData: Color[] | null = null;
-            if (!!(colorPrmAnimFlags & 0x02)) {
+            if (!!((colorPrmAnimFlags >>> 1) & 0x01)) {
                 const colorPrmAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x14);
                 const colorPrmAnimDataCount = view.getUint8(tableIdx + 0x62);
                 colorPrmAnimData = makeColorTable(buffer.slice(colorPrmAnimDataOffs), colorPrmAnimDataCount, colorAnimMaxFrm);
             }
 
             let colorEnvAnimData: Color[] | null = null;
-            if (!!(colorEnvAnimFlags & 0x02)) {
+            if (!!((colorEnvAnimFlags >>> 1) & 0x01)) {
                 const colorEnvAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x16);
                 const colorEnvAnimDataCount = view.getUint8(tableIdx + 0x63);
                 colorEnvAnimData = makeColorTable(buffer.slice(colorEnvAnimDataOffs), colorEnvAnimDataCount, colorAnimMaxFrm);
@@ -3681,8 +3681,8 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
 
             const isEnableTexScrollAnm = !!view.getUint8(tableIdx + 0x96);
 
-            const isDrawFwdAhead = !!(flags & 0x01);
-            const isDrawPrntAhead = !!(flags & 0x02);
+            const isDrawFwdAhead  = !!((flags >>> 0) & 0x01);
+            const isDrawPrntAhead = !!((flags >>> 1) & 0x01);
 
             const isEnableTexture = true;
 
@@ -3707,8 +3707,8 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const alphaOutValue = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x1C));
             const alphaAnmFlags = view.getUint8(tableIdx + 0x1E);
 
-            const isEnableAlpha = !!(alphaAnmFlags & 0x01);
-            const isEnableSinWave = !!(alphaAnmFlags & 0x02);
+            const isEnableAlpha   = !!((alphaAnmFlags >>> 0) & 0x01);
+            const isEnableSinWave = !!((alphaAnmFlags >>> 1) & 0x01);
             const alphaWaveTypeFlag = view.getUint8(tableIdx + 0x1F);
             const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? alphaWaveTypeFlag : CalcAlphaWaveType.None;
 
@@ -3743,15 +3743,14 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
 
             const scaleAnmFlags = view.getUint8(tableIdx + 0x4E);
 
-            const isEnableScale     = !!(scaleAnmFlags & 0x01);
-            const isDiffXY          = !!(scaleAnmFlags & 0x02);
-            const isEnableScaleAnmY = !!(scaleAnmFlags & 0x04);
-            const isEnableScaleAnmX = !!(scaleAnmFlags & 0x08);
+            const isEnableScale         = !!((scaleAnmFlags >>> 1) & 0x01);
+            const isDiffXY              = !!((scaleAnmFlags >>> 2) & 0x01);
+            const isEnableScaleAnmY     = !!((scaleAnmFlags >>> 3) & 0x01);
+            const isEnableScaleAnmX     = !!((scaleAnmFlags >>> 4) & 0x01);
+            const isEnableScaleBySpeedY = !!((scaleAnmFlags >>> 5) & 0x01);
+            const isEnableScaleBySpeedX = !!((scaleAnmFlags >>> 6) & 0x01);
             const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
             const scaleAnmTypeY = isEnableScaleAnmY ? anmTypeY ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
-
-            const isEnableScaleBySpeedY = !!(scaleAnmFlags & 0x00000010);
-            const isEnableScaleBySpeedX = !!(scaleAnmFlags & 0x00000020);
 
             let scaleIncreaseRateX = 1, scaleIncreaseRateY = 1;
             if (scaleInTiming > 0) {
@@ -3814,9 +3813,9 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
 
             const isEnableRotate = !!view.getUint8(tableIdx + 0x56);
             const flags = view.getUint8(tableIdx + 0x57);
-            const isInheritedRGB = !!(flags & 0x04);
-            const isInheritedAlpha = !!(flags & 0x02);
-            const isInheritedScale = !!(flags & 0x01);
+            const isInheritedScale = !!((flags >>> 0) & 0x01);
+            const isInheritedAlpha = !!((flags >>> 1) & 0x01);
+            const isInheritedRGB   = !!((flags >>> 2) & 0x01);
 
             const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x58));
             const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x5C));
@@ -3859,7 +3858,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const indTextureID = view.getUint8(tableIdx + 0x1F);
             const subTextureID = view.getUint8(tableIdx + 0x20);
             const secondTextureFlags = view.getUint8(tableIdx + 0x30);
-            const secondTextureIndex = (!!(secondTextureFlags & 1)) ? view.getUint8(tableIdx + 0x33) : -1;
+            const secondTextureIndex = (!!((secondTextureFlags >>> 0) & 0x01)) ? view.getUint8(tableIdx + 0x33) : -1;
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
@@ -4064,23 +4063,26 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'BSP1') {
             // JPABaseShape
             // Contains particle draw settings.
+            const flags = view.getUint32(tableIdx + 0x08);
+            const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
+            const dirType: DirType     =    (flags >>>  4) & 0x07;
+            const rotType: RotType     =    (flags >>>  7) & 0x07;
+            let planeType: PlaneType   =    (flags >>> 10) & 0x01;
+            const colorLoopOfstMask    =  -((flags >>> 11) & 0x01);
+            const isGlblClrAnm         = !!((flags >>> 12) & 0x01);
+            const texIdxLoopOfstMask   =  -((flags >>> 13) & 0x01);
+            const isGlblTexAnm         = !!((flags >>> 14) & 0x01);
+            const colorInSelect        =    (flags >>> 15) & 0x07;
+            const alphaInSelect        =    (flags >>> 18) & 0x01;
+            // 19 = unk
+            const isEnableProjection   = !!((flags >>> 20) & 0x01);
+            const isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
+            const isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
+            // 23 = unk
+            const isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
 
-            const flags = view.getUint32(dataBegin + 0x00);
-            const shapeType: ShapeType = (flags >>> 0x00) & 0x0F;
-            const dirType: DirType = (flags >>> 0x04) & 0x07;
-            const rotType: RotType = (flags >>> 0x07) & 0x07;
-            let planeType: PlaneType = (flags >>> 0x0A) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
-
-            const colorInSelect = (flags >>> 0x0F) & 0x07;
-            const alphaInSelect = (flags >>> 0x12) & 0x01;
-            const isEnableTexScrollAnm = !!(flags & 0x01000000);
-            const isDrawPrntAhead      = !!(flags & 0x00400000);
-            const isDrawFwdAhead       = !!(flags & 0x00200000);
-            const isEnableProjection   = !!(flags & 0x00100000);
-            const isGlblTexAnm         = !!(flags & 0x00004000);
-            const isGlblClrAnm         = !!(flags & 0x00001000);
 
             // stopDrawParent is in the SSP1 block in JPA1.
             const isNoDrawParent = false;
@@ -4092,8 +4094,6 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
 
             const anmRndm = view.getInt16(dataBegin + 0x10);
-            const colorLoopOfstMask  = -((flags >>> 0x0B) & 0x01);
-            const texIdxLoopOfstMask = -((flags >>> 0x0D) & 0x01);
 
             const blendModeFlags = view.getUint16(dataBegin + 0x12);
             const alphaCompareFlags = view.getUint8(dataBegin + 0x14);
@@ -4109,17 +4109,19 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const colorPrm = colorNewFromRGBA8(view.getUint32(dataBegin + 0x20));
             const colorEnv = colorNewFromRGBA8(view.getUint32(dataBegin + 0x24));
 
+            const isColorPrmAnm = !!((colorFlags >>> 1) & 0x01);
+            const isColorEnvAnm = !!((colorFlags >>> 3) & 0x01);
             const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
 
             let colorPrmAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x02)) {
+            if (isColorPrmAnm) {
                 const colorPrmAnimDataOffs = tableIdx + view.getUint16(dataBegin + 0x04);
                 const colorPrmAnimDataCount = view.getUint8(dataBegin + 0x1C);
                 colorPrmAnimData = makeColorTable(buffer.slice(colorPrmAnimDataOffs), colorPrmAnimDataCount, colorAnimMaxFrm);
             }
 
             let colorEnvAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x08)) {
+            if (isColorEnvAnm) {
                 const colorEnvAnimDataOffs = tableIdx + view.getUint16(dataBegin + 0x06);
                 const colorEnvAnimDataCount = view.getUint8(dataBegin + 0x1D);
                 colorEnvAnimData = makeColorTable(buffer.slice(colorEnvAnimDataOffs), colorEnvAnimDataCount, colorAnimMaxFrm);
@@ -4143,11 +4145,11 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const texIncRot = view.getFloat32(dataBegin + 0x50);
 
             let texIdxAnimData: Uint8Array | null = null;
-            const isEnableTextureAnm = !!(texFlags & 0x00000001);
+            const isEnableTextureAnm = !!((texFlags >>> 0) & 0x01);
             if (isEnableTextureAnm)
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, tableIdx + 0x60, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
-            const isEnableTexture = !!(texFlags & 0x00000002);
+            const isEnableTexture = !!((texFlags >>> 1) & 0x01);
 
             bsp1 = {
                 shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
@@ -4164,23 +4166,24 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const isEnableScale     = !!(flags & 0x00000100);
-            const isDiffXY          = !!(flags & 0x00000200);
-            const isEnableScaleAnmY = !!(flags & 0x00000400);
-            const isEnableScaleAnmX = !!(flags & 0x00000800);
-            const isEnableScaleBySpeedY = !!(flags & 0x00001000);
-            const isEnableScaleBySpeedX = !!(flags & 0x00002000);
-            const isEnableAlpha     = !!(flags & 0x00000001);
-            const isEnableSinWave   = !!(flags & 0x00000002);
-            const isEnableRotate    = !!(flags & 0x01000000);
-            const alphaWaveTypeFlag = ((flags >>> 0x02) & 0x03);
+            const isEnableAlpha         = !!((flags >>>  0) & 0x01);
+            const isEnableSinWave       = !!((flags >>>  1) & 0x01);
+            const alphaWaveTypeFlag     =    (flags >>>  2) & 0x03;
+            const isEnableScale         = !!((flags >>>  8) & 0x01);
+            const isDiffXY              = !!((flags >>>  9) & 0x01);
+            const isEnableScaleAnmY     = !!((flags >>> 10) & 0x01);
+            const isEnableScaleAnmX     = !!((flags >>> 11) & 0x01);
+            const isEnableScaleBySpeedY = !!((flags >>> 12) & 0x01);
+            const isEnableScaleBySpeedX = !!((flags >>> 13) & 0x01);
+            const pivotX                =    (flags >>> 14) & 0x03;
+            const pivotY                =    (flags >>> 16) & 0x03;
+            const anmTypeX              = !!((flags >>> 18) & 0x01);
+            const anmTypeY              = !!((flags >>> 19) & 0x01);
+            const isEnableRotate        = !!((flags >>> 24) & 0x01);
+
             const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? alphaWaveTypeFlag : CalcAlphaWaveType.None;
-            const anmTypeX = !!((flags >>> 0x12) & 0x01);
-            const anmTypeY = !!((flags >>> 0x13) & 0x01);
             const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
             const scaleAnmTypeY = isEnableScaleAnmY ? anmTypeY ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
-            const pivotX = (flags >>> 0x0E) & 0x03;
-            const pivotY = (flags >>> 0x10) & 0x03;
 
             const alphaInTiming = view.getFloat32(dataBegin + 0x08);
             const alphaOutTiming = view.getFloat32(dataBegin + 0x0C);
@@ -4245,14 +4248,23 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains child particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const shapeType: ShapeType = (flags >>> 0) & 0x0F;
-            const dirType: DirType = (flags >>> 4) & 0x07;
-            const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
+            const dirType: DirType     =    (flags >>>  4) & 0x07;
+            const rotType: RotType     =    (flags >>>  7) & 0x07;
+            let planeType: PlaneType   =    (flags >>> 10) & 0x01;
+            const isInheritedScale     = !!((flags >>> 16) & 0x01);
+            const isInheritedAlpha     = !!((flags >>> 17) & 0x01);
+            const isInheritedRGB       = !!((flags >>> 18) & 0x01);
+            const isDrawParent         = !!((flags >>> 19) & 0x01);
+            // 20 = unk
+            const isEnableField        = !!((flags >>> 21) & 0x01);
+            const isEnableScaleOut     = !!((flags >>> 22) & 0x01);
+            const isEnableAlphaOut     = !!((flags >>> 23) & 0x01);
+            const isEnableRotate       = !!((flags >>> 24) & 0x01);
+
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
 
-            const isDrawParent = !!(flags & 0x00080000);
             assertExists(bsp1).isNoDrawParent = !isDrawParent;
 
             const posRndm = view.getFloat32(dataBegin + 0x04);
@@ -4270,14 +4282,6 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
 
             const rotateSpeed = view.getFloat32(dataBegin + 0x2C);
-
-            const isEnableRotate   = !!(flags & 0x01000000);
-            const isEnableAlphaOut = !!(flags & 0x00800000);
-            const isEnableScaleOut = !!(flags & 0x00400000);
-            const isEnableField    = !!(flags & 0x00200000);
-            const isInheritedRGB   = !!(flags & 0x00040000);
-            const isInheritedAlpha = !!(flags & 0x00020000);
-            const isInheritedScale = !!(flags & 0x00010000);
 
             const inheritScale = view.getFloat32(dataBegin + 0x30);
             const inheritAlpha = view.getFloat32(dataBegin + 0x34);
@@ -4311,10 +4315,10 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
-            const indTextureMode: IndTextureMode = (flags & 0x03);
+            const indTextureMode: IndTextureMode = (flags >>> 0) & 0x03;
             const indTextureID = view.getUint8(dataBegin + 0x20);
             const subTextureID = view.getUint8(dataBegin + 0x21);
-            const secondTextureIndex = (!!(flags & 0x00000100)) ? view.getUint8(dataBegin + 0x22) : -1;
+            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(dataBegin + 0x22) : -1;
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
@@ -4334,9 +4338,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const sttFlag = (flags >>> 0x10);
-            const type: FieldType = flags & 0x0F;
+            const type: FieldType       = (flags >>> 0) & 0x0F;
             const velType: FieldAddType = (flags >>> 8) & 0x03;
+            const sttFlag               = (flags >>> 16);
 
             const mag = view.getFloat32(dataBegin + 0x04);
             const magRndm = view.getFloat32(dataBegin + 0x08);
@@ -4516,27 +4520,29 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const shapeType: ShapeType = (flags >>> 0) & 0x0F;
-            const dirType: DirType = (flags >>> 4) & 0x07;
-            const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
+            const dirType: DirType     =    (flags >>>  4) & 0x07;
+            const rotType: RotType     =    (flags >>>  7) & 0x07;
+            let planeType: PlaneType   =    (flags >>> 10) & 0x01;
+            // 11 = unk
+            const isGlblClrAnm         = !!((flags >>> 12) & 0x01);
+            // 13 = unk
+            const isGlblTexAnm         = !!((flags >>> 14) & 0x01);
+            const colorInSelect        =    (flags >>> 15) & 0x07;
+            const alphaInSelect        =    (flags >>> 18) & 0x01;
+            // 19 = unk
+            const isEnableProjection   = !!((flags >>> 20) & 0x01);
+            const isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
+            const isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
+            // 23 = unk
+            const isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
+            const tilingS              = !!((flags >>> 25) & 0x01) ? 2.0 : 1.0;
+            const tilingT              = !!((flags >>> 26) & 0x01) ? 2.0 : 1.0;
+            const isNoDrawParent       = !!((flags >>> 27) & 0x01);
+            const isNoDrawChild        = !!((flags >>> 28) & 0x01);
+
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
-            const tilingS = !!((flags >>> 0x19) & 0x01) ? 2.0 : 1.0;
-            const tilingT = !!((flags >>> 0x1A) & 0x01) ? 2.0 : 1.0;
-
-            const isNoDrawParent = !!(flags & 0x08000000);
-            const isNoDrawChild  = !!(flags & 0x10000000);
-
-            const colorInSelect = (flags >>> 0x0F) & 0x07;
-            const alphaInSelect = (flags >>> 0x12) & 0x01;
-
-            const isEnableTexScrollAnm = !!(flags & 0x01000000);
-            const isDrawFwdAhead       = !!(flags & 0x00200000);
-            const isDrawPrntAhead      = !!(flags & 0x00400000);
-            const isEnableProjection   = !!(flags & 0x00100000);
-            const isGlblTexAnm     = !!(flags & 0x00004000);
-            const isGlblClrAnm   = !!(flags & 0x00001000);
 
             const baseSizeX = view.getFloat32(tableIdx + 0x10);
             const baseSizeY = view.getFloat32(tableIdx + 0x14);
@@ -4574,7 +4580,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             let texIncScaleY = 0;
             let texIncRot = 0;
 
-            if (!!(flags & 0x01000000)) {
+            if (isEnableTexScrollAnm) {
                 texInitTransX = view.getFloat32(extraDataOffs + 0x00);
                 texInitTransY = view.getFloat32(extraDataOffs + 0x04);
                 texInitScaleX = view.getFloat32(extraDataOffs + 0x08);
@@ -4590,27 +4596,29 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             let texIdxAnimData: Uint8Array | null = null;
 
-            const isEnableTextureAnm = !!(texFlags & 0x00000001);
+            const isEnableTextureAnm = !!((texFlags >>> 0) & 0x01);
             if (isEnableTextureAnm)
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, extraDataOffs, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             const colorAnimMaxFrm = view.getUint16(tableIdx + 0x24);
 
+            const isColorPrmAnm = !!((colorFlags >>> 1) & 0x01);
+            const isColorEnvAnm = !!((colorFlags >>> 3) & 0x01);
+            const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
+
             let colorPrmAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x02)) {
+            if (isColorPrmAnm) {
                 const colorPrmAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x0C);
                 const colorPrmAnimDataCount = view.getUint8(tableIdx + 0x22);
                 colorPrmAnimData = makeColorTable(buffer.slice(colorPrmAnimDataOffs), colorPrmAnimDataCount, colorAnimMaxFrm);
             }
 
             let colorEnvAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x08)) {
+            if (isColorEnvAnm) {
                 const colorEnvAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x0E);
                 const colorEnvAnimDataCount = view.getUint8(tableIdx + 0x23);
                 colorEnvAnimData = makeColorTable(buffer.slice(colorEnvAnimDataOffs), colorEnvAnimDataCount, colorAnimMaxFrm);
             }
-
-            const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
 
             const isEnableTexture = true;
 
@@ -4629,20 +4637,20 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const isEnableScale   = !!(flags & 0x00000001);
-            const isDiffXY        = !!(flags & 0x00000002);
+            const isEnableScale   = !!((flags >>>  0) & 0x01);
+            const isDiffXY        = !!((flags >>>  1) & 0x01);
+            const scaleAnmTypeX   =    (flags >>>  8) & 0x03;
+            const scaleAnmTypeY   =    (flags >>> 10) & 0x03;
+            const pivotX          =    (flags >>> 12) & 0x03;
+            const pivotY          =    (flags >>> 14) & 0x03;
+            const isEnableAlpha   = !!((flags >>> 16) & 0x01);
+            const isEnableSinWave = !!((flags >>> 17) & 0x01);
+            const isEnableRotate  = !!((flags >>> 24) & 0x01);
+            const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? CalcAlphaWaveType.NrmSin : CalcAlphaWaveType.None;
             // isEnableScaleBySpeedX was removed in JPA 2.0.
             const isEnableScaleBySpeedX = false;
             // isEnableScaleBySpeedY was removed in JPA 2.0.
             const isEnableScaleBySpeedY = false;
-            const isEnableAlpha   = !!(flags & 0x00010000);
-            const isEnableSinWave = !!(flags & 0x00020000);
-            const isEnableRotate  = !!(flags & 0x01000000);
-            const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? CalcAlphaWaveType.NrmSin : CalcAlphaWaveType.None;
-            const scaleAnmTypeX   = (flags >>> 0x08) & 0x03;
-            const scaleAnmTypeY   = (flags >>> 0x0A) & 0x03;
-            const pivotX          = (flags >>> 0x0C) & 0x03;
-            const pivotY          = (flags >>> 0x0E) & 0x03;
 
             const scaleInTiming =  view.getFloat32(tableIdx + 0x0C);
             const scaleOutTiming = view.getFloat32(tableIdx + 0x10);
@@ -4711,12 +4719,21 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains child particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const shapeType: ShapeType = (flags >>> 0) & 0x0F;
-            const dirType: DirType = (flags >>> 4) & 0x07;
-            const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
+            const dirType: DirType     =    (flags >>>  4) & 0x07;
+            const rotType: RotType     =    (flags >>>  7) & 0x07;
+            let planeType: PlaneType   =    (flags >>> 10) & 0x01;
+            const isInheritedScale     = !!((flags >>> 16) & 0x01);
+            const isInheritedAlpha     = !!((flags >>> 17) & 0x01);
+            const isInheritedRGB       = !!((flags >>> 18) & 0x01);
+            const isEnableField        = !!((flags >>> 21) & 0x01);
+            const isEnableScaleOut     = !!((flags >>> 22) & 0x01);
+            const isEnableAlphaOut     = !!((flags >>> 23) & 0x01);
+            const isEnableRotate       = !!((flags >>> 24) & 0x01);
+
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
+
             const posRndm = view.getFloat32(tableIdx + 0x0C);
             const baseVel = view.getFloat32(tableIdx + 0x10);
             const baseVelRndm = view.getFloat32(tableIdx + 0x14);
@@ -4726,14 +4743,6 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const globalScale2DX = view.getFloat32(tableIdx + 0x20);
             const globalScale2DY = view.getFloat32(tableIdx + 0x24);
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
-
-            const isEnableRotate   = !!(flags & 0x01000000);
-            const isEnableAlphaOut = !!(flags & 0x00800000);
-            const isEnableScaleOut = !!(flags & 0x00400000);
-            const isEnableField    = !!(flags & 0x00200000);
-            const isInheritedRGB   = !!(flags & 0x00040000);
-            const isInheritedAlpha = !!(flags & 0x00020000);
-            const isInheritedScale = !!(flags & 0x00010000);
 
             const inheritScale = view.getFloat32(tableIdx + 0x28);
             const inheritAlpha = view.getFloat32(tableIdx + 0x2C);
@@ -4772,10 +4781,10 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
-            const indTextureMode: IndTextureMode = (flags & 0x01);
+            const indTextureMode: IndTextureMode = ((flags >>> 0) & 0x01);
             const indTextureID = view.getUint8(tableIdx + 0x25);
             const subTextureID = 0;
-            const secondTextureIndex = (!!(flags & 0x00000100)) ? view.getUint8(tableIdx + 0x26) : -1;
+            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(tableIdx + 0x26) : -1;
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
@@ -4795,9 +4804,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const sttFlag = (flags >>> 0x10);
-            const type: FieldType = flags & 0x0F;
+            const type: FieldType       = (flags >>> 0) & 0x0F;
             const velType: FieldAddType = (flags >>> 8) & 0x03;
+            const sttFlag               = (flags >>> 16);
 
             // maxDist does not exist in JPA2
             const maxDist = 0;
