@@ -77,19 +77,6 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         [ -183, -47, 48, 183 ],
     ];
 
-    // Table 3.17.3 -- MSB/LSB colors to modifiers.
-    //
-    //  msb lsb
-    //  --- ---
-    //   0  0   small positive value (2nd intensity)
-    //   0  1   large positive value (3rd intensity)
-    //   1  0   small negative value (1st intensity)
-    //   1  1   large negative value (0th intensity)
-    //
-    // Why the spec doesn't lay out the intensity map in this order,
-    // I'll never know...
-    const pixelToColorIndex = [ 2, 3, 1, 0 ];
-
     const diff = (w1 & 0x02) !== 0;
     const flip = (w1 & 0x01) !== 0;
 
@@ -150,7 +137,19 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         const lsb = (w2 >>> i) & 0x01;
         const msb = (w2 >>> (16 + i)) & 0x01;
         const lookup = (msb << 1) | lsb;
-        const colorsIndex = pixelToColorIndex[lookup];
+
+        // Table 3.17.3 -- MSB/LSB colors to modifiers.
+        //
+        //  msb lsb
+        //  --- ---
+        //   0  0   small positive value (2nd intensity)
+        //   0  1   large positive value (3rd intensity)
+        //   1  0   small negative value (1st intensity)
+        //   1  1   large negative value (0th intensity)
+        //
+        // Why the spec doesn't lay out the intensity map in this order,
+        // I'll never know...
+        const colorsIndex = lookup ^ 0x02;
 
         // Indexes march down and to the right here.
         const y = i & 0x03;
