@@ -645,8 +645,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         assert(texCoordGen.type >= GX.TexGenType.BUMP0 && texCoordGen.type <= GX.TexGenType.BUMP7);
         const lightIdx = (texCoordGen.type - GX.TexGenType.BUMP0);
         const lightDir = `normalize(u_LightParams[${lightIdx}].Position.xyz - v_Position.xyz)`;
-        const b = this.generateMulNrm(1);
-        const t = this.generateMulNrm(2);
+        const b = this.generateMulNrm(`a_Binormal`);
+        const t = this.generateMulNrm(`a_Tangent`);
         return `${src}.xyz + vec3(dot(${lightDir}, ${b}.xyz), dot(${lightDir}, ${t}.xyz), 0.0)`;
     }
 
@@ -1372,10 +1372,8 @@ ${this.generateFogAdj(`t_FogBase`)}
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateMulNrm(which: number): string {
-        const src = (which === 0) ? `vec4(a_Normal.xyz, 0.0)` :
-            (which === 1) ? `vec4(a_Binormal.xyz, 0.0)` : `vec4(a_Tangent.xyz, 0.0)`;
-
+    private generateMulNrm(attr: string): string {
+        const src = `vec4(${attr}.xyz, 0.0)`;
         if (materialUsePnMtxIdx(this.material))
             return `normalize(${this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`)})`;
         else
@@ -1425,7 +1423,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(0) : `vec3(0.0)`};
+    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(`a_Normal`) : `vec3(0.0)`};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
