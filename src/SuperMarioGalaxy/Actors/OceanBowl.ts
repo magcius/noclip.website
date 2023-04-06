@@ -365,7 +365,7 @@ export class OceanBowl extends LiveActor {
         setTextureMatrixST(materialParams.u_TexMtx[0], scale0, this.tex0Trans);
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
         setTextureMatrixST(materialParams.u_TexMtx[2], scale2, this.tex2Trans);
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], camera);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], materialParams.m_TextureMapping[1], camera);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
 
         setTextureMatrixST(materialParams.u_TexMtx[4], scale4, null);

@@ -162,6 +162,12 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RGBA_SRGB)
         return 'rgba8unorm-srgb';
+    else if (format === GfxFormat.S8_R_NORM)
+        return 'r8snorm';
+    else if (format === GfxFormat.S8_RG_NORM)
+        return 'rg8snorm';
+    else if (format === GfxFormat.S8_RGBA_NORM)
+        return 'rgba8snorm';
     else if (format === GfxFormat.U32_R)
         return 'r32uint';
     else if (format === GfxFormat.F16_RGBA)
@@ -245,11 +251,6 @@ function getPlatformBuffer(buffer_: GfxBuffer): GPUBuffer {
 function getPlatformSampler(sampler_: GfxSampler): GPUSampler {
     const sampler = sampler_ as GfxSamplerP_WebGPU;
     return sampler.gpuSampler;
-}
-
-function getPlatformQuerySet(queryPool_: GfxQueryPool): GPUQuerySet {
-    const queryPool = queryPool_ as GfxQueryPoolP_WebGPU;
-    return queryPool.querySet;
 }
 
 function translateTopology(topology: GfxPrimitiveTopology): GPUPrimitiveTopology {
@@ -430,14 +431,28 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'uint8x4';
     else if (format === GfxFormat.U8_RGBA)
         return 'uint8x4';
+    else if (format === GfxFormat.U8_RG_NORM)
+        return 'unorm8x2';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'unorm8x4';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
         return 'snorm8x4';
+    else if (format === GfxFormat.U16_RG_NORM)
+        return 'unorm16x2';
+    else if (format === GfxFormat.U16_RGBA_NORM)
+        return 'unorm16x4';
+    else if (format === GfxFormat.S16_RG_NORM)
+        return 'snorm16x2';
+    else if (format === GfxFormat.S16_RGBA_NORM)
+        return 'snorm16x4';
     else if (format === GfxFormat.S16_RG)
         return 'uint16x2';
+    else if (format === GfxFormat.F16_RG)
+        return 'float16x2';
+    else if (format === GfxFormat.F16_RGBA)
+        return 'float16x4';
     else if (format === GfxFormat.F32_R)
         return 'float32';
     else if (format === GfxFormat.F32_RG)
@@ -1242,28 +1257,25 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
-        // GfxInputLayout is not a platform object, it's a descriptor in WebGPU.
-
         const buffers: GPUVertexBufferLayout[] = [];
-        for (let i = 0; i < inputLayoutDescriptor.vertexBufferDescriptors.length; i++) {
-            const b = inputLayoutDescriptor.vertexBufferDescriptors[i];
-            if (b === null)
-                continue;
-            const arrayStride = b.byteStride;
-            const stepMode = translateVertexBufferFrequency(b.frequency);
-            const attributes: GPUVertexAttribute[] = [];
-            buffers[i] = { arrayStride, stepMode, attributes };
-        }
-
         for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
             const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
-            const b = assertExists(buffers[attr.bufferIndex]);
+
             const attribute: GPUVertexAttribute = {
                 shaderLocation: attr.location,
                 format: translateVertexFormat(attr.format),
                 offset: attr.bufferByteOffset,
             };
-            (b.attributes as GPUVertexAttribute[]).push(attribute);
+
+            if (buffers[attr.bufferIndex] !== undefined) {
+                (buffers[attr.bufferIndex].attributes as GPUVertexAttribute[]).push(attribute);
+            } else {
+                const b = assertExists(inputLayoutDescriptor.vertexBufferDescriptors[attr.bufferIndex]);
+                const arrayStride = b.byteStride;
+                const stepMode = translateVertexBufferFrequency(b.frequency);
+                const attributes: GPUVertexAttribute[] = [attribute];
+                buffers[attr.bufferIndex] = { arrayStride, stepMode, attributes };
+            }
         }
 
         const indexFormat = translateIndexFormat(inputLayoutDescriptor.indexBufferFormat);

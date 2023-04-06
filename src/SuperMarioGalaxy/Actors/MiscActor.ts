@@ -4174,7 +4174,6 @@ export class WaterPlantDrawInit extends NameObj {
         this.waterPlantD = loadBTIData(sceneObjHolder, arc, `WaterPlantD.bti`);
 
         const mb = new GXMaterialBuilder(`WaterPlant`);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -5361,16 +5360,17 @@ class OceanRingDrawer {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
-        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
-        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
-        setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
-        setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera);
-
         materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
         sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
+
+        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
+        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], materialParams.m_TextureMapping[1], viewerInput.camera);
+
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x76D7FFFF);
 
@@ -7300,7 +7300,7 @@ export class PlantGroup extends LiveActor {
     private placeOnCollisionFormCircle(sceneObjHolder: SceneObjHolder, center: vec3, gravity: vec3): void {
         vec3.zero(center);
 
-        let angle = MathConstants.TAU;
+        let angle: number = MathConstants.TAU;
         let plantsPerRing = 0;
         let numRings = 0;
         let radius = 0.0;

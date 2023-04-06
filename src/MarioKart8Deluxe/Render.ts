@@ -399,7 +399,7 @@ void CalcBakeResult(out BakeResult t_Result, in vec4 t_TexCoordBake) {
     int bake_light_type = enable_bake_texture ? ${this.shaderOptionInt('bake_light_type')} : -1;
     if (bake_light_type == 0) {
         // Lightmap.
-        vec4 t_Bake1Sample = texture(u_TextureBake1, t_TexCoordBake.zw);
+        vec4 t_Bake1Sample = texture(SAMPLER_2D(u_TextureBake1), t_TexCoordBake.zw);
         vec3 t_Bake1Color = t_Bake1Sample.rgb * t_Bake1Sample.a;
         t_Result.IndirectLight = t_Bake1Color * u_BakeLightScale.rgb;
     } else {
@@ -409,15 +409,15 @@ void CalcBakeResult(out BakeResult t_Result, in vec4 t_TexCoordBake) {
 
     int bake_shadow_type = enable_bake_texture ? ${this.shaderOptionInt('bake_shadow_type')} : -1;
     if (bake_shadow_type == 0) {
-        float t_BakeSample = texture(u_TextureBake0, t_TexCoordBake.xy).r;
+        float t_BakeSample = texture(SAMPLER_2D(u_TextureBake0), t_TexCoordBake.xy).r;
         t_Result.AO = t_BakeSample;
         t_Result.Shadow = 1.0;
     } else if (bake_shadow_type == 1) {
-        float t_BakeSample = texture(u_TextureBake0, t_TexCoordBake.xy).r;
+        float t_BakeSample = texture(SAMPLER_2D(u_TextureBake0), t_TexCoordBake.xy).r;
         t_Result.AO = 1.0;
         t_Result.Shadow = t_BakeSample;
     } else if (bake_shadow_type == 2) {
-        vec2 t_BakeSample = texture(u_TextureBake0, t_TexCoordBake.xy).rg;
+        vec2 t_BakeSample = texture(SAMPLER_2D(u_TextureBake0), t_TexCoordBake.xy).rg;
         t_Result.AO = t_BakeSample.r;
         t_Result.Shadow = t_BakeSample.g;
     } else {
