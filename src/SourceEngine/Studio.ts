@@ -4,7 +4,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { assert, readString, nArray, assertExists } from "../util";
+import { assert, readString, nArray, assertExists, align } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -110,6 +110,7 @@ class StudioModelStripGroupData {
 }
 
 const enum StudioModelMeshDataFlags {
+    None = 0,
     HasTexCoord1 = 1 << 0,
 }
 
@@ -1025,7 +1026,7 @@ export class StudioModelData {
         const vvdVertexDataStart = vvdView.getUint32(0x38, true);
         const vvdTangentDataStart = vvdView.getUint32(0x3C, true);
 
-        let meshDataFlags: StudioModelMeshDataFlags = 0;
+        let meshDataFlags: StudioModelMeshDataFlags = StudioModelMeshDataFlags.None;
         let vvdTexCoord1DataStart = 0;
         if (hasExtraVertexData) {
             // Find start of extra data pointer
@@ -1276,7 +1277,7 @@ export class StudioModelData {
                         if (meshDataFlags & StudioModelMeshDataFlags.HasTexCoord1)
                             vertexSize += 2;
                         const meshVtxData = new Float32Array(meshNumVertices * vertexSize);
-                        const meshIdxData = new Uint16Array(meshNumIndices);
+                        const meshIdxData = new Uint16Array(align(meshNumIndices, 2));
 
                         let dataOffs = 0x00;
                         let meshIdxBase = 0;

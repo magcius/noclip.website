@@ -14,6 +14,7 @@ import { clamp } from "../MathHelpers";
 // https://github.com/riidefi/MKWDecompilation/blob/master/EGG/posteffect/Lighting/res_blight.hpp
 
 const enum EggBinaryLightFlags {
+    NONE                 = 0,
     ENABLE               = 1 << 0,
     ENABLE_G3D           = 1 << 5,
     ENABLE_GX            = 1 << 6,
@@ -82,7 +83,7 @@ export class EggLightManager {
 }
 
 export class EggBinaryLight {
-    public flags: EggBinaryLightFlags = 0;
+    public flags: EggBinaryLightFlags = EggBinaryLightFlags.NONE;
     public color = colorNewCopy(White);
 
     public lightType = EggBinaryLightType.DIRECTIONAL;

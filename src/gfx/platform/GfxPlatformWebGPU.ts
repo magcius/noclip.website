@@ -1658,10 +1658,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public queryLimits(): GfxDeviceLimits {
-        // TODO(jstpierre): GPULimits
         return {
-            uniformBufferMaxPageWordSize: 0x10000,
-            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment * 4,
+            uniformBufferMaxPageWordSize: this.device.limits.maxUniformBufferBindingSize >>> 2,
+            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment >>> 2,
             supportedSampleCounts: [1],
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,

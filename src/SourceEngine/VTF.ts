@@ -206,15 +206,16 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
 }
 
 export const enum VTFFlags {
-    POINTSAMPLE   = 0x00000001,
-    TRILINEAR     = 0x00000002,
-    CLAMPS        = 0x00000004,
-    CLAMPT        = 0x00000008,
-    SRGB          = 0x00000040,
-    NOMIP         = 0x00000100,
-    ONEBITALPHA   = 0x00001000,
-    EIGHTBITALPHA = 0x00002000,
-    ENVMAP        = 0x00004000,
+    NONE          = 0,
+    POINTSAMPLE   = 1 << 0,
+    TRILINEAR     = 1 << 1,
+    CLAMPS        = 1 << 2,
+    CLAMPT        = 1 << 3,
+    SRGB          = 1 << 6,
+    NOMIP         = 1 << 8,
+    ONEBITALPHA   = 1 << 12,
+    EIGHTBITALPHA = 1 << 13,
+    ENVMAP        = 1 << 14,
 }
 
 interface VTFResourceEntry {
@@ -227,7 +228,7 @@ export class VTF {
     public gfxSampler: GfxSampler | null = null;
 
     public format: ImageFormat;
-    public flags: VTFFlags = 0;
+    public flags: VTFFlags = VTFFlags.NONE;
     public width: number = 0;
     public height: number = 0;
     public depth: number = 1;

@@ -2989,6 +2989,7 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 }
 
 const enum LightObjFlags {
+    NONE = 0,
     ENABLE = 1 << 0,
     HAS_COLOR = 1 << 1,
     HAS_ALPHA = 1 << 2,
@@ -3001,7 +3002,7 @@ export const enum LightObjSpace {
 }
 
 export class LightObj {
-    public flags: LightObjFlags = 0;
+    public flags: LightObjFlags = LightObjFlags.NONE;
     public light = new GX_Material.Light();
     public space: LightObjSpace = LightObjSpace.WORLD_SPACE;
 
