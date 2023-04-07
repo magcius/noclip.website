@@ -390,8 +390,9 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
 }
 
 export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const useWebGPU = window.localStorage.getItem('webgpu');
-    if (useWebGPU)
+    const platformBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2');
+
+    if (platformBackend === 'WebGPU')
         return initializeViewerWebGPU(out, canvas);
     else
         return initializeViewerWebGL2(out, canvas);
