@@ -770,10 +770,9 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
             assert(texGenMatrix === GX.TexGenMatrix.IDENTITY || texGenMatrix === matrix);
 
-            if (texGenMatrix === GX.TexGenMatrix.IDENTITY) {
+            if (texGenMatrix === GX.TexGenMatrix.IDENTITY && texMatrices[j] !== null) {
                 // If this is an identity matrix, then clear out the matrix in that file.
-                const texMtx = assertExists(texMatrices[j]);
-                mat4.identity(texMtx.matrix);
+                mat4.identity(texMatrices[j]!.matrix);
             }
 
             const normalize = false;
