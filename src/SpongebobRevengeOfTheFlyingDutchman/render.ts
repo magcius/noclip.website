@@ -21,17 +21,19 @@ import {
     GfxDevice,
     GfxFormat,
     GfxFrontFaceMode,
+    GfxIndexBufferDescriptor,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxMipFilterMode,
     GfxProgramDescriptorSimple,
     GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
+    GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
     GfxWrapMode,
     makeTextureDescriptor2D
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -270,7 +272,8 @@ class VertexData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public indexCount: number;
 
     constructor(
@@ -295,15 +298,15 @@ class VertexData {
 
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -344,7 +347,7 @@ class MeshRenderer {
         }
         
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setVertexInput(this.geometryData.inputLayout, this.geometryData.vertexBufferDescriptors, this.geometryData.indexBufferDescriptor);
         let textureAlpha = 0;
         const textureMapping = new TextureMapping();
         const reflectionMapping = new TextureMapping();

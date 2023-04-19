@@ -14,7 +14,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import { DrawParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
@@ -35,7 +35,8 @@ class PlaneShape {
     private idxBuffer: GfxBuffer;
     private zeroBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vtx = new Float32Array(4 * 5);
@@ -82,11 +83,11 @@ class PlaneShape {
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        const vertexBuffers: GfxVertexBufferDescriptor[] = [
+        this.vertexBufferDescriptors = [
             { buffer: this.vtxBuffer, byteOffset: 0, },
             { buffer: this.zeroBuffer, byteOffset: 0, },
         ];
-        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
+        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx): void {
@@ -95,7 +96,7 @@ class PlaneShape {
         // Force this so it renders after the skybox.
         renderInst.filterKey = SMSPass.OPAQUE;
         renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(6);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -104,7 +105,6 @@ class PlaneShape {
         device.destroyBuffer(this.vtxBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyBuffer(this.zeroBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

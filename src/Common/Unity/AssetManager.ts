@@ -3,7 +3,7 @@ import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { SceneContext } from '../../SceneBase';
 import { downloadBlob } from '../../DownloadUtils';
 import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputState, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../gfx/platform/GfxPlatform';
 import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
 import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
@@ -45,7 +45,7 @@ export enum UnityChannel {
 export class UnityMesh {
     public bbox: Geometry.AABB; 
 
-    constructor(public inputLayout: GfxInputLayout, public inputState: GfxInputState, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[]) {
+    constructor(public inputLayout: GfxInputLayout, public vertexBufferDescriptors: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public numIndices: number, bbox: UnityAABB, public buffers: GfxBuffer[]) {
         let center = vec3.fromValues(bbox.center.x, bbox.center.y, bbox.center.z);
         let extent = vec3.fromValues(bbox.extent.x, bbox.extent.y, bbox.extent.z);
         this.bbox = new Geometry.AABB();
@@ -54,7 +54,6 @@ export class UnityMesh {
 
     public destroy(device: GfxDevice) {
         this.buffers.forEach(buf => device.destroyBuffer(buf));
-        device.destroyInputState(this.inputState);
         device.destroyInputLayout(this.inputLayout);
     }
 }
@@ -150,14 +149,15 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     let normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer);
     let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
-    let state = device.createInputState(layout, [
+    const vertexBuffers = [
         { buffer: vertsBuf, byteOffset: 0, },
         { buffer: normsBuf, byteOffset: 0, },
-    ], { buffer: trisBuf, byteOffset: 0 });
+    ];
+    const indexBufferDescriptor = { buffer: trisBuf, byteOffset: 0 };
 
     let buffers = [vertsBuf, normsBuf, trisBuf];
 
-    return new UnityMesh(layout, state, indices.length, mesh.local_aabb, buffers);
+    return new UnityMesh(layout, vertexBuffers, indexBufferDescriptor, indices.length, mesh.local_aabb, buffers);
 }
 
 function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
@@ -216,10 +216,9 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
     let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-    let state = device.createInputState(layout, [
-        { buffer: vertsBuf, byteOffset: 0 },
-    ], { buffer: trisBuf, byteOffset: 0 });
+    const vertexBuffers = [{ buffer: vertsBuf, byteOffset: 0 }];
+    const indexBufferDescriptor = { buffer: trisBuf, byteOffset: 0 };
     let buffers = [vertsBuf, trisBuf];
 
-    return new UnityMesh(layout, state,  numIndices, mesh.local_aabb, buffers);
+    return new UnityMesh(layout, vertexBuffers, indexBufferDescriptor, numIndices, mesh.local_aabb, buffers);
 }

@@ -2,8 +2,8 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import { IntersectionState } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
+import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
@@ -30,7 +30,6 @@ export class NfsParticleEmitterGroup {
 const worldMat = mat4.create();
 const pos = vec3.create();
 export class NfsParticleEmitter {
-
     private emitterProperties: NfsParticleEmitterType;
     private timeToNextCycle: number = 0;
     private timerToNextParticle: number;
@@ -41,7 +40,8 @@ export class NfsParticleEmitter {
     private minFreeParticle: number = 0;
 
     public static inputLayout: GfxInputLayout;
-    public static inputState: GfxInputState;
+    public static vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public static indexBufferDescriptor: GfxIndexBufferDescriptor;
     private static vertexBuffer: GfxBuffer;
     private static indexBuffer: GfxBuffer;
 
@@ -77,10 +77,8 @@ export class NfsParticleEmitter {
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
         });
-        NfsParticleEmitter.inputState = device.createInputState(this.inputLayout,
-            [{ buffer: NfsParticleEmitter.vertexBuffer, byteOffset: 0 }],
-            { buffer: NfsParticleEmitter.indexBuffer, byteOffset: 0 }
-        );
+        NfsParticleEmitter.vertexBufferDescriptors = [{ buffer: NfsParticleEmitter.vertexBuffer, byteOffset: 0 }];
+        NfsParticleEmitter.indexBufferDescriptor = { buffer: NfsParticleEmitter.indexBuffer, byteOffset: 0 };
     }
 
     public update(deltaTime: number) {
@@ -206,11 +204,9 @@ export class NfsParticleEmitter {
 
     public static destroy(device: GfxDevice) {
         device.destroyInputLayout(NfsParticleEmitter.inputLayout);
-        device.destroyInputState(NfsParticleEmitter.inputState);
         device.destroyBuffer(NfsParticleEmitter.vertexBuffer);
         device.destroyBuffer(NfsParticleEmitter.indexBuffer);
     }
-
 }
 
 class NfsParticle {

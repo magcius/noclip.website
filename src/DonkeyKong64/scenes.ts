@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 
-import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
@@ -228,7 +228,8 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
 export class RenderData {
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
@@ -265,16 +266,14 @@ export class RenderData {
             vertexAttributeDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -402,7 +401,7 @@ export class RootMeshRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(renderData.inputLayout, renderData.inputState);
+        template.setVertexInput(renderData.inputLayout, renderData.vertexBufferDescriptors, renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.sortKey = this.sortKeyBase;

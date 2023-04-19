@@ -201,7 +201,7 @@ class ShapeInstance {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
+        template.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
         const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);

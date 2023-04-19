@@ -12,7 +12,7 @@ import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, getDebugO
 import { AABB } from '../../Geometry';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
@@ -5446,7 +5446,7 @@ class OceanRingPipeOutside extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
+        renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
         renderInst.drawIndexes(this.pipe.indexCount);
 
         materialParams.clear();
@@ -5545,7 +5545,7 @@ class OceanRingPipeInside extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
+        renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
         renderInst.drawIndexes(this.pipe.indexCount);
 
         materialParams.clear();
@@ -5581,7 +5581,8 @@ class OceanRingPipe extends LiveActor {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public width1: number = 1200.0;
     public width2: number = 1200.0;
     public indexCount: number;
@@ -5731,10 +5732,8 @@ class OceanRingPipe extends LiveActor {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
-
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         return points;
     }
 
@@ -5751,7 +5750,6 @@ class OceanRingPipe extends LiveActor {
         super.destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

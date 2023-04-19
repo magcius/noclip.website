@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -763,7 +763,8 @@ class PrmsData {
 
 class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     public useVertexColor: boolean = false;
     public indexBuffer: GfxBuffer;
@@ -837,16 +838,16 @@ class SepdData {
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             perInstanceBinding,
             { buffer: vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
         if (this.perInstanceBuffer !== null)
             device.destroyBuffer(this.perInstanceBuffer);
     }
@@ -865,7 +866,7 @@ class ShapeInstance {
         const sepd = this.sepdData.sepd;
 
         const materialTemplate = renderInstManager.pushTemplateRenderInst();
-        materialTemplate.setInputLayoutAndState(this.sepdData.inputLayout, this.sepdData.inputState);
+        materialTemplate.setVertexInput(this.sepdData.inputLayout, this.sepdData.vertexBufferDescriptors, this.sepdData.indexBufferDescriptor);
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, materialTemplate, textureHolder);
 
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {

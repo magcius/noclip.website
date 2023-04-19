@@ -73,7 +73,7 @@ export class NfsPostProcessing {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(fullscreenMegaState);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
         renderInst.drawPrimitives(3);
 

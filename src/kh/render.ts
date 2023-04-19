@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { DeviceProgram } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
@@ -87,7 +87,8 @@ export class MapData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public textures: GfxTexture[] = [];
     public sampler: GfxSampler;
@@ -235,9 +236,10 @@ export class MapData {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     private createBatchedDrawCalls(isSkybox: boolean, meshes: Bin.Mesh[], skyboxTexIndexMap: Map<number, number>, submeshesOut: Bin.Submesh[], layersOut: Layer[]): DrawCall[] {
@@ -372,7 +374,6 @@ export class MapData {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -413,7 +414,7 @@ class DrawCallInstance {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
+        renderInst.setVertexInput(this.mapData.inputLayout, this.mapData.vertexBufferDescriptors, this.mapData.indexBufferDescriptor);
         renderInst.sortKey = this.drawCallIndex;
 
         if (this.gfxProgram === null)

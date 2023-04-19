@@ -12,7 +12,7 @@ import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { OrbitCameraController } from '../Camera';
@@ -35,7 +35,8 @@ class PlaneShape {
     private idxBuffer: GfxBuffer;
     private zeroBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private indexCount: number;
 
     private gridSideLength: number = 6;
@@ -127,16 +128,16 @@ class PlaneShape {
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        const vertexBuffers: GfxVertexBufferDescriptor[] = [
+        this.vertexBufferDescriptors = [
             { buffer: this.vtxBuffer, byteOffset: 0, },
         ];
-        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
+        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 10);
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -145,7 +146,6 @@ class PlaneShape {
         device.destroyBuffer(this.vtxBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyBuffer(this.zeroBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

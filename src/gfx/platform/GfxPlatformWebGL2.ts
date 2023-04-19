@@ -1,6 +1,6 @@
 
 import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage, GfxComputeProgramDescriptor, GfxComputePipelineDescriptor, GfxComputePass } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
@@ -65,16 +65,11 @@ interface GfxBindingsP_GL extends GfxBindings {
 interface GfxInputLayoutP_GL extends GfxInputLayout {
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
+    vertexBufferFormats: ReturnType<typeof translateVertexFormat>[];
     indexBufferFormat: GfxFormat | null;
     indexBufferType: GLenum | null;
     indexBufferCompByteSize: number | null;
-}
-
-interface GfxInputStateP_GL extends GfxInputState {
     vao: WebGLVertexArrayObject;
-    indexBufferByteOffset: number | null;
-    inputLayout: GfxInputLayoutP_GL;
-    vertexBuffers: (GfxVertexBufferDescriptor | null)[];
 }
 
 interface GfxBindingLayoutSamplerDescriptorP_GL {
@@ -456,7 +451,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
     private _currentSampleCount: number = -1;
     private _currentPipeline!: GfxRenderPipelineP_GL;
-    private _currentInputState!: GfxInputStateP_GL;
+    private _currentIndexBufferByteOffset: number | null = null;
     private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
@@ -483,6 +478,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _fallbackTexture2DArray: WebGLTexture;
     private _fallbackTexture3D: WebGLTexture;
     private _fallbackTextureCube: WebGLTexture;
+    private _fallbackVertexBuffer: GfxBuffer;
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGL2';
@@ -537,6 +533,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
+        this._fallbackVertexBuffer = this.createBuffer(1, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
 
         // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
@@ -1035,21 +1032,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(indexBufferFormat === GfxFormat.U16_R || indexBufferFormat === GfxFormat.U32_R || indexBufferFormat === null);
         const indexBufferType = indexBufferFormat !== null ? translateIndexFormat(indexBufferFormat) : null;
         const indexBufferCompByteSize = indexBufferFormat !== null ? getFormatCompByteSize(indexBufferFormat) : null;
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat, indexBufferType, indexBufferCompByteSize };
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(inputLayout);
-        return inputLayout;
-    }
-
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBufferBinding: GfxIndexBufferDescriptor | null): GfxInputState {
-        const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
         const gl = this.gl;
         const vao = this.ensureResourceExists(gl.createVertexArray());
         gl.bindVertexArray(vao);
 
-        for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-            const attr = inputLayout.vertexAttributeDescriptors[i];
+        const vertexBufferFormats = [];
+        for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
+            const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
 
             if (isFormatSizedInteger(attr.format)) {
                 // See https://groups.google.com/d/msg/angleproject/yQb5DaCzcWg/Ova0E3wcAQAJ for more info.
@@ -1057,19 +1047,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 // debugger;
             }
 
-            const { size, type, normalized } = translateVertexFormat(attr.format);
-            const vertexBuffer = vertexBuffers[attr.bufferIndex];
-            if (vertexBuffer === null)
-                continue;
+            const inputLayoutBuffer = assertExists(inputLayoutDescriptor.vertexBufferDescriptors[attr.bufferIndex]);
 
-            const inputLayoutBuffer = assertExists(inputLayout.vertexBufferDescriptors[attr.bufferIndex]);
+            const format = translateVertexFormat(attr.format);
+            vertexBufferFormats.push(format);
 
-            const buffer = vertexBuffer.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.Vertex);
-            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
-
-            const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
-            gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
+            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(this._fallbackVertexBuffer));
+            gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, 0, 0);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PerInstance) {
                 gl.vertexAttribDivisor(attr.location, 1);
@@ -1078,21 +1062,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.enableVertexAttribArray(attr.location);
         }
 
-        assert((indexBufferBinding !== null) === (inputLayout.indexBufferFormat !== null));
-        let indexBufferByteOffset: number | null = null;
-        if (indexBufferBinding !== null) {
-            const buffer = indexBufferBinding.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.Index);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBufferBinding.buffer));
-            indexBufferByteOffset = indexBufferBinding.byteOffset;
-        }
-
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(), vao, indexBufferByteOffset, inputLayout, vertexBuffers };
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, vao, vertexBufferFormats, indexBufferFormat, indexBufferType, indexBufferCompByteSize };
         if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(inputState);
-        return inputState;
+            this._resourceCreationTracker.trackResourceCreated(inputLayout);
+
+        return inputLayout;
     }
 
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
@@ -1193,17 +1169,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public destroyInputLayout(o: GfxInputLayout): void {
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceDestroyed(o);
-    }
-
-    public destroyInputState(o: GfxInputState): void {
-        const inputState = o as GfxInputStateP_GL;
-        if (this._currentBoundVAO === inputState.vao) {
+        const inputLayout = o as GfxInputLayoutP_GL;
+        if (this._currentBoundVAO === inputLayout.vao) {
             this.gl.bindVertexArray(null);
             this._currentBoundVAO = null;
         }
-        this.gl.deleteVertexArray(inputState.vao);
+        this.gl.deleteVertexArray(inputLayout.vao);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1589,8 +1560,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const { gl_renderbuffer } = o as GfxRenderTargetP_GL;
             if (gl_renderbuffer !== null)
                 assignPlatformName(gl_renderbuffer, name);
-        } else if (o._T === _T.InputState) {
-            assignPlatformName((o as GfxInputStateP_GL).vao, name);
+        } else if (o._T === _T.InputLayout) {
+            assignPlatformName((o as GfxInputLayoutP_GL).vao, name);
         }
     }
 
@@ -2215,15 +2186,44 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public setInputState(inputState_: GfxInputState | null): void {
-        const inputState = inputState_ as GfxInputStateP_GL;
-        this._currentInputState = inputState;
-        if (this._currentInputState !== null) {
-            assert(this._currentPipeline.inputLayout === this._currentInputState.inputLayout);
-            this._setVAO(this._currentInputState.vao);
+    public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        if (inputLayout_ !== null) {
+            assert(this._currentPipeline.inputLayout === inputLayout_);
+            const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
+
+            this._setVAO(inputLayout.vao);
+
+            const gl = this.gl;
+            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
+                const attr = inputLayout.vertexAttributeDescriptors[i];
+
+                const vertexBuffer = vertexBuffers![attr.bufferIndex];
+                if (vertexBuffer === null)
+                    continue;
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
+
+                const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
+                const format = inputLayout.vertexBufferFormats[i];
+
+                const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex]!;
+                gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, inputLayoutBuffer.byteStride, bufferOffset);
+            }
+
+            assert((indexBuffer !== null) === (inputLayout.indexBufferFormat !== null));
+            if (indexBuffer !== null) {
+                const buffer = indexBuffer.buffer as GfxBufferP_GL;
+                assert(buffer.usage === GfxBufferUsage.Index);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(buffer));
+                this._currentIndexBufferByteOffset = indexBuffer.byteOffset;
+            } else {
+                this._currentIndexBufferByteOffset = null;
+            }
         } else {
             assert(this._currentPipeline.inputLayout === null);
+            assert(indexBuffer === null);
             this._setVAO(null);
+            this._currentIndexBufferByteOffset = 0;
         }
     }
 
@@ -2244,9 +2244,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
-        const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState, inputLayout = inputState.inputLayout;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        const pipeline = this._currentPipeline, inputLayout = assertExists(pipeline.inputLayout);
+        const byteOffset = assertExists(this._currentIndexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
         gl.drawElements(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles(count / 3);
@@ -2254,9 +2253,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
         const gl = this.gl;
-        const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState, inputLayout = inputState.inputLayout;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        const pipeline = this._currentPipeline, inputLayout = assertExists(pipeline.inputLayout);
+        const byteOffset = assertExists(this._currentIndexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
         gl.drawElementsInstanced(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset, instanceCount);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);

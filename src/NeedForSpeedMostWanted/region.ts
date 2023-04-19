@@ -525,20 +525,17 @@ export class NfsModel {
             const inputLayout = device.createInputLayout({
                 vertexAttributeDescriptors: vertAttDesc, vertexBufferDescriptors: vertInpLayoutBufDesc, indexBufferFormat: GfxFormat.U16_R
             });
-            const vertexBufDesc: GfxVertexBufferDescriptor[] = [
+            const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [
                 {buffer: this.vertexBuffers[vertexListIndex], byteOffset: 0}
             ];
-            const inputState = device.createInputState(inputLayout, vertexBufDesc, {buffer: this.indexBuffer, byteOffset: 0});
-
-            this.vertInfos.push({ inputLayout, inputState, drawCall: { indexOffset, indexCount }, textureMappings, shaderType });
+            const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
+            this.vertInfos.push({ inputLayout, vertexBufferDescriptors, indexBufferDescriptor, drawCall: { indexOffset, indexCount }, textureMappings, shaderType });
         }
-
     }
 
     public destroy(device: GfxDevice) {
         this.vertInfos.forEach(v => {
             device.destroyInputLayout(v.inputLayout);
-            device.destroyInputState(v.inputState);
         });
         this.vertexBuffers.forEach(b => device.destroyBuffer(b));
         device.destroyBuffer(this.indexBuffer);

@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -64,7 +64,7 @@ class Chunk {
     public numVertices: number;
     public posBuffer: GfxBuffer;
     public nrmBuffer: GfxBuffer;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
     constructor(device: GfxDevice, public chunk: IV.Chunk, private inputLayout: GfxInputLayout) {
         // Run through our data, calculate normals and such.
@@ -115,17 +115,17 @@ class Chunk {
         this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posData.buffer);
         this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, nrmData.buffer);
 
-        this.inputState = device.createInputState(inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.posBuffer, byteOffset: 0, },
             { buffer: this.nrmBuffer, byteOffset: 0, },
-        ], null);
+        ];
 
         this.numVertices = chunk.indexData.length;
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.drawPrimitives(this.numVertices);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -133,7 +133,6 @@ class Chunk {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.posBuffer);
         device.destroyBuffer(this.nrmBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

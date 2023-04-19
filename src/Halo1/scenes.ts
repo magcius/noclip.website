@@ -9,7 +9,7 @@ import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLib
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
@@ -976,7 +976,7 @@ class MaterialRender_TransparencyWater {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 4 }]);
-        template.setInputLayoutAndState(null, null);
+        template.setVertexInput(null, null, null);
         template.setGfxProgram(this.rippleCompositeProgram);
         template.setMegaStateFlags(fullscreenMegaState);
         template.setSamplerBindingsFromTextureMappings(this.rippleCompositeMapping);
@@ -1523,7 +1523,8 @@ class LightmapRenderer {
 class LightmapModelData {
     private vertexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private indexCount = 0;
     private lightmapVertexBuffer: GfxBuffer;
     private modelMatrix: mat4;
@@ -1537,10 +1538,11 @@ class LightmapModelData {
         this.indexCount = this.material.get_num_indices();
         this.indexOffset = this.material.get_index_offset();
 
-        this.inputState = cache.device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0 },
             { buffer: this.lightmapVertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 })
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst) {
@@ -1548,13 +1550,12 @@ class LightmapModelData {
         const mapped = renderInst.mapUniformBufferF32(BaseProgram.ub_ModelParams);
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount, this.indexOffset);
     }
 
     public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputState(this.inputState);
         this.material.free();
     }
 
@@ -1685,7 +1686,8 @@ class ModelData {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     public parts: ModelPartData[] = [];
 
     constructor(cache: GfxRenderCache, mgr: HaloSceneManager, private model: HaloModel) {
@@ -1747,7 +1749,8 @@ class ModelData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         this.inputLayout = this.getInputLayout(cache);
-        this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         this.parts.sort((a, b) => {
             return a.origIndex - b.origIndex;
@@ -1770,13 +1773,12 @@ class ModelData {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
         this.model.free();
         this.parts.forEach((part) => part.destroy(device));
     }

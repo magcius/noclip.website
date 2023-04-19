@@ -5,7 +5,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA } from '../Color';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
@@ -25,7 +25,8 @@ export interface ShapeRenderContext {
 }
 
 class MyShapeHelper {
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
     private vertexBuffers: GfxBuffer[] = [];
@@ -41,13 +42,12 @@ class MyShapeHelper {
             }
         }
 
-        const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
             const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
                 dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
             this.vertexBuffers.push(vertexBuffer);
 
-            buffers.push({
+            this.vertexBufferDescriptors.push({
                 buffer: vertexBuffer,
                 byteOffset: 0,
             });
@@ -56,7 +56,7 @@ class MyShapeHelper {
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
             this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
-            buffers.push({
+            this.vertexBufferDescriptors.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
@@ -67,11 +67,10 @@ class MyShapeHelper {
         this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.Index,
             dynamicIndices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
 
-        const indexBufferDesc: GfxIndexBufferDescriptor = {
+        this.indexBufferDescriptor = {
             buffer: this.indexBuffer,
             byteOffset: 0,
         };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDesc);
 
         this.uploadData(device, true, true);
     }
@@ -87,7 +86,7 @@ class MyShapeHelper {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         if (draw !== null)
             renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
         else
@@ -95,7 +94,6 @@ class MyShapeHelper {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
         // Do not destroy inputLayout; it is owned by the render cache.
         if (this.zeroBuffer !== null)
             device.destroyBuffer(this.zeroBuffer);

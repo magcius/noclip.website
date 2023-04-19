@@ -1,7 +1,7 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { GfxDevice, GfxTexture, GfxProgram, GfxBuffer, GfxFormat, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxCullMode, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxProgram, GfxBuffer, GfxFormat, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxCullMode, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { assert, nArray } from "../util";
@@ -258,7 +258,8 @@ class PatchLibrary {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private patchVariation: { startIndex: number, indexCount: number }[] = [];
 
     constructor(cache: GfxRenderCache, public sideNumQuads: number = 32) {
@@ -548,7 +549,8 @@ class PatchLibrary {
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public getVariationNo(splitTop: boolean, splitLeft: boolean, splitRight: boolean, splitBottom: boolean): number {
@@ -565,7 +567,7 @@ class PatchLibrary {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, variationNo: number): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         const variation = this.patchVariation[variationNo];
         renderInst.drawIndexes(variation.indexCount, variation.startIndex);
@@ -574,7 +576,6 @@ class PatchLibrary {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

@@ -2351,7 +2351,6 @@ export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Flo
 
     // clear existing input objects, but leave the buffers
     device.destroyInputLayout(data.inputLayout);
-    device.destroyInputState(data.inputState);
 
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
         { location: EggProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
@@ -2372,8 +2371,9 @@ export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Flo
         vertexAttributeDescriptors,
     });
 
-    data.inputState = device.createInputState(data.inputLayout, [
+    data.vertexBufferDescriptors = [
         { buffer: data.vertexBuffer, byteOffset: 0 },
-        { buffer: eggBuffer, byteOffset: 0 }
-    ], { buffer: data.indexBuffer, byteOffset: 0 });
+        { buffer: eggBuffer, byteOffset: 0 },
+    ];
+    data.indexBufferDescriptor = { buffer: data.indexBuffer, byteOffset: 0 };
 }

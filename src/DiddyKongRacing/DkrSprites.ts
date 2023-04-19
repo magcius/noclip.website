@@ -4,8 +4,9 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
     GfxVertexAttributeDescriptor, 
+    GfxVertexBufferDescriptor, 
     GfxVertexBufferFrequency, 
     GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -40,7 +41,8 @@ export class DkrSprites {
 
     public spriteData: Float32Array;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private textureMappings: TextureMapping[];
     private gfxProgram: GfxProgram | null = null;
     private program: F3DDKR_Sprite_Program;
@@ -113,11 +115,8 @@ export class DkrSprites {
                 vertexBufferDescriptors,
             });
     
-            this.inputState = device.createInputState(
-                this.inputLayout, 
-                [{ buffer: this.vertexBuffer, byteOffset: 0 }], 
-                { buffer: this.indexBuffer, byteOffset: 0 }
-            );
+            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+            this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
             // Setup sprite sheet texture
             const sampler = cache.createSampler({
@@ -145,7 +144,6 @@ export class DkrSprites {
             device.destroyBuffer(this.indexBuffer);
             device.destroyBuffer(this.vertexBuffer);
             device.destroyInputLayout(this.inputLayout);
-            device.destroyInputState(this.inputState);
             device.destroyTexture(this.textureMappings[0].gfxTexture!);
             // The sampler is already destroyed from renderHelper.destroy()
             this.hasBeenDestroyed = true;
@@ -198,7 +196,7 @@ export class DkrSprites {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         if(layer === SPRITE_LAYER_TRANSPARENT) {
             this.checkCameraDistanceToObjects(viewerInput.camera, layer);

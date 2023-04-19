@@ -2,7 +2,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
@@ -18,7 +18,8 @@ export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private program: DeviceProgram;
     private indexCount: number;
 
@@ -80,9 +81,8 @@ export class MaterialRenderer {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         // Create UVTX renderers (if necessary)
         if (this.isTextured) {
@@ -353,7 +353,7 @@ export class MaterialRenderer {
             uvtxRenderHelper.fillCombineParams(combineParams, combineParamsOffs);
         }
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         let gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(gfxProgram);
@@ -368,7 +368,6 @@ export class MaterialRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 
     private DEBUG_shouldSkip(): boolean {

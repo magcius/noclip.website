@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat";
@@ -70,12 +70,6 @@ interface GfxBindingsP_WebGPU extends GfxBindings {
 interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
     buffers: GPUVertexBufferLayout[];
     indexFormat: GPUIndexFormat | undefined;
-}
-
-interface GfxInputStateP_WebGPU extends GfxInputState {
-    inputLayout: GfxInputLayout;
-    vertexBuffers: (GfxVertexBufferDescriptor | null)[];
-    indexBuffer: GfxIndexBufferDescriptor | null;
 }
 
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
@@ -670,19 +664,16 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.setPipeline(gpuRenderPipeline);
     }
 
-    public setInputState(inputState_: GfxInputState | null): void {
-        if (inputState_ === null)
+    public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        if (inputLayout_ === null)
             return;
 
-        const inputState = inputState_ as GfxInputStateP_WebGPU;
-        if (inputState.indexBuffer !== null) {
-            const inputLayout = inputState.inputLayout as GfxInputLayoutP_WebGPU;
-            const indexBuffer = inputState.indexBuffer;
+        const inputLayout = inputLayout_ as GfxInputLayoutP_WebGPU;
+        if (indexBuffer !== null)
             this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
-        }
 
-        for (let i = 0; i < inputState.vertexBuffers.length; i++) {
-            const b = inputState.vertexBuffers[i];
+        for (let i = 0; i < vertexBuffers!.length; i++) {
+            const b = vertexBuffers![i];
             if (b === null)
                 continue;
             this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
@@ -1284,15 +1275,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return inputLayout;
     }
 
-    public createInputState(inputLayout: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState {
-        // GfxInputState is a GL-only thing, as VAOs suck. We emulate it with a VAO-alike here.
-        const inputState: GfxInputStateP_WebGPU = {
-            _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(),
-            inputLayout, vertexBuffers, indexBuffer,
-        };
-        return inputState;
-    }
-
     private _createPipelineLayout(bindingLayouts: GfxBindingLayoutDescriptor[]): GPUPipelineLayout {
         const bindGroupLayouts = bindingLayouts.flatMap((bindingLayout) => this._createBindGroupLayout(bindingLayout).gpuBindGroupLayout);
         return this.device.createPipelineLayout({ bindGroupLayouts });
@@ -1483,9 +1465,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyInputLayout(o: GfxInputLayout): void {
-    }
-
-    public destroyInputState(o: GfxInputState): void {
     }
 
     public destroyRenderPipeline(o: GfxRenderPipeline): void {

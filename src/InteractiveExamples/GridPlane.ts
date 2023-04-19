@@ -1,6 +1,6 @@
 
 import { DeviceProgram } from "../Program";
-import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -74,7 +74,8 @@ export class GridPlane {
     private posBuffer: GfxBuffer;
     private idxBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private modelMatrix = mat4.create();
     public color = colorNewCopy(White);
     public cellCount: number = 4;
@@ -113,11 +114,11 @@ export class GridPlane {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
-        })
-        const vertexBuffers: GfxVertexBufferDescriptor[] = [
+        });
+        this.vertexBufferDescriptors = [
             { buffer: this.posBuffer, byteOffset: 0, },
         ];
-        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
+        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
 
     public setSize(n: number): void {
@@ -128,7 +129,7 @@ export class GridPlane {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayout);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         const megaState = renderInst.setMegaStateFlags({
             depthWrite: false,
         });
@@ -154,6 +155,5 @@ export class GridPlane {
         device.destroyBuffer(this.posBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }

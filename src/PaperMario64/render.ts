@@ -3,7 +3,7 @@
 import program_glsl from './program.glsl';
 import * as Viewer from '../viewer';
 import * as Tex from './tex';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
 import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
@@ -61,7 +61,8 @@ export class N64Data {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public rspOutput: RSPOutput) {
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
@@ -85,16 +86,16 @@ export class N64Data {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -195,7 +196,7 @@ export class BackgroundBillboardRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
@@ -393,7 +394,7 @@ class ModelTreeLeafInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.gfxProgram);
-        template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
+        template.setVertexInput(this.n64Data.inputLayout, this.n64Data.vertexBufferDescriptors, this.n64Data.indexBufferDescriptor);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setMegaStateFlags(this.megaStateFlags);
         template.sortKey = this.sortKey;

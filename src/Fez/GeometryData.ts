@@ -1,5 +1,5 @@
 
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { Fez_ShaderInstancedIndexedPrimitives, Fez_VertexPositionNormalTextureInstance } from './XNB_Fez';
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -12,7 +12,8 @@ export class GeometryData {
     private texcoordBuffer: GfxBuffer;
     public indexCount: number;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public bbox = new AABB();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, geometry: Fez_ShaderInstancedIndexedPrimitives<Fez_VertexPositionNormalTextureInstance>) {
@@ -51,12 +52,12 @@ export class GeometryData {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.positionBuffer, byteOffset: 0, },
             { buffer: this.normalBuffer, byteOffset: 0, },
             { buffer: this.texcoordBuffer, byteOffset: 0, },
-        ],
-        { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
@@ -64,7 +65,6 @@ export class GeometryData {
         device.destroyBuffer(this.positionBuffer);
         device.destroyBuffer(this.normalBuffer);
         device.destroyBuffer(this.texcoordBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 

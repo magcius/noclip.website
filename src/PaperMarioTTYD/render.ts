@@ -87,7 +87,7 @@ class BackgroundBillboardRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);

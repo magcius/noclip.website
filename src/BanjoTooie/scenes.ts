@@ -370,12 +370,9 @@ function applyPaletteSwap(device: GfxDevice, cache: GfxRenderCache, base: Geomet
     }
 
     device.destroyBuffer(base.renderData.vertexBuffer);
-    device.destroyInputState(base.renderData.inputState);
 
     base.renderData.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, base.renderData.vertexBufferData.buffer);
-    base.renderData.inputState = device.createInputState(base.renderData.inputLayout, [
-        { buffer: base.renderData.vertexBuffer, byteOffset: 0, },
-    ], { buffer: base.renderData.indexBuffer, byteOffset: 0 });
+    base.renderData.vertexBufferDescriptors[0].buffer = base.renderData.vertexBuffer;
 }
 
 const collectibleLookup = new Map<number, number>([

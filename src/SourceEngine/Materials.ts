@@ -3,7 +3,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -4612,8 +4612,9 @@ class Material_SpriteCard extends BaseMaterial {
 class StaticQuad {
     private vertexBufferQuad: GfxBuffer;
     private indexBufferQuad: GfxBuffer;
+    private vertexBufferDescriptorsQuad: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptorQuad: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
-    public inputStateQuad: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -4638,18 +4639,18 @@ class StaticQuad {
             0, 1, 2, 2, 1, 3,
         ]).buffer);
 
-        this.inputStateQuad = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptorsQuad = [
             { buffer: this.vertexBufferQuad, byteOffset: 0 },
-        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptorQuad = { buffer: this.indexBufferQuad, byteOffset: 0 };
     }
 
     public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStateQuad);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptorsQuad, this.indexBufferDescriptorQuad);
         renderInst.drawIndexes(6);
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputStateQuad);
         device.destroyBuffer(this.vertexBufferQuad);
         device.destroyBuffer(this.indexBufferQuad);
     }

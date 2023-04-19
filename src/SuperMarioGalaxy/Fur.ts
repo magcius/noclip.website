@@ -512,7 +512,7 @@ class FurCtrl {
 
         for (let i = 0; i < numLayers; i++) {
             const vertexBuffers: GfxVertexBufferDescriptor[] = [coalescedBuffers[i]];
-            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBuffer, shapeData.shapeHelper.loadedVertexLayout);
+            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBufferDescriptor, shapeData.shapeHelper.loadedVertexLayout);
             this.ownShapeHelpers.push(shapeHelper);
             this.shapeHelpers.push(shapeHelper);
         }

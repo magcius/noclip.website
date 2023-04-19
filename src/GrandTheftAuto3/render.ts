@@ -5,7 +5,7 @@ import * as rw from "librw";
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
@@ -211,7 +211,8 @@ class BaseRenderer {
     protected vertexBuffer: GfxBuffer;
     protected indexBuffer: GfxBuffer;
     protected inputLayout: GfxInputLayout;
-    protected inputState: GfxInputState;
+    protected vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    protected indexBufferDescriptor: GfxIndexBufferDescriptor;
     protected megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     protected gfxProgram?: GfxProgram;
 
@@ -221,7 +222,7 @@ class BaseRenderer {
 
     protected prepare(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indices);
 
         if (this.gfxProgram === undefined)
@@ -237,7 +238,6 @@ class BaseRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputState(this.inputState);
         if (this.atlas !== undefined)
             this.atlas.destroy(device);
     }
@@ -264,9 +264,8 @@ export class SkyRenderer extends BaseRenderer {
             { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -532,9 +531,8 @@ export class SceneRenderer extends BaseRenderer {
             { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.megaStateFlags = {
             depthWrite: !dual,
             cullMode: this.params.backface ? GfxCullMode.None : GfxCullMode.Back,

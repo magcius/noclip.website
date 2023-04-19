@@ -3,7 +3,7 @@
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { assert, readString, nArray, assertExists, align } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
@@ -119,7 +119,8 @@ class StudioModelMeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
@@ -129,10 +130,10 @@ class StudioModelMeshData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
         // Create our base input state.
-        [this.inputLayout, this.inputState] = this.createInputState(cache, StaticLightingMode.None);
+        [this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor] = this.createVertexInput(cache, StaticLightingMode.None);
     }
 
-    public createInputState(cache: GfxRenderCache, staticLightingMode: StaticLightingMode, colorBufferDescriptor: GfxVertexBufferDescriptor | null = null): [GfxInputLayout, GfxInputState] {
+    public createVertexInput(cache: GfxRenderCache, staticLightingMode: StaticLightingMode, colorBufferDescriptor: GfxVertexBufferDescriptor | null = null): [GfxInputLayout, GfxVertexBufferDescriptor[], GfxIndexBufferDescriptor] {
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
@@ -182,14 +183,13 @@ class StudioModelMeshData {
 
         const indexBufferFormat = GfxFormat.U16_R;
         const inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        const inputState = cache.device.createInputState(inputLayout, bufferDescriptors, { buffer: this.indexBuffer, byteOffset: 0, });
-        return [inputLayout, inputState];
+        const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        return [inputLayout, bufferDescriptors, indexBufferDescriptor];
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -1703,7 +1703,8 @@ class StudioModelMeshInstance {
     private visible = true;
     private materialInstance: BaseMaterial | null = null;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private staticLightingMode: StaticLightingMode;
     private skinningMode: SkinningMode;
     private currentSkin: number;
@@ -1711,7 +1712,8 @@ class StudioModelMeshInstance {
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
         this.skinningMode = this.calcSkinningMode();
         this.inputLayout = this.meshData.inputLayout;
-        this.inputState = this.meshData.inputState;
+        this.vertexBufferDescriptors = this.meshData.vertexBufferDescriptors;
+        this.indexBufferDescriptor = this.meshData.indexBufferDescriptor;
         this.staticLightingMode = StaticLightingMode.StudioAmbientCube;
     }
 
@@ -1749,7 +1751,7 @@ class StudioModelMeshInstance {
     }
 
     public bindColorMeshData(cache: GfxRenderCache, data: HardwareVertData, mesh: HardwareVertDataMesh): void {
-        assert(this.inputState === this.meshData.inputState);
+        assert(this.vertexBufferDescriptors === this.meshData.vertexBufferDescriptors);
         assert(mesh.vertexCount === this.meshData.vertexCount);
 
         if (data.vertexSize === 1*0x04)
@@ -1760,7 +1762,7 @@ class StudioModelMeshInstance {
             throw "whoops";
 
         const colorDescriptor: GfxVertexBufferDescriptor = { buffer: data.buffer, byteOffset: mesh.byteOffset };
-        [this.inputLayout, this.inputState] = this.meshData.createInputState(cache, this.staticLightingMode, colorDescriptor);
+        [this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor] = this.meshData.createVertexInput(cache, this.staticLightingMode, colorDescriptor);
 
         if (this.materialInstance !== null)
             this.materialInstance.setStaticLightingMode(this.staticLightingMode);
@@ -1794,7 +1796,7 @@ class StudioModelMeshInstance {
         this.materialInstance.setOnRenderInst(renderContext, template);
         this.materialInstance.setOnRenderInstModelMatrix(template, modelMatrix);
 
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
             const stripGroupData = this.meshData.stripGroupData[i];
@@ -1814,8 +1816,6 @@ class StudioModelMeshInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputState !== this.meshData.inputState)
-            device.destroyInputState(this.inputState);
     }
 }
 

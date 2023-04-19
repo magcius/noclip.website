@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, GfxComputePipeline } from "./GfxPlatformImpl";
+import type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, GfxComputePipeline } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -373,7 +373,7 @@ export interface GfxRenderPass {
     setScissor(x: number, y: number, w: number, h: number): void;
     setPipeline(pipeline: GfxRenderPipeline): void;
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
-    setInputState(inputState: GfxInputState | null): void;
+    setVertexInput(inputLayout: GfxInputLayout | null, buffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void;
     setStencilRef(value: number): void;
 
     // Draw commands.
@@ -430,7 +430,6 @@ export interface GfxDevice {
     createComputeProgram(descriptor: GfxComputeProgramDescriptor): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
-    createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createComputePipeline(descriptor: GfxComputePipelineDescriptor): GfxComputePipeline;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
     createReadback(byteCount: number): GfxReadback;
@@ -446,7 +445,6 @@ export interface GfxDevice {
     destroyProgram(o: GfxProgram): void;
     destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
-    destroyInputState(o: GfxInputState): void;
     destroyComputePipeline(o: GfxComputePipeline): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
     destroyReadback(o: GfxReadback): void;
@@ -504,5 +502,5 @@ export interface GfxDevice {
     popDebugGroup(): void;
 }
 
-export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
+export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };

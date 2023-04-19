@@ -2,7 +2,7 @@
 import { nArray, assert, assertExists, spliceBisectRight, setBitFlagEnabled } from "../../util";
 import { clamp } from "../../MathHelpers";
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform";
 
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 
@@ -177,7 +177,8 @@ export class GfxRenderInst {
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
     public _flags: GfxRenderInstFlags = 0;
-    private _inputState: GfxInputState | null = null;
+    private _vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null = null;
+    private _indexBuffer: GfxIndexBufferDescriptor | null = null;
     private _drawStart: number = 0;
     private _drawCount: number = 0;
     private _drawInstanceCount: number = 0;
@@ -207,7 +208,8 @@ export class GfxRenderInst {
         this.sortKey = 0;
         this.filterKey = 0;
         this._flags = GfxRenderInstFlags.AllowSkippingIfPipelineNotReady;
-        this._inputState = null;
+        this._vertexBuffers = null;
+        this._indexBuffer = null;
         this._renderPipelineDescriptor.inputLayout = null;
     }
 
@@ -227,11 +229,12 @@ export class GfxRenderInst {
             this._renderPipelineDescriptor.colorAttachmentFormats[i] = o._renderPipelineDescriptor.colorAttachmentFormats[i];
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = o._renderPipelineDescriptor.depthStencilAttachmentFormat;
         this._renderPipelineDescriptor.sampleCount = o._renderPipelineDescriptor.sampleCount;
-        this._inputState = o._inputState;
         this._uniformBuffer = o._uniformBuffer;
         this._drawCount = o._drawCount;
         this._drawStart = o._drawStart;
         this._drawInstanceCount = o._drawInstanceCount;
+        this._vertexBuffers = o._vertexBuffers;
+        this._indexBuffer = o._indexBuffer;
         this._flags = (this._flags & ~GfxRenderInstFlags.InheritedFlags) | (o._flags & GfxRenderInstFlags.InheritedFlags);
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
@@ -283,12 +286,13 @@ export class GfxRenderInst {
     }
 
     /**
-     * Sets both the {@see GfxInputLayout} and {@see GfxInputState} to be used by this render instance.
+     * Sets the vertex input configuration to be used by this render instance.
      * The {@see GfxInputLayout} is used to construct the pipeline as part of the automatic pipeline building
-     * facilities, while {@see GfxInputState} is used for the render.
+     * facilities, while the {@see GfxVertexBufferDescriptor} and {@see GfxIndexBufferDescriptor} is used for the render.
      */
-    public setInputLayoutAndState(inputLayout: GfxInputLayout | null, inputState: GfxInputState | null): void {
-        this._inputState = inputState;
+    public setVertexInput(inputLayout: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        this._vertexBuffers = vertexBuffers;
+        this._indexBuffer = indexBuffer;
         this._renderPipelineDescriptor.inputLayout = inputLayout;
     }
 
@@ -509,7 +513,7 @@ export class GfxRenderInst {
         }
 
         passRenderer.setPipeline(gfxPipeline);
-        passRenderer.setInputState(this._inputState);
+        passRenderer.setVertexInput(this._renderPipelineDescriptor.inputLayout, this._vertexBuffers, this._indexBuffer);
 
         for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].buffer = assertExists(this._uniformBuffer.gfxBuffer);

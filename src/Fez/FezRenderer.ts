@@ -277,7 +277,7 @@ export class FezObjectRenderer {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setVertexInput(this.geometryData.inputLayout, this.geometryData.vertexBufferDescriptors, this.geometryData.indexBufferDescriptor);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
@@ -366,7 +366,7 @@ export class BackgroundPlaneRenderer {
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
+        renderInst.setVertexInput(this.staticData.inputLayout, this.staticData.vertexBufferDescriptors, this.staticData.indexBufferDescriptor);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);

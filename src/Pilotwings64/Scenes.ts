@@ -2,9 +2,9 @@
 import * as RDP from '../Common/N64/RDP';
 
 import {
-    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
+    GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -1433,7 +1433,8 @@ class MeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertexData.buffer);
@@ -1454,16 +1455,16 @@ class MeshData {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -1590,7 +1591,7 @@ class MeshRenderer {
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
+        template.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
         // compute common model view matrix
         mat4.mul(MeshRenderer.scratchMatrix, viewerInput.camera.viewMatrix, jointMatrix);
         for (let i = 0; i < this.materials.length; i++)
@@ -2338,10 +2339,11 @@ const snowBindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 const snowScratchVector = vec3.create();
 class SnowRenderer {
-    public vertexBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer;
-    public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private visible = true;
     private snowProgram = new SnowProgram();
     private snowShift = vec3.create();
@@ -2392,10 +2394,10 @@ class SnowRenderer {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
-
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2432,7 +2434,7 @@ class SnowRenderer {
         }
         fillVec3v(d, offs, this.snowShift, this.flakeScale);
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.snowProgram));
         renderInst.drawIndexes(6 * this.flakeCount);
         renderInstManager.submitRenderInst(renderInst);
@@ -2442,7 +2444,6 @@ class SnowRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 

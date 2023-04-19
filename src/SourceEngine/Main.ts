@@ -8,7 +8,7 @@ import { AABB, Frustum, Plane } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
@@ -224,7 +224,8 @@ export class SkyboxRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private materialInstances: BaseMaterial[] = [];
     private modelMatrix = mat4.create();
 
@@ -290,10 +291,11 @@ export class SkyboxRenderer {
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
             { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         this.bindMaterial(renderContext);
     }
@@ -327,7 +329,7 @@ export class SkyboxRenderer {
                 return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         fillSceneParamsOnRenderInst(template, view, renderContext.toneMapParams);
 
         for (let i = 0; i < 6; i++) {
@@ -349,7 +351,6 @@ export class SkyboxRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -669,7 +670,8 @@ export class BSPRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     public entitySystem: EntitySystem;
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
@@ -699,9 +701,8 @@ export class BSPRenderer {
         const indexBufferFormat = GfxFormat.U32_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
@@ -748,7 +749,7 @@ export class BSPRenderer {
 
     public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, kinds: RenderObjectKind = RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.Entities): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         fillSceneParamsOnRenderInst(template, renderContext.currentView, renderContext.toneMapParams);
 
@@ -794,7 +795,6 @@ export class BSPRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
 
         for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
             this.detailPropLeafRenderers[i].destroy(device);
@@ -1897,7 +1897,7 @@ export class SourceRenderer implements SceneGfx {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayoutsBloom);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.drawPrimitives(3);
 
@@ -2025,7 +2025,7 @@ export class SourceRenderer implements SceneGfx {
 
             const postRenderInst = renderInstManager.newRenderInst();
             postRenderInst.setBindingLayouts(bindingLayoutsPost);
-            postRenderInst.setInputLayoutAndState(null, null);
+            postRenderInst.setVertexInput(null, null, null);
             postRenderInst.setGfxProgram(postProgram);
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
             postRenderInst.drawPrimitives(3);

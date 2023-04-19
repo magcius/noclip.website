@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
@@ -108,7 +108,8 @@ export class MapData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public layers: Layer[] = [];
     public drawCalls: DrawCall[] = [];
@@ -444,9 +445,8 @@ export class MapData {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-        const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
@@ -457,7 +457,6 @@ export class MapData {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -506,7 +505,7 @@ class DrawCallInstance {
             return;
         }
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
+        renderInst.setVertexInput(this.mapData.inputLayout, this.mapData.vertexBufferDescriptors, this.mapData.indexBufferDescriptor);
         renderInst.sortKey = this.drawCallIndex;
         if (this.gfxProgram === null) {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);

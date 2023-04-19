@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { assert, assertExists, nArray, readString } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -297,9 +297,10 @@ export class BSPRenderer {
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
 
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     private lightmapManager: LightmapManager;
 
@@ -322,9 +323,10 @@ export class BSPRenderer {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData);
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage);
 
@@ -348,7 +350,7 @@ export class BSPRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.gfxProgram);
         template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
         this.mainView.setupFromCamera(viewerInput.camera);
@@ -364,7 +366,6 @@ export class BSPRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         this.lightmapManager.destroy(device);

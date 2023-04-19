@@ -1,7 +1,7 @@
 
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
 import * as Viewer from "../viewer";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture";
 import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb";
@@ -176,7 +176,8 @@ class MeshFragData {
     private uvBuffer: GfxBuffer | null;
     private idxBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public indexCount: number;
 
     constructor(device: GfxDevice, public meshFrag: EMeshFrag) {
@@ -213,13 +214,12 @@ class MeshFragData {
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        const buffers: (GfxVertexBufferDescriptor | null)[] = [
+        this.vertexBufferDescriptors = [
             { buffer: this.posNrmBuffer, byteOffset: 0 },
             this.colorBuffer ? { buffer: this.colorBuffer, byteOffset: 0, } : null,
             this.uvBuffer    ? { buffer: this.uvBuffer, byteOffset: 0, } : null,
         ];
-        const idxBuffer: GfxIndexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, idxBuffer);
+        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
@@ -230,7 +230,6 @@ class MeshFragData {
             device.destroyBuffer(this.uvBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -362,7 +361,7 @@ class MeshFragInstance {
         const meshFrag = this.meshFragData.meshFrag;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.meshFragData.inputLayout, this.meshFragData.inputState);
+        renderInst.setVertexInput(this.meshFragData.inputLayout, this.meshFragData.vertexBufferDescriptors, this.meshFragData.indexBufferDescriptor);
         renderInst.drawIndexes(this.meshFragData.indexCount);
 
         if (this.gfxProgram === null)

@@ -19,7 +19,7 @@ import * as GX from "../../gx/gx_enum";
 import { assert, readString, assertExists, nArray } from "../../util";
 import { vec3, mat4, vec2, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { Endianness } from "../../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
@@ -716,7 +716,9 @@ function get_r_zh(random: JPARandom): number {
 
 class JPAGlobalRes {
     public inputLayout: GfxInputLayout;
-    public inputStateQuad: GfxInputState;
+
+    public inputVertexQuad: GfxVertexBufferDescriptor[];
+    public inputIndexQuad: GfxIndexBufferDescriptor;
 
     private vertexBufferQuad: GfxBuffer;
     private indexBufferQuad: GfxBuffer;
@@ -863,14 +865,12 @@ class JPAGlobalRes {
             4, 5, 6, 6, 5, 7,
         ]).buffer);
 
-        this.inputStateQuad = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBufferQuad, byteOffset: 0 },
-        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+        this.inputVertexQuad = [{ buffer: this.vertexBufferQuad, byteOffset: 0 }];
+        this.inputIndexQuad = { buffer: this.indexBufferQuad, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputStateQuad);
         device.destroyBuffer(this.vertexBufferQuad);
         device.destroyBuffer(this.indexBufferQuad);
     }
@@ -983,14 +983,13 @@ class StripeEntry {
     public shadowBufferF32: Float32Array;
     public shadowBufferU8: Uint8Array;
 
-    constructor(public wordCount: number, public gfxBuffer: GfxBuffer, public inputState: GfxInputState) {
+    constructor(public wordCount: number, public gfxBuffer: GfxBuffer, public vertexBufferDescriptors: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor) {
         this.shadowBufferF32 = new Float32Array(wordCount);
         this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.gfxBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -998,7 +997,9 @@ const MAX_STRIPE_VERTEX_COUNT = 512;
 class StripeBufferManager {
     public stripeEntry: StripeEntry[] = [];
     private indexBuffer: GfxBuffer;
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, MAX_STRIPE_VERTEX_COUNT);
@@ -1021,10 +1022,7 @@ class StripeBufferManager {
         }
 
         const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        const inputState = device.createInputState(this.inputLayout, [
-            { buffer: gfxBuffer, byteOffset: 0, },
-        ], this.indexBufferDescriptor);
-        const entry = new StripeEntry(wordCount, gfxBuffer, inputState);
+        const entry = new StripeEntry(wordCount, gfxBuffer, [{ buffer: gfxBuffer, byteOffset: 0, },], this.indexBufferDescriptor);
         this.stripeEntry.push(entry);
         return entry;
     }
@@ -2009,7 +2007,7 @@ export class JPABaseEmitter {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = workData.particleSortKey;
-        template.setInputLayoutAndState(globalRes.inputLayout, entry.inputState);
+        template.setVertexInput(globalRes.inputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
 
         workData.fillParticleRenderInst(device, renderInstManager, template);
 
@@ -3248,7 +3246,7 @@ export class JPABaseParticle {
             // TODO(jstpierre): This breaks on Line10 / Line20? Have to check how the original game works...
             // materialParams.u_TexMtx[0][0] = 0.0;
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
@@ -3261,7 +3259,7 @@ export class JPABaseParticle {
             this.applyPivot(drawParams.u_PosMtx[0], workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, drawParams.u_PosMtx[0]);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
@@ -3303,7 +3301,7 @@ export class JPABaseParticle {
             mat4.mul(dst, workData.posCamMtx, dst);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             if (shapeType === ShapeType.DirectionCross)
                 renderInst.drawIndexes(12, 0);
             else
@@ -3320,7 +3318,7 @@ export class JPABaseParticle {
             mat4.mul(dst, workData.posCamMtx, dst);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             if (shapeType === ShapeType.RotationCross)
                 renderInst.drawIndexes(12, 0);
             else
@@ -3354,7 +3352,7 @@ export class JPABaseParticle {
             this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.YBillboard) {
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
@@ -3391,7 +3389,7 @@ export class JPABaseParticle {
             this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
+            renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             renderInst.drawIndexes(6, 0);
         } else {
             throw "whoops";
