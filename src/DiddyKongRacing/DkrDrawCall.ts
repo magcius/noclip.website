@@ -99,7 +99,7 @@ export class DkrDrawCall {
             let keyframeTotalNum = 0;
             for (let i = 0; i < animations.length; i++) {
                 const keyframes = animations![i].getKeyframes();
-                keyframeTotalNum += keyframes.length + 1;
+                keyframeTotalNum += keyframes.length;
             }
             assert(keyframeTotalNum > 0);
 
@@ -109,9 +109,9 @@ export class DkrDrawCall {
             for (let i = 0; i < animations.length; i++) {
                 const frameByteOffset: number[] = [];
                 const keyframes = animations![i].getKeyframes();
-                for (let j = 0; j < keyframes.length + 1; j++) {
+                for (let j = 0; j < keyframes.length; j++) {
                     frameByteOffset.push(positionOffs * 0x04);
-                    const positions = j >= keyframes.length ? keyframes[0] : keyframes[j];
+                    const positions = keyframes[j];
                     for (let k = 0; k < this.vertices.length; k++) {
                         const originalIndex = this.vertices[k].originalIndex;
                         positionBuffer.set(positions[originalIndex], positionOffs);
@@ -132,11 +132,12 @@ export class DkrDrawCall {
 
         const vertexAttributeDescriptors = [
             { location: F3DDKR_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
-            { location: F3DDKR_Program.a_Position_2, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: positionBufferFrameSize * 0x04, },
-            { location: F3DDKR_Program.a_Color, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
-            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 1, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+            { location: F3DDKR_Program.a_Position_2, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_Color, bufferIndex: 2, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
         ];
         const vertexBufferDescriptors = [
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
             { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
             { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // RGBA UV
         ];
@@ -149,6 +150,7 @@ export class DkrDrawCall {
         this.positionBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
         this.attribBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
         this.vertexBufferDescriptors = [
+            { buffer: this.positionBuffer, byteOffset: 0 },
             { buffer: this.positionBuffer, byteOffset: 0 },
             { buffer: this.attribBuffer, byteOffset: 0 },
         ];
@@ -287,8 +289,11 @@ export class DkrDrawCall {
             if(!!params.objAnim) {
                 const currentFrameIndex = params.objAnim.getCurrentFrame();
                 this.vertexBufferDescriptors[0].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][currentFrameIndex];
+                const nextFrameIndex = (currentFrameIndex + 1) % params.objAnim.getKeyframes().length;
+                this.vertexBufferDescriptors[1].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][nextFrameIndex];
             } else {
                 this.vertexBufferDescriptors[0].byteOffset = 0;
+                this.vertexBufferDescriptors[1].byteOffset = 0;
             }
 
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
