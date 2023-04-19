@@ -1282,21 +1282,20 @@ export class FSHPMeshData {
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
     
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, mesh.indexBufferData);
+        this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyBuffer(this.indexBuffer);
     }
 }
@@ -1304,9 +1303,9 @@ export class FSHPMeshData {
 export class FSHPData {
     public meshData: FSHPMeshData[] = [];
 
-    constructor(device: GfxDevice, public fshp: FSHP, fvtxData: FVTXData) {
+    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: FVTXData) {
         for (let i = 0; i < fshp.mesh.length; i++)
-            this.meshData.push(new FSHPMeshData(device, fshp.mesh[i], fvtxData));
+            this.meshData.push(new FSHPMeshData(cache, fshp.mesh[i], fvtxData));
     }
 
     public destroy(device: GfxDevice): void {
@@ -1319,12 +1318,12 @@ export class FMDLData {
     public fvtxData: FVTXData[] = [];
     public fshpData: FSHPData[] = [];
 
-    constructor(device: GfxDevice, public fmdl: FMDL) {
+    constructor(cache: GfxRenderCache, public fmdl: FMDL) {
         for (let i = 0; i < fmdl.fvtx.length; i++)
-            this.fvtxData.push(new FVTXData(device, fmdl.fvtx[i]));
+            this.fvtxData.push(new FVTXData(cache.device, fmdl.fvtx[i]));
         for (let i = 0; i < fmdl.fshp.length; i++) {
             const fshp = fmdl.fshp[i];
-            this.fshpData.push(new FSHPData(device, fshp, this.fvtxData[fshp.vertexIndex]));
+            this.fshpData.push(new FSHPData(cache, fshp, this.fvtxData[fshp.vertexIndex]));
         }
     }
 

@@ -505,7 +505,7 @@ export class RenderData {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
@@ -520,7 +520,6 @@ export class RenderData {
             device.destroyTexture(this.textures[i]);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
         for (let i = 0; i < this.dynamicBufferCopies.length; i++)
             device.destroyBuffer(this.dynamicBufferCopies[i]);
     }

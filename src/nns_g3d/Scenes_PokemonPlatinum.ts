@@ -73,7 +73,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public getCache() {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public adjustCameraController(c: CameraController) {

@@ -50,10 +50,6 @@ class GfxRenderHelperBase {
     public getDebugTextDrawer(): TextDrawer | null {
         return null;
     }
-
-    public getCache(): GfxRenderCache {
-        return this.renderCache;
-    }
 }
 
 // Debug Thumbnails

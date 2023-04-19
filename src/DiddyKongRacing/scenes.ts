@@ -223,7 +223,7 @@ class DKRSceneDesc implements Viewer.SceneDesc {
         this.renderer = new DKRRenderer(device, this.trackParams.camStart);
         new DataManager(context, pathBase, dkrVersion, (dataManager: DataManager) => {
             this.dataManager = dataManager;
-            const renderCache = this.renderer.renderHelper.getCache();
+            const renderCache = this.renderer.renderHelper.renderCache;
             this.textureCache = new DkrTextureCache(device, renderCache, this.dataManager);
             this.objectCache = new DkrObjectCache(this.dataManager);
             this.sprites = new DkrSprites(device, renderCache, this.dataManager);

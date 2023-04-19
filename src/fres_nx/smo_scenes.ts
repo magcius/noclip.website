@@ -12,6 +12,7 @@ import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `smo`;
 
@@ -21,6 +22,11 @@ class ResourceSystem {
     public bfresCache = new Map<string, BFRES.FRES | null>();
     public fmdlDataCache = new Map<string, FMDLData | null>();
     public arcPromiseCache = new Map<string, Promise<SARC.SARC | null>>();
+    private renderCache: GfxRenderCache;
+
+    constructor(device: GfxDevice) {
+        this.renderCache = new GfxRenderCache(device);
+    }
 
     private loadResource(device: GfxDevice, mountName: string, sarc: SARC.SARC): void {
         assert(!this.mounts.has(mountName));
@@ -80,7 +86,7 @@ class ResourceSystem {
                 // TODO(jstpierre): Proper actor implementations...
                 if (fres.fmdl.length > 0) {
                     assert(fres.fmdl.length === 1);
-                    fmdlData = new FMDLData(device, fres.fmdl[0]);
+                    fmdlData = new FMDLData(this.renderCache, fres.fmdl[0]);
                 } else {
                     return null;
                 }
@@ -97,6 +103,7 @@ class ResourceSystem {
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderCache.destroy();
         this.textureHolder.destroy(device);
         this.fmdlDataCache.forEach((value) => {
             if (value !== null)
@@ -147,7 +154,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const resourceSystem = new ResourceSystem();
+        const resourceSystem = new ResourceSystem(device);
         const dataFetcher = context.dataFetcher;
 
         const worldListSARC = assertExists(await resourceSystem.fetchData(device, dataFetcher, `SystemData/WorldList`));
@@ -165,7 +172,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         const world = assertExists(findWorldFromStage(worldList, this.id));
 
         const sceneRenderer = new OdysseyRenderer(device, resourceSystem);
-        const cache = sceneRenderer.renderHelper.getCache();
+        const cache = sceneRenderer.renderHelper.renderCache;
 
         resourceSystem.fetchData(device, dataFetcher, `ObjectData/${world.Name}Texture`);
 

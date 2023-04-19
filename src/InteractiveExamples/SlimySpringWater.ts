@@ -342,7 +342,7 @@ export class SlimySpringWaterDesc implements SceneDesc {
         const dataFetcher = context.dataFetcher;
 
         const renderer = new SlimySpringWaterRenderer(device);
-        const cache = renderer.renderHelper.getCache();
+        const cache = renderer.renderHelper.renderCache;
 
         // Skybox.
         {

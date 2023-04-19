@@ -723,7 +723,7 @@ class JPAGlobalRes {
     private vertexBufferQuad: GfxBuffer;
     private indexBufferQuad: GfxBuffer;
 
-    constructor(device: GfxDevice) {
+    constructor(cache: GfxRenderCache) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
             { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RG,  bufferIndex: 0, bufferByteOffset: 3*4 },
@@ -733,7 +733,7 @@ class JPAGlobalRes {
             { byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -849,6 +849,7 @@ class JPAGlobalRes {
         const n0 =  25;
         const n1 = -25;
 
+        const device = cache.device;
         this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([
             n0, n0, 0, 1, 0,
             n0, n1, 0, 1, 1,
@@ -870,7 +871,6 @@ class JPAGlobalRes {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyBuffer(this.vertexBufferQuad);
         device.destroyBuffer(this.indexBufferQuad);
     }
@@ -1055,7 +1055,7 @@ export class JPAEmitterManager {
     public globalRes: JPAGlobalRes;
     public stripeBufferManager: StripeBufferManager;
 
-    constructor(device: GfxDevice, private maxParticleCount: number, private maxEmitterCount: number) {
+    constructor(cache: GfxRenderCache, private maxParticleCount: number, private maxEmitterCount: number) {
         this.workData.emitterManager = this;
 
         for (let i = 0; i < this.maxEmitterCount; i++)
@@ -1063,8 +1063,8 @@ export class JPAEmitterManager {
         for (let i = 0; i < this.maxParticleCount; i++)
             this.deadParticlePool.push(new JPABaseParticle());
 
-        this.globalRes = new JPAGlobalRes(device);
-        this.stripeBufferManager = new StripeBufferManager(device, this.globalRes.inputLayout);
+        this.globalRes = new JPAGlobalRes(cache);
+        this.stripeBufferManager = new StripeBufferManager(cache.device, this.globalRes.inputLayout);
     }
 
     public createEmitter(resData: JPAResourceData): JPABaseEmitter | null {

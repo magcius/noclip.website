@@ -373,7 +373,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected override resolveLateSamplerBindingsForWorldOpaques(renderList: GfxRenderInstList, scope: GfxrPassScope) {
-        this.sphereMapMan.resolveLateSamplerBindings(renderList, scope, this.renderHelper.getCache());
+        this.sphereMapMan.resolveLateSamplerBindings(renderList, scope, this.renderHelper.renderCache);
     }
 
     public override destroy(device: GfxDevice) {

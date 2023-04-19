@@ -1077,13 +1077,12 @@ export class EffectSystem extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'EffectSystem');
 
-        const device = sceneObjHolder.modelCache.device;
         this.particleResourceHolder = sceneObjHolder.modelCache.ensureParticleResourceHolder();
 
         // These numbers are from GameScene::initEffect.
         const maxParticleCount = 0x1800;
         const maxEmitterCount = 0x200;
-        this.emitterManager = new JPA.JPAEmitterManager(device, maxParticleCount, maxEmitterCount);
+        this.emitterManager = new JPA.JPAEmitterManager(sceneObjHolder.modelCache.cache, maxParticleCount, maxEmitterCount);
 
         this.particleEmitterHolder = new ParticleEmitterHolder(this, maxParticleCount);
     }

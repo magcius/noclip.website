@@ -16,6 +16,7 @@ import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayout
 import { RenderData } from "../BanjoKazooie/render";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { EggProgram } from "./render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -2345,12 +2346,10 @@ function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
     return data;
 }
 
-export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Float32Array): void {
+export function eggInputSetup(cache: GfxRenderCache, data: RenderData, vertices: Float32Array): void {
+    const device = cache.device;
     const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
     data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
-
-    // clear existing input objects, but leave the buffers
-    device.destroyInputLayout(data.inputLayout);
 
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
         { location: EggProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
@@ -2365,7 +2364,7 @@ export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Flo
         { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
     ];
 
-    data.inputLayout = device.createInputLayout({
+    data.inputLayout = cache.createInputLayout({
         indexBufferFormat: GfxFormat.U32_R,
         vertexBufferDescriptors,
         vertexAttributeDescriptors,

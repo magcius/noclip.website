@@ -99,7 +99,7 @@ class DKSRenderer implements Viewer.SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public createPanels(): Panel[] {

@@ -443,7 +443,7 @@ export class GTA3SceneDesc implements SceneDesc {
             console.warn('Missing textures', Array.from(texturesMissing).sort());
 
         const sealevel = this.meta.water.origin[2];
-        const cache = renderer.renderHelper.getCache();
+        const cache = renderer.renderHelper.renderCache;
         for (const area of areas.values()) {
             const areaRenderer = new AreaRenderer();
             for (const [params, meshes] of area) {

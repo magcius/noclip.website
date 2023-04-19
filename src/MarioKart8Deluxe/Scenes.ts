@@ -37,7 +37,7 @@ class MarioKart8SceneDesc implements SceneDesc {
         const cache = renderer.renderHelper.renderCache;
 
         for (let i = 0; i < fres.fmdl.length; i++) {
-            const fmdlData = new FMDLData(device, fres.fmdl[i]);
+            const fmdlData = new FMDLData(cache, fres.fmdl[i]);
             context.destroyablePool.push(fmdlData);
 
             const fmdlRenderer = new FMDLRenderer(device, cache, textureHolder, fmdlData);

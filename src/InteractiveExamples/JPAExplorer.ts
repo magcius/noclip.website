@@ -43,9 +43,9 @@ class BasicEffectSystem {
         'IndDummy',         // Super Mario Galaxy
     ];
 
-    constructor(device: GfxDevice, private jpac: JPA.JPAC) {
-        const flipY = gfxDeviceNeedsFlipY(device);
-        this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
+    constructor(cache: GfxRenderCache, private jpac: JPA.JPAC) {
+        const flipY = gfxDeviceNeedsFlipY(cache.device);
+        this.emitterManager = new JPA.JPAEmitterManager(cache, 6000, 300);
         this.jpacData = new JPA.JPACData(this.jpac);
 
         for (let i = 0; i < this.fbTextureNames.length; i++) {
@@ -223,7 +223,7 @@ export class Explorer implements SceneGfx {
         this.uiContainer = context.uiContainer;
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.effectSystem = new BasicEffectSystem(device, this.jpac);
+        this.effectSystem = new BasicEffectSystem(this.renderHelper.renderCache, this.jpac);
 
         this.gridPlane = new GridPlane(device, this.renderHelper.renderCache);
 
@@ -374,7 +374,7 @@ export class Explorer implements SceneGfx {
 
     private createEmitter(effectIndex = this.currentEffectIndex): void {
         const resourceId = this.jpac.effects[effectIndex].resourceId;
-        const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.getCache(), resourceId);
+        const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.renderCache, resourceId);
         newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? Pass.INDIRECT : Pass.MAIN;
         this.emitters.push(newEmitter);
     }

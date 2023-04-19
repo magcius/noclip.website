@@ -181,10 +181,10 @@ const scratchMat4 = mat4.create();
 class ShapeInstance {
     private vertexData: VertexData;
 
-    constructor(device: GfxDevice, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
+    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
         const baseCtx = this.materialInstance.baseCtx;
         const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
-        this.vertexData = new VertexData(device, nitroVertexData);
+        this.vertexData = new VertexData(cache, nitroVertexData);
     }
 
     private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
@@ -290,7 +290,7 @@ export class MPHRenderer {
                 index = 0;
             }
             const nodeIndex = index;
-            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
+            this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
     }
 

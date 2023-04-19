@@ -77,7 +77,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public adjustCameraController(c: CameraController) {

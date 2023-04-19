@@ -312,7 +312,7 @@ class FurObj {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, obj.indexBuffer.buffer);
         this.indexCount = obj.indexBuffer.length;
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04 },
@@ -412,7 +412,7 @@ class SceneRenderer implements SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public createCameraController() {

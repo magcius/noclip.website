@@ -369,7 +369,7 @@ export class ParticleManager {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: ParticleProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
-        const inputLayout = device.createInputLayout({
+        const inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexBufferDescriptors: [
                 { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
@@ -484,7 +484,6 @@ export class ParticleManager {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.spriteData.indexBuffer);
         device.destroyBuffer(this.spriteData.vertexBuffer);
-        device.destroyInputLayout(this.spriteData.inputLayout);
 
         // samplers are already handled by the cache, just destroy textures
         for (let i = 0; i < this.levelData.length; i++)

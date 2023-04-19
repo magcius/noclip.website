@@ -125,7 +125,7 @@ export class GallerySceneRenderer implements SceneGfx {
         const device = context.device;
         this.renderHelper = new GfxRenderHelper(device);
 
-        const cache = this.renderHelper.getCache();
+        const cache = this.renderHelper.renderCache;
         this.circle = new GalleryCircleRenderer(device, cache);
 
         const labelContainer = document.createElement('div');
@@ -180,7 +180,7 @@ export class GallerySceneRenderer implements SceneGfx {
     }
 
     public async setObjectID(objectId: number) {
-        const device = this.context.device, cache = this.renderHelper.getCache(), dataFetcher = this.context.dataFetcher;
+        const device = this.context.device, cache = this.renderHelper.renderCache, dataFetcher = this.context.dataFetcher;
 
         const galleryObject = this.galleryObjects[objectId];
         const objectBuffer = await dataFetcher.fetchData(`${pathBase}/${galleryObject.Filename}`);

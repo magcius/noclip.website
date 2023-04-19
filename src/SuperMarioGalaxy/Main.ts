@@ -1791,7 +1791,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.uiContainer = context.uiContainer;
         sceneObjHolder.viewerInput = context.viewerInput;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
-        sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
+        sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.renderCache);
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
 

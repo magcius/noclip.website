@@ -109,7 +109,7 @@ export class DkrSprites {
                 { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
             ];
             
-            this.inputLayout = device.createInputLayout({
+            this.inputLayout = cache.createInputLayout({
                 indexBufferFormat: GfxFormat.U16_R,
                 vertexAttributeDescriptors,
                 vertexBufferDescriptors,
@@ -143,7 +143,6 @@ export class DkrSprites {
         if(!this.hasBeenDestroyed) {
             device.destroyBuffer(this.indexBuffer);
             device.destroyBuffer(this.vertexBuffer);
-            device.destroyInputLayout(this.inputLayout);
             device.destroyTexture(this.textureMappings[0].gfxTexture!);
             // The sampler is already destroyed from renderHelper.destroy()
             this.hasBeenDestroyed = true;

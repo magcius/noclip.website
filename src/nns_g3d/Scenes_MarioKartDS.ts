@@ -77,7 +77,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
     }
 
     public getCache() {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {

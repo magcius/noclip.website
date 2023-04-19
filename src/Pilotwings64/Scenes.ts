@@ -1408,14 +1408,14 @@ class ModelData {
     public parts: MeshData[];
     public partParentIndices: number[];
 
-    constructor(device: GfxDevice, public uvmd: UVMD, public modelIndex: number) {
+    constructor(cache: GfxRenderCache, public uvmd: UVMD, public modelIndex: number) {
         // Only load LOD 0 for now...
         const lod = uvmd.lods[0];
 
         this.parts = lod.parts.map((part) => {
             // TODO(jstpierre): Don't create this fake mesh chunk...
             const meshChunk = { vertexData: uvmd.vertexData, indexData: part.indexData, materials: part.materials };
-            return new MeshData(device, meshChunk);
+            return new MeshData(cache, meshChunk);
         });
 
         // TODO(jstpierre): Replace with a PartData (???)
@@ -1436,7 +1436,8 @@ class MeshData {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
-    constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
+    constructor(cache: GfxRenderCache, public mesh: Mesh_Chunk) {
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.indexData.buffer);
 
@@ -1449,7 +1450,7 @@ class MeshData {
             { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -1464,7 +1465,6 @@ class MeshData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -1943,7 +1943,8 @@ class TextureData {
     public gfxSampler: GfxSampler;
     public viewerTexture: Texture;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public uvtx: UVTX) {
+    constructor(cache: GfxRenderCache, public uvtx: UVTX) {
+        const device = cache.device;
         const texture = this.uvtx;
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
@@ -1952,7 +1953,7 @@ class TextureData {
         const levels = texture.levels.filter((t) => !t.usesPaired).map((t) => t.pixels);
         device.uploadTextureData(this.gfxTexture, 0, levels);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
             minFilter: GfxTexFilterMode.Point,
@@ -1974,7 +1975,6 @@ class TextureData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
-        device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -2351,7 +2351,7 @@ class SnowRenderer {
     private flakeBounds = 200 * 50; // 200 in game, scale up to make things simpler
     private flakeScale = .005; // somewhat arbitrary, apparent size of flake at z = 1
 
-    constructor(device: GfxDevice, private flakeCount: number) {
+    constructor(cache: GfxRenderCache, private flakeCount: number) {
         const flakeVertices = new Float32Array(4 * 3 * flakeCount);
         const flakeIndices = new Uint16Array(6 * flakeCount);
         // randomize initial positions in a cube
@@ -2378,6 +2378,7 @@ class SnowRenderer {
             flakeIndices[6 * i + 5] = 4 * i + 3;
         }
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, flakeVertices.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, flakeIndices.buffer);
 
@@ -2388,7 +2389,7 @@ class SnowRenderer {
             { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -2443,15 +2444,14 @@ class SnowRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
 class UVCTData {
     public meshData: MeshData;
 
-    constructor(device: GfxDevice, public uvct: UVCT_Chunk) {
-        this.meshData = new MeshData(device, uvct.mesh);
+    constructor(cache: GfxRenderCache, public uvct: UVCT_Chunk) {
+        this.meshData = new MeshData(cache, uvct.mesh);
     }
 
     public destroy(device: GfxDevice): void {
@@ -2776,13 +2776,13 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
         const file = fs.files[i];
         if (file.type === 'UVCT') {
             const uvct = parseUVCT(file);
-            dataHolder.uvctData.push(new UVCTData(device, uvct));
+            dataHolder.uvctData.push(new UVCTData(dataHolder.gfxRenderCache, uvct));
         } else if (file.type === 'UVTX') {
             const uvtx = parseUVTX(file);
-            dataHolder.textureData.push(new TextureData(device, dataHolder.gfxRenderCache, uvtx));
+            dataHolder.textureData.push(new TextureData(dataHolder.gfxRenderCache, uvtx));
         } else if (file.type === 'UVMD') {
             const uvmd = parseUVMD(file);
-            dataHolder.uvmdData.push(new ModelData(device, uvmd, dataHolder.uvmdData.length));
+            dataHolder.uvmdData.push(new ModelData(dataHolder.gfxRenderCache, uvmd, dataHolder.uvmdData.length));
         } else if (file.type === 'UVTR') {
             dataHolder.uvtr.push(parseUVTR(file));
         } else if (file.type === 'UVLV') {
@@ -3102,7 +3102,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
             renderer.dobjRenderers.push(oceanPlane);
         }
         if (this.levelID === 3 && this.weatherConditions === 2)
-            renderer.snowRenderer = new SnowRenderer(device, 800);
+            renderer.snowRenderer = new SnowRenderer(renderer.renderHelper.renderCache, 800);
 
         const currUPWL = dataHolder.upwl[this.levelID];
         const landingPads: LandingPad[] = [];

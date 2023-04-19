@@ -185,6 +185,9 @@ export class Scene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
+        this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
+
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
@@ -194,14 +197,12 @@ export class Scene implements Viewer.SceneGfx {
             { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat: GfxFormat | null = null;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.ivRenderers = this.ivs.map((iv) => {
             return new IVRenderer(device, iv, this.inputLayout);
         });
-
-        this.renderHelper = new GfxRenderHelper(device);
-        this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
     }
 
     public adjustCameraController(c: CameraController) {
@@ -253,7 +254,6 @@ export class Scene implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy();

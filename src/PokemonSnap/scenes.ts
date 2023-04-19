@@ -174,10 +174,11 @@ class SceneDesc implements Viewer.SceneDesc {
 
             sceneRenderer.globals.collision = level.collision;
 
+            const cache = sceneRenderer.renderHelper.renderCache;
             sceneActorInit();
 
             if (level.skybox !== null) {
-                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
+                const skyboxData = new RenderData(device, cache, level.skybox.node.model!.sharedOutput);
                 const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], [], true);
                 if (level.skybox.animation !== null) {
                     skyboxRenderer.animations.push(level.skybox.animation!);
@@ -191,19 +192,19 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
+            const zeroOneData = new RenderData(device, cache, level.zeroOne.sharedOutput);
             sceneRenderer.renderData.push(zeroOneData);
 
             const projData: RenderData[] = [];
             for (let i = 0; i < level.projectiles.length; i++)
-                projData.push(new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[i].sharedOutput));
+                projData.push(new RenderData(device, cache, level.projectiles[i].sharedOutput));
             sceneRenderer.renderData.push(...projData);
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
-                const data = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.objectInfo[i].sharedOutput);
+                const data = new RenderData(device, cache, level.objectInfo[i].sharedOutput);
                 if (level.objectInfo[i].id === 601 || level.objectInfo[i].id === 602) // replace egg vertex buffers
-                    eggInputSetup(device, data, level.eggData!);
+                    eggInputSetup(cache, data, level.eggData!);
                 objectDatas.push(data);
                 sceneRenderer.renderData.push(data);
                 for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++) {
@@ -214,7 +215,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             let haunterData: RenderData | null = null;
             if (level.haunterData) {
-                haunterData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.haunterData[1].model!.sharedOutput);
+                haunterData = new RenderData(device, cache, level.haunterData[1].model!.sharedOutput);
                 sceneRenderer.renderData.push(haunterData);
                 for (let j = 0; j < haunterData.sharedOutput.textureCache.textures.length; j++) {
                     haunterData.sharedOutput.textureCache.textures[j].name = `93_${j + 1}`;
@@ -229,10 +230,10 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.modelRenderers.push(
                 ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
             );
-            sceneRenderer.globals.particles = new ParticleManager(device, sceneRenderer.renderHelper.getCache(), level.levelParticles, level.pesterParticles);
+            sceneRenderer.globals.particles = new ParticleManager(device, cache, level.levelParticles, level.pesterParticles);
 
             for (let i = 0; i < level.rooms.length; i++) {
-                const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
+                const renderData = new RenderData(device, cache, level.rooms[i].node.model!.sharedOutput);
                 const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node], []);
                 if (level.rooms[i].animation !== null) {
                     roomRenderer.animations.push(level.rooms[i].animation!);

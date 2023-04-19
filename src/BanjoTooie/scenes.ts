@@ -595,7 +595,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const viewerTextures: Viewer.Texture[] = [];
         const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
         const sceneRenderer = new BTRenderer(device, fakeTextureHolder, modelCache, this.id);
-        const cache = sceneRenderer.renderHelper.getCache();
+        const cache = sceneRenderer.renderHelper.renderCache;
         const opaFile = findFileByID(obj, obj.OpaGeoFileID);
         if (opaFile !== null) {
             const textures = obj.Files[obj.OpaGeoTextures];

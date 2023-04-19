@@ -150,7 +150,7 @@ export class DrawCallRenderData {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = renderCache.createInputLayout({
             indexBufferFormat: null,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
@@ -181,7 +181,6 @@ export class DrawCallRenderData {
         for (let i = 0; i < this.textures.length; i++)
             device.destroyTexture(this.textures[i]);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 

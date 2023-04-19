@@ -414,7 +414,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
         const renderer = new KatamariDamacyRenderer(device, levelParams, missionSetupBin, isTutorial);
         renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
-        const gfxCache = renderer.renderHelper.getCache();
+        const gfxCache = renderer.renderHelper.renderCache;
 
         for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
             cache.fetchFileData(getStageAreaFilePath(stageTextures[levelParams.stageAreaIndex + i]));

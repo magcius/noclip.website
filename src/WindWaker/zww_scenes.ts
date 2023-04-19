@@ -1083,7 +1083,7 @@ class SceneDesc {
             const jpacData = modelCache.getFileData(particleArchives[i]);
             jpac.push(JPA.parse(jpacData));
         }
-        globals.particleCtrl = new dPa_control_c(device, jpac);
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache, jpac);
 
         // dStage_Create
         dKankyo_create(globals);

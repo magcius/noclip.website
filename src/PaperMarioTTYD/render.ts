@@ -544,7 +544,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {
-        const mobj = new MOBJ(this.device, this.renderHelper.getCache(), this.animGroupCache!, mobjName, animPoseName);
+        const mobj = new MOBJ(this.device, this.renderHelper.renderCache, this.animGroupCache!, mobjName, animPoseName);
         this.mobj.push(mobj);
         return mobj;
     }

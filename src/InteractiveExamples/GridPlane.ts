@@ -110,7 +110,7 @@ export class GridPlane {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
@@ -154,6 +154,5 @@ export class GridPlane {
         device.destroyProgram(this.gfxProgram);
         device.destroyBuffer(this.posBuffer);
         device.destroyBuffer(this.idxBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }

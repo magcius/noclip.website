@@ -102,7 +102,7 @@ export class DkrObjectModel {
         for (let i = 0; i < numberOfTextures; i++) {
             this.textureIndices.push(view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
         }
-        const cache = renderHelper.getCache();
+        const cache = renderHelper.renderCache;
         textureCache.preload3dTextures(this.textureIndices, () => {
             this.triangleBatches = new Array(this.numberOfTriangleBatches);
             

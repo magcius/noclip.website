@@ -690,7 +690,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
-        const cache = sceneRenderer.renderHelper.getCache();
+        const cache = sceneRenderer.renderHelper.renderCache;
         for (let i = 0; i < map.displayLists.length; i++) {
             const dl = map.displayLists[i];
 

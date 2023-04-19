@@ -23,7 +23,7 @@ class BasicNSBMDRenderer implements SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {

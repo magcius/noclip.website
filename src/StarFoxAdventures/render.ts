@@ -99,7 +99,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             furs: new GfxRenderInstList(),
         };
 
-        const cache = this.renderHelper.getCache();
+        const cache = this.renderHelper.renderCache;
         this.opaqueColorTextureMapping.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -229,7 +229,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
         if (this.blurFilter === undefined)
-            this.blurFilter = new BlurFilter(this.renderHelper.getCache());
+            this.blurFilter = new BlurFilter(this.renderHelper.renderCache);
 
         return this.blurFilter.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height,
             () => {

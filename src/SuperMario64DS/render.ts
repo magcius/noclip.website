@@ -107,7 +107,8 @@ export class VertexData {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
-    constructor(device: GfxDevice, public nitroVertexData: NITRO_GX.VertexData) {
+    constructor(cache: GfxRenderCache, public nitroVertexData: NITRO_GX.VertexData) {
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.nitroVertexData.packedVertexBuffer.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.nitroVertexData.indexBuffer.buffer);
 
@@ -123,7 +124,7 @@ export class VertexData {
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
@@ -131,7 +132,6 @@ export class VertexData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -165,8 +165,8 @@ export const enum SM64DSPass {
 class BatchData {
     public vertexData: VertexData;
 
-    constructor(device: GfxDevice, public rootJoint: BMD.Joint, public batch: BMD.Batch) {
-        this.vertexData = new VertexData(device, batch.vertexData);
+    constructor(cache: GfxRenderCache, public rootJoint: BMD.Joint, public batch: BMD.Batch) {
+        this.vertexData = new VertexData(cache, batch.vertexData);
     }
 
     public destroy(device: GfxDevice): void {
@@ -180,9 +180,10 @@ class MaterialData {
 
     public textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public material: BMD.Material) {
+    constructor(cache: GfxRenderCache, public material: BMD.Material) {
         const texture = this.material.texture;
 
+        const device = cache.device;
         if (texture !== null) {
             this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
             device.setResourceName(this.gfxTexture, texture.name);
@@ -214,14 +215,14 @@ export class BMDData {
     public materialData: MaterialData[] = [];
     public batchData: BatchData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public bmd: BMD.BMD) {
+    constructor(cache: GfxRenderCache, public bmd: BMD.BMD) {
         for (let i = 0; i < this.bmd.materials.length; i++)
-            this.materialData.push(new MaterialData(device, cache, this.bmd.materials[i]));
+            this.materialData.push(new MaterialData(cache, this.bmd.materials[i]));
 
         for (let i = 0; i < this.bmd.joints.length; i++) {
             const joint = this.bmd.joints[i];
             for (let j = 0; j < joint.batches.length; j++)
-                this.batchData.push(new BatchData(device, joint, joint.batches[j]));
+                this.batchData.push(new BatchData(cache, joint, joint.batches[j]));
         }
     }
 
