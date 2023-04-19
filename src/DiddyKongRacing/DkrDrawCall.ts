@@ -15,10 +15,7 @@ import { DkrObjectAnimation } from './DkrObjectAnimation';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { makeTriangleIndexBuffer } from '../gfx/helpers/TopologyHelpers';
-import { range } from '../MathHelpers';
 import { GfxTopology } from '../gfx/helpers/TopologyHelpers';
-
-const VERTEX_BYTE_STRIDE = 12;
 
 // Currently known flags
 const FLAG_ENABLE_DEPTH_WRITE    = 0x00000010;
@@ -46,24 +43,21 @@ export interface DkrDrawCallParams {
 }
 
 export class DkrDrawCall {
-    private vertices = new Array<DkrFinalVertex>();
-    private defaultVertexBuffer: GfxBuffer;
+    private vertices: DkrFinalVertex[] = [];
+    private positionBuffer: GfxBuffer;
+    private attribBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private indexCount: number;
 
     private inputLayout: GfxInputLayout;
-    private defaultVertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     private indexBufferDescriptor: GfxIndexBufferDescriptor;
-    private objAnimInputVertexBufferDescriptors: GfxVertexBufferDescriptor[][][] = [];
-    private objAnimInputStateBuffers: GfxBuffer[] = [];
+    private objAnimPositionBufferByteOffset: number[][] = [];
     private gfxProgram: GfxProgram | null = null;
     private program: F3DDKR_Program;
     private isBuilt = false;
     private flags: number;
     private hasBeenDestroyed = false;
-
-    private vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
-    private vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[];
 
     // Only used for the Crescent Island waterfalls
     private scrollU = 0;
@@ -80,104 +74,92 @@ export class DkrDrawCall {
         this.vertices = this.vertices.concat(triBatch.getVertices());
     }
 
-    public build(animations: Array<DkrObjectAnimation> | null = null): void {
+    public build(animations: DkrObjectAnimation[] | null = null): void {
         assert(!this.isBuilt);
-
-        this.vertexAttributeDescriptors = [
-            { location: F3DDKR_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
-            { location: F3DDKR_Program.a_Position_2, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x04, },
-            { location: F3DDKR_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
-            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 10 * 0x04, },
-        ];
-        this.vertexBufferDescriptors = [
-            { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
-        ];
-        this.inputLayout = this.cache.createInputLayout({
-            indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors: this.vertexAttributeDescriptors,
-            vertexBufferDescriptors: this.vertexBufferDescriptors,
-        });
 
         const indexData = makeTriangleIndexBuffer(GfxTopology.Triangles, 0, this.vertices.length);
         this.indexCount = indexData.length;
         this.indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indexData.buffer);
 
-        const verticesAB = new Float32Array(this.vertices.length * VERTEX_BYTE_STRIDE);
+        const attribBuffer = new Float32Array(this.vertices.length * 6);
         for(let i = 0; i < this.vertices.length; i++) {
-            const off = i * VERTEX_BYTE_STRIDE;
-            verticesAB[off + 0] = this.vertices[i].x;
-            verticesAB[off + 1] = this.vertices[i].y;
-            verticesAB[off + 2] = this.vertices[i].z;
-            // Skipping a_Position_2, since it isn't used in the default state.
-            verticesAB[off + 6] = this.vertices[i].xr;
-            verticesAB[off + 7] = this.vertices[i].yg;
-            verticesAB[off + 8] = this.vertices[i].zb;
-            verticesAB[off + 9] = this.vertices[i].a;
-            verticesAB[off + 10] = this.vertices[i].u;
-            verticesAB[off + 11] = this.vertices[i].v;
+            const attribOffs = i * 6;
+            attribBuffer[attribOffs + 0] = this.vertices[i].xr;
+            attribBuffer[attribOffs + 1] = this.vertices[i].yg;
+            attribBuffer[attribOffs + 2] = this.vertices[i].zb;
+            attribBuffer[attribOffs + 3] = this.vertices[i].a;
+            attribBuffer[attribOffs + 4] = this.vertices[i].u;
+            attribBuffer[attribOffs + 5] = this.vertices[i].v;
         }
 
-        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
-        this.defaultVertexBufferDescriptors = [{ buffer: this.defaultVertexBuffer, byteOffset: 0 }];
+        const positionBufferFrameSize = this.vertices.length * 3;
+        let positionBuffer: Float32Array;
+
+        if (animations !== null && animations.length > 0) {
+            let keyframeTotalNum = 0;
+            for (let i = 0; i < animations.length; i++) {
+                const keyframes = animations![i].getKeyframes();
+                keyframeTotalNum += keyframes.length + 1;
+            }
+            assert(keyframeTotalNum > 0);
+
+            // Now set up the keyframes. Each keyframe is effectively a contiguous position vertex buffer.
+            positionBuffer = new Float32Array(positionBufferFrameSize * keyframeTotalNum);
+            let positionOffs = 0;
+            for (let i = 0; i < animations.length; i++) {
+                const frameByteOffset: number[] = [];
+                const keyframes = animations![i].getKeyframes();
+                for (let j = 0; j < keyframes.length + 1; j++) {
+                    frameByteOffset.push(positionOffs * 0x04);
+                    const positions = j >= keyframes.length ? keyframes[0] : keyframes[j];
+                    for (let k = 0; k < this.vertices.length; k++) {
+                        const originalIndex = this.vertices[k].originalIndex;
+                        positionBuffer.set(positions[originalIndex], positionOffs);
+                        positionOffs += 3;
+                    }
+                }
+                this.objAnimPositionBufferByteOffset.push(frameByteOffset);
+            }
+        } else {
+            positionBuffer = new Float32Array(positionBufferFrameSize);
+            for (let i = 0; i < this.vertices.length; i++) {
+                const positionOffs = i * 3;
+                positionBuffer[positionOffs + 0] = this.vertices[i].x;
+                positionBuffer[positionOffs + 1] = this.vertices[i].y;
+                positionBuffer[positionOffs + 2] = this.vertices[i].z;
+            }
+        }
+
+        const vertexAttributeDescriptors = [
+            { location: F3DDKR_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_Position_2, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: positionBufferFrameSize * 0x04, },
+            { location: F3DDKR_Program.a_Color, bufferIndex: 1, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 1, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+        ];
+        const vertexBufferDescriptors = [
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
+            { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // RGBA UV
+        ];
+        this.inputLayout = this.cache.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+        });
+
+        this.positionBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
+        this.attribBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
+        this.vertexBufferDescriptors = [
+            { buffer: this.positionBuffer, byteOffset: 0 },
+            { buffer: this.attribBuffer, byteOffset: 0 },
+        ];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
-
-        if(!!animations) {
-            for(const animation of animations) {
-                this.createObjAnimInputStateAndLayout(animation);
-            }
-        }
-
         this.isBuilt = true;
-    }
-
-    private createObjAnimInputStateAndLayout(animation: DkrObjectAnimation): void {
-        assert(!!animation);
-        const keyFrames = animation.getKeyframes();
-        const vertexBufferDescriptors: GfxVertexBufferDescriptor[][] = [];
-
-        // TODO(jstpierre): Just use one buffer for positions only. This wouldn't be that hard to do...
-        for(let kfi = 0; kfi < keyFrames.length - 1; kfi++) {
-            const keyframe = keyFrames[kfi];
-            const nextKeyframe = keyFrames[kfi + 1];
-            assert(!!keyframe && !!nextKeyframe);
-
-            const verticesAB = new Float32Array(this.vertices.length * VERTEX_BYTE_STRIDE);
-            for(let i = 0; i < this.vertices.length; i++) {
-                const off = i * VERTEX_BYTE_STRIDE;
-                const origIndex = this.vertices[i].originalIndex;
-                //if(kfi % 3 > 0) {
-                    verticesAB[off + 0] = keyframe[origIndex][0];
-                    verticesAB[off + 1] = keyframe[origIndex][1];
-                    verticesAB[off + 2] = keyframe[origIndex][2];
-                    verticesAB[off + 3] = nextKeyframe[origIndex][0];
-                    verticesAB[off + 4] = nextKeyframe[origIndex][1];
-                    verticesAB[off + 5] = nextKeyframe[origIndex][2];
-                //}
-                verticesAB[off + 6] = this.vertices[i].xr;
-                verticesAB[off + 7] = this.vertices[i].yg;
-                verticesAB[off + 8] = this.vertices[i].zb;
-                verticesAB[off + 9] = this.vertices[i].a;
-                verticesAB[off + 10] = this.vertices[i].u;
-                verticesAB[off + 11] = this.vertices[i].v;
-            }
-
-            // Create the buffer
-            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
-            this.objAnimInputStateBuffers.push(vertexBuffer);
-
-            vertexBufferDescriptors.push([{ buffer: vertexBuffer, byteOffset: 0 }]);
-        }
-
-        this.objAnimInputVertexBufferDescriptors.push(vertexBufferDescriptors);
     }
 
     public destroy(device: GfxDevice): void {
         if(!this.hasBeenDestroyed) {
             device.destroyBuffer(this.indexBuffer);
-            device.destroyBuffer(this.defaultVertexBuffer);
-            for(const buffer of this.objAnimInputStateBuffers) {
-                device.destroyBuffer(buffer);
-            }
+            device.destroyBuffer(this.positionBuffer);
             this.hasBeenDestroyed = true;
         }
     }
@@ -304,11 +286,12 @@ export class DkrDrawCall {
 
             if(!!params.objAnim) {
                 const currentFrameIndex = params.objAnim.getCurrentFrame();
-                const currentVertexBufferDescriptors = this.objAnimInputVertexBufferDescriptors[params.objAnimIndex][currentFrameIndex];
-                renderInst.setVertexInput(this.inputLayout, currentVertexBufferDescriptors, this.indexBufferDescriptor);
+                this.vertexBufferDescriptors[0].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][currentFrameIndex];
             } else {
-                renderInst.setVertexInput(this.inputLayout, this.defaultVertexBufferDescriptors, this.indexBufferDescriptor);
+                this.vertexBufferDescriptors[0].byteOffset = 0;
             }
+
+            renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
             renderInst.setGfxProgram(this.gfxProgram);
             renderInst.drawIndexesInstanced(this.indexCount, params.modelMatrices.length);
