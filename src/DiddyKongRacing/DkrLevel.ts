@@ -17,6 +17,8 @@ import { DkrDrawCall } from "./DkrDrawCall";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { Panel, Slider } from "../ui";
+import { F3DDKR_Program } from "./F3DDKR_Program";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
 export let CURRENT_LEVEL_ID = -1;
 
@@ -136,6 +138,13 @@ export class DkrLevel {
     private previousChannel = -1;
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        // Set scene parameters
+        let offs = template.allocateUniformBuffer(F3DDKR_Program.ub_SceneParams, 16);
+        const d = template.mapUniformBufferF32(F3DDKR_Program.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+
         if(DkrControlGlobals.ADV2_MIRROR.on !== this.cameraInMirrorMode) {
             this.mirrorCamera(viewerInput);
         }
@@ -221,6 +230,8 @@ export class DkrLevel {
             }
             this.sprites.prepareToRender(device, renderInstManager, viewerInput, SPRITE_LAYER_TRANSPARENT);
         }
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public getClearColor(): Color {

@@ -221,35 +221,30 @@ export class DkrDrawCall {
                 this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
             }
 
-            // Set scene parameters
-            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_SceneParams, 16);
-            const d = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_SceneParams);
-            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-
             // Set draw parameters
-            let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
-            const d2 = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
+            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
+            const d = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
 
             // Color
-            d2[offs2 + 0] = 1.0;
-            d2[offs2 + 1] = 1.0;
-            d2[offs2 + 2] = 1.0;
-            d2[offs2 + 3] = (params.overrideAlpha !== null) ? params.overrideAlpha : 1.0;
-            offs2 += 4;
+            d[offs + 0] = 1.0;
+            d[offs + 1] = 1.0;
+            d[offs + 2] = 1.0;
+            d[offs + 3] = (params.overrideAlpha !== null) ? params.overrideAlpha : 1.0;
+            offs += 4;
 
             // Misc[0] -- TexCoordOffset
             if (!!this.texture) {
                 const texCoordOffset = this.texture!.getTexCoordOffset();
-                d2[offs2 + 0] = texCoordOffset[0] + this.scrollU;
-                d2[offs2 + 1] = texCoordOffset[1] + this.scrollV;
+                d[offs + 0] = texCoordOffset[0] + this.scrollU;
+                d[offs + 1] = texCoordOffset[1] + this.scrollV;
             }
-            offs2 += 2;
+            offs += 2;
 
             // Misc[0] -- AnimProgress
             if (!!params.objAnim) {
-                d2[offs2] = params.objAnim.getProgressInCurrentFrame();
+                d[offs] = params.objAnim.getProgressInCurrentFrame();
             }
-            offs2++;
+            offs++;
 
             // Misc[0] -- Options
             let options = 0;
@@ -262,8 +257,8 @@ export class DkrDrawCall {
             if (params.objAnim)
                 options |= 0b1000;
 
-            d2[offs2] = options;
-            offs2++;
+            d[offs] = options;
+            offs++;
 
             if(!!this.texture) {
                 // Use the texture.
@@ -271,7 +266,7 @@ export class DkrDrawCall {
 
                 renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);
             } else {
-                offs2 += 16;
+                offs += 16;
             }
 
             assert(params.modelMatrices.length <= MAX_NUM_OF_INSTANCES);
@@ -283,7 +278,7 @@ export class DkrDrawCall {
                 } else {
                     mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, params.modelMatrices[i]);
                 }
-                offs2 += fillMatrix4x3(d2, offs2, viewMatrixCalcScratch);
+                offs += fillMatrix4x3(d, offs, viewMatrixCalcScratch);
             }
 
             if(!!params.objAnim) {
