@@ -188,7 +188,7 @@ class MaterialInstance {
             this.materialHelper.createProgram();
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: number): void {
         if (this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = makeSortKey(layer);
@@ -495,7 +495,7 @@ export class MDL0ModelInstance {
         this.execDrawOpList(this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: number): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setSortKeyLayer(layer);
     }

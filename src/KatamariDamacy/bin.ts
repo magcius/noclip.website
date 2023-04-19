@@ -968,6 +968,7 @@ export const enum MotionActionID {
     Unk0x0B       = 0x0B,
     TriggeredPath = 0x0C,
     FlyInCircles  = 0x0D,
+    Unk0x0E       = 0x0E,
     SporadicWalk  = 0x0F,
     StageAreaPath = 0x10,
     TriggeredMove = 0x11,

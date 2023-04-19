@@ -95,6 +95,7 @@ const enum AnimationType {
     WRIGGLE = 2,
     PANIC_A = 3,
     PANIC_B = 4,
+    UNK5 = 5,
 }
 
 interface OscillationState {

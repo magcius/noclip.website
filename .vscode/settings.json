@@ -3,6 +3,5 @@
     "files.exclude": {
         "**/*.js.map": true
     },
-    "npm.packageManager": "yarn",
-    "typescript.tsserver.experimental.enableProjectDiagnostics": true
+    "npm.packageManager": "yarn"
 }
