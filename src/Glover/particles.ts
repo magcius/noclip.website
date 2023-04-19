@@ -60,13 +60,14 @@ export var framesets = {
 }
 
 export enum FlipbookType {
+    None = 0,
     Looping = 1,
     Oneshot = 2,
     MirrorLooping = 3, // TODO
     RandomStartLooping = 4,
     OnlyTweened = 5, // TODO
     OneshotBackwards = 6, // TODO
-    NotTweened = 7 // TODO
+    NotTweened = 7, // TODO
 }
 
 export interface Flipbook {

@@ -148,6 +148,7 @@ export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number
 //#region GfxRenderInst
 // TODO(jstpierre): Very little of this is used, could be removed.
 const enum GfxRenderInstFlags {
+    None = 0,
     Indexed = 1 << 0,
     AllowSkippingIfPipelineNotReady = 1 << 1,
 

@@ -55,6 +55,7 @@ function sampleANF1AnimationData(frames: number[], animFrame: number): number {
 }
 
 export const enum J3DFrameCtrl__UpdateFlags {
+    None       = 0,
     HasStopped = 0b0001,
     HasLooped  = 0b0010,
 }
@@ -66,7 +67,7 @@ export class J3DFrameCtrl {
     public repeatStartFrame: number;
     public speedInFrames: number;
     public currentTimeInFrames: number;
-    public updateFlags: J3DFrameCtrl__UpdateFlags = 0;
+    public updateFlags: J3DFrameCtrl__UpdateFlags = J3DFrameCtrl__UpdateFlags.None;
 
     constructor(endFrame: number) {
         this.init(endFrame);

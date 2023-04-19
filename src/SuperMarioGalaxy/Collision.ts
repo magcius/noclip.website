@@ -706,6 +706,7 @@ enum WallCode {
 };
 
 export enum FloorCode {                               
+    Invalid        = -1,
     Normal         = 0x00,
     Death          = 0x01,
     Slip           = 0x02,

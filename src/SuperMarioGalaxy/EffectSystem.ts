@@ -109,7 +109,7 @@ function isDigitStringTail(s: string): boolean {
 }
 
 const enum SRTFlags {
-    S = 1, R = 2, T = 4,
+    None = 0, S = 1, R = 2, T = 4,
 }
 
 function parseSRTFlags(value: string): SRTFlags {

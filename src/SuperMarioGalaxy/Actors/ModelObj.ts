@@ -5,7 +5,7 @@ import { connectToScene } from "../ActorUtil";
 import { DrawBufferType, MovementType, CalcAnimType } from "../NameObj";
 
 export class ModelObj<T extends number = number> extends LiveActor<T> {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType | -2, movementType: MovementType | -2, calcAnimType: CalcAnimType | -2) {
         super(zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (this.transformMatrix !== null)

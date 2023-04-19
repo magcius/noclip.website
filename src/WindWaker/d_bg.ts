@@ -47,6 +47,7 @@ class cBgD__Tre_t {
 }
 
 const enum dBgW__PassFlag {
+    None             = 0x00,
     CamThrough       = 0x01,
     ObjThrough       = 0x02,
     LinkThrough      = 0x04,

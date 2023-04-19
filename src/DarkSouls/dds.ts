@@ -168,7 +168,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
 
             if (textureEntry.format === 'RGB') {
                 levelDatas.push(decodeRGB(level));
-            } else if (pixelFormat === GfxFormat.BC1 || pixelFormat === GfxFormat.BC1_SRGB || pixelFormat === GfxFormat.BC3 || pixelFormat === GfxFormat.BC3_SRGB) {
+            } else if (pixelFormat === GfxFormat.BC1 || pixelFormat === GfxFormat.BC1_SRGB /*|| pixelFormat === GfxFormat.BC3 || pixelFormat === GfxFormat.BC3_SRGB*/) {
                 levelDatas.push(level.data.createTypedArray(Uint8Array));
             } else {
                 const decodedSurface = decompressDDSLevel(textureEntry, level);

@@ -373,6 +373,7 @@ interface JPAFieldBlock {
 }
 
 const enum JPAKeyType {
+    None           = -1,
     Rate           = 0x00,
     VolumeSize     = 0x01,
     VolumeSweep    = 0x02,
@@ -2302,6 +2303,7 @@ const planeXZSwizzle = mat4.fromValues(
 );
 
 const enum JPAParticleStatus {
+    NONE                   = 0x00,
     DELETE_PARTICLE        = 0x02,
     STOP_FIELD_FADE_AFFECT = 0x04,
     INVISIBLE_PARTICLE     = 0x08,

@@ -411,6 +411,7 @@ enum CubeGravityValidAreaFlags {
 }
 
 enum CubeArea {
+    Invalid  = -1,
     X_Left   = 0,
     X_Inside = 1,
     X_Right  = 2,

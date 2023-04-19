@@ -65,6 +65,7 @@ export const enum MovementType {
 
 export const enum CalcAnimType {
     None                           = -1,
+
     ClippedMapParts                = 0x00,
     Planet                         = 0x01,
     CollisionMapObj                = 0x02,

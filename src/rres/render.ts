@@ -318,7 +318,7 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
-    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color, a: BRRES.AnimatableColor): void {
+    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color, a: BRRES.AnimatableColor | -1): void {
         const dst = materialParams.u_Color[i];
         let color: Color;
         if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
