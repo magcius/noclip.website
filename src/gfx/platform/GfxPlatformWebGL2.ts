@@ -66,13 +66,13 @@ interface GfxInputLayoutP_GL extends GfxInputLayout {
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
     indexBufferFormat: GfxFormat | null;
+    indexBufferType: GLenum | null;
+    indexBufferCompByteSize: number | null;
 }
 
 interface GfxInputStateP_GL extends GfxInputState {
     vao: WebGLVertexArrayObject;
     indexBufferByteOffset: number | null;
-    indexBufferType: GLenum | null;
-    indexBufferCompByteSize: number | null;
     inputLayout: GfxInputLayoutP_GL;
     vertexBuffers: (GfxVertexBufferDescriptor | null)[];
 }
@@ -1033,7 +1033,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         const { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat } = inputLayoutDescriptor;
         assert(indexBufferFormat === GfxFormat.U16_R || indexBufferFormat === GfxFormat.U32_R || indexBufferFormat === null);
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
+        const indexBufferType = indexBufferFormat !== null ? translateIndexFormat(indexBufferFormat) : null;
+        const indexBufferCompByteSize = indexBufferFormat !== null ? getFormatCompByteSize(indexBufferFormat) : null;
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat, indexBufferType, indexBufferCompByteSize };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(inputLayout);
         return inputLayout;
@@ -1076,21 +1078,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.enableVertexAttribArray(attr.location);
         }
 
-        let indexBufferType: GLenum | null = null;
-        let indexBufferCompByteSize: number | null = null;
+        assert((indexBufferBinding !== null) === (inputLayout.indexBufferFormat !== null));
         let indexBufferByteOffset: number | null = null;
         if (indexBufferBinding !== null) {
             const buffer = indexBufferBinding.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.Index);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBufferBinding.buffer));
-            indexBufferType = translateIndexFormat(assertExists(inputLayout.indexBufferFormat));
-            indexBufferCompByteSize = getFormatCompByteSize(inputLayout.indexBufferFormat!);
             indexBufferByteOffset = indexBufferBinding.byteOffset;
         }
 
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(), vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout, vertexBuffers };
+        const inputState: GfxInputStateP_GL = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(), vao, indexBufferByteOffset, inputLayout, vertexBuffers };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(inputState);
         return inputState;
@@ -2246,9 +2245,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
-        gl.drawElements(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset);
+        const inputState = this._currentInputState, inputLayout = inputState.inputLayout;
+        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        gl.drawElements(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles(count / 3);
     }
@@ -2256,9 +2255,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
-        gl.drawElementsInstanced(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset, instanceCount);
+        const inputState = this._currentInputState, inputLayout = inputState.inputLayout;
+        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        gl.drawElementsInstanced(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset, instanceCount);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
