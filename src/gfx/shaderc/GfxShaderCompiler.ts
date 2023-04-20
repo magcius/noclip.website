@@ -58,7 +58,6 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
         extraDefines += `${defineStr(`GFX_CLIPSPACE_NEAR_ZERO`, `1`)}\n`;
 
-    let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, implicitBinding = 0, location = 0;
 
@@ -86,8 +85,6 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerTyp
         rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
             return `layout(location = ${location++}) ${tok}`;
         });
-
-        outLayout = 'layout(location = 0) ';
 
         extraDefines += `${defineStr(`gl_VertexID`, `gl_VertexIndex`)}\n`;
         extraDefines += `${defineStr(`gl_InstanceID`, `gl_InstanceIndex`)}\n`;
@@ -155,7 +152,7 @@ layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerTyp
 
     const hasFragColor = rest.includes('gl_FragColor');
 
-    let concat = `
+    return `
 ${vendorInfo.glslVersion}
 ${precision}
 #define ${type.toUpperCase()}
@@ -165,20 +162,12 @@ ${precision}
 ${extraDefines}
 ${hasFragColor ? `
 #define gl_FragColor o_color
-${type === 'frag' ? `out vec4 o_color;` : ''}
+${type === 'frag' ? `layout(location = 0) out vec4 o_color;` : ''}
 ` : ``}
 ${GfxShaderLibrary.mat4}
 ${definesString}
 ${rest}
 `.trim();
-
-    if (vendorInfo.explicitBindingLocations && type === 'frag') {
-        concat = concat.replace(/^\b(out)\b/gm, (substr, tok) => {
-            return `layout(location = 0) ${tok}`;
-        });
-    }
-
-    return concat;
 }
 
 interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {
