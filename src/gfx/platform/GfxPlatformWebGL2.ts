@@ -543,6 +543,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // We always have depth & stencil test enabled.
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.STENCIL_TEST);
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
 
         this._checkLimits();
         this._checkForBugQuirks();
@@ -1037,6 +1038,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const vao = this.ensureResourceExists(gl.createVertexArray());
         gl.bindVertexArray(vao);
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(this._fallbackVertexBuffer));
+
         const vertexBufferFormats = [];
         for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
             const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
@@ -1052,7 +1055,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const format = translateVertexFormat(attr.format);
             vertexBufferFormats.push(format);
 
-            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(this._fallbackVertexBuffer));
             gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, 0, 0);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PerInstance) {
@@ -1261,11 +1263,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
         }
 
-        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
-        // gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
-
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
     }
 
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
@@ -1764,7 +1762,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
         }
         this._currentColorAttachments.length = numColorAttachments;
-        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
     }
 
     private _setRenderPassParametersColor(i: number, colorAttachment: GfxRenderTargetP_GL | null, attachmentLevel: number, colorResolveTo: GfxTextureP_GL | null, resolveToLevel: number): void {
@@ -2281,24 +2278,26 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private endPass(): void {
         const gl = this.gl;
 
-        let didUnbindDraw = false;
-
+        const renderPassDescriptor = this._currentRenderPassDescriptor!;
         for (let i = 0; i < this._currentColorAttachments.length; i++) {
             const colorResolveFrom = this._currentColorAttachments[i];
 
             if (colorResolveFrom !== null) {
                 const colorResolveTo = this._currentColorResolveTos[i];
-                let didBindRead = false;
+                const colorStore = renderPassDescriptor.colorStore[i];
+
+                const boundReadFB = colorResolveTo !== null || !colorStore;
+                if (boundReadFB) {
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
+                    if (this._resolveColorAttachmentsChanged)
+                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
+                }
 
                 if (colorResolveTo !== null) {
                     assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
                     assert(colorResolveFrom.pixelFormat === colorResolveTo.pixelFormat);
 
                     this._setScissorEnabled(false);
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
-                    if (this._resolveColorAttachmentsChanged)
-                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
-                    didBindRead = true;
 
                     // Special case: Blitting to the on-screen.
                     if (colorResolveTo === this._scTexture) {
@@ -2310,21 +2309,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     }
 
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                    didUnbindDraw = true;
                 }
 
-                if (!this._currentRenderPassDescriptor!.colorStore[i]) {
-                    if (!didBindRead) {
-                        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
-                        if (this._resolveColorAttachmentsChanged)
-                            this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
-                    }
-
+                if (!colorStore)
                     gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
-                }
 
-                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+                if (boundReadFB)
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             }
         }
 
@@ -2333,47 +2324,37 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const depthStencilResolveFrom = this._currentDepthStencilAttachment;
         if (depthStencilResolveFrom !== null) {
             const depthStencilResolveTo = this._currentDepthStencilResolveTo;
-            let didBindRead = false;
+            const depthStencilStore = renderPassDescriptor.depthStencilStore;
+
+            const boundReadFB = depthStencilResolveTo !== null || !depthStencilStore;
+            if (boundReadFB) {
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
+                if (this._resolveDepthStencilAttachmentsChanged)
+                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
+            }
 
             if (depthStencilResolveTo !== null) {
                 assert(depthStencilResolveFrom.width === depthStencilResolveTo.width && depthStencilResolveFrom.height === depthStencilResolveTo.height);
 
                 this._setScissorEnabled(false);
 
-                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
                 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDepthStencilDrawFramebuffer);
-                if (this._resolveDepthStencilAttachmentsChanged) {
-                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
+                if (this._resolveDepthStencilAttachmentsChanged)
                     this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, depthStencilResolveTo);
-                }
-                didBindRead = true;
 
                 gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
-                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                didUnbindDraw = true;
             }
 
-            if (!this._currentRenderPassDescriptor!.depthStencilStore) {
-                if (!didBindRead) {
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
-                    if (this._resolveDepthStencilAttachmentsChanged)
-                        this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
-                    didBindRead = true;
-                }
-
+            if (!depthStencilStore)
                 gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.DEPTH_STENCIL_ATTACHMENT]);
-            }
 
-            if (didBindRead)
+            if (boundReadFB)
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 
             this._resolveDepthStencilAttachmentsChanged = false;
         }
 
-        if (!didUnbindDraw) {
-            // If we did not unbind from a resolve, then we need to unbind our render pass draw FBO here.
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        }
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     }
     //#endregion
 }
