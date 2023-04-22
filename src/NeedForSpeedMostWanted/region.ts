@@ -83,12 +83,12 @@ export class NfsRegion {
                     const depsToParse = this.dependencies!.filter(d => d.loadStatus == LoadStatus.ReadyToParse);
                     depsToParse.forEach(d => d.parseTextures(device, renderHelper, map));
                     depsToParse.forEach(d => {
-                        d.parseModels(device, map);
+                        d.parseModels(device, renderHelper.renderCache, map);
                         d.loadStatus = LoadStatus.Loaded;
                     });
                 }
                 this.parseTextures(device, renderHelper, map);
-                this.parseModels(device, map);
+                this.parseModels(device, renderHelper.renderCache, map);
                 this.parseInstances(map);
                 this.parseParticleEmitterGroups(map);
                 this.loadStatus = LoadStatus.Loaded;
@@ -130,14 +130,14 @@ export class NfsRegion {
         textureAnimations.forEach(node => this.parseTextureCycleAnimation(node, map));
     }
 
-    public parseModels(device: GfxDevice, map: NfsMap) {
+    public parseModels(device: GfxDevice, cache: GfxRenderCache, map: NfsMap) {
         assert(this.dataSections.filter(s => s.node === undefined).length == 0);
         const modelCollections = this.dataSections.flatMap(s => s.node!.children.filter(node => node.type == NodeType.ModelCollection));
         const modelNodes = modelCollections.flatMap(collNode => collNode.children.slice(1));
         modelNodes.forEach(node => {
             const id = node.children[0].dataView.getUint32(0x10, true);
             if(!(id in map.modelCache)) {
-                map.modelCache[id] = new NfsModel(device, map, node);
+                map.modelCache[id] = new NfsModel(device, cache, map, node);
             }
         });
     }
@@ -451,7 +451,7 @@ export class NfsModel {
     private indexBuffer: GfxBuffer;
     private static textDecoder: TextDecoder = new TextDecoder();
 
-    constructor(device: GfxDevice, map: NfsMap, modelNode: NfsNode) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, map: NfsMap, modelNode: NfsNode) {
         this.vertInfos = [];
         assert(modelNode.type == NodeType.Model);
 
@@ -522,7 +522,7 @@ export class NfsModel {
             const vertInpLayoutBufDesc: GfxInputLayoutBufferDescriptor[] = [
                 { byteStride, frequency: GfxVertexBufferFrequency.PerVertex}
             ];
-            const inputLayout = device.createInputLayout({
+            const inputLayout = cache.createInputLayout({
                 vertexAttributeDescriptors: vertAttDesc, vertexBufferDescriptors: vertInpLayoutBufDesc, indexBufferFormat: GfxFormat.U16_R
             });
             const vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [
@@ -534,9 +534,6 @@ export class NfsModel {
     }
 
     public destroy(device: GfxDevice) {
-        this.vertInfos.forEach(v => {
-            device.destroyInputLayout(v.inputLayout);
-        });
         this.vertexBuffers.forEach(b => device.destroyBuffer(b));
         device.destroyBuffer(this.indexBuffer);
     }

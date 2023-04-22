@@ -20,6 +20,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
@@ -100,7 +101,7 @@ export class MapData {
     private vertices = 0;
     private indices = 0;
 
-    constructor(device: GfxDevice, bin: Bin.BIN) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, bin: Bin.BIN) {
         this.textures.push(this.translateTextureFromAtlas(device, bin.mapTextureAtlas));
         const skyboxTexIndexMap : Map<number, number> = new Map();
         for (let i = 0; i < bin.sky0TextureBlocks.length; i++) {
@@ -111,7 +112,7 @@ export class MapData {
             this.textures.push(this.translateTexture(device, bin.sky1TextureBlocks[i].textures[0]));
             skyboxTexIndexMap.set(bin.sky1TextureBlocks[i].dataOffs, bin.sky0TextureBlocks.length + i + 1);
         }
-        this.sampler = this.createSampler(device);
+        this.sampler = this.createSampler(cache);
 
         const submeshes: Bin.Submesh[] = [];
         const mapLayers: Layer[] = [];
@@ -230,7 +231,7 @@ export class MapData {
             { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -355,8 +356,8 @@ export class MapData {
         return gfxTexture;
     }
 
-    private createSampler(device: GfxDevice) {
-        return device.createSampler({
+    private createSampler(cache: GfxRenderCache) {
+        return cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -370,10 +371,8 @@ export class MapData {
         for (let i = 0; i < this.textures.length; i++) {
             device.destroyTexture(this.textures[i]);
         }
-        device.destroySampler(this.sampler);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -536,7 +535,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, bin: Bin.BIN) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        this.mapData = new MapData(device, bin);
+        this.mapData = new MapData(device, this.renderHelper.renderCache, bin);
 
         const mapSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.mapDrawCalls, /*isSkybox=*/false);
         this.sceneRenderers.push(mapSceneRenderer);

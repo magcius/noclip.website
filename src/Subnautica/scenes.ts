@@ -108,6 +108,10 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
     }
 
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.renderCache;
+    }
+
     addMesh(mesh: UnityMesh, offset: vec3) {
         let model = mat4.create();
         let scaling = vec3.fromValues(this.scaleFactor, this.scaleFactor, this.scaleFactor);
@@ -185,7 +189,7 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
                 let decoder = new TextDecoder();
                 return JSON.parse(decoder.decode(data.arrayBuffer as ArrayBuffer)).chunks;
             });
-        let assets = new UnityAssetManager('subnautica/resources.assets', context, device);
+        let assets = new UnityAssetManager('subnautica/resources.assets', context, device, renderer.getCache());
         await assets.loadAssetInfo();
 
         chunks.forEach(chunk => {

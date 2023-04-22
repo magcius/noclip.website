@@ -29,6 +29,7 @@ import { SphereMapManager } from './SphereMaps';
 import { computeViewMatrix } from '../Camera';
 import { nArray } from '../util';
 import { transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const scratchVec0 = vec3.create();
 const scratchMtx0 = mat4.create();
@@ -44,13 +45,15 @@ export class World {
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
     public worldLights: WorldLights = new WorldLights();
+    public renderCache: GfxRenderCache;
 
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
+        this.renderCache = this.materialFactory.cache;
     }
 
     private async init(dataFetcher: DataFetcher) {
         this.animController = new SFAAnimationController();
-        this.envfxMan = await EnvfxManager.create(this.device, this, dataFetcher);
+        this.envfxMan = await EnvfxManager.create(this, dataFetcher);
         
         const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
         const texFetcherPromise = async () => {
@@ -270,7 +273,7 @@ class WorldRenderer extends SFARenderer {
 
     // XXX: for testing
     public loadTexture(id: number, useTex1: boolean = false) {
-        const texture = this.world.resColl.texFetcher.getTexture(this.world.device, id, useTex1);
+        const texture = this.world.resColl.texFetcher.getTexture(this.world.renderCache, id, useTex1);
         if (texture !== null && texture.viewerTexture !== undefined)
             console.log(`Loaded texture "${texture.viewerTexture.name}"`);
         else
@@ -406,7 +409,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const materialFactory = new MaterialFactory(device);
         const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs, materialFactory);
-        
+
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
             const mapSceneInfo = await loadMap(this.gameInfo, dataFetcher, this.mapNum);

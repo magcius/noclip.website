@@ -12,6 +12,7 @@ import { ViewerRenderInput } from "../viewer";
 import { NfsMap } from "./map";
 import { NfsTexture } from "./region";
 import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export class NfsParticleEmitterGroup {
 
@@ -61,7 +62,9 @@ export class NfsParticleEmitter {
         }
     }
 
-    public static init(device: GfxDevice) {
+    public static init(cache: GfxRenderCache) {
+        const device = cache.device;
+
         // construct simple quad for particles
         NfsParticleEmitter.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]).buffer);
         NfsParticleEmitter.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array([0, 2, 3, 0, 1, 3]).buffer);
@@ -72,7 +75,7 @@ export class NfsParticleEmitter {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
-        NfsParticleEmitter.inputLayout = device.createInputLayout({
+        NfsParticleEmitter.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
@@ -203,7 +206,6 @@ export class NfsParticleEmitter {
     }
 
     public static destroy(device: GfxDevice) {
-        device.destroyInputLayout(NfsParticleEmitter.inputLayout);
         device.destroyBuffer(NfsParticleEmitter.vertexBuffer);
         device.destroyBuffer(NfsParticleEmitter.indexBuffer);
     }

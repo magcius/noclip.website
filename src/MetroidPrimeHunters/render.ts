@@ -64,18 +64,19 @@ class MaterialInstance {
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
 
+        const device = cache.device;
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: expand5to8(this.material.alpha) };
 
         if (this.gfxTextures.length > 0) {
-            this.gfxSampler = device.createSampler({
+            this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
                 mipFilter: GfxMipFilterMode.Nearest,
@@ -160,8 +161,6 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -236,7 +235,6 @@ const enum BillboardMode {
     NONE, BB, BBY,
 }
 
-
 export class MPHRenderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
@@ -265,7 +263,7 @@ export class MPHRenderer {
         const model = mphModel.models[0];
 
         for (let i = 0; i < model.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(device, this.tex0, model, model.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, model, model.materials[i]));
 
         for (let i = 0; i < model.nodes.length; i++)
             this.nodes.push(new Node(model.nodes[i]));

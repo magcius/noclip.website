@@ -80,15 +80,15 @@ export class TextureData {
 
     constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
 
-    public setup(device: GfxDevice) {
+    public setup(cache: GfxRenderCache) {
         if (this.isSetup)
             return;
 
+        const device = cache.device;
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
-
         device.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             magFilter: this.filter,
             minFilter: this.filter,
             mipFilter: GfxMipFilterMode.Nearest,
@@ -114,8 +114,6 @@ export class TextureData {
 
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
         
         this.isSetup = false;
     }
@@ -586,7 +584,7 @@ export class FragRenderer extends BaseRenderer {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
+        this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
@@ -707,7 +705,6 @@ export class FragRenderer extends BaseRenderer {
         super.destroy(device);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
         if (this.frag.textureData !== undefined)
             this.frag.textureData.destroy(device);
     }
@@ -726,7 +723,7 @@ export class MeshRenderer extends BaseRenderer {
             const fragDefines = Object.assign({}, defines);
 
             if (frag.textureData) {
-                frag.textureData.setup(device);
+                frag.textureData.setup(cache);
                 fragDefines.USE_TEXTURE = '1';
             }
 

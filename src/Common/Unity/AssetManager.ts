@@ -9,6 +9,7 @@ import { assert } from '../../util';
 import * as Geometry from '../../Geometry';
 import { vec3 } from 'gl-matrix';
 import { rust } from '../../rustlib';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 
 // this is a ballpark estimate, it's probably much lower
 const MAX_HEADER_LENGTH = 4096;
@@ -54,14 +55,13 @@ export class UnityMesh {
 
     public destroy(device: GfxDevice) {
         this.buffers.forEach(buf => device.destroyBuffer(buf));
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
 export class UnityAssetManager {
     private assetInfo: AssetInfo;
 
-    constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice) {
+    constructor(public assetPath: string, private context: SceneContext, public device: GfxDevice, private cache: GfxRenderCache) {
     }
 
     private async loadBytes(range: Range, path = this.assetPath): Promise<Uint8Array> {
@@ -124,14 +124,15 @@ export class UnityAssetManager {
         }
 
         if (mesh.is_compressed()) {
-            return await loadCompressedMesh(this.device, mesh);
+            return await loadCompressedMesh(this.cache, mesh);
         } else {
-            return await loadMesh(this.device, mesh);
+            return await loadMesh(this.cache, mesh);
         }
     }
 }
 
-function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
+function loadCompressedMesh(cache: GfxRenderCache, mesh: Mesh): UnityMesh {
+    const device = cache.device;
     let vertices = mesh.unpack_vertices()!;
     let normals = mesh.unpack_normals()!;
     let indices = mesh.unpack_indices()!;
@@ -144,7 +145,7 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
         { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
     ];
     const indexBufferFormat: GfxFormat = GfxFormat.U32_R;
-    let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+    let layout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
     let normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer);
     let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
@@ -192,7 +193,8 @@ function channelInfoToVertexAttributeDescriptor(location: number, channelInfo: C
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
 }
 
-function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
+function loadMesh(cache: GfxRenderCache, mesh: Mesh): UnityMesh {
+    const device = cache.device;
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(UnityChannel.Vertex, mesh.get_channel_info(0)!));
     vertexAttributeDescriptors.push(channelInfoToVertexAttributeDescriptor(UnityChannel.Normal, mesh.get_channel_info(1)!));
@@ -215,7 +217,7 @@ function loadMesh(device: GfxDevice, mesh: Mesh): UnityMesh {
     let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, mesh.get_vertex_data().buffer);
     let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
-    let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+    let layout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
     const vertexBuffers = [{ buffer: vertsBuf, byteOffset: 0 }];
     const indexBufferDescriptor = { buffer: trisBuf, byteOffset: 0 };
     let buffers = [vertsBuf, trisBuf];

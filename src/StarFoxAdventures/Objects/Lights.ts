@@ -68,9 +68,9 @@ export class LGTProjecte extends SFAClass {
 
         const texId = data.getUint16(0x24);
         if (texId === 0)
-            this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.device, 0x5dc, false);
+            this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.renderCache, 0x5dc, false);
         else
-            this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.device, texId, false);
+            this.texture = obj.world.resColl.texFetcher.getTexture(obj.world.renderCache, texId, false);
         console.log(`loaded projected light texture ${this.texture?.viewerTexture?.name}`);
 
         vec3.zero(scratchVec0);

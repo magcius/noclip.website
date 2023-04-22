@@ -337,7 +337,7 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
         }
 
         const mapShape = MapShape.parse(arc.ShapeFile);
-        const modelTreeRenderer = new PaperMario64ModelTreeRenderer(device, tex, renderer.textureHolder, mapShape.rootNode);
+        const modelTreeRenderer = new PaperMario64ModelTreeRenderer(device, renderer.renderHelper.renderCache, tex, renderer.textureHolder, mapShape.rootNode);
         renderer.modelTreeRenderers.push(modelTreeRenderer);
 
         const mapOverlay = arc.ROMOverlayData.createDataView();

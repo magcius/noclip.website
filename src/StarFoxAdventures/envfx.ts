@@ -11,6 +11,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { createDirectionalLight, Light } from './WorldLights';
 import { SceneUpdateContext } from './render';
 import { computeViewMatrix } from '../Camera';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -59,12 +60,12 @@ export class EnvfxManager {
     private mistTexture: SFATexture;
     private mistParam?: number;
 
-    private constructor(device: GfxDevice, private world: World) {
-        this.mistTexture = SFATexture.create(device, MIST_TEXTURE_DIM, MIST_TEXTURE_DIM);
+    private constructor(private world: World) {
+        this.mistTexture = SFATexture.create(this.world.renderCache, MIST_TEXTURE_DIM, MIST_TEXTURE_DIM);
     }
 
-    public static async create(device: GfxDevice, world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
-        const self = new EnvfxManager(device, world);
+    public static async create(world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
+        const self = new EnvfxManager(world);
 
         const pathBase = world.gameInfo.pathBase;
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
@@ -191,7 +192,7 @@ export class EnvfxManager {
             for (let i = 0; i < 8; i++) {
                 const texId = BASE + texIds[i];
                 console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
-                this.atmosphere.textures[i] = this.world.resColl.texFetcher.getTexture(this.world.device, texId, false);
+                this.atmosphere.textures[i] = this.world.resColl.texFetcher.getTexture(this.world.renderCache, texId, false);
             }
 
             const outdoorAmbColors: Color[] = [];

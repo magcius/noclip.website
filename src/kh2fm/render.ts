@@ -18,6 +18,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
@@ -123,14 +124,14 @@ export class MapData {
     private atlasWidth = 0;
     private atlasHeight = 0;
 
-    constructor(device: GfxDevice, map: MAP.KingdomHeartsIIMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, map: MAP.KingdomHeartsIIMap) {
         this.textures.push(this.buildTextureAtlas(device, map));
         this.processTextureAnimations(device, map);
-        this.sampler = this.createSampler(device);
+        this.sampler = this.createSampler(cache);
 
         const meshesInDrawOrder: MAP.MapMesh[] = [];
         this.createBatchedDrawCalls(map, meshesInDrawOrder);
-        this.buildBuffersAndInputState(device, meshesInDrawOrder);
+        this.buildBuffersAndInputState(cache, meshesInDrawOrder);
     }
 
     private processTextureAnimations(device: GfxDevice, map: MAP.KingdomHeartsIIMap) {
@@ -337,8 +338,8 @@ export class MapData {
         return drawCall;
     }
 
-    private createSampler(device: GfxDevice) {
-        return device.createSampler({
+    private createSampler(cache: GfxRenderCache) {
+        return cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -348,7 +349,7 @@ export class MapData {
         });
     }
 
-    private buildBuffersAndInputState(device: GfxDevice, meshesInDrawOrder: MAP.MapMesh[]) {
+    private buildBuffersAndInputState(cache: GfxRenderCache, meshesInDrawOrder: MAP.MapMesh[]) {
         const vBuffer = new Float32Array(this.vertices * 24);
         const iBuffer = new Uint32Array(this.indices);
         let vBufferIndex = 0;
@@ -424,6 +425,7 @@ export class MapData {
             lastInd += mesh.vtx.length;
         }
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vBuffer.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, iBuffer.buffer);
 
@@ -440,7 +442,7 @@ export class MapData {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 24*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -453,10 +455,8 @@ export class MapData {
         for (let i = 0; i < this.textures.length; i++) {
             device.destroyTexture(this.textures[i]);
         }
-        device.destroySampler(this.sampler);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -620,7 +620,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.mapData = new MapData(device, map);
+        this.mapData = new MapData(device, this.renderHelper.renderCache, map);
         this.sceneRenderers.push(new SceneRenderer(device, this.mapData, this.mapData.drawCalls));
     }
 

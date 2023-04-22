@@ -154,7 +154,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     private createRendererFromData(cache: GfxRenderCache, objectData: ObjectData, position: vec3 | null = null): MDL0Renderer {
         const device = cache.device;
         const scaleFactor = 1/16;
-        const renderer = new MDL0Renderer(device, cache, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
+        const renderer = new MDL0Renderer(cache, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
         if (position !== null)
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);

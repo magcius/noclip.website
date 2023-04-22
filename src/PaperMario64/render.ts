@@ -64,7 +64,7 @@ export class N64Data {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
-    constructor(device: GfxDevice, public rspOutput: RSPOutput) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public rspOutput: RSPOutput) {
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexBufferData);
         assert(this.rspOutput.vertices.length <= 0xFFFF);
@@ -80,7 +80,7 @@ export class N64Data {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -95,7 +95,6 @@ export class N64Data {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -249,8 +248,8 @@ class ModelTreeLeafInstance {
     public modelMatrix = mat4.create();
     private flags: number = 0;
 
-    constructor(device: GfxDevice, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
-        this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
+        this.n64Data = new N64Data(device, cache, modelTreeLeaf.rspOutput);
 
         const renderModeProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C);
         if (renderModeProp !== undefined && renderModeProp.type === PropertyType.INT)
@@ -296,7 +295,7 @@ class ModelTreeLeafInstance {
                 const image = this.textureEnvironment.images[i];
                 textureHolder.fillTextureMapping(this.textureMapping[i], image.name);
 
-                this.gfxSampler[i] = device.createSampler({
+                this.gfxSampler[i] = cache.createSampler({
                     wrapS: translateCM(image.cms),
                     wrapT: translateCM(image.cmt),
                     minFilter: GfxTexFilterMode.Point,
@@ -471,8 +470,6 @@ class ModelTreeLeafInstance {
 
     public destroy(device: GfxDevice): void {
         this.n64Data.destroy(device);
-        for (let i = 0; i < this.gfxSampler.length; i++)
-            device.destroySampler(this.gfxSampler[i]);
     }
 }
 
@@ -542,7 +539,7 @@ export class PaperMario64ModelTreeRenderer {
     public modelMatrix = mat4.create();
     public texAnimGroup: TexAnimGroup[] = [];
 
-    constructor(device: GfxDevice, private textureArchive: Tex.TextureArchive, private textureHolder: PaperMario64TextureHolder, private modelTreeRoot: ModelTreeNode) {
+    constructor(device: GfxDevice, private cache: GfxRenderCache, private textureArchive: Tex.TextureArchive, private textureHolder: PaperMario64TextureHolder, private modelTreeRoot: ModelTreeNode) {
         this.modelTreeRootInstance = this.translateModelTreeNode(device, modelTreeRoot);
     }
 
@@ -553,7 +550,7 @@ export class PaperMario64ModelTreeRenderer {
                 children.push(this.translateModelTreeNode(device, modelTreeNode.children[i]));
             return new ModelTreeGroupInstance(modelTreeNode, children);
         } else if (modelTreeNode.type === 'leaf') {
-            return new ModelTreeLeafInstance(device, this.textureArchive, this.textureHolder, modelTreeNode);
+            return new ModelTreeLeafInstance(device, this.cache, this.textureArchive, this.textureHolder, modelTreeNode);
         } else {
             throw "whoops";
         }

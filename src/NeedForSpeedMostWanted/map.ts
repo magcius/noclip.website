@@ -36,7 +36,7 @@ export class NfsMap {
             const region: NfsRegion = new NfsRegion(2601);
             region.dataSections = [{node: fileNode, length: file.byteLength, offset: 0}];
             region.parseTextures(device, renderHelper, this);
-            region.parseModels(device, this);
+            region.parseModels(device, renderHelper.renderCache, this);
         });
         const regionDefNode = baseFileNode.children.filter(node => node.type == NodeType.RegionDefinitions)[0];
         const dataSectionDefNode = baseFileNode.children.filter(node => node.type == NodeType.DataSectionDefinitions)[0];
@@ -57,7 +57,7 @@ export class NfsMap {
         });
         await Promise.all(coll);
 
-        globalRegions.forEach(region => region.parseModels(device, this));
+        globalRegions.forEach(region => region.parseModels(device, renderHelper.renderCache, this));
         globalRegions.forEach(region => region.parseInstances(this));
     }
 

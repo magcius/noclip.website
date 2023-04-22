@@ -40,12 +40,13 @@ class MaterialInstance {
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
 
+        const device = cache.device;
         const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         if (texture !== null) {
-            this.gfxSampler = device.createSampler({
+            this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
                 mipFilter: GfxMipFilterMode.Nearest,
@@ -157,8 +158,6 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -249,7 +248,7 @@ export class MDL0Renderer {
     public viewerTextures: Viewer.Texture[] = [];
     public bbox: AABB | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public model: MDL0Model, private tex0: TEX0) {
+    constructor(cache: GfxRenderCache, public model: MDL0Model, private tex0: TEX0) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -258,7 +257,7 @@ export class MDL0Renderer {
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
 
         for (let i = 0; i < this.model.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(device, this.tex0, this.model, this.model.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, this.model, this.model.materials[i]));
 
         for (let i = 0; i < this.model.nodes.length; i++)
             this.nodes.push(new Node(this.model.nodes[i]));

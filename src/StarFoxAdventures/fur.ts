@@ -1,5 +1,6 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { lerp } from '../MathHelpers';
 
 import { SFATexture } from './textures';
@@ -69,7 +70,7 @@ export class FurFactory {
     private layers: SFATexture[] = [];
     private hairs: Hair[] = [];
 
-    constructor(private device: GfxDevice) {
+    constructor(private cache: GfxRenderCache) {
         // Distribute 50 hairs within the fur map and ensure they aren't too
         // densely packed.
         const NUM_HAIRS = 50;
@@ -127,8 +128,9 @@ export class FurFactory {
     private makeFurMap(layer: number): SFATexture {
         const width = 64;
         const height = 64;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const cache = this.cache, device = this.cache.device;
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
@@ -157,7 +159,7 @@ export class FurFactory {
             }
         }
     
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        device.uploadTextureData(gfxTexture, 0, [pixels]);
     
         return new SFATexture(gfxTexture, gfxSampler, width, height);
     }

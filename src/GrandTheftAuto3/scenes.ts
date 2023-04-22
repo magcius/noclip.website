@@ -334,6 +334,7 @@ export class GTA3SceneDesc implements SceneDesc {
         const texturesUsed = new Set<string>();
         const txdsUsed = new Set<string>();
         const areas = new Map<string, Map<DrawParams, MeshInstance[]>>();
+        const cache = renderer.renderHelper.renderCache;
 
         modelCache.meshData.set('water', waterMesh);
 
@@ -414,7 +415,7 @@ export class GTA3SceneDesc implements SceneDesc {
             const textureSet = textureSets.get(key)!;
             textureSet.add(texture);
             if (textureSet.size >= 0x100) {
-                textureArrays.push(new TextureArray(device, Array.from(textureSet)));
+                textureArrays.push(new TextureArray(cache, Array.from(textureSet)));
                 textureSet.clear();
             }
         }
@@ -423,6 +424,7 @@ export class GTA3SceneDesc implements SceneDesc {
             txdsUsed.clear();
             txdsUsed.add('particle');
         }
+
         for (const txd of txdsUsed) {
             await this.fetchTXD(device, dataFetcher, txd, texture => {
                 if (texturesUsed.has(texture.name)) {
@@ -433,7 +435,7 @@ export class GTA3SceneDesc implements SceneDesc {
         }
         for (const textureSet of textureSets.values()) {
             if (textureSet.size > 0) {
-                textureArrays.push(new TextureArray(device, Array.from(textureSet)));
+                textureArrays.push(new TextureArray(cache, Array.from(textureSet)));
                 textureSet.clear();
             }
         }
@@ -443,7 +445,6 @@ export class GTA3SceneDesc implements SceneDesc {
             console.warn('Missing textures', Array.from(texturesMissing).sort());
 
         const sealevel = this.meta.water.origin[2];
-        const cache = renderer.renderHelper.renderCache;
         for (const area of areas.values()) {
             const areaRenderer = new AreaRenderer();
             for (const [params, meshes] of area) {
@@ -463,7 +464,7 @@ export class GTA3SceneDesc implements SceneDesc {
 
         await this.fetchTXD(device, dataFetcher, 'particle', texture => {
             if (texture.name === `particle/${this.meta.water.texture}`) {
-                const atlas = new TextureArray(device, [texture]);
+                const atlas = new TextureArray(cache, [texture]);
                 renderer.renderers.push(new SkyRenderer(device, cache, atlas));
             }
         });

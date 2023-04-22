@@ -102,7 +102,7 @@ export class TextureArray extends TextureMapping {
     public subimages = new Map<string, number>();
     public transparent: boolean;
 
-    constructor(device: GfxDevice, textures: Texture[]) {
+    constructor(cache: GfxRenderCache, textures: Texture[]) {
         super();
         assert(textures.length > 0);
         const { width, height, pixelFormat, transparent } = textures[0];
@@ -141,6 +141,7 @@ export class TextureArray extends TextureMapping {
             }
         }
 
+        const device = cache.device;
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray, pixelFormat,
             width, height, depth: textures.length, numLevels: mipmaps.length, usage: GfxTextureUsage.Sampled,
@@ -154,7 +155,7 @@ export class TextureArray extends TextureMapping {
         this.flipY = false;
         this.transparent = transparent;
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
             mipFilter: (mipmaps.length > 1) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest,
@@ -168,8 +169,6 @@ export class TextureArray extends TextureMapping {
     public destroy(device: GfxDevice): void {
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 

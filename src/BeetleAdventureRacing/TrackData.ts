@@ -12,6 +12,7 @@ import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { Filesystem } from "./Filesystem";
 import { UVTT } from "./ParsedFiles/UVTT";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 
 // If the player resets when their progress is within this range, they will be reset as if their progress was at the end of the range
@@ -246,13 +247,14 @@ export class TranslucentPlaneRenderer {
     private program: DeviceProgram;
     private gfxProgram: GfxProgram | null;
 
-    constructor(device: GfxDevice) {
+    constructor(cache: GfxRenderCache) {
         this.program = new TranslucentPlaneProgram();
         this.gfxProgram = null;
 
         const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
         const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
@@ -263,7 +265,7 @@ export class TranslucentPlaneRenderer {
             { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -324,7 +326,6 @@ export class TranslucentPlaneRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
     }
 }
 
@@ -370,8 +371,8 @@ export class TrackDataRenderer {
     private progressFixZonesHeight: number;
 
 
-    constructor(device: GfxDevice, private trackData: CourseTrackData) {
-        this.planeRenderer = new TranslucentPlaneRenderer(device);
+    constructor(cache: GfxRenderCache, private trackData: CourseTrackData) {
+        this.planeRenderer = new TranslucentPlaneRenderer(cache);
 
         let sortedZVals = trackData.uvtt.pnts.map(p => p.pos[2]).sort((a, b) => a - b);
         let zMin = sortedZVals[0];

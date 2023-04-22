@@ -83,11 +83,11 @@ export class SFARenderer implements Viewer.SceneGfx {
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper = new GXRenderHelperGfx(device, null, this.materialFactory.cache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.depthResampler = new DepthResampler(device, this.renderHelper.renderInstManager.gfxRenderCache);
-        
+
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.TEX0, true);

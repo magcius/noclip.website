@@ -88,7 +88,7 @@ export class NfsRenderer implements SceneGfx {
 
         this.postProcessing = new NfsPostProcessing(map, renderHelper);
 
-        NfsParticleEmitter.init(device);
+        NfsParticleEmitter.init(this.renderHelper.renderCache);
         this.particleProgram = new NfsParticleProgram();
     }
 
