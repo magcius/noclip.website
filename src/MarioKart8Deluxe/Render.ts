@@ -1173,11 +1173,15 @@ class FVTXData {
 
         for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
             const vertexAttribute = fvtx.vertexAttributes[i];
+            const bufferIndex = vertexAttribute.bufferIndex;
+
+            if (this.inputBufferDescriptors[bufferIndex] === undefined)
+                this.inputBufferDescriptors[bufferIndex] = null;
+
             const attribLocation = TurboUBER.a_Orders.indexOf(vertexAttribute.name);
             if (attribLocation < 0)
                 continue;
 
-            const bufferIndex = vertexAttribute.bufferIndex;
             const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
@@ -1201,8 +1205,6 @@ class FVTXData {
                     buffer: gfxBuffer,
                     byteOffset: 0,
                 };
-
-                this.inputBufferDescriptors[bufferIndex] = null;
             } else {
                 // Can use buffer data directly.
                 this.vertexAttributeDescriptors.push({
