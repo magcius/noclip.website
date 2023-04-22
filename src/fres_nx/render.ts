@@ -530,7 +530,7 @@ interface ConvertedVertexAttribute {
 
 class FVTXData {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-    public inputBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+    public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
     constructor(device: GfxDevice, public fvtx: FVTX) {
@@ -566,6 +566,8 @@ class FVTXData {
                     buffer: gfxBuffer,
                     byteOffset: 0,
                 };
+
+                this.inputBufferDescriptors[bufferIndex] = null;
             } else {
                 // Can use buffer data directly.
                 this.vertexAttributeDescriptors.push({
