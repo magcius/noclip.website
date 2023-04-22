@@ -605,7 +605,6 @@ export class GeometryRenderer {
     private vertexBuffer: GfxBuffer;
     private vertexBufferData: Float32Array;
     private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
@@ -638,13 +637,13 @@ export class GeometryRenderer {
             );
 
             this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-            this.indexBufferDescriptor = { buffer: this.geometryData.renderData.indexBuffer, byteOffset: 0 };
 
             // allow the render data to destroy the copies later
             this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);
         } else {
             this.vertexBufferData = this.geometryData.renderData.vertexBufferData; // shouldn't be necessary
             this.vertexBuffer = this.geometryData.renderData.vertexBuffer;
+            this.vertexBufferDescriptors = this.geometryData.renderData.vertexBufferDescriptors;
         }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -843,7 +842,7 @@ export class GeometryRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
