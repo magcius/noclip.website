@@ -55,8 +55,8 @@ void main() {
     vec3 nearPlane = v_Position * u_Frustum.xyz;
     vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
     vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));
-    float elevation = atan(cameraRay.y, length(cameraRay.zx)) * 180.0 / radians(180.0);
-    gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / 45.0), 0.0, 1.0));
+    float elevation = atan(cameraRay.y, length(cameraRay.zx));
+    gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / radians(45.0)), 0.0, 1.0));
     gl_FragDepth = 0.0;
 
     float t = (u_WaterOrigin.y - cameraPos.y) / cameraRay.y;

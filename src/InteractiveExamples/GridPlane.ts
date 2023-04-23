@@ -9,8 +9,9 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helper
 import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -18,48 +19,92 @@ class GridPlaneProgram extends DeviceProgram {
 
     public override both = `
 layout(std140) uniform ub_Params {
-    Mat4x4 u_Projection;
-    Mat4x3 u_ModelView;
+    Mat4x4 u_WorldFromClip;
+    Mat4x4 u_ClipFromWorld;
     vec4 u_GridColor;
     vec4 u_Misc[1];
 };
 
-#define u_CellCount (u_Misc[0].x)
+#define u_Scale (u_Misc[0].x)
 #define u_LineWidth (u_Misc[0].y)
+#define u_RadiusInner (u_Misc[0].z)
+#define u_RadiusOuter (u_Misc[0].w)
 `;
 
     public override vert = `
-layout(location = ${GridPlaneProgram.a_Position}) in vec3 a_Position;
-
-out vec2 v_SurfCoord;
+out vec2 v_TexCoord;
 
 void main() {
-    v_SurfCoord = a_Position.xz * 0.5 + 0.5;
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1.0, 1.0);
 
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
+#ifdef GFX_VIEWPORT_ORIGIN_TL
+    v_TexCoord.y = 1.0 - v_TexCoord.y;
+#endif
 }
 `;
 
     public override frag = `
-in vec2 v_SurfCoord;
+in vec2 v_TexCoord;
 
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
 
-// 1 at t=0, 0 at t=N, 0 at t=1-N, 1 at t=1
-float Notch(float t, float N) {
-    float inv = 1.0/N;
-    return saturate((t - (1.0 - N))*inv) + saturate(1.0 - (t * inv));
+vec3 CalcWorldPos(in vec2 t_ClipXY, in float t_ClipZ) {
+    vec4 t_World = Mul(u_WorldFromClip, vec4(t_ClipXY, t_ClipZ, 1.0));
+    return t_World.xyz / t_World.www;
+}
+
+vec3 IntersectPlane(in vec2 t_ClipXY, out float t_RayT, out vec3 t_Near, out vec3 t_Far) {
+    float t_ClipNearZ = ${IS_DEPTH_REVERSED ? `1.0` : `0.0`};
+    float t_ClipFarZ = 1.0 - t_ClipNearZ;
+
+    t_Near = CalcWorldPos(t_ClipXY, t_ClipNearZ);
+    t_Far = CalcWorldPos(t_ClipXY, t_ClipFarZ);
+    t_RayT = t_Near.y / (t_Near.y - t_Far.y);
+    return mix(t_Near, t_Far, t_RayT);
+}
+
+vec3 IntersectPlane(in vec2 t_ClipXY) {
+    float t_RayT;
+    vec3 t_Near, t_Far;
+    return IntersectPlane(t_ClipXY, t_RayT, t_Near, t_Far);
 }
 
 void main() {
     gl_FragColor = vec4(u_GridColor);
 
-    vec2 t_Thresh = fract(v_SurfCoord.xy * u_CellCount);
+    vec2 t_ClipXY = v_TexCoord.xy * vec2(2.0) - vec2(1.0);
 
-    gl_FragColor.a = pow(Notch(t_Thresh.x, u_LineWidth), 0.4545) + pow(Notch(t_Thresh.y, u_LineWidth), 0.4545);
-    if (!gl_FrontFacing)
-        gl_FragColor.a *= 0.2;
-    gl_FragDepth = gl_FragCoord.z + 1e-6;
+    float t_FragWorldT;
+    vec3 t_FragWorldNear, t_FragWorldFar;
+    vec3 t_FragWorldPos = IntersectPlane(t_ClipXY, t_FragWorldT, t_FragWorldNear, t_FragWorldFar);
+
+    if (t_FragWorldT > 0.0) {
+        vec3 t_CenterWorldPos = IntersectPlane(vec2(0.0));
+        float t_Distance = distance(t_FragWorldPos, t_CenterWorldPos);
+        float t_Alpha = saturate(invlerp(u_RadiusOuter, u_RadiusInner, t_Distance));
+
+        if (t_FragWorldFar.y > t_FragWorldNear.y)
+            gl_FragColor.a *= 0.2;
+
+        float t_Scale = u_Scale;
+        vec2 t_Coord = t_FragWorldPos.xz * vec2(t_Scale);
+        vec2 t_LineWidth = fwidth(t_Coord) * u_LineWidth;
+        vec2 t_Thresh = abs(fract(t_Coord - vec2(0.5)) - 0.5);
+        float t_Signal = max(t_LineWidth.x - t_Thresh.x, t_LineWidth.y - t_Thresh.y);
+        float t_Zone = fwidth(t_Signal) * 0.5;
+        t_Alpha *= saturate(t_Signal / t_Zone);
+        gl_FragColor.a = t_Alpha;
+
+        vec4 t_PlaneClipPos = Mul(u_ClipFromWorld, vec4(t_FragWorldPos.xyz, 1.0));
+        t_PlaneClipPos.xyz /= t_PlaneClipPos.www;
+        gl_FragDepth = t_PlaneClipPos.z;
+    } else {
+        gl_FragColor.a = 0.0;
+    }
 }
 `;
 }
@@ -71,54 +116,18 @@ const bindingLayout: GfxBindingLayoutDescriptor[] = [
 const scratchMatrix = mat4.create();
 export class GridPlane {
     public gfxProgram: GfxProgram;
-    private posBuffer: GfxBuffer;
-    private idxBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private modelMatrix = mat4.create();
     public color = colorNewCopy(White);
-    public cellCount: number = 4;
-    public lineWidth: number = 4;
+    public scale: number = 0.05;
+    public lineWidth: number = 2;
+    public radiusInner: number = 100.0;
+    public radiusOuter: number = 5000.0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const program = new GridPlaneProgram();
         this.gfxProgram = cache.createProgram(program);
 
         this.setSize(500);
-
-        const vtx = new Float32Array(4 * 3);
-        vtx[0]  = -1;
-        vtx[1]  = 0;
-        vtx[2]  = -1;
-        vtx[3]  = -1;
-        vtx[4]  = 0;
-        vtx[5]  = 1;
-        vtx[6]  = 1;
-        vtx[7]  = 0;
-        vtx[8]  = -1;
-        vtx[9]  = 1;
-        vtx[10] = 0;
-        vtx[11] = 1;
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vtx.buffer);
-
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, makeTriangleIndexBuffer(GfxTopology.TriStrips, 0, 4).buffer);
-
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex, },
-        ];
-        this.inputLayout = cache.createInputLayout({
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-            indexBufferFormat: GfxFormat.U16_R,
-        });
-        this.vertexBufferDescriptors = [
-            { buffer: this.posBuffer, byteOffset: 0, },
-        ];
-        this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
 
     public setSize(n: number): void {
@@ -126,10 +135,12 @@ export class GridPlane {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(1, 5000);
+
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayout);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setVertexInput(null, null, null);
         const megaState = renderInst.setMegaStateFlags({
             depthWrite: false,
         });
@@ -138,21 +149,19 @@ export class GridPlane {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
-        renderInst.drawIndexes(6);
+        renderInst.drawPrimitives(3);
 
-        let offs = renderInst.allocateUniformBuffer(GridPlaneProgram.a_Position, 4*4 + 4*3 + 4 + 4);
+        let offs = renderInst.allocateUniformBuffer(GridPlaneProgram.a_Position, 4*4 + 4*4 + 4 + 4);
         const d = renderInst.mapUniformBufferF32(GridPlaneProgram.a_Position);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, this.modelMatrix);
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
+        mat4.invert(scratchMatrix, viewerInput.camera.clipFromWorldMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.clipFromWorldMatrix);
         offs += fillColor(d, offs, this.color);
-        offs += fillVec4(d, offs, this.cellCount, this.lineWidth / this.modelMatrix[0]);
+        offs += fillVec4(d, offs, this.scale, this.lineWidth, this.radiusInner, this.radiusOuter);
         renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice) {
         device.destroyProgram(this.gfxProgram);
-        device.destroyBuffer(this.posBuffer);
-        device.destroyBuffer(this.idxBuffer);
     }
 }
