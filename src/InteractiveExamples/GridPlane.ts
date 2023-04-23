@@ -27,8 +27,6 @@ layout(std140) uniform ub_Params {
 
 #define u_Scale (u_Misc[0].x)
 #define u_LineWidth (u_Misc[0].y)
-#define u_RadiusInner (u_Misc[0].z)
-#define u_RadiusOuter (u_Misc[0].w)
 `;
 
     public override vert = `
@@ -83,24 +81,27 @@ void main() {
     vec3 t_FragWorldPos = IntersectPlane(t_ClipXY, t_FragWorldT, t_FragWorldNear, t_FragWorldFar);
 
     if (t_FragWorldT > 0.0) {
-        vec3 t_CenterWorldPos = IntersectPlane(vec2(0.0));
-        float t_Distance = distance(t_FragWorldPos, t_CenterWorldPos);
-        float t_Alpha = saturate(invlerp(u_RadiusOuter, u_RadiusInner, t_Distance));
-
         if (t_FragWorldFar.y > t_FragWorldNear.y)
             gl_FragColor.a *= 0.2;
 
-        float t_Scale = u_Scale;
-        vec2 t_Coord = t_FragWorldPos.xz * vec2(t_Scale);
-        vec2 t_LineWidth = fwidth(t_Coord) * u_LineWidth;
-        vec2 t_Thresh = abs(fract(t_Coord - vec2(0.5)) - 0.5);
-        float t_Signal = max(t_LineWidth.x - t_Thresh.x, t_LineWidth.y - t_Thresh.y);
-        float t_Zone = fwidth(t_Signal) * 0.5;
-        t_Alpha *= saturate(t_Signal / t_Zone);
-        gl_FragColor.a = t_Alpha;
-
         vec4 t_PlaneClipPos = Mul(u_ClipFromWorld, vec4(t_FragWorldPos.xyz, 1.0));
         t_PlaneClipPos.xyz /= t_PlaneClipPos.www;
+
+        float t_PlaneClipZ = t_PlaneClipPos.z;
+#if !defined GFX_CLIPSPACE_NEAR_ZERO
+        t_PlaneClipZ = t_PlaneClipZ * 0.5 + 0.5;
+#endif
+
+        float t_LineScale = u_LineWidth * t_PlaneClipZ;
+        float t_LineWidth = max(t_LineScale, 1.0);
+        float t_Scale = u_Scale;
+        vec2 t_Coord = t_FragWorldPos.xz * vec2(t_Scale);
+        vec2 t_LineSize = fwidth(t_Coord) * t_LineWidth;
+        vec2 t_Thresh = abs(fract(t_Coord - vec2(0.5)) - vec2(0.5));
+        float t_Signal = max(t_LineSize.x - t_Thresh.x, t_LineSize.y - t_Thresh.y);
+        float t_Zone = fwidth(t_Signal) * 0.5;
+        gl_FragColor.a *= saturate(t_Signal / t_Zone) * min(t_LineScale * 3.0, 1.0);
+
         gl_FragDepth = t_PlaneClipPos.z;
     } else {
         gl_FragColor.a = 0.0;
@@ -119,9 +120,7 @@ export class GridPlane {
     private modelMatrix = mat4.create();
     public color = colorNewCopy(White);
     public scale: number = 0.05;
-    public lineWidth: number = 2;
-    public radiusInner: number = 100.0;
-    public radiusOuter: number = 5000.0;
+    public lineWidth: number = 40;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const program = new GridPlaneProgram();
@@ -135,8 +134,6 @@ export class GridPlane {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(1, 5000);
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayout);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -157,7 +154,7 @@ export class GridPlane {
         offs += fillMatrix4x4(d, offs, scratchMatrix);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.clipFromWorldMatrix);
         offs += fillColor(d, offs, this.color);
-        offs += fillVec4(d, offs, this.scale, this.lineWidth, this.radiusInner, this.radiusOuter);
+        offs += fillVec4(d, offs, this.scale, this.lineWidth);
         renderInstManager.submitRenderInst(renderInst);
     }
 
