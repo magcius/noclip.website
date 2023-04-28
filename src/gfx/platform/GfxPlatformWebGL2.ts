@@ -507,7 +507,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
         this._OES_texture_float_linear = gl.getExtension('OES_texture_float_linear');
         this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
-        // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
+        this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
@@ -726,7 +726,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return isInteger ? WebGL2RenderingContext.RGBA_INTEGER : WebGL2RenderingContext.RGBA;
         }
     }
-    
+
     private translateTextureType(fmt: GfxFormat): GLenum {
         const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
         switch (typeFlags) {
@@ -1318,7 +1318,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
-       
+
         const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
         const isCompressed = this.isTextureFormatCompressed(pixelFormat);
         const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
@@ -1960,7 +1960,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             );
             currentAttachmentState.channelWriteMask = newAttachmentState.channelWriteMask;
         }
-    
+
         const blendModeChanged = (
             currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
             currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode
@@ -1971,28 +1971,31 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendDstFactor !== newAttachmentState.rgbBlendState.blendDstFactor ||
             currentAttachmentState.alphaBlendState.blendDstFactor !== newAttachmentState.alphaBlendState.blendDstFactor
         );
-    
+
+        const blendDisabled = isBlendStateNone(newAttachmentState.rgbBlendState) && isBlendStateNone(newAttachmentState.alphaBlendState);
         if (blendFuncChanged || blendModeChanged) {
             if (isBlendStateNone(currentAttachmentState.rgbBlendState) && isBlendStateNone(currentAttachmentState.alphaBlendState))
-                dbi.enableiOES(i, gl.BLEND);
-            else if (isBlendStateNone(newAttachmentState.rgbBlendState) && isBlendStateNone(newAttachmentState.alphaBlendState))
-                dbi.disableiOES(i, gl.BLEND);
+                dbi.enableiOES(gl.BLEND, i);
+            else if (blendDisabled)
+                dbi.disableiOES(gl.BLEND, i);
         }
-    
+
         if (blendModeChanged) {
-            dbi.blendEquationSeparateiOES(i,
-                newAttachmentState.rgbBlendState.blendMode,
-                newAttachmentState.alphaBlendState.blendMode,
-            );
+            if (!blendDisabled)
+                dbi.blendEquationSeparateiOES(i,
+                    newAttachmentState.rgbBlendState.blendMode,
+                    newAttachmentState.alphaBlendState.blendMode,
+                );
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
         }
-    
+
         if (blendFuncChanged) {
-            dbi.blendFuncSeparateiOES(i,
-                newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
-                newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
-            );
+            if (!blendDisabled)
+                dbi.blendFuncSeparateiOES(i,
+                    newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
+                    newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
+                );
             currentAttachmentState.rgbBlendState.blendSrcFactor = newAttachmentState.rgbBlendState.blendSrcFactor;
             currentAttachmentState.alphaBlendState.blendSrcFactor = newAttachmentState.alphaBlendState.blendSrcFactor;
             currentAttachmentState.rgbBlendState.blendDstFactor = newAttachmentState.rgbBlendState.blendDstFactor;
@@ -2012,7 +2015,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             );
             currentAttachmentState.channelWriteMask = newAttachmentState.channelWriteMask;
         }
-    
+
         const blendModeChanged = (
             currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
             currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode
@@ -2039,7 +2042,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
         }
-    
+
         if (blendFuncChanged) {
             gl.blendFuncSeparate(
                 newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
@@ -2107,7 +2110,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.enable(gl.CULL_FACE);
             else if (newMegaState.cullMode === GfxCullMode.None)
                 gl.disable(gl.CULL_FACE);
-    
+
             if (newMegaState.cullMode === GfxCullMode.Back)
                 gl.cullFace(gl.BACK);
             else if (newMegaState.cullMode === GfxCullMode.Front)
@@ -2121,7 +2124,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.frontFace(newMegaState.frontFace);
             currentMegaState.frontFace = newMegaState.frontFace;
         }
-    
+
         if (currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
             if (newMegaState.polygonOffset) {
                 gl.polygonOffset(1, 1);
