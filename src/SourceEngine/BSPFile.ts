@@ -728,7 +728,7 @@ function decompressLZMA(compressedData: ArrayBufferSlice, uncompressedSize: numb
     assert(lzmaSize + 0x11 <= compressedData.byteLength);
     const lzmaProperties = decodeLZMAProperties(compressedData.slice(0x0C));
 
-    return new ArrayBufferSlice(decompress(compressedData.slice(0x11), lzmaProperties, actualSize));
+    return decompress(compressedData.slice(0x11), lzmaProperties, actualSize);
 }
 
 export class LightmapPacker {

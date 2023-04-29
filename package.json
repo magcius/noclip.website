@@ -19,6 +19,7 @@
     "html-webpack-plugin": "^5.5.0",
     "iconv-lite": "^0.6.3",
     "ignore-loader": "^0.1.2",
+    "pako": "^1.0.11",
     "pngjs": "^3.4.0",
     "thread-loader": "^3.0.4",
     "ts-loader": "^9.4.2",
@@ -34,7 +35,6 @@
     "crc-32": "^1.2.2",
     "gl-matrix": "^3.4.3",
     "librw": "^0.4.0",
-    "pako": "^1.0.11",
     "reflect-metadata": "^0.1.13"
   },
   "scripts": {

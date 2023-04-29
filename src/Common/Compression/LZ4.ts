@@ -1,9 +1,9 @@
-
 import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { rust } from '../../rustlib';
 
 // https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md
 
-export function decompress(buffer: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
+export function decompressSW(buffer: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
     const dst = new Uint8Array(uncompressedSize);
     const src = buffer.createTypedArray(Uint8Array);
 
@@ -49,3 +49,9 @@ export function decompress(buffer: ArrayBufferSlice, uncompressedSize: number): 
 
     return new ArrayBufferSlice(dst.buffer);
 }
+
+export function decompress(srcBuffer: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
+    const bufView = rust!.lz4_decompress(srcBuffer.createTypedArray(Uint8Array), uncompressedSize);
+    return ArrayBufferSlice.fromView(bufView);
+}
+

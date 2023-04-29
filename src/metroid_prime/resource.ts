@@ -1,6 +1,6 @@
 // Resource System
 
-import * as Pako from 'pako';
+import * as Deflate from '../Common/Compression/Deflate';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -136,9 +136,9 @@ export class ResourceSystem {
                 decompressedChunks.push(chunkBuffer.createTypedArray(Uint8Array));
             } else {
                 if (method === CompressionMethod.CMPD_ZLIB) {
-                    const inflated = Pako.inflate(chunkBuffer.createTypedArray(Uint8Array));
+                    const inflated = Deflate.decompress(chunkBuffer);
                     assert(inflated.byteLength === chunkDecompressedSize);
-                    decompressedChunks.push(inflated);
+                    decompressedChunks.push(inflated.createTypedArray(Uint8Array));
                 } else {
                     let remaining = chunkDecompressedSize;
                     let ptr = chunkDataIdx;
@@ -167,9 +167,9 @@ export class ResourceSystem {
             return resource.buffer;
         } else if (resource.compressionMethod === CompressionMethod.ZLIB) {
             // 0x00 is decompresedSize.
-            const deflated = resource.buffer.createTypedArray(Uint8Array, 0x04);
-            const inflated = Pako.inflate(deflated);
-            return new ArrayBufferSlice(inflated.buffer);
+            const deflated = resource.buffer.slice(0x04);
+            const inflated = Deflate.decompress(deflated);
+            return inflated;
         } else if (resource.compressionMethod === CompressionMethod.LZO) {
             return this.loadResourceBuffer_LZO(resource.buffer);
         } else if (resource.compressionMethod === CompressionMethod.CMPD_ZLIB ||

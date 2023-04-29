@@ -15,7 +15,7 @@ function doFile(path: string, filename: string, data: ArrayBufferSlice) {
     const view = data.createDataView();
     const assetType = view.getUint32(0x00, true);
     const uncompressedSize = view.getUint32(0x08, true);
-    const uncompressed = LZ4.decompress(data.slice(0x0C), uncompressedSize);
+    const uncompressed = LZ4.decompressSW(data.slice(0x0C), uncompressedSize);
     writeFileSync(`${path}${filename}.dec`, Buffer.from(uncompressed.arrayBuffer, 0, uncompressedSize));
 
     if (assetType === 3) {
