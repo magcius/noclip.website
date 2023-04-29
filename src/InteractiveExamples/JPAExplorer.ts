@@ -212,6 +212,7 @@ export class Explorer implements SceneGfx {
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
     private forceCentered: boolean = false;
+    private gridVisible: boolean = true;
 
     // UI
     private currentEffectIndexEntry: SimpleTextEntry;
@@ -363,6 +364,12 @@ export class Explorer implements SceneGfx {
             this.forceCentered = forceCenteredCheckbox.checked;
         };
         panel.contents.appendChild(forceCenteredCheckbox.elem);
+
+        const gridVisibleCheckbox = new Checkbox('Grid Visible', this.gridVisible);
+        gridVisibleCheckbox.onchanged = () => {
+            this.gridVisible = gridVisibleCheckbox.checked;
+        };
+        panel.contents.appendChild(gridVisibleCheckbox.elem);
     }
 
     private setUIToCurrent(): void {
@@ -406,7 +413,8 @@ export class Explorer implements SceneGfx {
         const baseTemplate = this.renderHelper.pushTemplateRenderInst();
         baseTemplate.filterKey = Pass.MAIN;
 
-        this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.gridVisible)
+            this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.loopEmitters) {
             for (let i = this.emitters.length - 1; i >= 0; i--) {

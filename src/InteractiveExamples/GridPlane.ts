@@ -118,9 +118,9 @@ const scratchMatrix = mat4.create();
 export class GridPlane {
     public gfxProgram: GfxProgram;
     private modelMatrix = mat4.create();
-    public color = colorNewCopy(White);
+    public color = colorNewCopy(White, 0.5);
     public scale: number = 0.05;
-    public lineWidth: number = 40;
+    public lineWidth: number = 10;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const program = new GridPlaneProgram();
