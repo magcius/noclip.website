@@ -25,7 +25,7 @@ import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Pako from 'pako';
+import * as Deflate from '../Common/Compression/Deflate';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
@@ -651,8 +651,8 @@ export class Map {
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const view = buffer.createDataView();
     assert(view.getUint32(0x00) === 0x1F8B0800);
-    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, 0x0A));
-    return new ArrayBufferSlice(decompressed.buffer);
+    const decompressed = Deflate.decompress_raw(buffer.slice(0x0A));
+    return decompressed;
 }
 
 class ROMData {

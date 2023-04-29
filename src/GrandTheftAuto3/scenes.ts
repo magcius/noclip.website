@@ -3,7 +3,7 @@ import * as rw from 'librw';
 import meta from './scenes.json';
 import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
-import { inflate } from 'pako';
+import { decompress } from '../Common/Compression/Deflate';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
@@ -109,8 +109,8 @@ export class GTA3SceneDesc implements SceneDesc {
 
     private async fetchGZ(dataFetcher: DataFetcher, path: string): Promise<ArrayBufferSlice> {
         const gz = assertExists(await this.fetch(dataFetcher, path, false));
-        const bytes = inflate(gz.createTypedArray(Uint8Array));
-        return new ArrayBufferSlice(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const bytes = decompress(gz);
+        return bytes;
     }
 
     private async fetch(dataFetcher: DataFetcher, path: string, cache = true): Promise<ArrayBufferSlice | null> {

@@ -5,8 +5,8 @@
 import * as CRC32 from 'crc-32';
 import ArrayBufferSlice from './ArrayBufferSlice';
 import { readString, assert } from './util';
-import Pako from "pako";
-import { decodeLZMAProperties, decompress } from './Common/Compression/LZMA';
+import * as Deflate from './Common/Compression/Deflate';
+import * as LZMA from './Common/Compression/LZMA';
 
 export const enum ZipCompressionMethod {
     None = 0,
@@ -176,8 +176,7 @@ export function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
         return entry.data;
     } else if (entry.compressionMethod === ZipCompressionMethod.DEFLATE) {
-        const decompressed = Pako.inflateRaw(entry.data.createTypedArray(Uint8Array));
-        return new ArrayBufferSlice(decompressed.buffer);
+        return Deflate.decompress_raw(entry.data);
     } else if (entry.compressionMethod === ZipCompressionMethod.LZMA) {
         // Parse out the ZIP-style LZMA header. See APPNOTE.txt section 5.8.8
         const view = entry.data.createDataView();
@@ -189,10 +188,10 @@ export function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
         const propertiesSize = view.getUint16(0x02, true);
         assert(propertiesSize === 5);
 
-        const properties = decodeLZMAProperties(entry.data.subarray(0x04, propertiesSize));
+        const properties = LZMA.decodeLZMAProperties(entry.data.subarray(0x04, propertiesSize));
         // Compressed data comes immediately after the properties.
         const compressedData = entry.data.slice(0x04 + propertiesSize);
-        return new ArrayBufferSlice(decompress(compressedData, properties, entry.uncompressedSize!));
+        return LZMA.decompress(compressedData, properties, entry.uncompressedSize!);
     } else {
         throw "whoops";
     }

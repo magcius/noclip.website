@@ -1,4 +1,4 @@
-import * as pako from 'pako';
+import * as Deflate from '../Common/Compression/Deflate';
 import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
@@ -40,7 +40,7 @@ function loadZLB(compData: ArrayBufferSlice): ArrayBufferLike {
         throw Error(`Invalid magic identifier 0x${hexzero(header.magic, 8)}`);
     }
 
-    return pako.inflate(new Uint8Array(compData.copyToBuffer(ZLBHeader.SIZE, header.size))).buffer;
+    return Deflate.decompress(compData.subarray(ZLBHeader.SIZE, header.size)).arrayBuffer;
 }
 
 function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
