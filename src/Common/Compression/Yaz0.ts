@@ -65,22 +65,7 @@ export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     }
 }
 
-export class Yaz0DecompressorWASM {
-    constructor(private yaz0dec: (src: Uint8Array) => Uint8Array) {
-    }
-
-    public decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-        const buf = this.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
-        return new ArrayBufferSlice(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-}
-
-let _decompressor: Yaz0DecompressorWASM | null = null;
-
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-    if (_decompressor === null) {
-        _decompressor = new Yaz0DecompressorWASM(rust!.yaz0dec);
-    }
-
-    return _decompressor.decompress(srcBuffer);
+    const bufView = rust!.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
+    return ArrayBufferSlice.fromView(bufView);
 }
