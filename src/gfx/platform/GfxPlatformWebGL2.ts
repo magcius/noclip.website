@@ -1981,21 +1981,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         if (blendModeChanged) {
-            if (!blendDisabled)
-                dbi.blendEquationSeparateiOES(i,
-                    newAttachmentState.rgbBlendState.blendMode,
-                    newAttachmentState.alphaBlendState.blendMode,
-                );
+            dbi.blendEquationSeparateiOES(i,
+                newAttachmentState.rgbBlendState.blendMode,
+                newAttachmentState.alphaBlendState.blendMode,
+            );
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
         }
 
         if (blendFuncChanged) {
-            if (!blendDisabled)
-                dbi.blendFuncSeparateiOES(i,
-                    newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
-                    newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
-                );
+            dbi.blendFuncSeparateiOES(i,
+                newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
+                newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor,
+            );
             currentAttachmentState.rgbBlendState.blendSrcFactor = newAttachmentState.rgbBlendState.blendSrcFactor;
             currentAttachmentState.alphaBlendState.blendSrcFactor = newAttachmentState.alphaBlendState.blendSrcFactor;
             currentAttachmentState.rgbBlendState.blendDstFactor = newAttachmentState.rgbBlendState.blendDstFactor;
