@@ -4,7 +4,7 @@ import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, Gfx
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
-import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
+import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -507,7 +507,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
         this._OES_texture_float_linear = gl.getExtension('OES_texture_float_linear');
         this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
-        this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
+        // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
@@ -543,7 +543,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // We always have depth & stencil test enabled.
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.STENCIL_TEST);
-        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
 
         this._checkLimits();
         this._checkForBugQuirks();
@@ -1757,11 +1756,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
         for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++) {
-            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
-            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
+            const attachment = this._currentColorAttachments[i];
+            if (!attachment)
+                continue;
+            else if (attachment.gl_renderbuffer !== null)
+                gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
+            else if (attachment.gfxTexture !== null)
+                gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
+            this._currentColorAttachments[i] = null;
         }
         this._currentColorAttachments.length = numColorAttachments;
+
+        for (let i = this._currentMegaState.attachmentsState.length; i < numColorAttachments; i++)
+            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
     private _setRenderPassParametersColor(i: number, colorAttachment: GfxRenderTargetP_GL | null, attachmentLevel: number, colorResolveTo: GfxTextureP_GL | null, resolveToLevel: number): void {
@@ -1947,9 +1956,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.scissor(x, y, w, h);
     }
 
-    private _setAttachmentStateIndexed(i: number, currentAttachmentState: GfxAttachmentState, newAttachmentState: GfxAttachmentState): void {
+    private _setAttachmentStateIndexed(i: number, newAttachmentState: GfxAttachmentState): void {
         const gl = this.gl;
         const dbi = this._OES_draw_buffers_indexed!;
+
+        const currentAttachmentState = this._currentMegaState.attachmentsState[i];
 
         if (currentAttachmentState.channelWriteMask !== newAttachmentState.channelWriteMask) {
             dbi.colorMaskiOES(i,
@@ -2001,8 +2012,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _setAttachmentState(currentAttachmentState: GfxAttachmentState, newAttachmentState: GfxAttachmentState): void {
+    private _setAttachmentState(newAttachmentState: GfxAttachmentState): void {
         const gl = this.gl;
+
+        const currentAttachmentState = this._currentMegaState.attachmentsState[0];
 
         if (currentAttachmentState.channelWriteMask !== newAttachmentState.channelWriteMask) {
             gl.colorMask(
@@ -2064,11 +2077,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const currentMegaState = this._currentMegaState;
 
         if (this._OES_draw_buffers_indexed !== null) {
-            for (let i = 0; i < newMegaState.attachmentsState.length; i++)
-                this._setAttachmentStateIndexed(i, currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+            assert(newMegaState.attachmentsState.length === 1 || newMegaState.attachmentsState.length >= this._currentColorAttachments.length);
+            for (let i = 0; i < this._currentColorAttachments.length; i++) {
+                if (this._currentColorAttachments[i] === null)
+                    continue;
+                const newAttachmentState = newMegaState.attachmentsState.length === 1 ? newMegaState.attachmentsState[0] : newMegaState.attachmentsState[i];
+                this._setAttachmentStateIndexed(i, newAttachmentState);
+            }
         } else {
             assert(newMegaState.attachmentsState.length === 1);
-            this._setAttachmentState(currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+            this._setAttachmentState(newMegaState.attachmentsState[0]);
         }
 
         if (!gfxColorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {

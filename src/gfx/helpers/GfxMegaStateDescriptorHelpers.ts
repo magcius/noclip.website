@@ -9,7 +9,7 @@ function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendSt
     dst.blendMode = src.blendMode;
 }
 
-function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttachmentState): GfxAttachmentState {
+export function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttachmentState): GfxAttachmentState {
     if (dst === undefined) {
         dst = {
             rgbBlendState: {} as GfxChannelBlendState,
