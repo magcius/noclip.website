@@ -20,7 +20,7 @@ import { TextureMapping } from "../TextureHolder";
 import { arrayRemove, assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile";
-import { BSPFile, Model, Surface } from "./BSPFile";
+import { BSPFile, BSPFileVariant, Model, Surface } from "./BSPFile";
 import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem";
 import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
@@ -1067,6 +1067,7 @@ class Flashlight {
 
 export class SourceLoadContext {
     public entityFactoryRegistry = new EntityFactoryRegistry();
+    public bspFileVariant = BSPFileVariant.Default;
 
     constructor(public filesystem: SourceFileSystem) {
     }

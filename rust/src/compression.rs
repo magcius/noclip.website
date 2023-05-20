@@ -24,7 +24,7 @@ pub fn lzma_decompress(
         lzma_rs::decompress::raw::LzmaParams::new(properties, dict_size, Some(unpacked_size));
     let mut decoder = lzma_rs::decompress::raw::LzmaDecoder::new(params, None).unwrap();
     let mut dst = Vec::<u8>::with_capacity(unpacked_size.try_into().unwrap());
-    decoder.decompress(&mut src, &mut dst);
+    decoder.decompress(&mut src, &mut dst).unwrap();
     dst
 }
 

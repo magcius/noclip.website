@@ -15,7 +15,7 @@ export async function createScene(context: SceneContext, loadContext: SourceLoad
 
     const bspFile = await context.dataShare.ensureObject(`SourceEngine/${mapPath}`, async () => {
         const bsp = loadMapFromVpk ? assertExists(await filesystem.fetchFileData(mapPath)) : await context.dataFetcher.fetchData(mapPath);
-        return new BSPFile(bsp, mapId);
+        return new BSPFile(bsp, mapId, loadContext.bspFileVariant);
     });
 
     if (bspFile.pakfile !== null)

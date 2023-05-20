@@ -69,6 +69,7 @@ import * as Scenes_HalfLife2Ep1 from './SourceEngine/Scenes_HalfLife2Ep1';
 import * as Scenes_HalfLife2Ep2 from './SourceEngine/Scenes_HalfLife2Ep2';
 import * as Scenes_NfsMostWanted from './NeedForSpeedMostWanted/scenes';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
+import * as Scenes_Left4Dead2 from './SourceEngine/Scenes_Left4Dead2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
 import * as Scenes_TheStanleyParable from './SourceEngine/Scenes_TheStanleyParable';
@@ -207,6 +208,7 @@ const sceneGroups = [
     Scenes_Subnautica.sceneGroup,
     Scenes_Halo1.sceneGroup,
     Scenes_HalfLife.sceneGroup,
+    Scenes_Left4Dead2.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {

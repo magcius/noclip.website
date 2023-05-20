@@ -809,6 +809,11 @@ class ResizableArrayBuffer {
     }
 }
 
+export enum BSPFileVariant {
+    Default,
+    Left4Dead2, // https://developer.valvesoftware.com/wiki/.bsp_(Source)/Game-Specific#Left_4_Dead_2_.2F_Contagion
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -835,7 +840,7 @@ export class BSPFile {
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
 
-    constructor(buffer: ArrayBufferSlice, mapname: string) {
+    constructor(buffer: ArrayBufferSlice, mapname: string, private variant: BSPFileVariant = BSPFileVariant.Default) {
         assert(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
@@ -844,10 +849,22 @@ export class BSPFile {
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
             const idx = lumpsStart + lumpType * 0x10;
-            const offs = view.getUint32(idx + 0x00, true);
-            const size = view.getUint32(idx + 0x04, true);
-            const version = view.getUint32(idx + 0x08, true);
-            const uncompressedSize = view.getUint32(idx + 0x0C, true);
+
+            let offs, size, version, uncompressedSize;
+            if (variant === BSPFileVariant.Default) {
+                offs = view.getUint32(idx + 0x00, true);
+                size = view.getUint32(idx + 0x04, true);
+                version = view.getUint32(idx + 0x08, true);
+                uncompressedSize = view.getUint32(idx + 0x0C, true);
+            } else if (variant === BSPFileVariant.Left4Dead2) {
+                version = view.getUint32(idx + 0x00, true);
+                offs = view.getUint32(idx + 0x04, true);
+                size = view.getUint32(idx + 0x08, true);
+                uncompressedSize = view.getUint32(idx + 0x0C, true);
+            } else {
+                throw "whoops";
+            }
+
             if (uncompressedSize !== 0) {
                 // LZMA compression.
                 const compressedData = buffer.subarray(offs, size);
