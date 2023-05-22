@@ -19,6 +19,7 @@ import { dGlobals } from "./zww_scenes";
 import * as GX from '../gx/gx_enum';
 import { ColorKind } from "../gx/gx_render";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -47,9 +48,10 @@ export class dPa_control_c {
     private jpacData: JPACData[] = [];
     private resourceDatas = new Map<number, JPAResourceData>();
 
-    constructor(device: GfxDevice, private jpac: JPAC[]) {
+    constructor(cache: GfxRenderCache, private jpac: JPAC[]) {
+        const device = cache.device;
         const flipY = gfxDeviceNeedsFlipY(device);
-        this.emitterManager = new JPAEmitterManager(device, 6000, 300);
+        this.emitterManager = new JPAEmitterManager(cache, 6000, 300);
         for (let i = 0; i < this.jpac.length; i++) {
             const jpacData = new JPACData(this.jpac[i]);
 

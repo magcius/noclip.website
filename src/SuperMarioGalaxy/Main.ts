@@ -91,7 +91,7 @@ class SpecialTextureBinder {
         this.clampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             maxLOD: 100,
             minLOD: 0,
             wrapS: GfxWrapMode.Clamp,
@@ -1791,7 +1791,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.uiContainer = context.uiContainer;
         sceneObjHolder.viewerInput = context.viewerInput;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
-        sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
+        sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.renderCache);
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
 

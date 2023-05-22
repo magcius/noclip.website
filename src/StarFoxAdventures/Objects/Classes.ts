@@ -218,7 +218,7 @@ export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
                                 fail = false;
                                 // Found the texture! Make it scroll now.
                                 // console.log(`Making texId ${targetTexId} scroll!`);
-                                const theTexture = obj.world.resColl.texFetcher.getTexture(obj.world.device, targetTexId, true)!;
+                                const theTexture = obj.world.resColl.texFetcher.getTexture(obj.world.renderCache, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
                                 layer.scrollSlot = mat.factory.addScrollSlot(dxPerFrame, dyPerFrame);

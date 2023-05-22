@@ -1,17 +1,17 @@
 
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { assert, assertExists, nArray, readString } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import { Texture, ViewerRenderInput } from "../viewer";
+import { SceneGfx, Texture, ViewerRenderInput } from "../viewer";
 import { DeviceProgram } from "../Program";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
 import { mat4 } from "gl-matrix";
-import { Camera } from "../Camera";
+import { Camera, CameraController } from "../Camera";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { WAD, WADLumpType } from "./WAD";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -189,13 +189,20 @@ void main() {
 
 class BSPSurfaceRenderer {
     private textureMapping = nArray(2, () => new TextureMapping());
+    private visible = true;
 
     constructor(textureCache: TextureCache, private surface: Surface) {
         const miptex = textureCache.findMipTex(this.surface.texName);
         this.textureMapping[0].gfxTexture = miptex.gfxTexture;
+
+        if (this.surface.texName.startsWith('sky'))
+            this.visible = false;
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, lightmapManager: LightmapManager): void {
+        if (!this.visible)
+            return;
+
         this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
 
         const renderInst = renderInstManager.newRenderInst();
@@ -290,9 +297,10 @@ export class BSPRenderer {
     public surfaceRenderers: BSPSurfaceRenderer[] = [];
 
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     private lightmapManager: LightmapManager;
 
@@ -315,17 +323,20 @@ export class BSPRenderer {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.bsp.vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, this.bsp.indexData);
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         this.lightmapManager = new LightmapManager(device, this.bsp.lightmapPackerPage);
 
         const program = new GoldSrcProgram();
         this.gfxProgram = cache.createProgram(program);
 
-        for (let i = 0; i < this.bsp.surfaces.length; i++) {
-            const surface = this.bsp.surfaces[i];
+        // TODO(jstpierre): Other models.
+        const model = this.bsp.models[0]!;
+        for (let i = 0; i < model.surfaces.length; i++) {
+            const surface = this.bsp.surfaces[model.surfaces[i]];
             this.surfaceRenderers.push(new BSPSurfaceRenderer(textureCache, surface));
 
             for (let j = 0; j < surface.lightmapData.length; j++)
@@ -339,7 +350,7 @@ export class BSPRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.gfxProgram);
         template.setBindingLayouts([{ numSamplers: 2, numUniformBuffers: 1 }]);
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
 
         this.mainView.setupFromCamera(viewerInput.camera);
@@ -355,14 +366,13 @@ export class BSPRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         this.lightmapManager.destroy(device);
     }
 }
 
-export class GoldSrcRenderer {
+export class GoldSrcRenderer implements SceneGfx {
     public textureCache: TextureCache;
     public bspRenderers: BSPRenderer[] = [];
     public renderHelper: GfxRenderHelper;
@@ -371,6 +381,10 @@ export class GoldSrcRenderer {
         this.renderHelper = new GfxRenderHelper(device);
         this.textureCache = new TextureCache(this.renderHelper.renderCache);
     }
+
+    public adjustCameraController(c: CameraController): void {
+        c.setSceneMoveSpeedMult(4/60);
+    } 
 
     private prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();

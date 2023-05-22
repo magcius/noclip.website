@@ -11,6 +11,7 @@ import { loadRes } from './resource';
 import { readUint32 } from './util';
 import * as Viewer from '../viewer';
 import { TextureMapping } from '../TextureHolder';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class SFATexture {
     public viewerTexture?: Viewer.Texture;
@@ -18,14 +19,15 @@ export class SFATexture {
     constructor(public gfxTexture: GfxTexture, public gfxSampler: GfxSampler, public width: number, public height: number) {
     }
 
-    public static create(device: GfxDevice, width: number, height: number) {
+    public static create(cache: GfxRenderCache, width: number, height: number) {
+        const device = cache.device;
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = device.createSampler({
+        const gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -34,7 +36,6 @@ export class SFATexture {
     }
 
     public destroy(device: GfxDevice) {
-        device.destroySampler(this.gfxSampler);
         device.destroyTexture(this.gfxTexture);
     }
 
@@ -61,9 +62,9 @@ export class SFATextureArray {
 
 export abstract class TextureFetcher {
     public abstract loadSubdirs(subdirs: string[], dataFetcher: DataFetcher): Promise<void>;
-    public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
-    public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
-        const texArray = this.getTextureArray(device, num, alwaysUseTex1);
+    public abstract getTextureArray(cache: GfxRenderCache, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
+    public getTexture(cache: GfxRenderCache, num: number, alwaysUseTex1: boolean) : SFATexture | null {
+        const texArray = this.getTextureArray(cache, num, alwaysUseTex1);
         if (texArray) {
             return texArray.textures[0];
         } else {
@@ -73,7 +74,7 @@ export abstract class TextureFetcher {
     public abstract destroy(device: GfxDevice): void;
 }
 
-function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boolean): SFATexture {
+function loadTexture(cache: GfxRenderCache, texData: ArrayBufferSlice, isBeta: boolean): SFATexture {
     const dv = texData.createDataView();
     const textureInput = {
         name: `Texture`,
@@ -91,11 +92,11 @@ function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boole
     };
     
     const mipChain = GX_Texture.calcMipChain(textureInput, textureInput.mipCount);
-    const loadedTexture = loadTextureFromMipChain(device, mipChain);
+    const loadedTexture = loadTextureFromMipChain(cache.device, mipChain);
     
     // GL texture is bound by loadTextureFromMipChain.
     const [minFilter, mipFilter] = translateTexFilterGfx(fields.minFilt);
-    const gfxSampler = device.createSampler({
+    const gfxSampler = cache.createSampler({
         wrapS: translateWrapModeGfx(fields.wrapS),
         wrapT: translateWrapModeGfx(fields.wrapT),
         minFilter: minFilter,
@@ -120,7 +121,7 @@ function isValidTextureTabValue(tabValue: number) {
     return tabValue != 0xFFFFFFFF && (tabValue & 0x80000000) != 0;
 }
 
-function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, isBeta: boolean): SFATextureArray | null {
+function loadFirstValidTexture(cache: GfxRenderCache, tab: DataView, bin: ArrayBufferSlice, isBeta: boolean): SFATextureArray | null {
     let firstValidId = 0;
     let found = false;
     for (let i = 0; i < tab.byteLength; i += 4) {
@@ -139,10 +140,10 @@ function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBuffe
         return null;
     }
 
-    return loadTextureArrayFromTable(device, tab, bin, firstValidId, isBeta);
+    return loadTextureArrayFromTable(cache, tab, bin, firstValidId, isBeta);
 }
 
-function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, id: number, isBeta: boolean): (SFATextureArray | null) {
+function loadTextureArrayFromTable(cache: GfxRenderCache, tab: DataView, bin: ArrayBufferSlice, id: number, isBeta: boolean): (SFATextureArray | null) {
     const tabValue = readUint32(tab, 0, id);
     if (isValidTextureTabValue(tabValue)) {
         const arrayLength = (tabValue >> 24) & 0x3f;
@@ -150,7 +151,7 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
         if (arrayLength === 1) {
             const compData = bin.slice(binOffs);
             const uncompData = loadRes(compData);
-            return new SFATextureArray([loadTexture(device, uncompData, isBeta)]);
+            return new SFATextureArray([loadTexture(cache, uncompData, isBeta)]);
         } else {
             const result = [];
             const binDv = bin.createDataView();
@@ -158,27 +159,28 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
                 const texOffs = readUint32(binDv, binOffs, i);
                 const compData = bin.slice(binOffs + texOffs);
                 const uncompData = loadRes(compData);
-                result.push(loadTexture(device, uncompData, isBeta));
+                result.push(loadTexture(cache, uncompData, isBeta));
             }
             return new SFATextureArray(result);
         }
     } else {
         console.warn(`Texture id 0x${id.toString(16)} (tab value 0x${hexzero(tabValue, 8)}) not found in table. Using first valid texture.`);
-        return loadFirstValidTexture(device, tab, bin, isBeta);
+        return loadFirstValidTexture(cache, tab, bin, isBeta);
     }
 }
 
-function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
+function makeFakeTexture(cache: GfxRenderCache, num: number): SFATextureArray {
     const DIM = 128;
     const CHECKER = 32;
 
+    const device = cache.device;
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, DIM, DIM, 1));
-    const gfxSampler = device.createSampler({
+    const gfxSampler = cache.createSampler({
         wrapS: GfxWrapMode.Repeat,
         wrapT: GfxWrapMode.Repeat,
         minFilter: GfxTexFilterMode.Bilinear,
         magFilter: GfxTexFilterMode.Bilinear,
-        mipFilter: GfxMipFilterMode.NoMip,
+        mipFilter: GfxMipFilterMode.Nearest,
         minLOD: 0,
         maxLOD: 100,
     });
@@ -240,10 +242,10 @@ class TextureFile {
         return this.textures[num] !== undefined;
     }
 
-    public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
+    public getTextureArray(cache: GfxRenderCache, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
             try {
-                const texture = loadTextureArrayFromTable(device, this.tab, this.bin, num, this.isBeta);
+                const texture = loadTextureArrayFromTable(cache, this.tab, this.bin, num, this.isBeta);
                 if (texture !== null) {
                     for (let arrayIdx = 0; arrayIdx < texture.textures.length; arrayIdx++) {
                         const viewerTexture = texture.textures[arrayIdx].viewerTexture;
@@ -257,7 +259,7 @@ class TextureFile {
             } catch (e) {
                 console.warn(`Failed to load texture 0x${num.toString(16)} from ${this.name} due to exception:`);
                 console.error(e);
-                this.textures[num] = makeFakeTexture(device, num);
+                this.textures[num] = makeFakeTexture(cache, num);
             }
         }
 
@@ -288,9 +290,9 @@ async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPa
 export class FakeTextureFetcher extends TextureFetcher {
     textures: SFATextureArray[] = [];
 
-    public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
+    public getTextureArray(cache: GfxRenderCache, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
-            this.textures[num] = makeFakeTexture(device, num);
+            this.textures[num] = makeFakeTexture(cache, num);
         }
         return this.textures[num];
     }
@@ -390,16 +392,16 @@ export class SFATextureFetcher extends TextureFetcher {
         await Promise.all(promises);
     }
 
-    public getTextureArray(device: GfxDevice, texId: number, useTex1: boolean): SFATextureArray | null {
+    public getTextureArray(cache: GfxRenderCache, texId: number, useTex1: boolean): SFATextureArray | null {
         const file = this.getTextureFile(texId, useTex1);
 
         if (file.file === null) {
             console.warn(`Texture ID ${texId} was not found in any loaded subdirectories (${Object.keys(this.subdirTextureFiles)})`);
-            return this.fakes.getTextureArray(device, file.texNum);
+            return this.fakes.getTextureArray(cache, file.texNum);
         }
 
         const isNewlyLoaded = !file.file.isTextureLoaded(file.texNum);
-        const textureArray = file.file.getTextureArray(device, file.texNum);
+        const textureArray = file.file.getTextureArray(cache, file.texNum);
         if (isNewlyLoaded && textureArray !== null) {
             for (let arrayIdx = 0; arrayIdx < textureArray.textures.length; arrayIdx++) {
                 const viewerTexture = textureArray.textures[arrayIdx].viewerTexture;

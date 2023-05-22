@@ -10,6 +10,7 @@ import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../viewer";
 import { RendererStore } from "../Scenes";
 import * as RDP from '../../Common/N64/RDP';
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 export class UVCT {
     public uvmds: [UVMD, mat4][] = [];
@@ -118,14 +119,14 @@ export class UVCT {
 export class UVCTRenderer {
     public materialRenderers: MaterialRenderer[] = [];
     public uvmdRenderers: Map<UVMD, UVMDRenderer> = new Map();
-    constructor(public uvct: UVCT, device: GfxDevice, rendererStore: RendererStore) {
+    constructor(public uvct: UVCT, cache: GfxRenderCache, rendererStore: RendererStore) {
 
         for(let material of uvct.materials) {
-            let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, device, rendererStore))
+            let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, cache, rendererStore))
             this.materialRenderers.push(materialRenderer);
         }
         for(let [uvmd, placementMat] of uvct.uvmds) {
-            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, device, rendererStore))
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, cache, rendererStore))
             this.uvmdRenderers.set(uvmd, uvmdRenderer);
         }
     }

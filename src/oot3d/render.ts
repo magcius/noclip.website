@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -507,7 +507,7 @@ class MaterialInstance {
 
     public environmentSettings = new ZSI.ZSIEnvironmentSettings;
 
-    constructor(device: GfxDevice, public cmb: CMB.CMB, public material: CMB.Material) {
+    constructor(cache: GfxRenderCache, public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
             this.constantColors[i] = colorNewCopy(this.material.constantColors[i]);
 
@@ -519,7 +519,7 @@ class MaterialInstance {
             const [minFilter, mipFilter] = this.translateTextureFilter(binding.minFilter);
             const [magFilter] = this.translateTextureFilter(binding.magFilter);
 
-            const gfxSampler = device.createSampler({
+            const gfxSampler = cache.createSampler({
                 wrapS: this.translateWrapMode(binding.wrapS),
                 wrapT: this.translateWrapMode(binding.wrapT),
                 magFilter,
@@ -732,8 +732,6 @@ class MaterialInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.gfxSamplers.length; i++)
-            device.destroySampler(this.gfxSamplers[i]);
     }
 }
 
@@ -763,13 +761,15 @@ class PrmsData {
 
 class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     public useVertexColor: boolean = false;
     public indexBuffer: GfxBuffer;
     public prmsData: PrmsData[] = [];
 
-    constructor(device: GfxDevice, vertexBuffer: GfxBuffer, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
+    constructor(cache: GfxRenderCache, vertexBuffer: GfxBuffer, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
+        const device = cache.device;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         const perInstanceBufferData = new Float32Array(32);
@@ -835,18 +835,17 @@ class SepdData {
 
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             perInstanceBinding,
             { buffer: vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
         if (this.perInstanceBuffer !== null)
             device.destroyBuffer(this.perInstanceBuffer);
     }
@@ -865,7 +864,7 @@ class ShapeInstance {
         const sepd = this.sepdData.sepd;
 
         const materialTemplate = renderInstManager.pushTemplateRenderInst();
-        materialTemplate.setInputLayoutAndState(this.sepdData.inputLayout, this.sepdData.inputState);
+        materialTemplate.setVertexInput(this.sepdData.inputLayout, this.sepdData.vertexBufferDescriptors, this.sepdData.indexBufferDescriptor);
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, materialTemplate, textureHolder);
 
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
@@ -914,13 +913,14 @@ export class CmbData {
 
     private vertexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, public cmb: CMB.CMB) {
+    constructor(cache: GfxRenderCache, public cmb: CMB.CMB) {
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, cmb.vatrChunk.dataBuffer);
 
         const vatrChunk = cmb.vatrChunk;
 
         for (let i = 0; i < this.cmb.sepds.length; i++)
-            this.sepdData[i] = new SepdData(device, this.vertexBuffer, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
+            this.sepdData[i] = new SepdData(cache, this.vertexBuffer, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
 
         const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
@@ -958,9 +958,9 @@ export class CmbInstance {
     public isSkybox = false;
     public passMask: number = 1;
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
+    constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(device, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
         for (let i = 0; i < this.cmbData.cmb.meshs.length; i++) {
             const mesh = this.cmbData.cmb.meshs[i];
             this.shapeInstances.push(new ShapeInstance(this.cmbData.sepdData[mesh.sepdIdx], this.materialInstances[mesh.matsIdx]));
@@ -1099,19 +1099,21 @@ export class RoomRenderer {
     public objectRenderers: CmbInstance[] = [];
     public roomSetups: ZSI.ZSIRoomSetup[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
+    constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
+        const device = cache.device;
+
         if (mesh.opaque !== null) {
             textureHolder.addTextures(device, mesh.opaque.textures);
-            this.opaqueData = new CmbData(device, mesh.opaque);
-            this.opaqueMesh = new CmbInstance(device, textureHolder, this.opaqueData, `${name} Opaque`);
+            this.opaqueData = new CmbData(cache, mesh.opaque);
+            this.opaqueMesh = new CmbInstance(cache, textureHolder, this.opaqueData, `${name} Opaque`);
             this.opaqueMesh.animationController.fps = 20;
             this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
         if (mesh.transparent !== null) {
             textureHolder.addTextures(device, mesh.transparent.textures);
-            this.transparentData = new CmbData(device, mesh.transparent);
-            this.transparentMesh = new CmbInstance(device, textureHolder, this.transparentData, `${name} Transparent`);
+            this.transparentData = new CmbData(cache, mesh.transparent);
+            this.transparentMesh = new CmbInstance(cache, textureHolder, this.transparentData, `${name} Transparent`);
             this.transparentMesh.animationController.fps = 20;
             this.transparentMesh.setConstantColor(1, TransparentBlack);
         }

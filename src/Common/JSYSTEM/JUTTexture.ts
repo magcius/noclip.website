@@ -6,7 +6,7 @@ import { GfxSampler, GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatfor
 import { Texture } from "../../viewer";
 import { TextureMapping } from "../../TextureHolder";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain } from "../../gx/gx_render";
+import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy } from "../../gx/gx_render";
 import { calcMipChain, TextureInputGX } from "../../gx/gx_texture";
 
 export interface BTI_Texture extends TextureInputGX {
@@ -17,6 +17,7 @@ export interface BTI_Texture extends TextureInputGX {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
+    maxAnisotropy: GX.Anisotropy;
     paletteFormat: GX.TexPalette;
     paletteData: ArrayBufferSlice | null;
 }
@@ -32,6 +33,7 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData
     const paletteFormat: GX.TexPalette = view.getUint8(0x09);
     const paletteCount: number = view.getUint16(0x0A);
     const paletteOffs: number = view.getUint32(0x0C);
+    const maxAnisotropy: GX.Anisotropy = view.getUint8(0x13);
     const minFilter: GX.TexFilter = view.getUint8(0x14);
     const magFilter: GX.TexFilter = view.getUint8(0x15);
     const minLOD: number = view.getInt8(0x16) * 1/8;
@@ -50,7 +52,7 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData
     if (paletteOffs !== 0)
         paletteData = buffer.subarray(paletteOffs, paletteCount * 2, copyData);
 
-    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
+    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, maxAnisotropy, data, paletteFormat, paletteData };
 }
 
 export class BTI {
@@ -68,6 +70,7 @@ export interface TEX1_SamplerSub {
     magFilter: GX.TexFilter;
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
+    maxAnisotropy: GX.Anisotropy;
     minLOD: number;
     maxLOD: number;
 }
@@ -82,6 +85,7 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampl
         minFilter, mipFilter, magFilter,
         minLOD: sampler.minLOD,
         maxLOD: sampler.maxLOD,
+        maxAnisotropy: translateMaxAnisotropy(sampler.maxAnisotropy),
     });
 
     return gfxSampler;

@@ -43,9 +43,9 @@ class BasicEffectSystem {
         'IndDummy',         // Super Mario Galaxy
     ];
 
-    constructor(device: GfxDevice, private jpac: JPA.JPAC) {
-        const flipY = gfxDeviceNeedsFlipY(device);
-        this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
+    constructor(cache: GfxRenderCache, private jpac: JPA.JPAC) {
+        const flipY = gfxDeviceNeedsFlipY(cache.device);
+        this.emitterManager = new JPA.JPAEmitterManager(cache, 6000, 300);
         this.jpacData = new JPA.JPACData(this.jpac);
 
         for (let i = 0; i < this.fbTextureNames.length; i++) {
@@ -212,6 +212,7 @@ export class Explorer implements SceneGfx {
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
     private forceCentered: boolean = false;
+    private gridVisible: boolean = true;
 
     // UI
     private currentEffectIndexEntry: SimpleTextEntry;
@@ -223,7 +224,7 @@ export class Explorer implements SceneGfx {
         this.uiContainer = context.uiContainer;
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.effectSystem = new BasicEffectSystem(device, this.jpac);
+        this.effectSystem = new BasicEffectSystem(this.renderHelper.renderCache, this.jpac);
 
         this.gridPlane = new GridPlane(device, this.renderHelper.renderCache);
 
@@ -363,6 +364,12 @@ export class Explorer implements SceneGfx {
             this.forceCentered = forceCenteredCheckbox.checked;
         };
         panel.contents.appendChild(forceCenteredCheckbox.elem);
+
+        const gridVisibleCheckbox = new Checkbox('Grid Visible', this.gridVisible);
+        gridVisibleCheckbox.onchanged = () => {
+            this.gridVisible = gridVisibleCheckbox.checked;
+        };
+        panel.contents.appendChild(gridVisibleCheckbox.elem);
     }
 
     private setUIToCurrent(): void {
@@ -374,7 +381,7 @@ export class Explorer implements SceneGfx {
 
     private createEmitter(effectIndex = this.currentEffectIndex): void {
         const resourceId = this.jpac.effects[effectIndex].resourceId;
-        const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.getCache(), resourceId);
+        const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.renderCache, resourceId);
         newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? Pass.INDIRECT : Pass.MAIN;
         this.emitters.push(newEmitter);
     }
@@ -406,7 +413,8 @@ export class Explorer implements SceneGfx {
         const baseTemplate = this.renderHelper.pushTemplateRenderInst();
         baseTemplate.filterKey = Pass.MAIN;
 
-        this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.gridVisible)
+            this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.loopEmitters) {
             for (let i = this.emitters.length - 1; i >= 0; i--) {

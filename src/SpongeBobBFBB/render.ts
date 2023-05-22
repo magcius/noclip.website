@@ -5,7 +5,7 @@ import * as rw from 'librw';
 import * as UI from "../ui";
 import * as Viewer from '../viewer';
 import * as Assets from './assets';
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { MeshFragData, Texture, rwTexture } from '../GrandTheftAuto3/render';
 import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNewFromRGBA, Color, colorCopy, TransparentBlack } from '../Color';
@@ -80,18 +80,18 @@ export class TextureData {
 
     constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
 
-    public setup(device: GfxDevice) {
+    public setup(cache: GfxRenderCache) {
         if (this.isSetup)
             return;
 
+        const device = cache.device;
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
-
         device.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             magFilter: this.filter,
             minFilter: this.filter,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 1000,
             wrapS: this.wrapS,
@@ -114,8 +114,6 @@ export class TextureData {
 
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
         
         this.isSetup = false;
     }
@@ -522,7 +520,8 @@ export class FragRenderer extends BaseRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private program: DeviceProgram;
     private gfxProgram: GfxProgram;
@@ -585,10 +584,9 @@ export class FragRenderer extends BaseRenderer {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: attrLen * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.inputLayout = cache.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors, vertexBufferDescriptors });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         this.megaStateFlags = {
             cullMode: GfxCullMode.None,
@@ -667,7 +665,7 @@ export class FragRenderer extends BaseRenderer {
 
     public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
 
@@ -707,8 +705,6 @@ export class FragRenderer extends BaseRenderer {
         super.destroy(device);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
         if (this.frag.textureData !== undefined)
             this.frag.textureData.destroy(device);
     }
@@ -727,7 +723,7 @@ export class MeshRenderer extends BaseRenderer {
             const fragDefines = Object.assign({}, defines);
 
             if (frag.textureData) {
-                frag.textureData.setup(device);
+                frag.textureData.setup(cache);
                 fragDefines.USE_TEXTURE = '1';
             }
 

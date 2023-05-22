@@ -1,10 +1,10 @@
 
 import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage, GfxComputeProgramDescriptor, GfxComputePipelineDescriptor, GfxComputePass } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
+import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil';
-import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
+import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -65,16 +65,11 @@ interface GfxBindingsP_GL extends GfxBindings {
 interface GfxInputLayoutP_GL extends GfxInputLayout {
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
+    vertexBufferFormats: ReturnType<typeof translateVertexFormat>[];
     indexBufferFormat: GfxFormat | null;
-}
-
-interface GfxInputStateP_GL extends GfxInputState {
-    vao: WebGLVertexArrayObject;
-    indexBufferByteOffset: number | null;
     indexBufferType: GLenum | null;
     indexBufferCompByteSize: number | null;
-    inputLayout: GfxInputLayoutP_GL;
-    vertexBuffers: (GfxVertexBufferDescriptor | null)[];
+    vao: WebGLVertexArrayObject;
 }
 
 interface GfxBindingLayoutSamplerDescriptorP_GL {
@@ -456,7 +451,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
     private _currentSampleCount: number = -1;
     private _currentPipeline!: GfxRenderPipelineP_GL;
-    private _currentInputState!: GfxInputStateP_GL;
+    private _currentIndexBufferByteOffset: number | null = null;
     private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
@@ -483,6 +478,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _fallbackTexture2DArray: WebGLTexture;
     private _fallbackTexture3D: WebGLTexture;
     private _fallbackTextureCube: WebGLTexture;
+    private _fallbackVertexBuffer: GfxBuffer;
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGL2';
@@ -537,6 +533,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._fallbackTexture2DArray = this.createFallbackTexture(GfxTextureDimension.n2DArray, GfxSamplerFormatKind.Float);
         this._fallbackTexture3D = this.createFallbackTexture(GfxTextureDimension.n3D, GfxSamplerFormatKind.Float);
         this._fallbackTextureCube = this.createFallbackTexture(GfxTextureDimension.Cube, GfxSamplerFormatKind.Float);
+        this._fallbackVertexBuffer = this.createBuffer(1, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
 
         // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.Less;
@@ -728,7 +725,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return isInteger ? WebGL2RenderingContext.RGBA_INTEGER : WebGL2RenderingContext.RGBA;
         }
     }
-    
+
     private translateTextureType(fmt: GfxFormat): GLenum {
         const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
         switch (typeFlags) {
@@ -1033,21 +1030,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         const { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat } = inputLayoutDescriptor;
         assert(indexBufferFormat === GfxFormat.U16_R || indexBufferFormat === GfxFormat.U32_R || indexBufferFormat === null);
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(inputLayout);
-        return inputLayout;
-    }
-
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBufferBinding: GfxIndexBufferDescriptor | null): GfxInputState {
-        const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
+        const indexBufferType = indexBufferFormat !== null ? translateIndexFormat(indexBufferFormat) : null;
+        const indexBufferCompByteSize = indexBufferFormat !== null ? getFormatCompByteSize(indexBufferFormat) : null;
 
         const gl = this.gl;
         const vao = this.ensureResourceExists(gl.createVertexArray());
         gl.bindVertexArray(vao);
 
-        for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-            const attr = inputLayout.vertexAttributeDescriptors[i];
+        gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(this._fallbackVertexBuffer));
+
+        const vertexBufferFormats = [];
+        for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
+            const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
 
             if (isFormatSizedInteger(attr.format)) {
                 // See https://groups.google.com/d/msg/angleproject/yQb5DaCzcWg/Ova0E3wcAQAJ for more info.
@@ -1055,19 +1049,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 // debugger;
             }
 
-            const { size, type, normalized } = translateVertexFormat(attr.format);
-            const vertexBuffer = vertexBuffers[attr.bufferIndex];
-            if (vertexBuffer === null)
-                continue;
+            const inputLayoutBuffer = assertExists(inputLayoutDescriptor.vertexBufferDescriptors[attr.bufferIndex]);
 
-            const inputLayoutBuffer = assertExists(inputLayout.vertexBufferDescriptors[attr.bufferIndex]);
+            const format = translateVertexFormat(attr.format);
+            vertexBufferFormats.push(format);
 
-            const buffer = vertexBuffer.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.Vertex);
-            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
-
-            const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
-            gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
+            gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, 0, 0);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PerInstance) {
                 gl.vertexAttribDivisor(attr.location, 1);
@@ -1076,24 +1063,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.enableVertexAttribArray(attr.location);
         }
 
-        let indexBufferType: GLenum | null = null;
-        let indexBufferCompByteSize: number | null = null;
-        let indexBufferByteOffset: number | null = null;
-        if (indexBufferBinding !== null) {
-            const buffer = indexBufferBinding.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.Index);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBufferBinding.buffer));
-            indexBufferType = translateIndexFormat(assertExists(inputLayout.indexBufferFormat));
-            indexBufferCompByteSize = getFormatCompByteSize(inputLayout.indexBufferFormat!);
-            indexBufferByteOffset = indexBufferBinding.byteOffset;
-        }
-
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(), vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout, vertexBuffers };
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, vao, vertexBufferFormats, indexBufferFormat, indexBufferType, indexBufferCompByteSize };
         if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(inputState);
-        return inputState;
+            this._resourceCreationTracker.trackResourceCreated(inputLayout);
+
+        return inputLayout;
     }
 
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
@@ -1194,17 +1170,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public destroyInputLayout(o: GfxInputLayout): void {
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceDestroyed(o);
-    }
-
-    public destroyInputState(o: GfxInputState): void {
-        const inputState = o as GfxInputStateP_GL;
-        if (this._currentBoundVAO === inputState.vao) {
+        const inputLayout = o as GfxInputLayoutP_GL;
+        if (this._currentBoundVAO === inputLayout.vao) {
             this.gl.bindVertexArray(null);
             this._currentBoundVAO = null;
         }
-        this.gl.deleteVertexArray(inputState.vao);
+        this.gl.deleteVertexArray(inputLayout.vao);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1291,11 +1262,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._currentMegaState.attachmentsState[0].channelWriteMask = GfxChannelWriteMask.Alpha;
         }
 
-        // TODO(jstpierre): gl.clearBufferfv seems to have an issue in Chrome / ANGLE which causes a nasty visual tear.
-        // gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
-
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
     }
 
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
@@ -1350,7 +1317,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
-       
+
         const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
         const isCompressed = this.isTextureFormatCompressed(pixelFormat);
         const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
@@ -1590,8 +1557,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const { gl_renderbuffer } = o as GfxRenderTargetP_GL;
             if (gl_renderbuffer !== null)
                 assignPlatformName(gl_renderbuffer, name);
-        } else if (o._T === _T.InputState) {
-            assignPlatformName((o as GfxInputStateP_GL).vao, name);
+        } else if (o._T === _T.InputLayout) {
+            assignPlatformName((o as GfxInputLayoutP_GL).vao, name);
         }
     }
 
@@ -1789,12 +1756,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
         for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++) {
-            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
-            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
+            const attachment = this._currentColorAttachments[i];
+            if (!attachment)
+                continue;
+            else if (attachment.gl_renderbuffer !== null)
+                gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
+            else if (attachment.gfxTexture !== null)
+                gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
+            this._currentColorAttachments[i] = null;
         }
         this._currentColorAttachments.length = numColorAttachments;
-        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+
+        for (let i = this._currentMegaState.attachmentsState.length; i < numColorAttachments; i++)
+            this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
     private _setRenderPassParametersColor(i: number, colorAttachment: GfxRenderTargetP_GL | null, attachmentLevel: number, colorResolveTo: GfxTextureP_GL | null, resolveToLevel: number): void {
@@ -1980,9 +1956,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.scissor(x, y, w, h);
     }
 
-    private _setAttachmentStateIndexed(i: number, currentAttachmentState: GfxAttachmentState, newAttachmentState: GfxAttachmentState): void {
+    private _setAttachmentStateIndexed(i: number, newAttachmentState: GfxAttachmentState): void {
         const gl = this.gl;
         const dbi = this._OES_draw_buffers_indexed!;
+
+        const currentAttachmentState = this._currentMegaState.attachmentsState[i];
 
         if (currentAttachmentState.channelWriteMask !== newAttachmentState.channelWriteMask) {
             dbi.colorMaskiOES(i,
@@ -1993,7 +1971,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             );
             currentAttachmentState.channelWriteMask = newAttachmentState.channelWriteMask;
         }
-    
+
         const blendModeChanged = (
             currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
             currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode
@@ -2004,14 +1982,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendDstFactor !== newAttachmentState.rgbBlendState.blendDstFactor ||
             currentAttachmentState.alphaBlendState.blendDstFactor !== newAttachmentState.alphaBlendState.blendDstFactor
         );
-    
+
+        const blendDisabled = isBlendStateNone(newAttachmentState.rgbBlendState) && isBlendStateNone(newAttachmentState.alphaBlendState);
         if (blendFuncChanged || blendModeChanged) {
             if (isBlendStateNone(currentAttachmentState.rgbBlendState) && isBlendStateNone(currentAttachmentState.alphaBlendState))
-                dbi.enableiOES(i, gl.BLEND);
-            else if (isBlendStateNone(newAttachmentState.rgbBlendState) && isBlendStateNone(newAttachmentState.alphaBlendState))
-                dbi.disableiOES(i, gl.BLEND);
+                dbi.enableiOES(gl.BLEND, i);
+            else if (blendDisabled)
+                dbi.disableiOES(gl.BLEND, i);
         }
-    
+
         if (blendModeChanged) {
             dbi.blendEquationSeparateiOES(i,
                 newAttachmentState.rgbBlendState.blendMode,
@@ -2020,7 +1999,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
         }
-    
+
         if (blendFuncChanged) {
             dbi.blendFuncSeparateiOES(i,
                 newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
@@ -2033,8 +2012,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _setAttachmentState(currentAttachmentState: GfxAttachmentState, newAttachmentState: GfxAttachmentState): void {
+    private _setAttachmentState(newAttachmentState: GfxAttachmentState): void {
         const gl = this.gl;
+
+        const currentAttachmentState = this._currentMegaState.attachmentsState[0];
 
         if (currentAttachmentState.channelWriteMask !== newAttachmentState.channelWriteMask) {
             gl.colorMask(
@@ -2045,7 +2026,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             );
             currentAttachmentState.channelWriteMask = newAttachmentState.channelWriteMask;
         }
-    
+
         const blendModeChanged = (
             currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
             currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode
@@ -2072,7 +2053,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
             currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
         }
-    
+
         if (blendFuncChanged) {
             gl.blendFuncSeparate(
                 newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
@@ -2096,11 +2077,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const currentMegaState = this._currentMegaState;
 
         if (this._OES_draw_buffers_indexed !== null) {
-            for (let i = 0; i < newMegaState.attachmentsState.length; i++)
-                this._setAttachmentStateIndexed(i, currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+            assert(newMegaState.attachmentsState.length === 1 || newMegaState.attachmentsState.length >= this._currentColorAttachments.length);
+            for (let i = 0; i < this._currentColorAttachments.length; i++) {
+                if (this._currentColorAttachments[i] === null)
+                    continue;
+                const newAttachmentState = newMegaState.attachmentsState.length === 1 ? newMegaState.attachmentsState[0] : newMegaState.attachmentsState[i];
+                this._setAttachmentStateIndexed(i, newAttachmentState);
+            }
         } else {
             assert(newMegaState.attachmentsState.length === 1);
-            this._setAttachmentState(currentMegaState.attachmentsState[0], newMegaState.attachmentsState[0]);
+            this._setAttachmentState(newMegaState.attachmentsState[0]);
         }
 
         if (!gfxColorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
@@ -2140,7 +2126,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.enable(gl.CULL_FACE);
             else if (newMegaState.cullMode === GfxCullMode.None)
                 gl.disable(gl.CULL_FACE);
-    
+
             if (newMegaState.cullMode === GfxCullMode.Back)
                 gl.cullFace(gl.BACK);
             else if (newMegaState.cullMode === GfxCullMode.Front)
@@ -2154,7 +2140,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.frontFace(newMegaState.frontFace);
             currentMegaState.frontFace = newMegaState.frontFace;
         }
-    
+
         if (currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
             if (newMegaState.polygonOffset) {
                 gl.polygonOffset(1, 1);
@@ -2216,15 +2202,44 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public setInputState(inputState_: GfxInputState | null): void {
-        const inputState = inputState_ as GfxInputStateP_GL;
-        this._currentInputState = inputState;
-        if (this._currentInputState !== null) {
-            assert(this._currentPipeline.inputLayout === this._currentInputState.inputLayout);
-            this._setVAO(this._currentInputState.vao);
+    public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        if (inputLayout_ !== null) {
+            assert(this._currentPipeline.inputLayout === inputLayout_);
+            const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
+
+            this._setVAO(inputLayout.vao);
+
+            const gl = this.gl;
+            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
+                const attr = inputLayout.vertexAttributeDescriptors[i];
+
+                const vertexBuffer = vertexBuffers![attr.bufferIndex];
+                if (vertexBuffer === null)
+                    continue;
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
+
+                const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
+                const format = inputLayout.vertexBufferFormats[i];
+
+                const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex]!;
+                gl.vertexAttribPointer(attr.location, format.size, format.type, format.normalized, inputLayoutBuffer.byteStride, bufferOffset);
+            }
+
+            assert((indexBuffer !== null) === (inputLayout.indexBufferFormat !== null));
+            if (indexBuffer !== null) {
+                const buffer = indexBuffer.buffer as GfxBufferP_GL;
+                assert(buffer.usage === GfxBufferUsage.Index);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(buffer));
+                this._currentIndexBufferByteOffset = indexBuffer.byteOffset;
+            } else {
+                this._currentIndexBufferByteOffset = null;
+            }
         } else {
             assert(this._currentPipeline.inputLayout === null);
+            assert(indexBuffer === null);
             this._setVAO(null);
+            this._currentIndexBufferByteOffset = 0;
         }
     }
 
@@ -2245,20 +2260,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
-        const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
-        gl.drawElements(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset);
+        const pipeline = this._currentPipeline, inputLayout = assertExists(pipeline.inputLayout);
+        const byteOffset = assertExists(this._currentIndexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        gl.drawElements(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles(count / 3);
     }
 
     public drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
         const gl = this.gl;
-        const pipeline = this._currentPipeline;
-        const inputState = this._currentInputState;
-        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
-        gl.drawElementsInstanced(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset, instanceCount);
+        const pipeline = this._currentPipeline, inputLayout = assertExists(pipeline.inputLayout);
+        const byteOffset = assertExists(this._currentIndexBufferByteOffset) + firstIndex * inputLayout.indexBufferCompByteSize!;
+        gl.drawElementsInstanced(pipeline.drawMode, count, inputLayout.indexBufferType!, byteOffset, instanceCount);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
@@ -2284,24 +2297,26 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private endPass(): void {
         const gl = this.gl;
 
-        let didUnbindDraw = false;
-
+        const renderPassDescriptor = this._currentRenderPassDescriptor!;
         for (let i = 0; i < this._currentColorAttachments.length; i++) {
             const colorResolveFrom = this._currentColorAttachments[i];
 
             if (colorResolveFrom !== null) {
                 const colorResolveTo = this._currentColorResolveTos[i];
-                let didBindRead = false;
+                const colorStore = renderPassDescriptor.colorStore[i];
+
+                const boundReadFB = colorResolveTo !== null || !colorStore;
+                if (boundReadFB) {
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
+                    if (this._resolveColorAttachmentsChanged)
+                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
+                }
 
                 if (colorResolveTo !== null) {
                     assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
                     assert(colorResolveFrom.pixelFormat === colorResolveTo.pixelFormat);
 
                     this._setScissorEnabled(false);
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
-                    if (this._resolveColorAttachmentsChanged)
-                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
-                    didBindRead = true;
 
                     // Special case: Blitting to the on-screen.
                     if (colorResolveTo === this._scTexture) {
@@ -2313,21 +2328,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     }
 
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                    didUnbindDraw = true;
                 }
 
-                if (!this._currentRenderPassDescriptor!.colorStore[i]) {
-                    if (!didBindRead) {
-                        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
-                        if (this._resolveColorAttachmentsChanged)
-                            this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
-                    }
-
+                if (!colorStore)
                     gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
-                }
 
-                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+                if (boundReadFB)
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             }
         }
 
@@ -2336,47 +2343,37 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const depthStencilResolveFrom = this._currentDepthStencilAttachment;
         if (depthStencilResolveFrom !== null) {
             const depthStencilResolveTo = this._currentDepthStencilResolveTo;
-            let didBindRead = false;
+            const depthStencilStore = renderPassDescriptor.depthStencilStore;
+
+            const boundReadFB = depthStencilResolveTo !== null || !depthStencilStore;
+            if (boundReadFB) {
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
+                if (this._resolveDepthStencilAttachmentsChanged)
+                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
+            }
 
             if (depthStencilResolveTo !== null) {
                 assert(depthStencilResolveFrom.width === depthStencilResolveTo.width && depthStencilResolveFrom.height === depthStencilResolveTo.height);
 
                 this._setScissorEnabled(false);
 
-                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
                 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDepthStencilDrawFramebuffer);
-                if (this._resolveDepthStencilAttachmentsChanged) {
-                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
+                if (this._resolveDepthStencilAttachmentsChanged)
                     this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, depthStencilResolveTo);
-                }
-                didBindRead = true;
 
                 gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
-                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                didUnbindDraw = true;
             }
 
-            if (!this._currentRenderPassDescriptor!.depthStencilStore) {
-                if (!didBindRead) {
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
-                    if (this._resolveDepthStencilAttachmentsChanged)
-                        this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
-                    didBindRead = true;
-                }
-
+            if (!depthStencilStore)
                 gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, [gl.DEPTH_STENCIL_ATTACHMENT]);
-            }
 
-            if (didBindRead)
+            if (boundReadFB)
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
 
             this._resolveDepthStencilAttachmentsChanged = false;
         }
 
-        if (!didUnbindDraw) {
-            // If we did not unbind from a resolve, then we need to unbind our render pass draw FBO here.
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        }
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
     }
     //#endregion
 }

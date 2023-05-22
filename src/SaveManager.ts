@@ -2,7 +2,6 @@
 import * as defaultSaveStateData from './DefaultSaveStates.json';
 
 export type SettingCallback = (saveManager: SaveManager, key: string) => void;
-export type SaveStateCallback = (saveManager: SaveManager) => void;
 
 interface SaveStateMap {
     [k: string]: string;
@@ -22,7 +21,6 @@ interface SettingListener {
 
 export class SaveManager {
     private settingListeners: SettingListener[] = [];
-    private saveStateListeners: SaveStateCallback[] = [];
 
     constructor() {
         this.cleanOldKeys();
@@ -78,15 +76,6 @@ export class SaveManager {
         window.sessionStorage.setItem('CurrentSceneDescId', id);
     }
 
-    public addSaveStateListener(callback: SaveStateCallback): void {
-        this.saveStateListeners.push(callback);
-    }
-
-    private callSaveStateListeners(): void {
-        for (let i = 0; i < this.saveStateListeners.length; i++)
-            this.saveStateListeners[i](this);
-    }
- 
     public saveTemporaryState(key: string, serializedState: string): void {
         // Clean up old stuff.
         window.localStorage.removeItem(key);
@@ -95,12 +84,10 @@ export class SaveManager {
 
     public saveState(key: string, serializedState: string): void {
         window.localStorage.setItem(key, serializedState);
-        this.callSaveStateListeners();
     }
 
     public deleteState(key: string): void {
         window.localStorage.removeItem(key);
-        this.callSaveStateListeners();
     }
 
     public hasStateInLocation(key: string, location: SaveStateLocation): boolean {

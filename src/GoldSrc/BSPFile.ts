@@ -1,10 +1,11 @@
 
 import { ReadonlyVec4, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { AABB } from "../Geometry";
 import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT";
-import { assert, decodeString, readString } from "../util";
+import { assert, decodeString, ensureInList, readString } from "../util";
 
 const enum LumpType {
     ENTITIES = 0,
@@ -48,6 +49,12 @@ export interface SurfaceLightmapData {
     pagePosY: number;
 }
 
+export interface Model {
+    bbox: AABB;
+    headnode: number[];
+    surfaces: number[];
+}
+
 export interface Surface {
     texName: string;
     startIndex: number;
@@ -74,13 +81,14 @@ export class BSPFile {
     public version: number;
 
     private entitiesStr: string; // For debugging.
+    public models: Model[] = [];
     public entities: BSPEntity[] = [];
     public indexData: ArrayBuffer;
     public vertexData: ArrayBuffer;
     public surfaces: Surface[] = [];
     public extraTexData: ArrayBufferSlice[] = [];
     public lightmapPackerPage = new LightmapPackerPage(2048, 2048);
-
+    
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
         this.version = view.getUint32(0x00, true);
@@ -171,6 +179,36 @@ export class BSPFile {
 
         faces.sort((a, b) => a.texName.localeCompare(b.texName));
 
+        const models = getLumpData(LumpType.MODELS).createDataView();
+        const faceToModelIdx: number[] = [];
+        for (let idx = 0x00; idx < models.byteLength; idx += 0x40) {
+            const minX = models.getFloat32(idx + 0x00, true);
+            const minY = models.getFloat32(idx + 0x04, true);
+            const minZ = models.getFloat32(idx + 0x08, true);
+            const maxX = models.getFloat32(idx + 0x0C, true);
+            const maxY = models.getFloat32(idx + 0x10, true);
+            const maxZ = models.getFloat32(idx + 0x14, true);
+            const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+
+            const originX = models.getFloat32(idx + 0x18, true);
+            const originY = models.getFloat32(idx + 0x1C, true);
+            const originZ = models.getFloat32(idx + 0x20, true);
+
+            const headnode0 = models.getUint32(idx + 0x24, true);
+            const headnode1 = models.getUint32(idx + 0x28, true);
+            const headnode2 = models.getUint32(idx + 0x2C, true);
+            const headnode3 = models.getUint32(idx + 0x30, true);
+            const headnode: number[] = [headnode0, headnode1, headnode2, headnode3];
+            const visleafs = models.getUint32(idx + 0x34, true);
+            const firstface = models.getUint32(idx + 0x38, true);
+            const numfaces = models.getUint32(idx + 0x3C, true);
+
+            const modelIndex = this.models.length;
+            for (let i = firstface; i < firstface + numfaces; i++)
+                faceToModelIdx[i] = modelIndex;
+            this.models.push({ bbox, headnode, surfaces: [] });
+        }
+
         const vertexData = new Float32Array(numVertexData * 7);
         let dstOffsVertex = 0;
 
@@ -206,10 +244,11 @@ export class BSPFile {
 
                 if (face.texName !== prevFace.texName)
                     canMerge = false;
+                else if (faceToModelIdx[prevFace.index] !== faceToModelIdx[face.index])
+                    canMerge = false;
 
                 if (canMerge)
                     mergeSurface = this.surfaces[this.surfaces.length - 1];
-                // TODO(jstpierre): models
             }
 
             const m = texinfoa[face.texinfo].textureMapping;
@@ -223,8 +262,8 @@ export class BSPFile {
                 const py = vertexes[vertIndex * 3 + 1];
                 const pz = vertexes[vertIndex * 3 + 2];
 
-                const texCoordS = px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3];
-                const texCoordT = px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3];
+                const texCoordS = Math.fround(px*m.s[0] + py*m.s[1] + pz*m.s[2] + m.s[3]);
+                const texCoordT = Math.fround(px*m.t[0] + py*m.t[1] + pz*m.t[2] + m.t[3]);
 
                 vertexData[dstOffsVertex++] = px;
                 vertexData[dstOffsVertex++] = py;
@@ -243,8 +282,9 @@ export class BSPFile {
                 maxTexCoordT = Math.max(maxTexCoordT, texCoordT);
             }
 
-            const surfaceW = Math.ceil((maxTexCoordS / 16)) - Math.floor(minTexCoordS / 16) + 1;
-            const surfaceH = Math.ceil((maxTexCoordT / 16)) - Math.floor(minTexCoordT / 16) + 1;
+            const lightmapScale = 1 / 16;
+            const surfaceW = Math.ceil((maxTexCoordS * lightmapScale)) - Math.floor(minTexCoordS * lightmapScale) + 1;
+            const surfaceH = Math.ceil((maxTexCoordT * lightmapScale)) - Math.floor(minTexCoordT * lightmapScale) + 1;
 
             const lightmapSamplesSize = (surfaceW * surfaceH * styles.length * 3);
             const samples = lightofs !== 0xFFFFFFFF ? lighting.subarray(lightofs, lightmapSamplesSize).createTypedArray(Uint8Array) : null;
@@ -258,16 +298,16 @@ export class BSPFile {
             assert(this.lightmapPackerPage.allocate(lightmapData));
 
             // Fill in UV
-            for (let i = 0; i < numedges; i++) {
-                let offs = dstOffsVertexBase + (i * 7) + 3;
+            for (let j = 0; j < numedges; j++) {
+                let offs = dstOffsVertexBase + (j * 7) + 3;
 
                 const texCoordS = vertexData[offs++];
                 const texCoordT = vertexData[offs++];
 
-                const lightmapCoordS = lightmapData.pagePosX + (texCoordS - Math.floor(minTexCoordS)) / 16;
-                const lightmapCoordT = lightmapData.pagePosY + (texCoordT - Math.floor(minTexCoordT)) / 16;
-                vertexData[offs++] = lightmapCoordS;
-                vertexData[offs++] = lightmapCoordT;
+                const lightmapCoordS = (texCoordS * lightmapScale) - Math.floor(minTexCoordS * lightmapScale) + 0.5;
+                const lightmapCoordT = (texCoordT * lightmapScale) - Math.floor(minTexCoordT * lightmapScale) + 0.5;
+                vertexData[offs++] = lightmapData.pagePosX + lightmapCoordS;
+                vertexData[offs++] = lightmapData.pagePosY + lightmapCoordT;
             }
 
             const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, numedges);
@@ -279,6 +319,11 @@ export class BSPFile {
                 surface = { texName: face.texName, startIndex: dstOffsIndex, indexCount: 0, lightmapData: [] };
                 this.surfaces.push(surface);
             }
+
+            const surfaceIndex = this.surfaces.length - 1;
+
+            const model = this.models[faceToModelIdx[face.index]];
+            ensureInList(model.surfaces, surfaceIndex);
 
             surface.lightmapData.push(lightmapData);
             surface.indexCount += indexCount;

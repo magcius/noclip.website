@@ -1,5 +1,5 @@
 
-// Kirby's Return to Dreamland
+// Kirby's Return to Dream Land
 
 import * as Viewer from '../viewer';
 import * as BRRES from './brres';
@@ -34,7 +34,7 @@ class RTDLSceneDesc implements Viewer.SceneDesc {
 
 // Stages added/named/organized by Matthew @TanukiMatthew <3
 const id = 'rtdl';
-const name = "Kirby's Return to Dreamland";
+const name = "Kirby's Return to Dream Land";
 const sceneDescs = [
     "World Maps",
     new RTDLSceneDesc('popstarBg', "Planet Popstar"),

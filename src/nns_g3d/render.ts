@@ -40,15 +40,16 @@ class MaterialInstance {
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
 
+        const device = cache.device;
         const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         if (texture !== null) {
-            this.gfxSampler = device.createSampler({
+            this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: parseTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -157,8 +158,6 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -178,10 +177,10 @@ const scratchMat4 = mat4.create();
 class ShapeInstance {
     private vertexData: VertexData;
 
-    constructor(device: GfxDevice, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
+    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
         const baseCtx = this.materialInstance.baseCtx;
         const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
-        this.vertexData = new VertexData(device, nitroVertexData);
+        this.vertexData = new VertexData(cache, nitroVertexData);
     }
 
     private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
@@ -201,7 +200,7 @@ class ShapeInstance {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
+        template.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
         const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
@@ -249,7 +248,7 @@ export class MDL0Renderer {
     public viewerTextures: Viewer.Texture[] = [];
     public bbox: AABB | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public model: MDL0Model, private tex0: TEX0) {
+    constructor(cache: GfxRenderCache, public model: MDL0Model, private tex0: TEX0) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -258,7 +257,7 @@ export class MDL0Renderer {
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
 
         for (let i = 0; i < this.model.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(device, this.tex0, this.model, this.model.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, this.model, this.model.materials[i]));
 
         for (let i = 0; i < this.model.nodes.length; i++)
             this.nodes.push(new Node(this.model.nodes[i]));
@@ -267,7 +266,7 @@ export class MDL0Renderer {
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
-        this.execSBC(device);
+        this.execSBC(cache);
     }
 
     public bindSRT0(srt0: SRT0, animationController: AnimationController = this.animationController): void {
@@ -282,7 +281,7 @@ export class MDL0Renderer {
         }
     }
 
-    private execSBC(device: GfxDevice) {
+    private execSBC(cache: GfxRenderCache) {
         const model = this.model;
         const view = model.sbcBuffer.createDataView();
 
@@ -313,7 +312,7 @@ export class MDL0Renderer {
             } else if (cmd === Op.SHP) {
                 const shpIdx = view.getUint8(idx++);
                 const shape = model.shapes[shpIdx];
-                this.shapeInstances.push(new ShapeInstance(device, assertExists(currentMaterial), assertExists(currentNode), shape, this.model.posScale));
+                this.shapeInstances.push(new ShapeInstance(cache, assertExists(currentMaterial), assertExists(currentNode), shape, this.model.posScale));
             } else if (cmd === Op.NODEDESC) {
                 const idxNode = view.getUint8(idx++);
                 const idxNodeParent = view.getUint8(idx++);

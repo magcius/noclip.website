@@ -1,5 +1,5 @@
 
-import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxInputLayout, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeTextureFromXNA_Texture2D } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
@@ -80,7 +80,8 @@ export class BackgroundPlaneData {
 
 export class BackgroundPlaneStaticData {
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public indexCount = 6;
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -113,14 +114,14 @@ export class BackgroundPlaneStaticData {
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }

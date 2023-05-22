@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 
-import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
@@ -25,7 +25,7 @@ import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Pako from 'pako';
+import * as Deflate from '../Common/Compression/Deflate';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
@@ -44,7 +44,7 @@ function translateSampler(cache: GfxRenderCache, texture: Texture): GfxSampler {
         wrapT: translateCM(texture.tile.cmt),
         minFilter: GfxTexFilterMode.Point,
         magFilter: GfxTexFilterMode.Point,
-        mipFilter: GfxMipFilterMode.NoMip,
+        mipFilter: GfxMipFilterMode.Nearest,
         minLOD: 0, maxLOD: 0,
     });
 }
@@ -228,7 +228,8 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
 export class RenderData {
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
@@ -259,22 +260,19 @@ export class RenderData {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -402,7 +400,7 @@ export class RootMeshRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(renderData.inputLayout, renderData.inputState);
+        template.setVertexInput(renderData.inputLayout, renderData.vertexBufferDescriptors, renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.sortKey = this.sortKeyBase;
@@ -653,8 +651,8 @@ export class Map {
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const view = buffer.createDataView();
     assert(view.getUint32(0x00) === 0x1F8B0800);
-    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, 0x0A));
-    return new ArrayBufferSlice(decompressed.buffer);
+    const decompressed = Deflate.decompress_raw(buffer.slice(0x0A));
+    return decompressed;
 }
 
 class ROMData {
@@ -691,7 +689,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
-        const cache = sceneRenderer.renderHelper.getCache();
+        const cache = sceneRenderer.renderHelper.renderCache;
         for (let i = 0; i < map.displayLists.length; i++) {
             const dl = map.displayLists[i];
 

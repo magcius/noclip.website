@@ -30,6 +30,12 @@ export const enum TexFilter {
     LIN_MIP_LIN = 5, /*!< Trilinear filtering */
 }
 
+export const enum Anisotropy {
+    _1 = 0x00,
+    _2 = 0x01,
+    _4 = 0x02,
+}
+
 export const enum Command {
     NOOP                = 0x00,
 

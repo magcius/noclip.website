@@ -1,6 +1,6 @@
 
 import * as Ninja from "./Ninja";
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -109,7 +109,8 @@ export class NjsMeshData {
     private indexBuffer: GfxBuffer;
 
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public indexCount: number;
 
@@ -118,8 +119,7 @@ export class NjsMeshData {
         const indexData = this.mesh.indexData;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
-        const buffers: GfxVertexBufferDescriptor[] = []
+        const vertexLayoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
 
         if (vertexData.positions.length > 0) {
             const values = vertexData.positions.reduce((accumulator, currentValue) => accumulator.concat(...currentValue), [] as number[]);
@@ -128,8 +128,8 @@ export class NjsMeshData {
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Position, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
-            vertexBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            buffers.push({ buffer, byteOffset: 0, });
+            vertexLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
         }
 
         if (vertexData.normals.length > 0) {
@@ -139,8 +139,8 @@ export class NjsMeshData {
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Normal, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGB });
-            vertexBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
-            buffers.push({ buffer, byteOffset: 0, });
+            vertexLayoutBufferDescriptors.push({ byteStride: 0x0C, frequency: GfxVertexBufferFrequency.PerVertex, });
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
         }
 
         if (vertexData.uvs.length > 0) {
@@ -150,8 +150,8 @@ export class NjsMeshData {
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_TexCoord, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RG });
-            vertexBufferDescriptors.push({ byteStride: 0x08, frequency: GfxVertexBufferFrequency.PerVertex, });
-            buffers.push({ buffer, byteOffset: 0, });
+            vertexLayoutBufferDescriptors.push({ byteStride: 0x08, frequency: GfxVertexBufferFrequency.PerVertex, });
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
         }
 
         if (vertexData.diffuse.length > 0) {
@@ -161,8 +161,8 @@ export class NjsMeshData {
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Diffuse, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
-            vertexBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            buffers.push({ buffer, byteOffset: 0, });
+            vertexLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
         }
 
         if (vertexData.specular.length > 0) {
@@ -172,18 +172,17 @@ export class NjsMeshData {
 
             this.vertexBuffers.push(buffer);
             vertexAttributeDescriptors.push({ location: JSRProgram.a_Specular, bufferIndex, bufferByteOffset: 0, format: GfxFormat.F32_RGBA });
-            vertexBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
-            buffers.push({ buffer, byteOffset: 0, });
+            vertexLayoutBufferDescriptors.push({ byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, });
+            this.vertexBufferDescriptors.push({ buffer, byteOffset: 0, });
         }
 
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, Uint16Array.from(indexData).buffer);
-        const indexBufferFormat = GfxFormat.U16_R;
-        const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         this.indexCount = indexData.length;
 
-        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDescriptor);
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: vertexLayoutBufferDescriptors, indexBufferFormat });
     }
 
     public destroy(device: GfxDevice): void {
@@ -191,7 +190,6 @@ export class NjsMeshData {
             device.destroyBuffer(this.vertexBuffers[i]);
 
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -344,7 +342,7 @@ export class NjsMeshInstance {
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
+        template.setVertexInput(this.data.inputLayout, this.data.vertexBufferDescriptors, this.data.indexBufferDescriptor);
         template.sortKey = makeSortKey(this.layer);
         /*if (this.depthSort) {
             transformVec3Mat4w1(posScrath, scratchMatrix, this.model.center);
@@ -530,7 +528,7 @@ export class NjsActionInstance {
 function translateTextureFilter(filter: Ninja.FILTER_MODE): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
         case Ninja.FILTER_MODE.POINT:
-            return [GfxTexFilterMode.Point, GfxMipFilterMode.NoMip];
+            return [GfxTexFilterMode.Point, GfxMipFilterMode.Linear];
         case Ninja.FILTER_MODE.BILINEAR:
             return [GfxTexFilterMode.Bilinear, GfxMipFilterMode.Linear];
         case Ninja.FILTER_MODE.TRILINEAR:

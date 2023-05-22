@@ -22,7 +22,7 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
         _ => Err("unknown shader stage")
     }.unwrap();
 
-    let mut parser = naga::front::glsl::Parser::default();
+    let mut parser = naga::front::glsl::Frontend::default();
     let module = match parser.parse(&naga::front::glsl::Options {
         stage: naga_stage,
         defines: Default::default(),

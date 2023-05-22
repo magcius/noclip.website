@@ -472,6 +472,7 @@ export const enum HSD_RenderModeFlags {
 }
 
 export const enum HSD_PEFlags {
+    NONE           = 0,
     ENABLE_COMPARE = 1 << 4,
     ENABLE_ZUPDATE = 1 << 5,
 }

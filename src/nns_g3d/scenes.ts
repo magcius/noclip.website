@@ -23,7 +23,7 @@ class BasicNSBMDRenderer implements SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
@@ -82,7 +82,7 @@ export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: Arr
     const bmd = parseNSBMD(buffer);
     for (let i = 0; i < bmd.models.length; i++) {
         const mdl0 = bmd.models[0];
-        const mdl0Renderer = new MDL0Renderer(device, renderer.getCache(), mdl0, assertExists(bmd.tex0));
+        const mdl0Renderer = new MDL0Renderer(renderer.getCache(), mdl0, assertExists(bmd.tex0));
         for (let j = 0; j < mdl0Renderer.viewerTextures.length; j++)
             textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[j]);
         renderer.mdl0Renderers.push(mdl0Renderer);

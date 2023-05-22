@@ -28,7 +28,7 @@ export class DkrLevelSegment {
         
         this.triangleBatches = new Array(numberOfTriangleBatches);
 
-        const cache = renderHelper.getCache();
+        const cache = renderHelper.renderCache;
         for (let i = 0; i < numberOfTriangleBatches; i++) {
             const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
             const tiNext = ti + SIZE_OF_BATCH_INFO;

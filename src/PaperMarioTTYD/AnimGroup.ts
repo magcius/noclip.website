@@ -5,7 +5,7 @@ import { GX_VtxDesc, GX_VtxAttrFmt, LoadedVertexLayout, compileVtxLoader, Loaded
 import * as GX from "../gx/gx_enum";
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import * as TPL from "./tpl";
 import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";

@@ -49,7 +49,11 @@ export function getJMapInfoGroupId(infoIter: JMapInfoIter): number | null {
 
 type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
-function makeTable(bcsv: BCSV.Bcsv): HTMLTableElement {
+// Fix build in tsc-node.
+declare var document: any;
+declare var window: any;
+
+function makeTable(bcsv: BCSV.Bcsv) {
     const table = document.createElement('table');
     table.border = '1';
 

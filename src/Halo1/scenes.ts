@@ -9,7 +9,7 @@ import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLib
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
@@ -17,6 +17,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
 import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
 import { DeviceProgram } from '../Program';
+import { rust } from '../rustlib';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';
 import { assert, nArray } from '../util';
@@ -37,20 +38,6 @@ const noclipSpaceFromHaloSpace = mat4.fromValues(
 );
 
 const scratchVec3a = vec3.create();
-
-let _wasm: typeof import('../../rust/pkg/index') | null = null;
-
-async function loadWasm() {
-    if (_wasm === null) {
-        _wasm = await import('../../rust/pkg/index');
-    }
-    return _wasm;
-}
-
-export function wasm() {
-    assert(_wasm !== null);
-    return _wasm!;
-}
 
 const enum SortKey {
     Translucent = GfxRendererLayer.TRANSLUCENT + 2,
@@ -195,7 +182,7 @@ vec2 uv1 = Mul(u_MapTransform1, vec4(v_UV, 1.0, 1.0));
 vec2 uv2 = Mul(u_MapTransform2, vec4(v_UV, 1.0, 1.0));
 vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
 `);
-        if (this.shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
+        if (this.shader.first_map_type === rust!.ShaderTransparentGenericMapType.Map2D) {
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
         } else {
             fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
@@ -216,110 +203,110 @@ vec4 AB, CD, ABCD;
 `);
 
         function genInputColor(input: ShaderInput, stage: number): string { // vec3
-            if (input === _wasm!.ShaderInput.Zero)
+            if (input === rust!.ShaderInput.Zero)
                 return `vec3(0.0)`;
-            else if (input === _wasm!.ShaderInput.One)
+            else if (input === rust!.ShaderInput.One)
                 return `vec3(1.0)`;
-            else if (input === _wasm!.ShaderInput.OneHalf)
+            else if (input === rust!.ShaderInput.OneHalf)
                 return `vec3(0.5)`;
-            else if (input === _wasm!.ShaderInput.NegativeOne)
+            else if (input === rust!.ShaderInput.NegativeOne)
                 return `vec3(-1.0)`;
-            else if (input === _wasm!.ShaderInput.NegativeOneHalf)
+            else if (input === rust!.ShaderInput.NegativeOneHalf)
                 return `vec3(-0.5)`;
-            else if (input === _wasm!.ShaderInput.Texture0Color)
+            else if (input === rust!.ShaderInput.Texture0Color)
                 return `t0.rgb`;
-            else if (input === _wasm!.ShaderInput.Texture1Color)
+            else if (input === rust!.ShaderInput.Texture1Color)
                 return `t1.rgb`;
-            else if (input === _wasm!.ShaderInput.Texture2Color)
+            else if (input === rust!.ShaderInput.Texture2Color)
                 return `t2.rgb`;
-            else if (input === _wasm!.ShaderInput.Texture3Color)
+            else if (input === rust!.ShaderInput.Texture3Color)
                 return `t3.rgb`;
-            else if (input === _wasm!.ShaderInput.VertexColor0Color)
+            else if (input === rust!.ShaderInput.VertexColor0Color)
                 return `v0.rgb`;
-            else if (input === _wasm!.ShaderInput.VertexColor1Color)
+            else if (input === rust!.ShaderInput.VertexColor1Color)
                 return `v1.rgb`;
-            else if (input === _wasm!.ShaderInput.Scratch0Color)
+            else if (input === rust!.ShaderInput.Scratch0Color)
                 return `r0.rgb`;
-            else if (input === _wasm!.ShaderInput.Scratch1Color)
+            else if (input === rust!.ShaderInput.Scratch1Color)
                 return `r1.rgb`;
-            else if (input === _wasm!.ShaderInput.Constant0Color)
+            else if (input === rust!.ShaderInput.Constant0Color)
                 return `u_Color0[${stage}].rgb`;
-            else if (input === _wasm!.ShaderInput.Constant1Color)
+            else if (input === rust!.ShaderInput.Constant1Color)
                 return `u_Color1[${stage}].rgb`;
-            else if (input === _wasm!.ShaderInput.Texture0Alpha)
+            else if (input === rust!.ShaderInput.Texture0Alpha)
                 return `t0.aaa`;
-            else if (input === _wasm!.ShaderInput.Texture1Alpha)
+            else if (input === rust!.ShaderInput.Texture1Alpha)
                 return `t1.aaa`;
-            else if (input === _wasm!.ShaderInput.Texture2Alpha)
+            else if (input === rust!.ShaderInput.Texture2Alpha)
                 return `t2.aaa`;
-            else if (input === _wasm!.ShaderInput.Texture3Alpha)
+            else if (input === rust!.ShaderInput.Texture3Alpha)
                 return `t3.aaa`;
-            else if (input === _wasm!.ShaderInput.VertexColor0Alpha)
+            else if (input === rust!.ShaderInput.VertexColor0Alpha)
                 return `v0.aaa`;
-            else if (input === _wasm!.ShaderInput.VertexColor1Alpha)
+            else if (input === rust!.ShaderInput.VertexColor1Alpha)
                 return `v1.aaa`;
-            else if (input === _wasm!.ShaderInput.Scratch0Alpha)
+            else if (input === rust!.ShaderInput.Scratch0Alpha)
                 return `r0.aaa`;
-            else if (input === _wasm!.ShaderInput.Scratch1Alpha)
+            else if (input === rust!.ShaderInput.Scratch1Alpha)
                 return `r1.aaa`;
-            else if (input === _wasm!.ShaderInput.Constant0Alpha)
+            else if (input === rust!.ShaderInput.Constant0Alpha)
                 return `u_Color0[${stage}].aaa`;
-            else if (input === _wasm!.ShaderInput.Constant1Alpha)
+            else if (input === rust!.ShaderInput.Constant1Alpha)
                 return `u_Color1[${stage}].aaa`;
             else
                 throw "whoops";
         }
 
         function genInputAlpha(input: ShaderAlphaInput, stage: number): string { // float
-            if (input === _wasm!.ShaderAlphaInput.Zero)
+            if (input === rust!.ShaderAlphaInput.Zero)
                 return `0.0`;
-            else if (input === _wasm!.ShaderAlphaInput.One)
+            else if (input === rust!.ShaderAlphaInput.One)
                 return `1.0`;
-            else if (input === _wasm!.ShaderAlphaInput.OneHalf)
+            else if (input === rust!.ShaderAlphaInput.OneHalf)
                 return `0.5`;
-            else if (input === _wasm!.ShaderAlphaInput.NegativeOne)
+            else if (input === rust!.ShaderAlphaInput.NegativeOne)
                 return `-1.0`;
-            else if (input === _wasm!.ShaderAlphaInput.NegativeOneHalf)
+            else if (input === rust!.ShaderAlphaInput.NegativeOneHalf)
                 return `-0.5`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture0Alpha)
+            else if (input === rust!.ShaderAlphaInput.Texture0Alpha)
                 return `t0.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture1Alpha)
+            else if (input === rust!.ShaderAlphaInput.Texture1Alpha)
                 return `t1.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture2Alpha)
+            else if (input === rust!.ShaderAlphaInput.Texture2Alpha)
                 return `t2.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture3Alpha)
+            else if (input === rust!.ShaderAlphaInput.Texture3Alpha)
                 return `t3.a`;
-            else if (input === _wasm!.ShaderAlphaInput.VertexColor0Alpha)
+            else if (input === rust!.ShaderAlphaInput.VertexColor0Alpha)
                 return `v0.a`;
-            else if (input === _wasm!.ShaderAlphaInput.VertexColor1Alpha)
+            else if (input === rust!.ShaderAlphaInput.VertexColor1Alpha)
                 return `v1.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Scratch0Alpha)
+            else if (input === rust!.ShaderAlphaInput.Scratch0Alpha)
                 return `r0.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Scratch1Alpha)
+            else if (input === rust!.ShaderAlphaInput.Scratch1Alpha)
                 return `r1.a`;
-            else if (input === _wasm!.ShaderAlphaInput.Constant0Alpha)
+            else if (input === rust!.ShaderAlphaInput.Constant0Alpha)
                 return `u_Color0[${stage}].a`;
-            else if (input === _wasm!.ShaderAlphaInput.Constant1Alpha)
+            else if (input === rust!.ShaderAlphaInput.Constant1Alpha)
                 return `u_Color1[${stage}].a`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture0Blue)
+            else if (input === rust!.ShaderAlphaInput.Texture0Blue)
                 return `t0.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture1Blue)
+            else if (input === rust!.ShaderAlphaInput.Texture1Blue)
                 return `t1.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture2Blue)
+            else if (input === rust!.ShaderAlphaInput.Texture2Blue)
                 return `t2.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Texture3Blue)
+            else if (input === rust!.ShaderAlphaInput.Texture3Blue)
                 return `t3.b`;
-            else if (input === _wasm!.ShaderAlphaInput.VertexColor0Blue)
+            else if (input === rust!.ShaderAlphaInput.VertexColor0Blue)
                 return `v0.b`;
-            else if (input === _wasm!.ShaderAlphaInput.VertexColor1Blue)
+            else if (input === rust!.ShaderAlphaInput.VertexColor1Blue)
                 return `v1.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Scratch0Blue)
+            else if (input === rust!.ShaderAlphaInput.Scratch0Blue)
                 return `r0.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Scratch1Blue)
+            else if (input === rust!.ShaderAlphaInput.Scratch1Blue)
                 return `r1.b`;
-            else if (input === _wasm!.ShaderAlphaInput.Constant0Blue)
+            else if (input === rust!.ShaderAlphaInput.Constant0Blue)
                 return `u_Color0[${stage}].b`;
-            else if (input === _wasm!.ShaderAlphaInput.Constant1Blue)
+            else if (input === rust!.ShaderAlphaInput.Constant1Blue)
                 return `u_Color1[${stage}].b`;
             else
                 throw "whoops";
@@ -327,21 +314,21 @@ vec4 AB, CD, ABCD;
 
         function genMapping(input: string, mapping: ShaderMapping, color: boolean): string {
             const constructor = color ? `vec3` : ``;
-            if (mapping === _wasm!.ShaderMapping.UnsignedIdentity)
+            if (mapping === rust!.ShaderMapping.UnsignedIdentity)
                 return `max(${input}, ${constructor}(0.0))`;
-            else if (mapping === _wasm!.ShaderMapping.UnsignedInvert)
+            else if (mapping === rust!.ShaderMapping.UnsignedInvert)
                 return `${constructor}(1.0) - saturate(${input})`;
-            else if (mapping === _wasm!.ShaderMapping.ExpandNormal)
+            else if (mapping === rust!.ShaderMapping.ExpandNormal)
                 return `${constructor}(2.0) * max(${input}, ${constructor}(0.0)) - ${constructor}(1.0)`;
-            else if (mapping === _wasm!.ShaderMapping.ExpandNegate)
+            else if (mapping === rust!.ShaderMapping.ExpandNegate)
                 return `${constructor}(-2.0) * max(${input}, ${constructor}(0.0)) + ${constructor}(1.0)`;
-            else if (mapping === _wasm!.ShaderMapping.HalfbiasNormal)
+            else if (mapping === rust!.ShaderMapping.HalfbiasNormal)
                 return `max(${input}, ${constructor}(0.0)) - ${constructor}(0.5)`;
-            else if (mapping === _wasm!.ShaderMapping.HalfbiasNegate)
+            else if (mapping === rust!.ShaderMapping.HalfbiasNegate)
                 return `-max(${input}, ${constructor}(0.0)) + ${constructor}(0.5)`;
-            else if (mapping === _wasm!.ShaderMapping.SignedIdentity)
+            else if (mapping === rust!.ShaderMapping.SignedIdentity)
                 return `${input}`;
-            else if (mapping === _wasm!.ShaderMapping.SignedNegate)
+            else if (mapping === rust!.ShaderMapping.SignedNegate)
                 return `-${input}`;
             else
                 throw "whoops";
@@ -354,9 +341,9 @@ vec4 AB, CD, ABCD;
         }
 
         function genOutputFunction(func: ShaderOutputFunction, a: string, b: string): string {
-            if (func === _wasm!.ShaderOutputFunction.DotProduct)
+            if (func === rust!.ShaderOutputFunction.DotProduct)
                 return `dot(${a}, ${b})`;
-            else if (func === _wasm!.ShaderOutputFunction.Multiply)
+            else if (func === rust!.ShaderOutputFunction.Multiply)
                 return `(${a} * ${b})`;
             else
                 throw "whoops";
@@ -367,63 +354,63 @@ vec4 AB, CD, ABCD;
         }
 
         function genOutputMapping(mapping: ShaderOutputMapping, v: string): string {
-            if (mapping === _wasm!.ShaderOutputMapping.Identity)
+            if (mapping === rust!.ShaderOutputMapping.Identity)
                 return ``;
-            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByHalf)
+            else if (mapping === rust!.ShaderOutputMapping.ScaleByHalf)
                 return `${v} = ${v} * 0.5;`;
-            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByTwo)
+            else if (mapping === rust!.ShaderOutputMapping.ScaleByTwo)
                 return `${v} = ${v} * 2.0;`;
-            else if (mapping === _wasm!.ShaderOutputMapping.ScaleByFour)
+            else if (mapping === rust!.ShaderOutputMapping.ScaleByFour)
                 return `${v} = ${v} * 4.0;`;
-            else if (mapping === _wasm!.ShaderOutputMapping.BiasByHalf)
+            else if (mapping === rust!.ShaderOutputMapping.BiasByHalf)
                 return `${v} = ${v} - 0.5;`;
-            else if (mapping === _wasm!.ShaderOutputMapping.ExpandNormal)
+            else if (mapping === rust!.ShaderOutputMapping.ExpandNormal)
                 return `${v} = (${v} - 0.5) * 2.0;`;
             else
                 throw "whoops";
         }
 
         function genOutputColor(output: ShaderOutput, v: string): string {
-            if (output === _wasm!.ShaderOutput.Discard)
+            if (output === rust!.ShaderOutput.Discard)
                 return ``;
-            else if (output === _wasm!.ShaderOutput.Scratch0)
+            else if (output === rust!.ShaderOutput.Scratch0)
                 return `r0.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Scratch1)
+            else if (output === rust!.ShaderOutput.Scratch1)
                 return `r1.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.VertexColor0)
+            else if (output === rust!.ShaderOutput.VertexColor0)
                 return `v0.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.VertexColor1)
+            else if (output === rust!.ShaderOutput.VertexColor1)
                 return `v1.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture0)
+            else if (output === rust!.ShaderOutput.Texture0)
                 return `t0.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture1)
+            else if (output === rust!.ShaderOutput.Texture1)
                 return `t1.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture2)
+            else if (output === rust!.ShaderOutput.Texture2)
                 return `t2.rgb = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture3)
+            else if (output === rust!.ShaderOutput.Texture3)
                 return `t3.rgb = ${v};`;
             else
                 throw "whoops";
         }
 
         function genOutputAlpha(output: ShaderOutput, v: string): string {
-            if (output === _wasm!.ShaderOutput.Discard)
+            if (output === rust!.ShaderOutput.Discard)
                 return ``;
-            else if (output === _wasm!.ShaderOutput.Scratch0)
+            else if (output === rust!.ShaderOutput.Scratch0)
                 return `r0.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Scratch1)
+            else if (output === rust!.ShaderOutput.Scratch1)
                 return `r1.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.VertexColor0)
+            else if (output === rust!.ShaderOutput.VertexColor0)
                 return `v0.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.VertexColor1)
+            else if (output === rust!.ShaderOutput.VertexColor1)
                 return `v1.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture0)
+            else if (output === rust!.ShaderOutput.Texture0)
                 return `t0.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture1)
+            else if (output === rust!.ShaderOutput.Texture1)
                 return `t1.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture2)
+            else if (output === rust!.ShaderOutput.Texture2)
                 return `t2.a = ${v};`;
-            else if (output === _wasm!.ShaderOutput.Texture3)
+            else if (output === rust!.ShaderOutput.Texture3)
                 return `t3.a = ${v};`;
             else
                 throw "whoops";
@@ -481,32 +468,32 @@ ${fragBody.join('\n')}
 }
 
 function setBlendMode(dst: Partial<GfxMegaStateDescriptor>, fn: FramebufferBlendFunction) {
-    if (fn === _wasm!.FramebufferBlendFunction.AlphaBlend) {
+    if (fn === rust!.FramebufferBlendFunction.AlphaBlend) {
         setAttachmentStateSimple(dst, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
-    } else if (fn === _wasm!.FramebufferBlendFunction.Multiply) {
+    } else if (fn === rust!.FramebufferBlendFunction.Multiply) {
         setAttachmentStateSimple(dst, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.Dst,
             blendDstFactor: GfxBlendFactor.Zero,
         });
-    } else if (fn === _wasm!.FramebufferBlendFunction.Add) {
+    } else if (fn === rust!.FramebufferBlendFunction.Add) {
         setAttachmentStateSimple(dst, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.One,
             blendDstFactor: GfxBlendFactor.One,
         });
-    } else if (fn === _wasm!.FramebufferBlendFunction.AlphaMultiplyAdd) {
+    } else if (fn === rust!.FramebufferBlendFunction.AlphaMultiplyAdd) {
         setAttachmentStateSimple(dst, {
             blendMode: GfxBlendMode.Add,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
             blendDstFactor: GfxBlendFactor.One,
         });
     } else {
-        throw new Error(`unsupported blend mode ${_wasm!.FramebufferBlendFunction[fn]}`)
+        throw new Error(`unsupported blend mode ${rust!.FramebufferBlendFunction[fn]}`)
     }
 }
 
@@ -540,7 +527,7 @@ class MaterialRender_TransparencyGeneric {
         this.textureMapping[1] = textureCache.getTextureMapping(shader.get_bitmap(1));
         this.textureMapping[2] = textureCache.getTextureMapping(shader.get_bitmap(2));
         this.textureMapping[3] = textureCache.getTextureMapping(shader.get_bitmap(3));
-        if (shader.first_map_type === _wasm!.ShaderTransparentGenericMapType.Map2D) {
+        if (shader.first_map_type === rust!.ShaderTransparentGenericMapType.Map2D) {
             this.textureMapping[0] = textureCache.getTextureMapping(shader.get_bitmap(0));
         } else {
             this.textureMapping[7] = textureCache.getTextureMapping(shader.get_bitmap(0));
@@ -645,15 +632,15 @@ layout(std140) uniform ub_ShaderParams {
 
     private getColorFunction(out: string, current: string, next: string, fn: ShaderTransparentChicagoColorFunction): string {
         switch (fn) {
-            case _wasm!.ShaderTransparentChicagoColorFunction.Current:
+            case rust!.ShaderTransparentChicagoColorFunction.Current:
                 return `${out} = ${current};`;
-            case _wasm!.ShaderTransparentChicagoColorFunction.NextMap:
+            case rust!.ShaderTransparentChicagoColorFunction.NextMap:
                 return `${out} = ${next};`
-            case _wasm!.ShaderTransparentChicagoColorFunction.Multiply:
+            case rust!.ShaderTransparentChicagoColorFunction.Multiply:
                 return `${out} = ${current} * ${next};`;
-            case _wasm!.ShaderTransparentChicagoColorFunction.DoubleMultiply:
+            case rust!.ShaderTransparentChicagoColorFunction.DoubleMultiply:
                 return `${out} = 2.0 * ${current} * ${next};`;
-            case _wasm!.ShaderTransparentChicagoColorFunction.Add:
+            case rust!.ShaderTransparentChicagoColorFunction.Add:
                 return `${out} = ${current} + ${next};`;
             default:
                 throw new Error(`unrecognized ShaderTransparentChicagoColorFunction ${fn}`)
@@ -989,7 +976,7 @@ class MaterialRender_TransparencyWater {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 4 }]);
-        template.setInputLayoutAndState(null, null);
+        template.setVertexInput(null, null, null);
         template.setGfxProgram(this.rippleCompositeProgram);
         template.setMegaStateFlags(fullscreenMegaState);
         template.setSamplerBindingsFromTextureMappings(this.rippleCompositeMapping);
@@ -1121,14 +1108,14 @@ class TextureAnimationHandler {
         const translation = vec3.fromValues(this.u.baseOffset, this.v.baseOffset, 0);
         const tSecs = t / 1000;
         switch (this.u.fn) {
-            case _wasm!.AnimationFunction.One: break;
-            case _wasm!.AnimationFunction.Slide:
+            case rust!.AnimationFunction.One: break;
+            case rust!.AnimationFunction.Slide:
                 translation[0] += (tSecs / this.u.period) * this.u.scale;
                 break;
         }
         switch (this.v.fn) {
-            case _wasm!.AnimationFunction.One: break;
-            case _wasm!.AnimationFunction.Slide:
+            case rust!.AnimationFunction.One: break;
+            case rust!.AnimationFunction.Slide:
                 translation[1] += (tSecs / this.v.period) * this.v.scale;
                 break;
         }
@@ -1287,11 +1274,11 @@ void mainVS() {
         fragBody.push(`vec2 secondaryUV = v_UV * ${glslGenerateFloat(this.shader!.secondary_detail_bitmap_scale)};`)
         fragBody.push(`vec4 secondaryDetail = texture(SAMPLER_2D(u_Texture4), secondaryUV);`)
         switch (this.shader!.shader_environment_type) {
-            case _wasm!.ShaderEnvironmentType.Normal:
+            case rust!.ShaderEnvironmentType.Normal:
                 fragBody.push(`vec4 blendedDetail = mix(secondaryDetail, primaryDetail, secondaryDetail.a);`)
                 break;
-            case _wasm!.ShaderEnvironmentType.Blended:
-            case _wasm!.ShaderEnvironmentType.BlendedBaseSpecular:
+            case rust!.ShaderEnvironmentType.Blended:
+            case rust!.ShaderEnvironmentType.BlendedBaseSpecular:
                 fragBody.push(`vec4 blendedDetail = mix(secondaryDetail, primaryDetail, color.a);`);
                 break;
             default:
@@ -1300,13 +1287,13 @@ void mainVS() {
         
         if (this.shader!.has_primary_detail_bitmap) {
             switch (this.shader!.detail_bitmap_function) {
-                case _wasm!.DetailBitmapFunction.DoubleBiasedMultiply:
+                case rust!.DetailBitmapFunction.DoubleBiasedMultiply:
                     fragBody.push(`color.rgb = saturate(2.0 * color.rgb * blendedDetail.rgb);`);
                     break;
-                case _wasm!.DetailBitmapFunction.Multiply:
+                case rust!.DetailBitmapFunction.Multiply:
                     fragBody.push(`color.rgb = saturate(color.rgb * blendedDetail.rgb);`);
                     break;
-                case _wasm!.DetailBitmapFunction.DoubleBiasedAdd:
+                case rust!.DetailBitmapFunction.DoubleBiasedAdd:
                     fragBody.push(`color.rgb = saturate(color.rgb + 2.0 * blendedDetail.rgb - 1.0);`);
                     break;
                 default:
@@ -1319,13 +1306,13 @@ void mainVS() {
         fragBody.push(`vec2 microUV = v_UV * ${glslGenerateFloat(this.shader!.micro_detail_bitmap_scale)};`)
         fragBody.push(`vec4 microDetail = texture(SAMPLER_2D(u_Texture5), microUV);`)
         switch (this.shader!.shader_environment_type) {
-            case _wasm!.ShaderEnvironmentType.Normal:
+            case rust!.ShaderEnvironmentType.Normal:
                 fragBody.push(`float specularReflectionMask = blendedDetail.a * base.a * microDetail.a;`)
                 break;
-            case _wasm!.ShaderEnvironmentType.Blended:
+            case rust!.ShaderEnvironmentType.Blended:
                 fragBody.push(`float specularReflectionMask = blendedDetail.a * microDetail.a;`)
                 break;
-            case _wasm!.ShaderEnvironmentType.BlendedBaseSpecular:
+            case rust!.ShaderEnvironmentType.BlendedBaseSpecular:
                 fragBody.push(`float specularReflectionMask = base.a * microDetail.a;`)
                 break;
             default:
@@ -1334,13 +1321,13 @@ void mainVS() {
         
         if (this.shader!.has_micro_detail_bitmap) {
             switch (this.shader!.detail_bitmap_function) {
-                case _wasm!.DetailBitmapFunction.DoubleBiasedMultiply:
+                case rust!.DetailBitmapFunction.DoubleBiasedMultiply:
                     fragBody.push(`color.rgb = saturate(2.0 * color.rgb  * microDetail.rgb);`)
                     break;
-                case _wasm!.DetailBitmapFunction.Multiply:
+                case rust!.DetailBitmapFunction.Multiply:
                     fragBody.push(`color.rgb = saturate(color.rgb * microDetail.rgb);`)
                     break;
-                case _wasm!.DetailBitmapFunction.DoubleBiasedAdd:
+                case rust!.DetailBitmapFunction.DoubleBiasedAdd:
                     fragBody.push(`color.rgb = saturate(color.rgb + 2.0 * microDetail.rgb - 1.0);`)
                     break;
                 default:
@@ -1486,13 +1473,13 @@ class LightmapRenderer {
         this.materialRenderers = [];
         mgr.get_lightmap_materials(lightmap).forEach(material => {
             const shader = this.mgr.get_material_shader(material);
-            if (shader instanceof _wasm!.HaloShaderEnvironment) {
+            if (shader instanceof rust!.HaloShaderEnvironment) {
                 this.materialRenderers.push(new MaterialRender_Environment(textureCache, renderCache, shader, lightmapTex, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
+            } else if (shader instanceof rust!.HaloShaderTransparencyGeneric) {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
+            } else if (shader instanceof rust!.HaloShaderTransparencyChicago) {
                 this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparentWater) {
+            } else if (shader instanceof rust!.HaloShaderTransparentWater) {
                 this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
@@ -1536,7 +1523,8 @@ class LightmapRenderer {
 class LightmapModelData {
     private vertexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private indexCount = 0;
     private lightmapVertexBuffer: GfxBuffer;
     private modelMatrix: mat4;
@@ -1550,10 +1538,11 @@ class LightmapModelData {
         this.indexCount = this.material.get_num_indices();
         this.indexOffset = this.material.get_index_offset();
 
-        this.inputState = cache.device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0 },
             { buffer: this.lightmapVertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 })
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst) {
@@ -1561,13 +1550,12 @@ class LightmapModelData {
         const mapped = renderInst.mapUniformBufferF32(BaseProgram.ub_ModelParams);
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount, this.indexOffset);
     }
 
     public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputState(this.inputState);
         this.material.free();
     }
 
@@ -1603,13 +1591,13 @@ class ModelRenderer {
     constructor(public textureCache: TextureCache, renderCache: GfxRenderCache, public mgr: HaloSceneManager, public model: HaloModel, public modelMatrix: mat4, public modelData: ModelData, fogEnabled: boolean) {
         const shaders = mgr.get_model_shaders(this.model);
         shaders.forEach(shader => {
-            if (shader instanceof _wasm!.HaloShaderModel) {
+            if (shader instanceof rust!.HaloShaderModel) {
                 this.materialRenderers.push(new MaterialRender_Model(textureCache, renderCache, shader, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparencyGeneric) {
+            } else if (shader instanceof rust!.HaloShaderTransparencyGeneric) {
                 this.materialRenderers.push(new MaterialRender_TransparencyGeneric(textureCache, renderCache, shader, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparencyChicago) {
+            } else if (shader instanceof rust!.HaloShaderTransparencyChicago) {
                 this.materialRenderers.push(new MaterialRender_TransparencyChicago(textureCache, renderCache, shader, fogEnabled));
-            } else if (shader instanceof _wasm!.HaloShaderTransparentWater) {
+            } else if (shader instanceof rust!.HaloShaderTransparentWater) {
                 this.materialRenderers.push(new MaterialRender_TransparencyWater(textureCache, renderCache, shader, fogEnabled));
             } else {
                 this.materialRenderers.push(null);
@@ -1698,7 +1686,8 @@ class ModelData {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     public parts: ModelPartData[] = [];
 
     constructor(cache: GfxRenderCache, mgr: HaloSceneManager, private model: HaloModel) {
@@ -1760,7 +1749,8 @@ class ModelData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         this.inputLayout = this.getInputLayout(cache);
-        this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0 }], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         this.parts.sort((a, b) => {
             return a.origIndex - b.origIndex;
@@ -1783,13 +1773,12 @@ class ModelData {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
         this.model.free();
         this.parts.forEach((part) => part.destroy(device));
     }
@@ -2069,11 +2058,10 @@ class HaloSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const wasm = await loadWasm();
-        wasm.init_panic_hook();
+        rust!.init_panic_hook();
         const bitmapReader = await context.dataShare.ensureObject(`${pathBase}/BitmapReader`, async () => {
             const resourceMapData = await dataFetcher.fetchData(`${pathBase}/maps/bitmaps.map`);
-            const bitmapReader = wasm.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
+            const bitmapReader = rust!.HaloBitmapReader.new(resourceMapData.createTypedArray(Uint8Array));
             bitmapReader.destroy = () => { // hax!!
                 bitmapReader.free();
             };
@@ -2081,7 +2069,7 @@ class HaloSceneDesc implements Viewer.SceneDesc {
         });
         const mapName = this.id.split('-')[0];
         const mapData = await dataFetcher.fetchData(`${pathBase}/maps/${mapName}.map`);
-        const mapManager = wasm.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
+        const mapManager = rust!.HaloSceneManager.new(mapData.createTypedArray(Uint8Array));
         const renderer = new HaloScene(device, mapManager, bitmapReader, this.fogSettings);
         let bsps = mapManager.get_bsps();
         if (this.specificBSPs.length > 0) {

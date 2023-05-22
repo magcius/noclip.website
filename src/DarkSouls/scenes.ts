@@ -99,7 +99,7 @@ class DKSRenderer implements Viewer.SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public createPanels(): Panel[] {
@@ -213,7 +213,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
 
     private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
         const buffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpf.dcx`));
-        const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(buffer));
+        const decompressed = DCX.decompressBuffer(buffer);
         const tpf = TPF.parse(decompressed);
         textureHolder.addTextures(device, tpf.textures);
     }
@@ -225,7 +225,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < bhd.fileRecords.length; i++) {
             const r = bhd.fileRecords[i];
             assert(r.name.endsWith('.tpf.dcx'));
-            const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(r.buffer));
+            const decompressed = DCX.decompressBuffer(r.buffer);
             const tpf = TPF.parse(decompressed);
             assert(tpf.textures.length === 1);
             const key1 = r.name.replace(/\\/g, '').replace('.tpf.dcx', '').toLowerCase();
@@ -262,7 +262,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < msb.models.length; i++) {
             if (msb.models[i].type === 0) {
                 const flverBuffer = assertExists(resourceSystem.lookupFile(msb.models[i].flverPath));
-                const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
+                const flver_ = FLVER.parse(DCX.decompressBuffer(flverBuffer));
                 if (flver_.batches.length > 0)
                     flver[i] = flver_;
             }

@@ -402,15 +402,18 @@ class ParallelGravity extends PlanetGravity {
 }
 
 enum CubeGravityValidAreaFlags {
+    None    = 0,
     X_Right = 0x01,
     X_Left  = 0x02,
     Y_Right = 0x04,
     Y_Left  = 0x08,
     Z_Right = 0x10,
     Z_Left  = 0x20,
+    All     = 0x3F,
 }
 
 enum CubeArea {
+    Invalid  = -1,
     X_Left   = 0,
     X_Inside = 1,
     X_Right  = 2,

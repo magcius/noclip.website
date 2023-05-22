@@ -12,7 +12,7 @@ import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, getDebugO
 import { AABB } from '../../Geometry';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
@@ -4174,7 +4174,6 @@ export class WaterPlantDrawInit extends NameObj {
         this.waterPlantD = loadBTIData(sceneObjHolder, arc, `WaterPlantD.bti`);
 
         const mb = new GXMaterialBuilder(`WaterPlant`);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -5361,16 +5360,17 @@ class OceanRingDrawer {
         const device = sceneObjHolder.modelCache.device;
         const renderInst = this.ddraw.endDraw(renderInstManager);
 
-        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
-        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
-        setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
-        setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera);
-
         materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
         sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
+
+        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
+        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], materialParams.m_TextureMapping[1], viewerInput.camera);
+
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x76D7FFFF);
 
@@ -5446,7 +5446,7 @@ class OceanRingPipeOutside extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
+        renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
         renderInst.drawIndexes(this.pipe.indexCount);
 
         materialParams.clear();
@@ -5545,7 +5545,7 @@ class OceanRingPipeInside extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
+        renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
         renderInst.drawIndexes(this.pipe.indexCount);
 
         materialParams.clear();
@@ -5581,7 +5581,8 @@ class OceanRingPipe extends LiveActor {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public width1: number = 1200.0;
     public width2: number = 1200.0;
     public indexCount: number;
@@ -5731,10 +5732,8 @@ class OceanRingPipe extends LiveActor {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
-
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         return points;
     }
 
@@ -5751,7 +5750,6 @@ class OceanRingPipe extends LiveActor {
         super.destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -7300,7 +7298,7 @@ export class PlantGroup extends LiveActor {
     private placeOnCollisionFormCircle(sceneObjHolder: SceneObjHolder, center: vec3, gravity: vec3): void {
         vec3.zero(center);
 
-        let angle = MathConstants.TAU;
+        let angle: number = MathConstants.TAU;
         let plantsPerRing = 0;
         let numRings = 0;
         let radius = 0.0;

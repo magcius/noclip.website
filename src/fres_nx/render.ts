@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
@@ -530,7 +530,7 @@ interface ConvertedVertexAttribute {
 
 class FVTXData {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-    public inputBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+    public inputBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
     constructor(device: GfxDevice, public fvtx: FVTX) {
@@ -538,11 +538,15 @@ class FVTXData {
 
         for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
             const vertexAttribute = fvtx.vertexAttributes[i];
+            const bufferIndex = vertexAttribute.bufferIndex;
+
+            if (this.inputBufferDescriptors[bufferIndex] === undefined)
+                this.inputBufferDescriptors[bufferIndex] = null;
+
             const attribLocation = AglProgram.a_Orders.indexOf(vertexAttribute.name);
             if (attribLocation < 0)
                 continue;
 
-            const bufferIndex = vertexAttribute.bufferIndex;
             const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
             const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
             if (convertedAttribute !== null) {
@@ -633,26 +637,25 @@ class FVTXData {
 }
 
 export class FSHPMeshData {
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     public indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
+    constructor(cache: GfxRenderCache, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
         const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat,
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
     
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Index, mesh.indexBufferData);
-        const indexBufferDescriptor: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
+        this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
+        this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
         device.destroyBuffer(this.indexBuffer);
     }
 }
@@ -660,9 +663,9 @@ export class FSHPMeshData {
 export class FSHPData {
     public meshData: FSHPMeshData[] = [];
 
-    constructor(device: GfxDevice, public fshp: FSHP, fvtxData: FVTXData) {
+    constructor(cache: GfxRenderCache, public fshp: FSHP, fvtxData: FVTXData) {
         for (let i = 0; i < fshp.mesh.length; i++)
-            this.meshData.push(new FSHPMeshData(device, fshp.mesh[i], fvtxData));
+            this.meshData.push(new FSHPMeshData(cache, fshp.mesh[i], fvtxData));
     }
 
     public destroy(device: GfxDevice): void {
@@ -675,12 +678,12 @@ export class FMDLData {
     public fvtxData: FVTXData[] = [];
     public fshpData: FSHPData[] = [];
 
-    constructor(device: GfxDevice, public fmdl: FMDL) {
+    constructor(cache: GfxRenderCache, public fmdl: FMDL) {
         for (let i = 0; i < fmdl.fvtx.length; i++)
-            this.fvtxData.push(new FVTXData(device, fmdl.fvtx[i]));
+            this.fvtxData.push(new FVTXData(cache.device, fmdl.fvtx[i]));
         for (let i = 0; i < fmdl.fshp.length; i++) {
             const fshp = fmdl.fshp[i];
-            this.fshpData.push(new FSHPData(device, fshp, this.fvtxData[fshp.vertexIndex]));
+            this.fshpData.push(new FSHPData(cache, fshp, this.fvtxData[fshp.vertexIndex]));
         }
     }
 
@@ -710,7 +713,7 @@ class FSHPMeshInstance {
         // TODO(jstpierre): Do we have to care about submeshes?
         const renderInst = renderInstManager.newRenderInst();
         renderInst.drawIndexes(this.meshData.mesh.count);
-        renderInst.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
+        renderInst.setVertexInput(this.meshData.inputLayout, this.meshData.vertexBufferDescriptors, this.meshData.indexBufferDescriptor);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);

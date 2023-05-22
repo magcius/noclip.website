@@ -55,7 +55,7 @@ class SPMSceneDesc implements Viewer.SceneDesc {
 
         /*
         const agd1 = await renderer.animGroupCache!.requestAnimGroupData('e_3D_manera');
-        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd1);
+        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.renderCache, agd1);
         computeModelMatrixS(agi1.modelMatrix, 100);
         renderer.animGroupInstances.push(agi1);
 

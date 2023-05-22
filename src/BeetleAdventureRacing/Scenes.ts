@@ -65,11 +65,11 @@ class BARRenderer implements SceneGfx {
     constructor(device: GfxDevice, context: SceneContext, rendererStore: RendererStore, uvtr: UVTR, uven: UVEN | null, private sceneIndex: number | null, private filesystem: Filesystem) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, () => new UVTRRenderer(uvtr, device, rendererStore))
+        this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, () => new UVTRRenderer(uvtr, this.renderHelper.renderCache, rendererStore))
 
         this.uvenRenderer = null;
         if (uven !== null)
-            this.uvenRenderer = rendererStore.getOrCreateRenderer(uven, () => new UVENRenderer(uven, device, rendererStore));
+            this.uvenRenderer = rendererStore.getOrCreateRenderer(uven, () => new UVENRenderer(uven, this.renderHelper.renderCache, rendererStore));
 
         this.texScrollAnims = [];
         this.texSeqAnims = [];
@@ -93,9 +93,8 @@ class BARRenderer implements SceneGfx {
 
         // TODO: should this be lazy?
         let trackData = getTrackData(this.sceneIndex, this.filesystem);
-        if (trackData !== null) {
-            this.trackDataRenderer = new TrackDataRenderer(device, trackData)
-        }
+        if (trackData !== null)
+            this.trackDataRenderer = new TrackDataRenderer(this.renderHelper.renderCache, trackData);
 
         this.inputManager = context.inputManager;
     }

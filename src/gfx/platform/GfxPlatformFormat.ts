@@ -2,7 +2,6 @@
 // Format enums
 
 import { GfxSamplerFormatKind } from "./GfxPlatform";
-import { assert } from "./GfxPlatformUtil";
 
 export const enum FormatTypeFlags {
     U8 = 0x01,

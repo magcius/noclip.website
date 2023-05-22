@@ -15,7 +15,7 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -248,6 +248,19 @@ export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMod
         return [ GfxTexFilterMode.Bilinear, GfxMipFilterMode.Nearest ];
     case GX.TexFilter.NEAR_MIP_NEAR:
         return [ GfxTexFilterMode.Point, GfxMipFilterMode.Nearest ];
+    }
+}
+
+export function translateMaxAnisotropy(anisotropy: GX.Anisotropy): number {
+    switch (anisotropy) {
+    case GX.Anisotropy._1:
+        return 1;
+    case GX.Anisotropy._2:
+        return 2;
+    case GX.Anisotropy._4:
+        return 4;
+    default:
+        throw "whoops";
     }
 }
 
@@ -547,11 +560,11 @@ export function createInputLayout(cache: GfxRenderCache, loadedVertexLayout: Loa
 }
 
 export class GXShapeHelperGfx {
-    public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public vertexBuffers: GfxVertexBufferDescriptor[], public indexBuffer: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, vertexBuffers: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -561,23 +574,21 @@ export class GXShapeHelperGfx {
             }
         }
 
-        const buffers: GfxVertexBufferDescriptor[] = vertexBuffers.slice();
-
+        this.vertexBufferDescriptors = vertexBuffers.slice();
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
             this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
-            buffers.push({
+            this.vertexBufferDescriptors.push({
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
 
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         if (draw === null) {
             // Legacy API -- render a single draw.
@@ -590,7 +601,6 @@ export class GXShapeHelperGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
         if (this.zeroBuffer !== null)
             device.destroyBuffer(this.zeroBuffer);
     }

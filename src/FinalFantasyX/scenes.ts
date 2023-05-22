@@ -160,7 +160,7 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
         };
 
         const renderer = new FFXRenderer(device, levelData);
-        const cache = renderer.renderHelper.getCache();
+        const cache = renderer.renderHelper.renderCache;
         renderer.clearPass = makeAttachmentClearDescriptor(level.clearColor);
         mat4.copy(renderer.lightDirection, level.lightDirection);
 

@@ -160,7 +160,7 @@ export class evt_map {
 }
 
 export class evt_handler {
-    public get_map_symbol(addr: number): evt_sym | null {
+    public get_user_func_sym(addr: number): evt_sym | null {
         return null;
     }
 
@@ -168,180 +168,46 @@ export class evt_handler {
         return op;
     }
 
-    public user_func(ctx: evtmgr, evt: evt_exec, funcAddr: number): evt_user_func_ret {
+    public user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
         return evt_user_func_ret.advance;
     }
 }
 
-const enum evt_disasm_ptype { Decimal, Hex, UserCode, String, EvtAddr, }
-interface evt_disasm_opcode_tbl_entry {
-    t: evt_disasm_ptype[];
-    varargs: boolean;
-}
+class mapentry {
+    public view: DataView;
 
-function opt(t: evt_disasm_ptype[], varargs = false): evt_disasm_opcode_tbl_entry {
-    return { t, varargs };
-}
+    constructor(public readonly base: number, public readonly buf: ArrayBufferSlice) {
+        this.view = buf.createDataView();
+    }
 
-const evt_disasm_opcode_tbl: { [o: number]: evt_disasm_opcode_tbl_entry } = {
-    [op.if_str_equal]:  opt([evt_disasm_ptype.String, evt_disasm_ptype.String]),
-    [op.user_func]:     opt([evt_disasm_ptype.UserCode], true),
-    [op.run_child_evt]: opt([evt_disasm_ptype.EvtAddr]),
-    [op.run_evt]:       opt([evt_disasm_ptype.EvtAddr]),
-};
-
-class evt_disasm_sub {
-    constructor(public addr: number, public name: string, public res: string | null = null) {
+    public getUint32(addr: number): number {
+        assert(addr >= this.base && addr <= this.base + this.view.byteLength);
+        return this.view.getUint32(addr - this.base);
     }
 }
 
-export class evt_disasm_ctx {
-    private sub: evt_disasm_sub[] = [];
+export class rommap {
+    private entry: mapentry[] = [];
 
-    constructor(private handler: evt_handler, private rel: ArrayBufferSlice, private baseAddress: number, private entryAddress: number) {
+    public map(addr: number, buf: ArrayBufferSlice): void {
+        this.entry.push(new mapentry(addr, buf));
     }
 
-    private disasm_addr(addr: number, type: evt_disasm_ptype): string {
-        if (type === evt_disasm_ptype.UserCode) {
-            const sym = this.handler.get_map_symbol(addr);
-            if (sym !== null)
-                return `${sym.name}/${sym.filename}`;
+    public ref(addr: number): mapentry | null {
+        for (let i = 0; i < this.entry.length; i++) {
+            const entry = this.entry[i];
+            const end = entry.base + entry.buf.byteLength;
+            if (addr >= entry.base && addr < end)
+                return this.entry[i];
         }
-
-        if (type === evt_disasm_ptype.EvtAddr && addr >= this.baseAddress) {
-            const sub = this.disasm_sub_maybe(addr);
-            return sub.name;
-        }
-
-        if (type === evt_disasm_ptype.String && addr >= this.baseAddress) {
-            const str = readString(this.rel, addr - this.baseAddress, 0xFF, true);
-            return `"${str}"`;
-        }
-
-        // Try to guess.
-        if (type === undefined && addr >= this.baseAddress) {
-            let str: string | null = null;
-            try {
-                str = readString(this.rel, addr - this.baseAddress, 0xFF, true);
-            } catch(e) {
-            }
-
-            if (str !== null && (str.length > 3 && str.split('').every((c) => c.charCodeAt(0) > 0x20 && c.charCodeAt(0) <= 0x7F)))
-                return `"${str}"`;
-        }
-
-        return `$${hexzero0x(addr, 8)}`;
-    }
-
-    private disasm_expr(uexpr: number, type: evt_disasm_ptype): string {
-        const expr = (uexpr | 0);
-        if (expr <= -250000000)
-            return this.disasm_addr(uexpr, type);
-        else if (expr >= -230000000 && expr <= -210000000)
-            return `${(expr - -230000000) / 1024.0}`;
-        else if (expr >= -210000000 && expr < -200000000)
-            return `UF(${expr - -210000000})`;
-        else if (expr >= -190000000 && expr < -180000000)
-            return `UW(${expr - -190000000})`;
-        else if (expr >= -170000000 && expr < -160000000)
-            return `GSW(${expr - -170000000})`;
-        else if (expr >= -150000000 && expr < -140000000)
-            return `LSW(${expr - -150000000})`;
-        else if (expr >= -130000000 && expr < -120000000)
-            return `GSWF(${expr - -130000000})`;
-        else if (expr >= -110000000 && expr < -100000000)
-            return `LSWF(${expr - -110000000})`;
-        else if (expr >= -90000000 && expr < -80000000)
-            return `GF(${expr - -90000000})`;
-        else if (expr >= -70000000 && expr < -60000000)
-            return `LF(${expr - -70000000})`;
-        else if (expr >= -50000000 && expr < -40000000)
-            return `GW(${expr - -50000000})`;
-        else if (expr >= -30000000 && expr < -20000000)
-            return `LW(${expr - -30000000})`;
-        else if (type === evt_disasm_ptype.Hex)
-            return `${hexzero0x(expr)}`;
-        else
-            return `${expr}`;
-    }
-
-    private disasm_sub(sub: evt_disasm_sub, view: DataView): string {
-        let pc = sub.addr;
-
-        let S = `${sub.name}:\n`;
-        let indent = '';
-
-        function pushIndent(): void {
-            indent += `  `;
-        }
-        function popIndent(): void {
-            indent = indent.slice(2);
-        }
-
-        while (true) {
-            const header = view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
-
-            if ((opcode === op.end_if) || opcode === op.else || opcode === op.while || opcode === op.end_switch || opcode === op.end_inline || opcode === op.end_brother)
-                popIndent();
-
-            const pcs = hexzero(pc, 8);
-            S += `${pcs}  ${indent}  ${op[opcode]}`;
-
-            pc += 0x04;
-            const tbl = evt_disasm_opcode_tbl[opcode];
-            let ptype: evt_disasm_ptype[] = [];
-            if (tbl !== undefined) {
-                if (!tbl.varargs)
-                    assert(tbl.t.length === paramCount);
-                ptype = tbl.t;
-            }
-
-            for (let i = 0; i < paramCount; i++) {
-                const expr = view.getUint32(pc - this.baseAddress);
-                pc += 0x04;
-
-                const exprType = ptype[i];
-                S += `  ${this.disasm_expr(expr, exprType)}`;
-            }
-
-            S += `\n`;
-
-            if (opcode === op.END)
-                break;
-
-            if ((opcode >= op.if_str_equal && opcode <= op.if_not_flag) || opcode === op.else || opcode === op.do || opcode === op.switch || opcode === op.inline_evt || opcode === op.inline_evt_id || opcode === op.brother_evt || opcode === op.brother_evt_id)
-                pushIndent();
-        }
-
-        return S;
-    }
-
-    private disasm_sub_maybe(addr: number, prefix = 'SUB_'): evt_disasm_sub {
-        let sub = this.sub.find((sub) => sub.addr === addr);
-        if (!sub) {
-            sub = new evt_disasm_sub(addr, `${prefix}_${hexzero(addr, 8)}`);
-            this.sub.push(sub);
-            sub.res = this.disasm_sub(sub, this.rel.createDataView());
-        }
-        return sub;
-    }
-
-    public disasm(): void {
-        this.disasm_sub_maybe(this.entryAddress, 'ENTRY_');
-
-        let S = ``;
-        for (let i = 0; i < this.sub.length; i++)
-            S += `${this.sub[i].res}\n\n`;
-        console.log(S);
+        return null;
     }
 }
 
 // records execution state for one evt
-const enum evt_state { running, waitonexpr, waitonfrm, waitonevt, stopped, end, }
+const enum evt_state { running, waitonexpr, waitonfrm, waitonevt, userfuncblock, stopped, end, }
 
-const enum evt_user_func_ret { advance, stay, stall, }
+const enum evt_user_func_ret { advance, block, stop, }
 
 interface evt_loop_record {
     pc: number;
@@ -370,7 +236,7 @@ class evt_exec {
     public entryAddress: number;
     public debug = false;
 
-    constructor(public id: number, public pc: number) {
+    constructor(public id: number, public pc: number, public readonly entry: mapentry) {
         this.entryAddress = this.pc;
     }
 
@@ -395,16 +261,21 @@ export class evtmgr {
     public gf: Uint8Array = new Uint8Array(512);
     public gw: Float32Array = new Float32Array(512);
 
-    constructor(private handler: evt_handler, private rel: ArrayBufferSlice, private baseAddress: number, private entryAddress: number) {
-        this.view = this.rel.createDataView();
-        this.evtnew(this.entryAddress, null);
+    constructor(private handler: evt_handler, private map: rommap) {
     }
 
-    private evtnew(pc: number, parent: evt_exec | null): evt_exec {
-        assert(pc >= this.baseAddress);
-        const evt = new evt_exec(this.evtid++, pc);
+    public disasm(addr: number): void {
+        const disasm = new evt_disasm_ctx(this.handler, this.map);
+        disasm.disasm(addr);
+    }
+
+    public evtnew(addr: number, parent: evt_exec | null = null): evt_exec {
+        const entry = this.map.ref(addr);
+        const evt = new evt_exec(this.evtid++, addr, entry!);
         if (parent !== null)
             evt.copy(parent);
+        if (entry === null)
+            evt.state = evt_state.end;
         this.evt.push(evt);
         return evt;
     }
@@ -417,7 +288,7 @@ export class evtmgr {
     }
 
     private evtdecode(evt: evt_exec): void {
-        const header = this.view.getUint32(evt.pc - this.baseAddress);
+        const header = evt.entry.getUint32(evt.pc);
         evt.opcode = this.handler.op_decode(header & 0xFFFF);
         evt.paramCount = (header >>> 16) & 0xFFFF;
     }
@@ -433,7 +304,7 @@ export class evtmgr {
 
     private evt_raw_arg(evt: evt_exec, i: number): number {
         assert(i < evt.paramCount);
-        return this.view.getUint32(evt.pc - this.baseAddress + 0x04 + 0x04 * i);
+        return evt.entry.getUint32(evt.pc + 0x04 + 0x04 * i);
     }
 
     public evt_set_arg(evt: evt_exec, i: number, v: number): void {
@@ -454,27 +325,27 @@ export class evtmgr {
         const expr = (uexpr | 0);
         if (expr <= -250000000)
             return uexpr; // addr
-        else if (expr >= -230000000 && expr <= -210000000)
+        else if (expr <= -210000000)
             return (expr - -230000000) / 1024.0; // float imm
-        else if (expr >= -210000000 && expr < -200000000)
+        else if (expr < -200000000)
             return evt.uf[expr - -210000000];
-        else if (expr >= -190000000 && expr < -180000000)
-            return evt.uw[expr - -1910000000];
-        else if (expr >= -170000000 && expr < -160000000)
+        else if (expr < -180000000)
+            return evt.uw[expr - -190000000];
+        else if (expr < -160000000)
             return this.gsw[expr - -170000000];
-        else if (expr >= -150000000 && expr < -140000000)
+        else if (expr < -140000000)
             return this.lsw[expr - -150000000];
-        else if (expr >= -130000000 && expr < -120000000)
+        else if (expr < -120000000)
             return this.gswf[expr - -130000000];
-        else if (expr >= -110000000 && expr < -100000000)
+        else if (expr < -100000000)
             return this.lswf[expr - -110000000];
-        else if (expr >= -90000000 && expr < -80000000)
+        else if (expr < -80000000)
             return this.gf[expr - -90000000];
-        else if (expr >= -70000000 && expr < -60000000)
+        else if (expr < -60000000)
             return evt.lf[expr - -70000000];
-        else if (expr >= -50000000 && expr < -40000000)
+        else if (expr < -40000000)
             return this.gw[expr - -50000000];
-        else if (expr >= -30000000 && expr < -20000000)
+        else if (expr < -20000000)
             return evt.lw[expr - -30000000];
         else
             return expr; // imm
@@ -482,60 +353,56 @@ export class evtmgr {
 
     private evtset(evt: evt_exec, uexpr: number, v: number): void {
         const expr = (uexpr | 0);
-        if (expr >= -210000000 && expr < -200000000)
+        if (expr < -200000000)
             evt.uf[expr - -210000000] = v;
-        else if (expr >= -190000000 && expr < -180000000)
-            evt.uw[expr - -1910000000] = v;
-        else if (expr >= -170000000 && expr < -160000000)
+        else if (expr < -180000000)
+            evt.uw[expr - -190000000] = v;
+        else if (expr < -160000000)
             this.gsw[expr - -170000000] = v;
-        else if (expr >= -150000000 && expr < -140000000)
+        else if (expr < -140000000)
             this.lsw[expr - -150000000] = v;
-        else if (expr >= -130000000 && expr < -120000000)
+        else if (expr < -120000000)
             this.gswf[expr - -130000000] = v;
-        else if (expr >= -110000000 && expr < -100000000)
+        else if (expr < -100000000)
             this.lswf[expr - -110000000] = v;
-        else if (expr >= -90000000 && expr < -80000000)
+        else if (expr < -80000000)
             this.gf[expr - -90000000] = v;
-        else if (expr >= -70000000 && expr < -60000000)
+        else if (expr < -60000000)
             evt.lf[expr - -70000000] = v;
-        else if (expr >= -50000000 && expr < -40000000)
+        else if (expr < -40000000)
             this.gw[expr - -50000000] = v;
-        else if (expr >= -30000000 && expr < -20000000)
+        else if (expr < -20000000)
             evt.lw[expr - -30000000] = v;
         else
             throw "whoops";
     }
 
-    private scan(evt: evt_exec, opena: op[], close: op): number {
+    private scanend(evt: evt_exec, opena: op[], close: op): void {
         let count = 0;
-        let pc = evt.pc;
-        assert(opena.includes(evt.opcode));
+        const beginop = evt.opcode;
+        assert(opena.includes(beginop));
 
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
-
             if (count === 0)
-                assert(opcode === evt.opcode);
+                assert(beginop === evt.opcode);
 
-            if (opena.includes(opcode))
+            if (opena.includes(evt.opcode))
                 ++count;
-            else if (opcode === close)
+            else if (evt.opcode === close)
                 --count;
 
-            pc += 0x04 + 0x04 * paramCount;
+            this.evtadv(evt);
 
             if (count === 0)
-                return pc;
+                return;
         }
     }
 
     private getstr(addr: number): string {
-        if (addr < this.baseAddress)
+        const entry = this.map.ref(addr);
+        if (entry === null)
             return "";
-
-        return readString(this.rel, addr - this.baseAddress, 0xFF, true);
+        return readString(entry.buf, addr - entry.base, 0xFF, true);
     }
 
     private switch_get_cur_operand(evt: evt_exec): number {
@@ -555,29 +422,23 @@ export class evtmgr {
         // Skip this switch case.
 
         // Since we're inside a switch, our count is 1.
+        const start = evt.pc;
         let count = 1;
-        let pc = evt.pc;
-
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
+            let found = false;
 
-            if (pc !== evt.pc && opcode >= op.case_equal && opcode <= op.case_between)
-                break;
-
-            if (opcode === op.switch || opcode === op.switchi)
+            if (count === 1 && evt.pc !== start && evt.opcode >= op.case_equal && evt.opcode <= op.case_between)
+                found = true;
+            else if (evt.opcode === op.switch || evt.opcode === op.switchi)
                 ++count;
-            else if (opcode === op.end_switch)
+            else if (evt.opcode === op.end_switch)
                 --count;
 
-            if (count === 0)
+            this.evtadv(evt);
+
+            if (found || count === 0)
                 break;
-
-            pc += 0x04 + 0x04 * paramCount;
         }
-
-        evt.pc = pc;
     }
 
     private switch_accept(evt: evt_exec): void {
@@ -589,25 +450,17 @@ export class evtmgr {
         // we're inside an if block here, so count starts as 1.
 
         let count = 1;
-        let pc = evt.pc;
-
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
-
-            pc += 0x04 + 0x04 * paramCount;
-
-            if (opcode >= op.if_str_equal && opcode <= op.if_not_flag)
+            if (evt.opcode >= op.if_str_equal && evt.opcode <= op.if_not_flag)
                 ++count;
-            else if (opcode === op.end_if)
+            else if (evt.opcode === op.end_if)
                 --count;
+
+            this.evtadv(evt);
 
             if (count === 0)
                 break;
         }
-
-        evt.pc = pc;
     }
 
     private op_if(evt: evt_exec, v: boolean): void {
@@ -618,28 +471,22 @@ export class evtmgr {
             return;
 
         let count = 0;
-        let pc = evt.pc;
-
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
+            let found = false;
 
-            pc += 0x04 + 0x04 * paramCount;
-
-            if (opcode === op.else && count === 1)
+            if (evt.opcode === op.else && count === 1)
                 break;
 
-            if (opcode >= op.if_str_equal && opcode <= op.if_not_flag)
+            if (evt.opcode >= op.if_str_equal && evt.opcode <= op.if_not_flag)
                 ++count;
-            else if (opcode === op.end_if)
+            else if (evt.opcode === op.end_if)
                 --count;
 
-            if (count === 0)
+            this.evtadv(evt);
+
+            if (found || count === 0)
                 break;
         }
-
-        evt.pc = pc;
     }
 
     private do_go_start(evt: evt_exec): void {
@@ -652,56 +499,39 @@ export class evtmgr {
         // Since we're inside a loop, we start our do/while counter at 1.
         assert(evt.loopRecord.length >= 1);
         let count = 1;
-        let pc = evt.pc;
 
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
-
-            pc += 0x04 + 0x04 * paramCount;
-
-            if (opcode === op.do)
+            if (evt.opcode === op.do)
                 ++count;
-            else if (opcode === op.while)
+            else if (evt.opcode === op.while)
                 --count;
+
+            this.evtadv(evt);
 
             if (count === 0)
                 break;
         }
 
-        evt.pc = pc;
         evt.loopRecord.shift();
     }
 
     private op_goto(evt: evt_exec, needle: number): void {
         // Look for lbl
 
-        let pc = evt.entryAddress;
-
         while (true) {
-            const header = this.view.getUint32(pc - this.baseAddress);
-            const opcode = this.handler.op_decode(header & 0xFFFF);
-            const paramCount = (header >>> 16) & 0xFFFF;
-
             let found = false;
-            if (opcode === op.lbl && paramCount === 1) {
-                const lbl = this.view.getUint32(pc - this.baseAddress + 0x04);
+
+            if (evt.opcode === op.lbl && evt.paramCount === 1) {
+                const lbl = this.evt_raw_arg(evt, 0);
                 if (lbl === needle)
                     found = true;
             }
 
-            pc += 0x04 + 0x04 * paramCount;
+            this.evtadv(evt);
 
             if (found)
                 break;
         }
-
-        evt.pc = pc;
-    }
-
-    private validevtaddr(addr: number): boolean {
-        return addr >= this.baseAddress;
     }
 
     private execone(evt: evt_exec): void {
@@ -925,7 +755,7 @@ export class evtmgr {
                 // we passed
             } else {
                 // we failed, look for case_end
-                while (evt.opcode !== op.case_end)
+                while (!(evt.opcode === op.case_end || evt.opcode === op.end_switch))
                     this.evtadv(evt);
             }
         } break;
@@ -1031,30 +861,25 @@ export class evtmgr {
             const func_addr = this.evt_eval_arg(evt, 0);
             const ret = this.handler.user_func(this, evt, func_addr);
 
-            if (ret === evt_user_func_ret.stay)
-                nextpc = null;
-            else if (ret === evt_user_func_ret.stall)
+            if (ret === evt_user_func_ret.block)
+                evt.state = evt_state.userfuncblock;
+            else if (ret === evt_user_func_ret.stop)
                 evt.state = evt_state.stopped;
         } break;
         case op.run_evt: {
             const addr = this.evt_eval_arg(evt, 0);
-            if (this.validevtaddr(addr))
-                this.evtnew(addr, evt);
+            this.evtnew(addr, evt);
         } break;
         case op.run_evt_id: {
             const addr = this.evt_eval_arg(evt, 0);
-            if (this.validevtaddr(addr)) {
-                const subevt = this.evtnew(addr, evt);
-                this.evt_set_arg(evt, 1, subevt.id);
-            }
+            const subevt = this.evtnew(addr, evt);
+            this.evt_set_arg(evt, 1, subevt.id);
         } break;
         case op.run_child_evt: {
             const addr = this.evt_eval_arg(evt, 0);
-            if (this.validevtaddr(addr)) {
-                const subevt = this.evtnew(addr, evt);
-                evt.waitonevtid = subevt.id;
-                evt.state = evt_state.waitonevt;
-            }
+            const subevt = this.evtnew(addr, evt);
+            evt.waitonevtid = subevt.id;
+            evt.state = evt_state.waitonevt;
         } break;
         case op.delete_evt: {
             const id = this.evt_eval_arg(evt, 0);
@@ -1095,20 +920,20 @@ export class evtmgr {
         } break;
         case op.inline_evt: {
             const subevt = this.evtnew(nextpc, evt);
-            evt.pc = this.scan(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
+            this.scanend(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
         } break;
         case op.inline_evt_id: {
             const subevt = this.evtnew(nextpc, evt);
-            nextpc = this.scan(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
+            this.scanend(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
             this.evt_set_arg(evt, 0, subevt.id);
         } break;
         case op.brother_evt: {
             const subevt = this.evtnew(nextpc, evt);
-            evt.pc = this.scan(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
+            this.scanend(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
         } break;
         case op.brother_evt_id: {
             const subevt = this.evtnew(nextpc, evt);
-            nextpc = this.scan(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
+            this.scanend(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
             this.evt_set_arg(evt, 0, subevt.id);
         } break;
         case op.debug_put_msg:
@@ -1120,13 +945,17 @@ export class evtmgr {
             throw "whoops";
         }
 
-        if (evt.pc === oldpc && nextpc !== null)
+        if (evt.pc === oldpc && evt.state !== evt_state.userfuncblock)
             evt.pc = nextpc;
     }
 
     private execevt(evt: evt_exec): void {
-        while (evt.state === evt_state.running)
+        while (evt.state === evt_state.running || evt.state === evt_state.userfuncblock) {
             this.execone(evt);
+
+            if (evt.state !== evt_state.running)
+                break;
+        }
 
         if (evt.state === evt_state.waitonfrm) {
             if (--evt.waitonfrm! <= 0)
@@ -1147,6 +976,175 @@ export class evtmgr {
     }
 }
 
+const enum evt_disasm_ptype { user_func, str, evt, }
+interface evt_disasm_opcode_tbl_entry {
+    t: evt_disasm_ptype[];
+    varargs: boolean;
+}
+
+function opt(t: evt_disasm_ptype[], varargs = false): evt_disasm_opcode_tbl_entry {
+    return { t, varargs };
+}
+
+const evt_disasm_opcode_tbl: { [o: number]: evt_disasm_opcode_tbl_entry } = {
+    [op.if_str_equal]:  opt([evt_disasm_ptype.str, evt_disasm_ptype.str]),
+    [op.user_func]:     opt([evt_disasm_ptype.user_func], true),
+    [op.run_child_evt]: opt([evt_disasm_ptype.evt]),
+    [op.run_evt]:       opt([evt_disasm_ptype.evt]),
+};
+
+class evt_disasm_sub {
+    constructor(public addr: number, public name: string, public res: string | null = null) {
+    }
+}
+
+export class evt_disasm_ctx {
+    private sub: evt_disasm_sub[] = [];
+
+    constructor(private handler: evt_handler, private map: rommap) {
+    }
+
+    private disasm_addr(addr: number, type: evt_disasm_ptype): string {
+        if (type === evt_disasm_ptype.user_func) {
+            const sym = this.handler.get_user_func_sym(addr);
+            if (sym !== null)
+                return `${sym.filename}/${sym.name}`;
+        }
+
+        const entry = this.map.ref(addr);
+        if (type === evt_disasm_ptype.evt && entry !== null) {
+            const sub = this.disasm_sub_maybe(addr);
+            return sub.name;
+        }
+
+        if (type === evt_disasm_ptype.str && entry !== null) {
+            const str = readString(entry.buf, addr - entry.base, 0xFF, true);
+            return `"${str}"`;
+        }
+
+        // Try to guess.
+        if (type === undefined && entry !== null) {
+            let str: string | null = null;
+            try {
+                str = readString(entry.buf, addr - entry.base, 0xFF, true);
+            } catch(e) {
+            }
+
+            if (str !== null && (str.length > 3 && str.split('').every((c) => c.charCodeAt(0) > 0x20 && c.charCodeAt(0) <= 0x7F)))
+                return `"${str}"`;
+        }
+
+        return `$${hexzero0x(addr, 8)}`;
+    }
+
+    private disasm_expr(uexpr: number, type: evt_disasm_ptype): string {
+        const expr = (uexpr | 0);
+        if (expr <= -250000000)
+            return this.disasm_addr(uexpr, type);
+        else if (expr <= -210000000)
+            return `${(expr - -230000000) / 1024.0}`;
+        else if (expr < -200000000)
+            return `UF(${expr - -210000000})`;
+        else if (expr < -180000000)
+            return `UW(${expr - -190000000})`;
+        else if (expr < -160000000)
+            return `GSW(${expr - -170000000})`;
+        else if (expr < -140000000)
+            return `LSW(${expr - -150000000})`;
+        else if (expr < -120000000)
+            return `GSWF(${expr - -130000000})`;
+        else if (expr < -100000000)
+            return `LSWF(${expr - -110000000})`;
+        else if (expr < -80000000)
+            return `GF(${expr - -90000000})`;
+        else if (expr < -60000000)
+            return `LF(${expr - -70000000})`;
+        else if (expr < -40000000)
+            return `GW(${expr - -50000000})`;
+        else if (expr < -20000000)
+            return `LW(${expr - -30000000})`;
+        else
+            return `${expr}`;
+    }
+
+    private disasm_sub(sub: evt_disasm_sub, entry: mapentry | null): string {
+        let S = `${sub.name}:\n`;
+
+        if (entry === null)
+            return S + `    [not found]`;
+
+        let pc = sub.addr;
+
+        let indent = '';
+
+        function pushIndent(): void {
+            indent += `  `;
+        }
+        function popIndent(): void {
+            indent = indent.slice(2);
+        }
+
+        while (true) {
+            const header = entry.getUint32(pc);
+            const opcode = this.handler.op_decode(header & 0xFFFF);
+            const paramCount = (header >>> 16) & 0xFFFF;
+
+            if ((opcode === op.end_if) || opcode === op.else || opcode === op.while || opcode === op.end_switch || opcode === op.end_inline || opcode === op.end_brother)
+                popIndent();
+
+            const pcs = hexzero(pc, 8);
+            S += `${pcs}  ${indent}  ${op[opcode]}`;
+
+            pc += 0x04;
+            const tbl = evt_disasm_opcode_tbl[opcode];
+            let ptype: evt_disasm_ptype[] = [];
+            if (tbl !== undefined) {
+                if (!tbl.varargs)
+                    assert(tbl.t.length === paramCount);
+                ptype = tbl.t;
+            }
+
+            for (let i = 0; i < paramCount; i++) {
+                const expr = entry.getUint32(pc);
+                pc += 0x04;
+
+                const exprType = ptype[i];
+                S += `  ${this.disasm_expr(expr, exprType)}`;
+            }
+
+            S += `\n`;
+
+            if (opcode === op.END)
+                break;
+
+            if ((opcode >= op.if_str_equal && opcode <= op.if_not_flag) || opcode === op.else || opcode === op.do || opcode === op.switch || opcode === op.inline_evt || opcode === op.inline_evt_id || opcode === op.brother_evt || opcode === op.brother_evt_id)
+                pushIndent();
+        }
+
+        return S;
+    }
+
+    private disasm_sub_maybe(addr: number, prefix = 'SUB_'): evt_disasm_sub {
+        let sub = this.sub.find((sub) => sub.addr === addr);
+        if (!sub) {
+            sub = new evt_disasm_sub(addr, `${prefix}_${hexzero(addr, 8)}`);
+            this.sub.push(sub);
+            const entry = this.map.ref(addr);
+            sub.res = this.disasm_sub(sub, entry);
+        }
+        return sub;
+    }
+
+    public disasm(entry: number): void {
+        this.disasm_sub_maybe(entry, 'ENTRY_');
+
+        let S = ``;
+        for (let i = 0; i < this.sub.length; i++)
+            S += `${this.sub[i].res}\n\n`;
+        console.log(S);
+    }
+}
+
 export class evt_handler_ttyd extends evt_handler {
     private mapfile: evt_map;
 
@@ -1155,10 +1153,10 @@ export class evt_handler_ttyd extends evt_handler {
         this.mapfile = new evt_map(mapFileData);
     }
 
-    public override user_func(ctx: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
+    public override user_func(mgr: evtmgr, evt: evt_exec, addr: number): evt_user_func_ret {
         if (addr === 0x805bea21) {
             // HACK: fix for tou_01
-            ctx.evt_set_arg(evt, 1, 1);
+            mgr.evt_set_arg(evt, 1, 1);
             return evt_user_func_ret.advance;
         }
 
@@ -1168,74 +1166,74 @@ export class evt_handler_ttyd extends evt_handler {
 
         if (sym.name === 'evt_sub_get_language') {
             // 0 = Japanese, 1 = English, 2 = German, 3 = French, 4 = Spanish, 5 = Italian
-            ctx.evt_set_arg(evt, 1, 1);
+            mgr.evt_set_arg(evt, 1, 1);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_sub_get_sincos') {
-            const theta = ctx.evt_eval_arg(evt, 1) * MathConstants.DEG_TO_RAD;
-            ctx.evt_set_arg(evt, 2, Math.sin(theta));
-            ctx.evt_set_arg(evt, 3, Math.cos(theta));
+            const theta = mgr.evt_eval_arg(evt, 1) * MathConstants.DEG_TO_RAD;
+            mgr.evt_set_arg(evt, 2, Math.sin(theta));
+            mgr.evt_set_arg(evt, 3, Math.cos(theta));
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_map_playanim') {
-            const animName = ctx.evt_eval_string_arg(evt, 1);
+            const animName = mgr.evt_eval_string_arg(evt, 1);
             this.renderer.playAnimationName(animName);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_mapobj_flag_onoff') {
-            const recurse = ctx.evt_eval_arg(evt, 1);
-            const v = ctx.evt_eval_arg(evt, 2);
-            const name = ctx.evt_eval_string_arg(evt, 3);
-            const flag = ctx.evt_eval_arg(evt, 4);
+            const recurse = mgr.evt_eval_arg(evt, 1);
+            const v = mgr.evt_eval_arg(evt, 2);
+            const name = mgr.evt_eval_string_arg(evt, 3);
+            const flag = mgr.evt_eval_arg(evt, 4);
             const mapObj = this.renderer.getMapObj(name);
             if (mapObj !== null)
                 mapObj.setFlag(flag, !!v, !!recurse);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_mapobj_rotate') {
-            const flag = ctx.evt_eval_arg(evt, 1);
-            const name = ctx.evt_eval_string_arg(evt, 2);
-            const rx = ctx.evt_eval_arg(evt, 3);
-            const ry = ctx.evt_eval_arg(evt, 4);
-            const rz = ctx.evt_eval_arg(evt, 5);
+            const flag = mgr.evt_eval_arg(evt, 1);
+            const name = mgr.evt_eval_string_arg(evt, 2);
+            const rx = mgr.evt_eval_arg(evt, 3);
+            const ry = mgr.evt_eval_arg(evt, 4);
+            const rz = mgr.evt_eval_arg(evt, 5);
             const mapObj = this.renderer.getMapObj(name);
             if (mapObj !== null)
                 mapObj.rotate(rx, ry, rz);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_mapobj_scale') {
-            const flag = ctx.evt_eval_arg(evt, 1);
-            const name = ctx.evt_eval_string_arg(evt, 2);
-            const sx = ctx.evt_eval_arg(evt, 3);
-            const sy = ctx.evt_eval_arg(evt, 4);
-            const sz = ctx.evt_eval_arg(evt, 5);
+            const flag = mgr.evt_eval_arg(evt, 1);
+            const name = mgr.evt_eval_string_arg(evt, 2);
+            const sx = mgr.evt_eval_arg(evt, 3);
+            const sy = mgr.evt_eval_arg(evt, 4);
+            const sz = mgr.evt_eval_arg(evt, 5);
             const mapObj = this.renderer.getMapObj(name);
             if (mapObj !== null)
                 mapObj.scale(sx, sy, sz);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_mapobj_trans') {
-            const flag = ctx.evt_eval_arg(evt, 1);
-            const name = ctx.evt_eval_string_arg(evt, 2);
-            const tx = ctx.evt_eval_arg(evt, 3);
-            const ty = ctx.evt_eval_arg(evt, 4);
-            const tz = ctx.evt_eval_arg(evt, 5);
+            const flag = mgr.evt_eval_arg(evt, 1);
+            const name = mgr.evt_eval_string_arg(evt, 2);
+            const tx = mgr.evt_eval_arg(evt, 3);
+            const ty = mgr.evt_eval_arg(evt, 4);
+            const tz = mgr.evt_eval_arg(evt, 5);
             const mapObj = this.renderer.getMapObj(name);
             if (mapObj !== null)
                 mapObj.trans(tx, ty, tz);
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_mobj_save_blk') {
-            const mobjName = ctx.evt_eval_string_arg(evt, 1);
-            const x = ctx.evt_eval_arg(evt, 2);
-            const y = ctx.evt_eval_arg(evt, 3);
-            const z = ctx.evt_eval_arg(evt, 4);
-            const evtEntry = ctx.evt_eval_arg(evt, 5);
+            const mobjName = mgr.evt_eval_string_arg(evt, 1);
+            const x = mgr.evt_eval_arg(evt, 2);
+            const y = mgr.evt_eval_arg(evt, 3);
+            const z = mgr.evt_eval_arg(evt, 4);
+            const evtEntry = mgr.evt_eval_arg(evt, 5);
             const mobj = this.renderer.spawnMOBJ(mobjName, 'MOBJ_SaveBlock');
             mobj.setPosition(x, y, z);
             mobj.setAnim('S_1');
             return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_npc_glide_position') {
-            return evt_user_func_ret.stall;
+            return evt_user_func_ret.stop;
         }
 
         return evt_user_func_ret.advance;
     }
 
-    public override get_map_symbol(addr: number): evt_sym | null {
+    public override get_user_func_sym(addr: number): evt_sym | null {
         return this.mapfile.getSymbol(addr);
     }
 }

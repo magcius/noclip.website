@@ -7,6 +7,7 @@ import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../viewer";
 import { RendererStore } from "../Scenes";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 // UVTR aka "terra"
 export class UVTR {
@@ -61,10 +62,10 @@ export class UVTR {
 
 export class UVTRRenderer {
     public uvctRenderers: Map<UVCT, UVCTRenderer> = new Map();
-    constructor(public uvtr: UVTR, device: GfxDevice, rendererStore: RendererStore) {
+    constructor(public uvtr: UVTR, cache: GfxRenderCache, rendererStore: RendererStore) {
 
         for(let [uvct, placementMat] of uvtr.uvcts) {
-            let uvctRenderer = rendererStore.getOrCreateRenderer(uvct, ()=>new UVCTRenderer(uvct, device, rendererStore))
+            let uvctRenderer = rendererStore.getOrCreateRenderer(uvct, ()=>new UVCTRenderer(uvct, cache, rendererStore));
             this.uvctRenderers.set(uvct, uvctRenderer);
         }
     }

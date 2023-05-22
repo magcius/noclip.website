@@ -9,6 +9,7 @@ import { assert } from './util';
 import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
+import { GlobalSaveManager } from './SaveManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -410,9 +411,13 @@ export class FPSCameraController implements CameraController {
 
         keyMovement[0] += -inputManager.getTouchDeltaX() * keyMoveVelocity;
 
-        if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space')) || inputManager.isKeyDown('KeyC')) {
+        const swapQE = GlobalSaveManager.loadSetting<boolean>('SwapQE', false);
+        const keyDownQE = swapQE ? 'KeyE' : 'KeyQ';
+        const keyUpQE = swapQE ? 'KeyQ' : 'KeyE';
+
+        if (inputManager.isKeyDown(keyDownQE) || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space')) || inputManager.isKeyDown('KeyC')) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
+        } else if (inputManager.isKeyDown(keyUpQE) || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
             keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
         } else if (Math.abs(keyMovement[1]) >= keyMoveLowSpeedCap) {
             keyMovement[1] *= this.keyMoveDrag;

@@ -69,6 +69,7 @@ import * as Scenes_HalfLife2Ep1 from './SourceEngine/Scenes_HalfLife2Ep1';
 import * as Scenes_HalfLife2Ep2 from './SourceEngine/Scenes_HalfLife2Ep2';
 import * as Scenes_NfsMostWanted from './NeedForSpeedMostWanted/scenes';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
+import * as Scenes_Left4Dead2 from './SourceEngine/Scenes_Left4Dead2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
 import * as Scenes_TheStanleyParable from './SourceEngine/Scenes_TheStanleyParable';
@@ -92,6 +93,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { assertExists, assert } from './util';
+import { loadRustLib } from './rustlib';
 import { DataFetcher } from './DataFetcher';
 import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
@@ -206,6 +208,7 @@ const sceneGroups = [
     Scenes_Subnautica.sceneGroup,
     Scenes_Halo1.sceneGroup,
     Scenes_HalfLife.sceneGroup,
+    Scenes_Left4Dead2.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -298,6 +301,8 @@ class Main {
         this.toplevel.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
+
+        await loadRustLib();
 
         const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {

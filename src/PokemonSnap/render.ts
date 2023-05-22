@@ -432,7 +432,7 @@ export class ModelRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.renderData.inputLayout, this.renderData.inputState);
+        template.setVertexInput(this.renderData.inputLayout, this.renderData.vertexBufferDescriptors, this.renderData.indexBufferDescriptor);
 
         template.filterKey = this.isSkybox ? SnapPass.SKYBOX : SnapPass.MAIN;
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16 + 2 * 4);

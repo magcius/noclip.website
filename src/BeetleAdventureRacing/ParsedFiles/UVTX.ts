@@ -10,6 +10,7 @@ import { vec4, mat4 } from "gl-matrix";
 import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, makeTextureDescriptor2D, GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { fillVec4v, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
 import { calcTextureMatrixFromRSPState } from "../../Common/N64/RSP";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 // TODO: figure out if any mode other than Loop is used
 enum TexScrollAnimMode {
@@ -479,19 +480,19 @@ export class UVTXRenderHelper {
     private texel0TileState: RDP.TileState;
     private texel1TileState: RDP.TileState;
 
-    constructor(public uvtx: UVTX, device: GfxDevice) {
+    constructor(public uvtx: UVTX, cache: GfxRenderCache) {
         this.hasPairedTexture = this.uvtx.otherUVTX !== null;
         if(this.hasPairedTexture) {
             // TODO: smarter handling of case where other uvtx = this uvtx ?
             if(this.uvtx.rspState.mainTextureIsFirstTexture) {
-                this.texel0TextureData = new TextureData(device, this.uvtx);
-                this.texel1TextureData = new TextureData(device, this.uvtx.otherUVTX!);
+                this.texel0TextureData = new TextureData(cache, this.uvtx);
+                this.texel1TextureData = new TextureData(cache, this.uvtx.otherUVTX!);
             } else {
-                this.texel0TextureData = new TextureData(device, this.uvtx.otherUVTX!);
-                this.texel1TextureData = new TextureData(device, this.uvtx);
+                this.texel0TextureData = new TextureData(cache, this.uvtx.otherUVTX!);
+                this.texel1TextureData = new TextureData(cache, this.uvtx);
             }
         } else {
-            this.texel0TextureData = new TextureData(device, this.uvtx);
+            this.texel0TextureData = new TextureData(cache, this.uvtx);
         }
 
         this.texel0TileState = uvtx.rspState.primitiveTile;
@@ -566,7 +567,9 @@ class TextureData {
     public width: number;
     public height: number;
     
-    public constructor(device: GfxDevice, uvtx: UVTX) {
+    public constructor(cache: GfxRenderCache, uvtx: UVTX) {
+        const device = cache.device;
+
         this.width = uvtx.width;
         this.height = uvtx.height;
 
@@ -576,12 +579,12 @@ class TextureData {
 
         device.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler({
             wrapS: translateCM(rspState.primitiveTile.cms),
             wrapT: translateCM(rspState.primitiveTile.cmt),
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -592,6 +595,5 @@ class TextureData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
-        device.destroySampler(this.gfxSampler);
     }
 }

@@ -12,14 +12,13 @@ import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { LoopMode, BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { colorFromRGBA, colorNewCopy, OpaqueBlack } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, Destroyable } from '../SceneBase';
-import { createModelInstance } from './scenes';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
@@ -470,7 +469,7 @@ class LightConfig {
         const px  = (nx * this.LARGE_NUMBER);
         const py  = (ny * this.LARGE_NUMBER);
         const pz  = (nz * this.LARGE_NUMBER);
-        
+
         vec3.set(lit.Position, px, py, pz);
     }
     private scratchVec3 = vec3.create();
@@ -482,7 +481,7 @@ class LightConfig {
         colorFromRGBA(diffDst.Color, diffSrc.r/0xFF, diffSrc.g/0xFF, diffSrc.b/0xFF, diffSrc.a/0xFF);
         vec3.set(diffDst.CosAtten, 1.0, 0.0, 0.0);
         vec3.set(diffDst.DistAtten, 1.0, 0.0, 0.0);
-        
+
         const specSrc = this.lightObj[2];
         const specDst = modelInstance.getGXLightReference(2);
         const v = this.scratchVec3;
@@ -545,7 +544,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             }
         }
     }
-    
+
     private LARGE_NUMBER = -1048576.0;
     private initSpecularDir(lit: Light, nx: number, ny: number, nz: number) {
         // Compute half-angle vector
@@ -556,7 +555,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         const px  = (nx * this.LARGE_NUMBER);
         const py  = (ny * this.LARGE_NUMBER);
         const pz  = (nz * this.LARGE_NUMBER);
-        
+
         vec3.set(lit.Position, px, py, pz);
     }
 
@@ -644,13 +643,13 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             v.destroy(device);
     }
 }
-        
+
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
     private ambAry: SceneBinObjGroup;
     private playerAmbIndex = -1;
     private objectsAmbIndex = -1;
-    
+
     public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.JKRArchive, basename: string, isSkybox: boolean): J3DModelInstanceSimple | null {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
@@ -659,10 +658,26 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const modelInstance = createModelInstance(device, cache, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+
+        const bmd = BMD.parse(bmdFile.buffer);
+        const bmdModel = new J3DModelData(device, cache, bmd);
+        const modelInstance = new J3DModelInstanceSimple(bmdModel);
+        if (bmtFile !== null)
+            modelInstance.setModelMaterialDataOwned(new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer)));
+
+        if (btkFile !== null)
+            modelInstance.bindTTK1(BTK.parse(btkFile.buffer));
+
+        if (brkFile !== null)
+            modelInstance.bindTRK1(BRK.parse(brkFile.buffer));
+
+        if (bckFile !== null)
+            modelInstance.bindANK1(BCK.parse(bckFile.buffer));
+
         modelInstance.name = basename;
         modelInstance.isSkybox = isSkybox;
         modelInstance.passMask = passMask;
+
         return modelInstance;
     }
 
@@ -684,25 +699,25 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const renderer = new SunshineRenderer(device, rarc);
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
-            if (skyScene !== null)
-                renderer.modelInstances.push(skyScene);
-            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/map', false);
-            if (mapScene !== null)
-                renderer.modelInstances.push(mapScene);
-            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/sea', false);
-            if (seaScene !== null)
-                renderer.modelInstances.push(seaScene);
-            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.INDIRECT, rarc, 'map/map/seaindirect', false);
-            if (seaIndirectScene !== null)
-                renderer.modelInstances.push(seaIndirectScene);
+            const sky = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
+            if (sky !== null)
+                renderer.modelInstances.push(sky);
+            const map = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/map', false);
+            if (map !== null)
+                renderer.modelInstances.push(map);
+            const sea = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/sea', false);
+            if (sea !== null)
+                renderer.modelInstances.push(sea);
+            const seaIndirect = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.INDIRECT, rarc, 'map/map/seaindirect', false);
+            if (seaIndirect !== null)
+                renderer.modelInstances.push(seaIndirect);
 
             this.createSceneBinObjects(device, cache, renderer, rarc, sceneBinObj);
-            
+
             for (let i = 0; i < renderer.modelInstances.length; i++) {
                 this.setUpAmbientLight(renderer.modelInstances[i]);
             }
-            
+
             return renderer;
         });
     }
@@ -726,7 +741,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             this.createRendererForSceneBinStaticObj(device, cache, renderer, rarc, obj);
         }
     }
-    
+
     private setUpAmbientLight(modelInstance: J3DModelInstanceSimple) {
         if (this.objectsAmbIndex !== -1 && modelInstance.modelMaterialData.materialData !== null) {
             const ambColor = this.ambAry.children[this.objectsAmbIndex] as SceneBinObjAmbColor;
@@ -755,7 +770,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 return bmdModel;
             }
         }
-        
+
         const modelLookup: ModelLookup[] = [
 { k: 'AirportPole' },
 { k: 'amiking', m: 'amiking_model1.bmd' },
@@ -979,30 +994,30 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             return null;
         }
 
-        let scene = null;
+        let modelInstance = null;
         if (modelEntry.m !== undefined) {
             const bmdFilename = `mapobj/${modelEntry.m.toLowerCase()}`;
             const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
             const bmdModel = lookupModel(bmdFile);
-            scene = new J3DModelInstanceSimple(bmdModel);
-            scene.passMask = SMSPass.OPAQUE;
+            modelInstance = new J3DModelInstanceSimple(bmdModel);
+            modelInstance.passMask = SMSPass.OPAQUE;
         }
 
-        if (scene === null) {
-            console.log("couldn't load "+JSON.stringify(modelEntry));
+        if (modelInstance === null) {
+            console.log(`couldn't load ${JSON.stringify(modelEntry)}`);
             return null;
         }
-        
+
         if (modelEntry.t !== undefined) {
             const bmtFilename = `mapobj/${modelEntry.t.toLowerCase()}.bmt`;
             const bmtFile = rarc.findFile(bmtFilename);
             if (bmtFile !== null) {
                 const modelMaterialData = new J3DModelMaterialData(device, cache, BMT.parse(bmtFile.buffer));
                 renderer.destroyables.push(modelMaterialData);
-                scene.setModelMaterialData(modelMaterialData);
+                modelInstance.setModelMaterialData(modelMaterialData);
             }
         }
-        
+
         if (modelEntry.n) {
             switch (modelEntry.u) {
             case 0:
@@ -1011,7 +1026,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 if (anmFile !== null) {
                     const anm = BCK.parse(anmFile.buffer);
                     //anm.loopMode = LoopMode.REPEAT;
-                    scene.bindANK1(anm);
+                    modelInstance.bindANK1(anm);
                 }
                 break;
             }
@@ -1019,42 +1034,42 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             {
                 const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.bpk`));
                 const anm = BPK.parse(anmFile.buffer);
-                scene.bindTRK1(anm);
+                modelInstance.bindTRK1(anm);
                 break;
             }
             case 3:
             {
                 const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.btp`));
                 const anm = BTP.parse(anmFile.buffer);
-                scene.bindTPT1(anm);
+                modelInstance.bindTPT1(anm);
                 break;
             }
             case 4:
             {
                 const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.btk`));
                 const anm = BTK.parse(anmFile.buffer);
-                scene.bindTTK1(anm);
+                modelInstance.bindTTK1(anm);
                 break;
             }
             case 5:
             {
                 const anmFile = assertExists(rarc.findFile(`mapobj/${modelEntry.n.toLowerCase()}.brk`));
                 const anm = BRK.parse(anmFile.buffer);
-                scene.bindTRK1(anm);
+                modelInstance.bindTRK1(anm);
                 break;
             }
             default:
                 throw `unhandled animation type ${modelEntry.u}`;
             }
         }
-        
+
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
-        mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
-        renderer.modelInstances.push(scene);
-        return scene;
+        mat4.fromRotationTranslationScale(modelInstance.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
+        renderer.modelInstances.push(modelInstance);
+        return modelInstance;
     }
-    
+
     private createRendererForSceneBinStaticObj(device: GfxDevice, cache: GfxRenderCache, renderer: SunshineRenderer, rarc: RARC.JKRArchive, obj: SceneBinObjStaticObj): J3DModelInstanceSimple | null {
         interface ModelLookup {
             k: string; // model key
@@ -1110,39 +1125,39 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 { k: 'TargetArrow', m: 'TargetArrow' },
 { k: 'TopOfCorona', p: 'mapObj/ms_coronasmoke.jpa' },
         ];
-        
+
         let modelEntry = modelLookup.find((lt) => obj.model === lt.k);
         if (modelEntry === undefined) {
             console.warn(`No model for ${obj.klass} ${obj.model}`);
             return null;
         }
 
-        let scene = null;
+        let modelInstance = null;
 
         if (modelEntry.m !== undefined) {
             const bmdFilename = `map/map/${modelEntry.m.toLowerCase()}.bmd`;
             const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
             const bmdModel = lookupModel(bmdFile);
-            scene = new J3DModelInstanceSimple(bmdModel);
-            scene.passMask = SMSPass.OPAQUE;
+            modelInstance = new J3DModelInstanceSimple(bmdModel);
+            modelInstance.passMask = SMSPass.OPAQUE;
         }
-        
+
         if (modelEntry.p !== undefined) {
             const jpaFilename = modelEntry.p.toLowerCase();
             const jpaFile = assertExists(rarc.findFile(jpaFilename), jpaFilename);
             const jpaData = lookupEffect(jpaFile);
         }
 
-        if (scene === null) {
-            console.log("couldn't load "+JSON.stringify(modelEntry));
+        if (modelInstance === null) {
+            console.log(`couldn't load ${JSON.stringify(modelEntry)}`);
             return null;
         }
 
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
-        mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
-        renderer.modelInstances.push(scene);
-        return scene;
+        mat4.fromRotationTranslationScale(modelInstance.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
+        renderer.modelInstances.push(modelInstance);
+        return modelInstance;
     }
 }
 

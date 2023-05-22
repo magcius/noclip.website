@@ -5,7 +5,7 @@ import { mat4, quat, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
-import { assert, readString } from '../../../util';
+import { assert, assertExists, readString } from '../../../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
@@ -721,35 +721,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             lightChannels.push({ colorChannel, alphaChannel });
         }
 
-        const texGens: GX_Material.TexGen[] = [];
-        for (let j = 0; j < 8; j++) {
-            const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
-            if (texGenIndex < 0)
-                continue;
-            const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
-            const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
-            const matrixCheck: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
-            assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
-            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
-            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
-            if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
-                postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
-            }
-
-            // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
-            // For this reason, we always assign a texture matrix. In theory, the file should
-            // have an identity texture matrix in the texMatrices section, so it should render correctly.
-            const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
-            // If we ever find a counter-example for this, I'll have to rethink the scheme, but I
-            // *believe* that texture matrices should always be paired with TexGens in order.
-            assert(matrixCheck === GX.TexGenMatrix.IDENTITY || matrixCheck === matrix);
-
-            const normalize = false;
-            const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
-            texGens[j] = texGen;
-        }
-
         const texMatrices: (TexMtx | null)[] = [];
         for (let j = 0; j < 10; j++) {
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
@@ -774,6 +745,40 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 postTexMatrices[j] = null;
         }
         */
+
+        const texGens: GX_Material.TexGen[] = [];
+        for (let j = 0; j < 8; j++) {
+            const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
+            if (texGenIndex < 0)
+                continue;
+            const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
+            const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
+            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
+            assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
+            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
+            if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
+                postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
+                assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+            }
+
+            // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
+            // For this reason, we always assign a texture matrix.
+            //
+            // If we ever find a counter-example for this, I'll have to rethink the scheme, but I
+            // *believe* that texture matrices should always be paired with TexGens in order.
+            const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
+            assert(texGenMatrix === GX.TexGenMatrix.IDENTITY || texGenMatrix === matrix);
+
+            if (texGenMatrix === GX.TexGenMatrix.IDENTITY && texMatrices[j] !== null) {
+                // If this is an identity matrix, then clear out the matrix in that file.
+                mat4.identity(texMatrices[j]!.matrix);
+            }
+
+            const normalize = false;
+            const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
+            texGens[j] = texGen;
+        }
 
         const textureIndexes = [];
         for (let j = 0; j < 8; j++) {
@@ -1158,6 +1163,7 @@ export interface TEX1_Sampler {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
+    maxAnisotropy: GX.Anisotropy;
     textureDataIndex: number;
 }
 
@@ -1213,6 +1219,7 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
             minLOD: btiTexture.minLOD,
             maxLOD: btiTexture.maxLOD,
             lodBias: btiTexture.lodBias,
+            maxAnisotropy: btiTexture.maxAnisotropy,
             textureDataIndex,
         };
         samplers.push(sampler);

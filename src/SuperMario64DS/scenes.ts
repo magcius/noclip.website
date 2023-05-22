@@ -447,7 +447,7 @@ class ModelCache {
             const buffer = assertExists(this.fileDataCache.get(modelPath));
             const result = LZ77.maybeDecompress(buffer);
             const bmd = BMD.parse(result);
-            p = new BMDData(device, this.gfxRenderCache, bmd);
+            p = new BMDData(this.gfxRenderCache, bmd);
             this.modelCache.set(modelPath, p);
         }
 

@@ -64,21 +64,22 @@ class MaterialInstance {
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
+    constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
 
+        const device = cache.device;
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: expand5to8(this.material.alpha) };
 
         if (this.gfxTextures.length > 0) {
-            this.gfxSampler = device.createSampler({
+            this.gfxSampler = cache.createSampler({
                 minFilter: GfxTexFilterMode.Point,
                 magFilter: GfxTexFilterMode.Point,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 wrapS: parseMPHTexImageParamWrapModeS(this.material.texParams),
                 wrapT: parseMPHTexImageParamWrapModeT(this.material.texParams),
                 minLOD: 0,
@@ -160,8 +161,6 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -181,10 +180,10 @@ const scratchMat4 = mat4.create();
 class ShapeInstance {
     private vertexData: VertexData;
 
-    constructor(device: GfxDevice, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
+    constructor(cache: GfxRenderCache, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
         const baseCtx = this.materialInstance.baseCtx;
         const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
-        this.vertexData = new VertexData(device, nitroVertexData);
+        this.vertexData = new VertexData(cache, nitroVertexData);
     }
 
     private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
@@ -200,7 +199,7 @@ class ShapeInstance {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
+        template.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
         const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
@@ -236,7 +235,6 @@ const enum BillboardMode {
     NONE, BB, BBY,
 }
 
-
 export class MPHRenderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
@@ -265,7 +263,7 @@ export class MPHRenderer {
         const model = mphModel.models[0];
 
         for (let i = 0; i < model.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(device, this.tex0, model, model.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.tex0, model, model.materials[i]));
 
         for (let i = 0; i < model.nodes.length; i++)
             this.nodes.push(new Node(model.nodes[i]));
@@ -290,7 +288,7 @@ export class MPHRenderer {
                 index = 0;
             }
             const nodeIndex = index;
-            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
+            this.shapeInstances.push(new ShapeInstance(cache, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
     }
 

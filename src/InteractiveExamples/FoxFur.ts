@@ -2,7 +2,7 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { DataFetcher } from "../DataFetcher";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
@@ -265,7 +265,8 @@ class FurObj {
     private inputLayout: GfxInputLayout;
     private gfxProgram: GfxProgram;
     private vertexBuffer: GfxBuffer;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private indexCount: number;
     private modelMatrix = mat4.create();
 
@@ -311,7 +312,7 @@ class FurObj {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, obj.indexBuffer.buffer);
         this.indexCount = obj.indexBuffer.length;
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: [
                 { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04 },
@@ -323,9 +324,10 @@ class FurObj {
             ]
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0x00, },
-        ], { buffer: this.indexBuffer, byteOffset: 0x00 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0x00 };
 
         this.gfxProgram = cache.createProgram(new FurProgram());
 
@@ -338,7 +340,7 @@ class FurObj {
         template.setBindingLayouts(bindingLayouts);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         for (let i = 0; i < this.numLayers; i++) {
@@ -410,7 +412,7 @@ class SceneRenderer implements SceneGfx {
     }
 
     public getCache(): GfxRenderCache {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public createCameraController() {

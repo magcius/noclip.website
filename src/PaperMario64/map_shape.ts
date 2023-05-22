@@ -19,7 +19,7 @@ const enum InternalType {
     LEAF = 0x02,
     GROUP = 0x05,
     ROOT = 0x07,
-    SPECIAL = 0x10,
+    SPECIAL = 0x0A,
 }
 
 interface ModelTreeNodeBase {

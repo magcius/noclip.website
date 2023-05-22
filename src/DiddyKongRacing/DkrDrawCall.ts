@@ -4,7 +4,7 @@ import { computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
 import { assert } from '../util';
 import { ViewerRenderInput } from '../viewer';
 import { DkrControlGlobals } from './DkrControlGlobals';
@@ -14,8 +14,8 @@ import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program';
 import { DkrObjectAnimation } from './DkrObjectAnimation';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-
-const VERTEX_BYTE_STRIDE = 12;
+import { makeTriangleIndexBuffer } from '../gfx/helpers/TopologyHelpers';
+import { GfxTopology } from '../gfx/helpers/TopologyHelpers';
 
 // Currently known flags
 const FLAG_ENABLE_DEPTH_WRITE    = 0x00000010;
@@ -43,20 +43,21 @@ export interface DkrDrawCallParams {
 }
 
 export class DkrDrawCall {
-    private vertices = new Array<DkrFinalVertex>();
-    private indices = new Array<number>();
-    private defaultInputLayout: GfxInputLayout;
-    private defaultInputState: GfxInputState;
-    private objAnimInputStates = new Array<Array<GfxInputState>>();
-    private objAnimInputStateBuffers = new Array<GfxBuffer>();
+    private vertices: DkrFinalVertex[] = [];
+    private positionBuffer: GfxBuffer;
+    private attribBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private indexCount: number;
+
+    private inputLayout: GfxInputLayout;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
+    private objAnimPositionBufferByteOffset: number[][] = [];
     private gfxProgram: GfxProgram | null = null;
     private program: F3DDKR_Program;
     private isBuilt = false;
     private flags: number;
     private hasBeenDestroyed = false;
-
-    private vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
-    private vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[];
 
     // Only used for the Crescent Island waterfalls
     private scrollU = 0;
@@ -73,138 +74,94 @@ export class DkrDrawCall {
         this.vertices = this.vertices.concat(triBatch.getVertices());
     }
 
-    public build(animations: Array<DkrObjectAnimation> | null = null): void {
+    public build(animations: DkrObjectAnimation[] | null = null): void {
         assert(!this.isBuilt);
-        const numberOfTriangles = this.vertices.length / 3;
-        assert(Number.isInteger(numberOfTriangles));
 
-        for(let i = 0; i < numberOfTriangles; i++) {
-            this.indices.push(i * 3);
-            this.indices.push(i * 3 + 1);
-            this.indices.push(i * 3 + 2);
+        const indexData = makeTriangleIndexBuffer(GfxTopology.Triangles, 0, this.vertices.length);
+        this.indexCount = indexData.length;
+        this.indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indexData.buffer);
+
+        const attribBuffer = new Float32Array(this.vertices.length * 6);
+        for(let i = 0; i < this.vertices.length; i++) {
+            const attribOffs = i * 6;
+            attribBuffer[attribOffs + 0] = this.vertices[i].xr;
+            attribBuffer[attribOffs + 1] = this.vertices[i].yg;
+            attribBuffer[attribOffs + 2] = this.vertices[i].zb;
+            attribBuffer[attribOffs + 3] = this.vertices[i].a;
+            attribBuffer[attribOffs + 4] = this.vertices[i].u;
+            attribBuffer[attribOffs + 5] = this.vertices[i].v;
         }
 
-        this.vertexAttributeDescriptors = [
+        const positionBufferFrameSize = this.vertices.length * 3;
+        let positionBuffer: Float32Array;
+
+        if (animations !== null && animations.length > 0) {
+            let keyframeTotalNum = 0;
+            for (let i = 0; i < animations.length; i++) {
+                const keyframes = animations![i].getKeyframes();
+                keyframeTotalNum += keyframes.length;
+            }
+            assert(keyframeTotalNum > 0);
+
+            // Now set up the keyframes. Each keyframe is effectively a contiguous position vertex buffer.
+            positionBuffer = new Float32Array(positionBufferFrameSize * keyframeTotalNum);
+            let positionOffs = 0;
+            for (let i = 0; i < animations.length; i++) {
+                const frameByteOffset: number[] = [];
+                const keyframes = animations![i].getKeyframes();
+                for (let j = 0; j < keyframes.length; j++) {
+                    frameByteOffset.push(positionOffs * 0x04);
+                    const positions = keyframes[j];
+                    for (let k = 0; k < this.vertices.length; k++) {
+                        const originalIndex = this.vertices[k].originalIndex;
+                        positionBuffer.set(positions[originalIndex], positionOffs);
+                        positionOffs += 3;
+                    }
+                }
+                this.objAnimPositionBufferByteOffset.push(frameByteOffset);
+            }
+        } else {
+            positionBuffer = new Float32Array(positionBufferFrameSize);
+            for (let i = 0; i < this.vertices.length; i++) {
+                const positionOffs = i * 3;
+                positionBuffer[positionOffs + 0] = this.vertices[i].x;
+                positionBuffer[positionOffs + 1] = this.vertices[i].y;
+                positionBuffer[positionOffs + 2] = this.vertices[i].z;
+            }
+        }
+
+        const vertexAttributeDescriptors = [
             { location: F3DDKR_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
-            { location: F3DDKR_Program.a_Position_2, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x04, },
-            { location: F3DDKR_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
-            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 10 * 0x04, },
+            { location: F3DDKR_Program.a_Position_2, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_Color, bufferIndex: 2, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+            { location: F3DDKR_Program.a_TexCoord, bufferIndex: 2, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
         ];
-        this.vertexBufferDescriptors = [
-            { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        const vertexBufferDescriptors = [
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
+            { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // RGBA UV
         ];
-        this.defaultInputLayout = this.cache.createInputLayout({
+        this.inputLayout = this.cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors: this.vertexAttributeDescriptors,
-            vertexBufferDescriptors: this.vertexBufferDescriptors,
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
-        this.createDefaultInputStateAndLayout();
-
-        if(!!animations) {
-            for(const animation of animations) {
-                this.createObjAnimInputStateAndLayout(animation);
-            }
-        }
-
+        this.positionBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
+        this.attribBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
+        this.vertexBufferDescriptors = [
+            { buffer: this.positionBuffer, byteOffset: 0 },
+            { buffer: this.positionBuffer, byteOffset: 0 },
+            { buffer: this.attribBuffer, byteOffset: 0 },
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.isBuilt = true;
-    }
-
-    private defaultVertexBuffer: GfxBuffer;
-    private defaultIndexBuffer: GfxBuffer;
-
-    private createDefaultInputStateAndLayout(): void {
-        // Create the array buffers.
-        const indicesAB = new Uint16Array(this.indices);
-        const verticesAB = new Float32Array(this.vertices.length * VERTEX_BYTE_STRIDE);
-        for(let i = 0; i < this.vertices.length; i++) {
-            const off = i * VERTEX_BYTE_STRIDE;
-            verticesAB[off + 0] = this.vertices[i].x;
-            verticesAB[off + 1] = this.vertices[i].y;
-            verticesAB[off + 2] = this.vertices[i].z;
-            // Skipping a_Position_2, since it isn't used in the default state.
-            verticesAB[off + 6] = this.vertices[i].xr;
-            verticesAB[off + 7] = this.vertices[i].yg;
-            verticesAB[off + 8] = this.vertices[i].zb;
-            verticesAB[off + 9] = this.vertices[i].a;
-            verticesAB[off + 10] = this.vertices[i].u;
-            verticesAB[off + 11] = this.vertices[i].v;
-        }
-
-        // Create the buffers
-        this.defaultVertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
-        this.defaultIndexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer);
-        
-        // Set default input state
-        this.defaultInputState = this.device.createInputState(
-            this.defaultInputLayout, 
-            [{ buffer: this.defaultVertexBuffer, byteOffset: 0 }], 
-            { buffer: this.defaultIndexBuffer, byteOffset: 0 }
-        );
-    }
-
-    private createObjAnimInputStateAndLayout(animation: DkrObjectAnimation): void {
-        assert(!!animation);
-        const indicesAB = new Uint16Array(this.indices);
-        const inputStateFrames = new Array<GfxInputState>();
-        const keyFrames = animation.getKeyframes();
-
-        for(let kfi = 0; kfi < keyFrames.length - 1; kfi++) {
-            const keyframe = keyFrames[kfi];
-            const nextKeyframe = keyFrames[kfi + 1];
-            assert(!!keyframe && !!nextKeyframe);
-
-            const verticesAB = new Float32Array(this.vertices.length * VERTEX_BYTE_STRIDE);
-            for(let i = 0; i < this.vertices.length; i++) {
-                const off = i * VERTEX_BYTE_STRIDE;
-                const origIndex = this.vertices[i].originalIndex;
-                //if(kfi % 3 > 0) {
-                    verticesAB[off + 0] = keyframe[origIndex][0];
-                    verticesAB[off + 1] = keyframe[origIndex][1];
-                    verticesAB[off + 2] = keyframe[origIndex][2];
-                    verticesAB[off + 3] = nextKeyframe[origIndex][0];
-                    verticesAB[off + 4] = nextKeyframe[origIndex][1];
-                    verticesAB[off + 5] = nextKeyframe[origIndex][2];
-                //}
-                verticesAB[off + 6] = this.vertices[i].xr;
-                verticesAB[off + 7] = this.vertices[i].yg;
-                verticesAB[off + 8] = this.vertices[i].zb;
-                verticesAB[off + 9] = this.vertices[i].a;
-                verticesAB[off + 10] = this.vertices[i].u;
-                verticesAB[off + 11] = this.vertices[i].v;
-            }
-
-            // Create the buffers
-            const vertexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, verticesAB.buffer);
-            const indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indicesAB.buffer);
-
-            // Store the buffers into an array so I can destroy them later.
-            this.objAnimInputStateBuffers.push(vertexBuffer);
-            this.objAnimInputStateBuffers.push(indexBuffer);
-
-            inputStateFrames.push(this.device.createInputState(
-                this.defaultInputLayout, 
-                [{ buffer: vertexBuffer, byteOffset: 0 }], 
-                { buffer: indexBuffer, byteOffset: 0 }
-            ));
-        }
-
-        this.objAnimInputStates.push(inputStateFrames);
     }
 
     public destroy(device: GfxDevice): void {
         if(!this.hasBeenDestroyed) {
-            device.destroyBuffer(this.defaultIndexBuffer);
-            device.destroyBuffer(this.defaultVertexBuffer);
-            device.destroyInputState(this.defaultInputState);
-            for(const inputStateFrame of this.objAnimInputStates) {
-                for(const inputState of inputStateFrame) {
-                    device.destroyInputState(inputState);
-                }
-            }
-            for(const buffer of this.objAnimInputStateBuffers) {
-                device.destroyBuffer(buffer);
-            }
+            device.destroyBuffer(this.indexBuffer);
+            device.destroyBuffer(this.positionBuffer);
             this.hasBeenDestroyed = true;
         }
     }
@@ -218,20 +175,18 @@ export class DkrDrawCall {
         }
 
         if(this.isBuilt) {
-            const template = renderInstManager.pushTemplateRenderInst();
-            template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 1, },]);
-            template.setInputLayoutAndState(this.defaultInputLayout, this.defaultInputState);
-    
             let texLayer;
-    
+
+            const renderInst = renderInstManager.newRenderInst();
+
             if(!!this.texture) {
                 if(params.isSkydome) {
-                    template.setMegaStateFlags(setAttachmentStateSimple({}, {
+                    renderInst.setMegaStateFlags(setAttachmentStateSimple({}, {
                         blendMode: GfxBlendMode.Add,
                         blendSrcFactor: GfxBlendFactor.SrcAlpha,
                         blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                     }));
-                    template.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
+                    renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
                 } else {
                     if(params.overrideAlpha === null || params.overrideAlpha === 1.0) {
                         texLayer = this.texture!.getLayer();
@@ -240,7 +195,7 @@ export class DkrDrawCall {
                     }
                     if(texLayer == GfxRendererLayer.ALPHA_TEST) {
                         texLayer = GfxRendererLayer.TRANSLUCENT;
-                        template.setMegaStateFlags(setAttachmentStateSimple({
+                        renderInst.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: true
                         }, {
                             blendMode: GfxBlendMode.Add,
@@ -248,7 +203,7 @@ export class DkrDrawCall {
                             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                         }));
                     } else if(texLayer == GfxRendererLayer.TRANSLUCENT) {
-                        template.setMegaStateFlags(setAttachmentStateSimple({
+                        renderInst.setMegaStateFlags(setAttachmentStateSimple({
                             depthWrite: !!(this.flags & FLAG_ENABLE_DEPTH_WRITE),
                         }, {
                             blendMode: GfxBlendMode.Add,
@@ -256,47 +211,40 @@ export class DkrDrawCall {
                             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
                         }));
                     }
-                    template.sortKey = makeSortKey(texLayer);
+                    renderInst.sortKey = makeSortKey(texLayer);
                 }
             } else {
-                template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
+                renderInst.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
             }
-    
+
             if (this.gfxProgram === null) {
                 this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
             }
-    
-            const renderInst = renderInstManager.newRenderInst();
-    
-            // Set scene parameters
-            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_SceneParams, 16);
-            const d = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_SceneParams);
-            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-    
+
             // Set draw parameters
-            let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
-            const d2 = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
+            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
+            const d = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
 
             // Color
-            d2[offs2 + 0] = 1.0;
-            d2[offs2 + 1] = 1.0;
-            d2[offs2 + 2] = 1.0;
-            d2[offs2 + 3] = (params.overrideAlpha !== null) ? params.overrideAlpha : 1.0;
-            offs2 += 4;
+            d[offs + 0] = 1.0;
+            d[offs + 1] = 1.0;
+            d[offs + 2] = 1.0;
+            d[offs + 3] = (params.overrideAlpha !== null) ? params.overrideAlpha : 1.0;
+            offs += 4;
 
             // Misc[0] -- TexCoordOffset
             if (!!this.texture) {
                 const texCoordOffset = this.texture!.getTexCoordOffset();
-                d2[offs2 + 0] = texCoordOffset[0] + this.scrollU;
-                d2[offs2 + 1] = texCoordOffset[1] + this.scrollV;
+                d[offs + 0] = texCoordOffset[0] + this.scrollU;
+                d[offs + 1] = texCoordOffset[1] + this.scrollV;
             }
-            offs2 += 2;
+            offs += 2;
 
             // Misc[0] -- AnimProgress
             if (!!params.objAnim) {
-                d2[offs2] = params.objAnim.getProgressInCurrentFrame();
+                d[offs] = params.objAnim.getProgressInCurrentFrame();
             }
-            offs2++;
+            offs++;
 
             // Misc[0] -- Options
             let options = 0;
@@ -309,16 +257,16 @@ export class DkrDrawCall {
             if (params.objAnim)
                 options |= 0b1000;
 
-            d2[offs2] = options;
-            offs2++;
+            d[offs] = options;
+            offs++;
 
             if(!!this.texture) {
                 // Use the texture.
                 this.texture!.bind(renderInst, params.textureFrame);
-                
+
                 renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);
             } else {
-                offs2 += 16;
+                offs += 16;
             }
 
             assert(params.modelMatrices.length <= MAX_NUM_OF_INSTANCES);
@@ -330,25 +278,28 @@ export class DkrDrawCall {
                 } else {
                     mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, params.modelMatrices[i]);
                 }
-                offs2 += fillMatrix4x3(d2, offs2, viewMatrixCalcScratch);
+                offs += fillMatrix4x3(d, offs, viewMatrixCalcScratch);
             }
 
             if(!!params.objAnim) {
                 const currentFrameIndex = params.objAnim.getCurrentFrame();
-                const currentInputState = this.objAnimInputStates[params.objAnimIndex][currentFrameIndex];
-                renderInst.setInputLayoutAndState(this.defaultInputLayout, currentInputState);
+                this.vertexBufferDescriptors[0].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][currentFrameIndex];
+                const nextFrameIndex = (currentFrameIndex + 1) % params.objAnim.getKeyframes().length;
+                this.vertexBufferDescriptors[1].byteOffset = this.objAnimPositionBufferByteOffset[params.objAnimIndex][nextFrameIndex];
             } else {
-                renderInst.setInputLayoutAndState(this.defaultInputLayout, this.defaultInputState);
+                this.vertexBufferDescriptors[0].byteOffset = 0;
+                this.vertexBufferDescriptors[1].byteOffset = 0;
             }
 
+            renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+
             renderInst.setGfxProgram(this.gfxProgram);
-            renderInst.drawIndexesInstanced(this.indices.length, params.modelMatrices.length);
+            renderInst.drawIndexesInstanced(this.indexCount, params.modelMatrices.length);
             renderInst.setMegaStateFlags({
                 cullMode: DkrControlGlobals.ADV2_MIRROR.on ? GfxCullMode.Front : GfxCullMode.Back
             });
-    
+
             renderInstManager.submitRenderInst(renderInst);
-            renderInstManager.popTemplateRenderInst();
         }
     }
 

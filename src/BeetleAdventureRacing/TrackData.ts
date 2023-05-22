@@ -6,12 +6,13 @@ import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { Filesystem } from "./Filesystem";
 import { UVTT } from "./ParsedFiles/UVTT";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 
 // If the player resets when their progress is within this range, they will be reset as if their progress was at the end of the range
@@ -241,17 +242,19 @@ export class TranslucentPlaneRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private program: DeviceProgram;
     private gfxProgram: GfxProgram | null;
 
-    constructor(device: GfxDevice) {
+    constructor(cache: GfxRenderCache) {
         this.program = new TranslucentPlaneProgram();
         this.gfxProgram = null;
 
         const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
         const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
 
@@ -262,15 +265,14 @@ export class TranslucentPlaneRenderer {
             { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor ={ buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
@@ -311,8 +313,7 @@ export class TranslucentPlaneRenderer {
         uniformsOffset += fillMatrix4x4(uniforms, uniformsOffset, viewFromModelMatrix);
         uniformsOffset += fillVec4v(uniforms, uniformsOffset, vec4.fromValues(planeColor.r, planeColor.g, planeColor.b, planeColor.a));
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
@@ -325,8 +326,6 @@ export class TranslucentPlaneRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -372,8 +371,8 @@ export class TrackDataRenderer {
     private progressFixZonesHeight: number;
 
 
-    constructor(device: GfxDevice, private trackData: CourseTrackData) {
-        this.planeRenderer = new TranslucentPlaneRenderer(device);
+    constructor(cache: GfxRenderCache, private trackData: CourseTrackData) {
+        this.planeRenderer = new TranslucentPlaneRenderer(cache);
 
         let sortedZVals = trackData.uvtt.pnts.map(p => p.pos[2]).sort((a, b) => a - b);
         let zMin = sortedZVals[0];

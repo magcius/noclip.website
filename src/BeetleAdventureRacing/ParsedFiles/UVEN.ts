@@ -6,6 +6,7 @@ import { mat4 } from "gl-matrix";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../viewer";
 import { RendererStore } from "../Scenes";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 export class UVEN {
     public clearR: number;
@@ -71,9 +72,9 @@ export class UVEN {
 
 export class UVENRenderer {
     public uvmdRenderers: UVMDRenderer[] = [];
-    constructor(public uven: UVEN, device: GfxDevice, rendererStore: RendererStore) {
+    constructor(public uven: UVEN, cache: GfxRenderCache, rendererStore: RendererStore) {
         for(let uvmd of uven.uvmds) {
-            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, device, rendererStore))
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, cache, rendererStore))
             this.uvmdRenderers.push(uvmdRenderer);
         }
     }

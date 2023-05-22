@@ -73,7 +73,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public getCache() {
-        return this.renderHelper.getCache();
+        return this.renderHelper.renderCache;
     }
 
     public adjustCameraController(c: CameraController) {
@@ -147,7 +147,7 @@ export function checkTEX0Compatible(mdl0: MDL0Model, tex0: TEX0): boolean {
 
 export function tryMDL0(device: GfxDevice, cache: GfxRenderCache, mdl0: MDL0Model, tex0: TEX0): MDL0Renderer | null {
     if (checkTEX0Compatible(mdl0, tex0))
-        return new MDL0Renderer(device, cache, mdl0, tex0);
+        return new MDL0Renderer(cache, mdl0, tex0);
     else
         return null;
 }
@@ -280,7 +280,7 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                     const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
                     const objBmd = parseNSBMD(modelFile);
 
-                    const obj = new MDL0Renderer(device, cache, objBmd.models[0], assertExists(objBmd.tex0));
+                    const obj = new MDL0Renderer(cache, objBmd.models[0], assertExists(objBmd.tex0));
                     obj.bbox = bbox;
                     mat4.translate(obj.modelMatrix, obj.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
                     renderer.objectRenderers.push(obj);

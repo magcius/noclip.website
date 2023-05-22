@@ -204,6 +204,7 @@ function createFurDensityMap(mapDensity: ReadonlyVec4, mapThickness: ReadonlyVec
         magFilter: GX.TexFilter.LINEAR,
         data: new ArrayBufferSlice(data.buffer),
         lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1,
+        maxAnisotropy: GX.Anisotropy._1,
         paletteData: null,
         paletteFormat: GX.TexPalette.IA8,
     };
@@ -511,7 +512,7 @@ class FurCtrl {
 
         for (let i = 0; i < numLayers; i++) {
             const vertexBuffers: GfxVertexBufferDescriptor[] = [coalescedBuffers[i]];
-            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBuffer, shapeData.shapeHelper.loadedVertexLayout);
+            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBufferDescriptor, shapeData.shapeHelper.loadedVertexLayout);
             this.ownShapeHelpers.push(shapeHelper);
             this.shapeHelpers.push(shapeHelper);
         }

@@ -16,6 +16,7 @@ import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFull
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OrbitCameraController } from '../Camera';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {
@@ -54,6 +55,10 @@ export class MultiCmbScene implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public getRenderCache(): GfxRenderCache {
+        return this.renderHelper.renderCache;
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -178,7 +183,11 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
         for (let i = 0; i < this.cmbRenderers.length; i++)
+        {
+            this.cmbRenderers[i].setIsActor(true)
+            this.cmbRenderers[i].setRenderFog(false)
             this.cmbRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -234,12 +243,13 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         this.cmbRenderers = [];
         this.cmbData = [];
 
+        const cache = this.renderHelper.renderCache;
         const cmb = CMB.parse(file.buffer);
-        const cmbData = new CmbData(device, cmb);
+        const cmbData = new CmbData(cache, cmb);
         this.textureHolder.destroy(device);
         this.textureHolder.addTextures(device, cmb.textures);
         this.cmbData.push(cmbData);
-        const cmbRenderer = new CmbInstance(device, this.textureHolder, cmbData, file.name);
+        const cmbRenderer = new CmbInstance(cache, this.textureHolder, cmbData, file.name);
         this.cmbRenderers.push(cmbRenderer);
     }
 

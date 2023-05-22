@@ -21,6 +21,7 @@ import { SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
+import { TextureMapping } from "../TextureHolder";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -893,8 +894,9 @@ export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
-export function loadTexProjectionMtx(m: mat4, camera: Camera): void {
-    texProjCameraSceneTex(m, camera, -1);
+export function loadTexProjectionMtx(m: mat4, textureMapping: TextureMapping, camera: Camera): void {
+    const flipYScale = textureMapping.flipY ? -1 : 1;
+    texProjCameraSceneTex(m, camera, flipYScale);
     mat4.mul(m, m, camera.viewMatrix);
 }
 

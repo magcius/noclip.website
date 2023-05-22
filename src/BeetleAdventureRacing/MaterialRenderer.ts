@@ -2,7 +2,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
@@ -13,12 +13,14 @@ import * as RDP from '../Common/N64/RDP';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private program: DeviceProgram;
     private indexCount: number;
 
@@ -40,7 +42,7 @@ export class MaterialRenderer {
     // TODO: some models are being culled incorrectly, figure out what's up with that
     // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
     // (e.g. see SS in the desert, MoM by the ice wall you smash)
-    constructor(material: Material, device: GfxDevice, rendererStore: RendererStore) {
+    constructor(material: Material, cache: GfxRenderCache, rendererStore: RendererStore) {
         this.material = material;
         this.isTextured = material.uvtx !== null;
         if(this.isTextured) {
@@ -62,6 +64,7 @@ export class MaterialRenderer {
         // Create GPU stuff
         this.indexCount = material.indexData.length;
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.indexData.buffer);
 
@@ -74,25 +77,24 @@ export class MaterialRenderer {
             { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0 },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         // Create UVTX renderers (if necessary)
         if (this.isTextured) {
             if(this.isTextureSequence) {
                 this.uvtxRenderHelpers = new Map();
                 for(let frame of this.uvtx.seqAnim!.uvts.frames) {
-                    this.uvtxRenderHelpers.set(frame.uvtx!, rendererStore.getOrCreateRenderer(frame.uvtx!, ()=>new UVTXRenderHelper(frame.uvtx!, device)));
+                    this.uvtxRenderHelpers.set(frame.uvtx!, rendererStore.getOrCreateRenderer(frame.uvtx!, ()=>new UVTXRenderHelper(frame.uvtx!, cache)));
                 }
             } else {
-                this.uvtxRenderHelper = rendererStore.getOrCreateRenderer(this.uvtx, ()=>new UVTXRenderHelper(this.uvtx, device));
+                this.uvtxRenderHelper = rendererStore.getOrCreateRenderer(this.uvtx, ()=>new UVTXRenderHelper(this.uvtx, cache));
             }
         }
     }
@@ -353,7 +355,7 @@ export class MaterialRenderer {
             uvtxRenderHelper.fillCombineParams(combineParams, combineParamsOffs);
         }
 
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         let gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(gfxProgram);
@@ -367,8 +369,6 @@ export class MaterialRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 
     private DEBUG_shouldSkip(): boolean {

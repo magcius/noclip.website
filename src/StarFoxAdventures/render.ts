@@ -83,11 +83,11 @@ export class SFARenderer implements Viewer.SceneGfx {
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper = new GXRenderHelperGfx(device, null, this.materialFactory.cache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.depthResampler = new DepthResampler(device, this.renderHelper.renderInstManager.gfxRenderCache);
-        
+
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -99,13 +99,13 @@ export class SFARenderer implements Viewer.SceneGfx {
             furs: new GfxRenderInstList(),
         };
 
-        const cache = this.renderHelper.getCache();
+        const cache = this.renderHelper.renderCache;
         this.opaqueColorTextureMapping.gfxSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -114,7 +114,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -229,7 +229,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
         if (this.blurFilter === undefined)
-            this.blurFilter = new BlurFilter(this.renderHelper.getCache());
+            this.blurFilter = new BlurFilter(this.renderHelper.renderCache);
 
         return this.blurFilter.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height,
             () => {

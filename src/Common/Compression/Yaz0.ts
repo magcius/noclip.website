@@ -18,6 +18,7 @@
 
 import { assert, readString } from '../../util';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { rust } from '../../rustlib';
 
 // Simple software version for environments without WebAssembly.
 export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -64,31 +65,7 @@ export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     }
 }
 
-export class Yaz0DecompressorWASM {
-    constructor(private yaz0dec: (src: Uint8Array) => Uint8Array) {
-    }
-
-    public decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-        const buf = this.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
-        return new ArrayBufferSlice(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-}
-
-export function decompressSync(d: Yaz0DecompressorWASM, srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-    return d.decompress(srcBuffer);
-}
-
-let _decompressor: Yaz0DecompressorWASM | null = null;
-
-export async function getWASM(): Promise<Yaz0DecompressorWASM> {
-    if (_decompressor === null) {
-        const { yaz0dec } = await import('../../../rust/pkg/index');
-        _decompressor = new Yaz0DecompressorWASM(yaz0dec);
-    }
-
-    return _decompressor;
-}
-
-export async function decompress(srcBuffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
-    return decompressSync(await getWASM(), srcBuffer);
+export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const bufView = rust!.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
+    return ArrayBufferSlice.fromView(bufView);
 }

@@ -21,17 +21,19 @@ import {
     GfxDevice,
     GfxFormat,
     GfxFrontFaceMode,
+    GfxIndexBufferDescriptor,
     GfxInputLayoutBufferDescriptor,
     GfxMegaStateDescriptor,
     GfxMipFilterMode,
     GfxProgramDescriptorSimple,
     GfxTexFilterMode,
     GfxVertexAttributeDescriptor,
+    GfxVertexBufferDescriptor,
     GfxVertexBufferFrequency,
     GfxWrapMode,
     makeTextureDescriptor2D
 } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout, GfxInputState, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
@@ -55,6 +57,7 @@ import * as CRC32 from "crc-32";
 import { DeviceProgram } from '../Program';
 import * as UI from '../ui';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class RotfdProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -261,8 +264,8 @@ class VertexDataBuilder {
         }
     }
 
-    public build(device: GfxDevice, material: number): VertexData {
-        return new VertexData(device, this.indices, this.vertices, this.bbox, material);
+    public build(device: GfxDevice, cache: GfxRenderCache, material: number): VertexData {
+        return new VertexData(device, cache, this.indices, this.vertices, this.bbox, material);
     }
 }
 
@@ -270,11 +273,13 @@ class VertexData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public indexCount: number;
 
     constructor(
         device: GfxDevice,
+        cache: GfxRenderCache,
         indices: number[],
         vertices: number[],
         public bbox: AABB,
@@ -294,16 +299,16 @@ class VertexData {
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -311,7 +316,6 @@ let bboxScratch = new AABB();
 let modelViewScratch = mat4.create();
 let modelViewScratch2 = mat4.create();
 let vec3Scratch = vec3.create();
-let vec4Scratch = vec4.create();
 class MeshRenderer {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private omniLights: OmniInstance[] = [];
@@ -344,7 +348,7 @@ class MeshRenderer {
         }
         
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setVertexInput(this.geometryData.inputLayout, this.geometryData.vertexBufferDescriptors, this.geometryData.indexBufferDescriptor);
         let textureAlpha = 0;
         const textureMapping = new TextureMapping();
         const reflectionMapping = new TextureMapping();
@@ -549,21 +553,22 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.gfxProgram = this.renderHelper.renderInstManager.gfxRenderCache.createProgramSimple(this.program);
         this.renderHackState = new RenderHackState();
         this.defaultTexture = makeSolidColorTexture2D(device, White);
-        this.sampler = device.createSampler({
+        const cache = this.renderHelper.renderCache;
+        this.sampler = cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
         // probably not correct, will need to research bitmap flags
-        this.warpSampler = device.createSampler({
+        this.warpSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -714,7 +719,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < mesh.materials.length; i++) {
             let builder = new VertexDataBuilder();
             builder.addMeshMaterial(mesh, i);
-            meshes.push(builder.build(this.device, mesh.materials[i]));
+            meshes.push(builder.build(this.device, this.renderHelper.renderCache, mesh.materials[i]));
         }
         this.meshes.set(id, {
             meshes
@@ -734,7 +739,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         }
         let meshes: VertexData[] = [];
         for (const [material, builder] of builders) {
-            meshes.push(builder.build(this.device, material));
+            meshes.push(builder.build(this.device, this.renderHelper.renderCache, material));
         }
         this.meshes.set(id, {
             meshes
@@ -824,7 +829,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
             builder.addTri(0, 1, 2);
             builder.addTri(1, 3, 2);
-            const vertexdata = builder.build(this.device, face.material);
+            const vertexdata = builder.build(this.device, this.renderHelper.renderCache, face.material);
             this.otherMeshes.push(vertexdata);
             this.addMeshRenderer(mat4.create(), vertexdata, true, 0, 0, undefined);
         }
@@ -931,7 +936,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         builder.addVertex([a[0] + o[0], b[1] + o[1], 0.0, 0.0, 1.0, 0.0, 0.0, -1.0]);
         builder.addTri(0, 1, 2);
         builder.addTri(0, 2, 3);
-        const mesh = builder.build(this.device, rotshape.materialanim_id);
+        const mesh = builder.build(this.device, this.renderHelper.renderCache, rotshape.materialanim_id);
         this.otherMeshes.push(mesh);
         this.addMeshRenderer(node.global_transform, mesh, false, node.light_id, node.hfog_id, rotshape);
     }
@@ -1059,35 +1064,4 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             }
         }
     }
-}
-
-function buildCube(device: GfxDevice, material: number, extents: vec3) {
-    const builder = new VertexDataBuilder();
-    for (const face of iterWarpSkybox({
-        // material_ids and size don't matter here
-        material_ids: [0, 0, 0, 0, 0, 0],
-        size: 1.0,
-        vertices: [
-            [-extents[0], -extents[1], +extents[2]],
-            [-extents[0], -extents[1], -extents[2]],
-            [+extents[0], -extents[1], -extents[2]],
-            [+extents[0], -extents[1], +extents[2]],
-            [-extents[0], +extents[1], +extents[2]],
-            [-extents[0], +extents[1], -extents[2]],
-            [+extents[0], +extents[1], -extents[2]],
-            [+extents[0], +extents[1], +extents[2]],
-        ],
-        texcoords: [[0, 0], [0, 1], [1, 1], [1, 0]],
-    })) {
-        let n = face.normal;
-        let verts = [];
-        for (let i = 0; i < 4; i++) {
-            let v = face.positions[i];
-            let t = face.texcoords[i];
-            verts.push(builder.addVertex([v[0], v[1], v[2], t[0], t[1], n[0], n[1], n[2]]));
-        }
-        builder.addTri(verts[0], verts[2], verts[1]);
-        builder.addTri(verts[1], verts[2], verts[3]);
-    }
-    return builder.build(device, material);
 }

@@ -102,7 +102,6 @@ class Command_Bin {
 
     public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((t) => device.destroyTexture(t));
-        this.gfxSamplers.forEach((t) => device.destroySampler(t));
         this.batchCommands.forEach((t) => t.destroy(device));
         this.bufferCoalescer.destroy(device);
     }
@@ -142,12 +141,12 @@ class Command_Bin {
             const { gfxTexture, viewerTexture } = loadTextureFromMipChain(device, mipChain);
 
             // GL texture is bound by loadTextureFromMipChain.
-            const gfxSampler = device.createSampler({
+            const gfxSampler = renderHelper.renderCache.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
                 minFilter: GfxTexFilterMode.Bilinear,
                 magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 minLOD: 0,
                 maxLOD: 100,
             });

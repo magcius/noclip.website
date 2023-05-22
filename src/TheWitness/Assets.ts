@@ -6,7 +6,7 @@ import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile";
 import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
-import { GfxBuffer, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatformImpl";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
 import { Entity } from "./Entity";
 import { load_entities } from "./Entity_Types";
 import { Stream_read_Color, Stream, Stream_read_Vector3, Stream_read_Vector2, Stream_read_Vector4 } from "./Stream";
@@ -473,7 +473,8 @@ class Device_Mesh {
     private vertex_buffer: GfxBuffer;
     private index_buffer: GfxBuffer | null;
     private input_layout: GfxInputLayout;
-    private input_state: GfxInputState;
+    private vertex_buffer_descriptors: GfxVertexBufferDescriptor[];
+    private index_buffer_descriptor: GfxIndexBufferDescriptor | null;
 
     public material_index: number;
     public detail_level: number;
@@ -605,13 +606,12 @@ class Device_Mesh {
             vertexBufferDescriptors,
         });
 
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertex_buffer, byteOffset: 0 }];
-        const indexBufferDescriptor: GfxIndexBufferDescriptor | null = this.index_buffer !== null ? { buffer: this.index_buffer, byteOffset: 0 } : null;
-        this.input_state = device.createInputState(this.input_layout, buffers, indexBufferDescriptor);
+        this.vertex_buffer_descriptors = [{ buffer: this.vertex_buffer, byteOffset: 0 }];
+        this.index_buffer_descriptor = this.index_buffer !== null ? { buffer: this.index_buffer, byteOffset: 0 } : null;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.input_layout, this.input_state);
+        renderInst.setVertexInput(this.input_layout, this.vertex_buffer_descriptors, this.index_buffer_descriptor);
 
         if (this.index_count > 0)
             renderInst.drawIndexesInstanced(this.index_count, this.instance_count);
@@ -623,7 +623,6 @@ class Device_Mesh {
         device.destroyBuffer(this.vertex_buffer);
         if (this.index_buffer !== null)
             device.destroyBuffer(this.index_buffer);
-        device.destroyInputState(this.input_state);
     }
 }
 

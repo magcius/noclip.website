@@ -3,7 +3,7 @@ import { SceneDesc, SceneContext } from "../SceneBase";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, SceneGroup } from "../viewer";
 import { EmptyScene } from "../Scenes_Test";
-import Pako from "pako";
+import * as Deflate from "../Common/Compression/Deflate";
 import { assert, readString, hexzero, nArray } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
@@ -17,7 +17,7 @@ const pathBase = `GoldenEye007`;
 function decompress1172(buffer: ArrayBufferSlice, offs: number): ArrayBufferSlice {
     const view = buffer.createDataView();
     assert(view.getUint16(offs + 0x00, false) === 0x1172);
-    return new ArrayBufferSlice(Pako.inflateRaw(buffer.createTypedArray(Uint8Array, offs + 0x02), { raw: true }).buffer);
+    return Deflate.decompress_raw(buffer.slice(offs + 0x02));
 }
 
 function maybeDecompress1172(buffer: ArrayBufferSlice, offs: number): ArrayBufferSlice {

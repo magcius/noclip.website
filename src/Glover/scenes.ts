@@ -1669,7 +1669,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const textureHolder = new GloverTextureHolder();
         const sceneRenderer = new GloverRenderer(device, textureHolder);
-        const cache = sceneRenderer.renderHelper.getCache();
+        const cache = sceneRenderer.renderHelper.renderCache;
 
         for (let bank of texture_banks) {
             if (bank) {

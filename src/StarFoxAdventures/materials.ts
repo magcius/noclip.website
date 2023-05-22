@@ -11,12 +11,11 @@ import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTra
 import { mat4, vec3 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, colorNewFromRGBA, colorLerp, Red } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
-import { clamp, lerp } from '../MathHelpers';
-import { ModelRenderContext } from './models';
-import { World } from './world';
+import { clamp } from '../MathHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export interface ShaderLayer {
     texId: number | null;
@@ -215,7 +214,7 @@ export type BlendOverride = ((mb: SFAMaterialBuilder<MaterialRenderContext>) => 
 export abstract class StandardMaterial extends MaterialBase {
     private blendOverride?: BlendOverride = undefined;
 
-    constructor(public device: GfxDevice, factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
+    constructor(public cache: GfxRenderCache, factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher) {
         super(factory);
     }
 
@@ -470,9 +469,9 @@ export class StandardMapMaterial extends StandardMaterial {
             mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
         });
 
-        const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, 0x600, false)));
+        const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, 0x600, false)));
         const texMap1 = this.mb.genTexMap(this.factory.getWavyTexture());
-        const texMap2 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+        const texMap2 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, this.shader.layers[0].texId!, true)));
 
         const texCoord3 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
@@ -651,9 +650,9 @@ export class StandardMapMaterial extends StandardMaterial {
 
     protected addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
-            const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+            const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, this.shader.layers[0].texId!, true)));
             const texCoord0 = this.genScrollableTexCoord(texMap0, GX.TexGenSrc.TEX0, this.shader.layers[0].scrollSlot);
-            const texMap1 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
+            const texMap1 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, this.shader.layers[1].texId!, true)));
             const texCoord1 = this.genScrollableTexCoord(texMap1, GX.TexGenSrc.TEX1, this.shader.layers[1].scrollSlot);
 
             this.addTevStageForTexture(0, texMap0, texCoord0);
@@ -665,7 +664,7 @@ export class StandardMapMaterial extends StandardMaterial {
             for (let i = 0; i < this.shader.layers.length; i++) {
                 const layer = this.shader.layers[i];
 
-                const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
+                const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, this.shader.layers[i].texId!, true)));
                 const texCoord = this.genScrollableTexCoord(texMap, GX.TexGenSrc.TEX0 + i, layer.scrollSlot);
 
                 if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
@@ -854,16 +853,18 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
+    // Perturbed normals, e.g. the Arwing
     private addNBTTextureStage(): number { // Returns scale to use for nbtTexCoord
         const indStage = this.mb.genIndTexStage();
-        const indTexMtx = this.mb.genIndTexMtx((dst: mat4) => {
+        const indTexMtx = this.mb.genIndTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+            mat4SetValue(dst, 0, 3, 0.125); // The matrix scale must be stored in the first row's w
         });
-        const nbtTex = this.texFetcher.getTexture(this.device, this.shader.nbtTexId!, true)!;
+        const nbtTex = this.texFetcher.getTexture(this.cache, this.shader.nbtTexId!, true)!;
         const nbtTexMap = this.mb.genTexMap(makeMaterialTexture(nbtTex));
         let nbtScale = 1;
         if (this.shader.layers[0].texId !== null) {
-            const layer0Tex = this.texFetcher.getTexture(this.device, this.shader.layers[0].texId, true);
+            const layer0Tex = this.texFetcher.getTexture(this.cache, this.shader.layers[0].texId, true);
             if (layer0Tex !== null) {
                 nbtScale = (this.shader.nbtParams & 0xf) * 4 + 1;
                 const scaleIdx = (layer0Tex.width / (nbtTex.width * nbtScale))|0;
@@ -1152,7 +1153,7 @@ class StandardObjectMaterial extends StandardMaterial {
             const layer = this.shader.layers[i];
             if (!!(layer.tevMode & 0x80) == preProbe) {
                 if (layer.texId !== null) {
-                    const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, layer.texId, true)));
+                    const texMap = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, layer.texId, true)));
                     // TODO: support scrollable textures (e.g. eyeballs)
                     const texCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0 + i);
 
@@ -1226,7 +1227,7 @@ class StandardObjectMaterial extends StandardMaterial {
 
         // FIXME: Figure out reflective probe mask textures
         if (this.shader.reflectiveProbeMaskTexId !== null) {
-            const reflectiveProbeMask = this.texFetcher.getTexture(this.device, this.shader.reflectiveProbeMaskTexId!, true)!;
+            const reflectiveProbeMask = this.texFetcher.getTexture(this.cache, this.shader.reflectiveProbeMaskTexId!, true)!;
             // XXX: actually the reflective probe mask texture itself seems to be ignored?
             // all it does is activate this stage when it is present...
             const stage = this.mb.genTevStage();
@@ -1450,14 +1451,14 @@ class WaterMaterial extends MaterialBase {
 }
 
 class FurMaterial extends MaterialBase {
-    public constructor(private device: GfxDevice, factory: MaterialFactory, public shader: Shader, private texFetcher: TextureFetcher, private isMapBlock: boolean) {
+    public constructor(private cache: GfxRenderCache, factory: MaterialFactory, public shader: Shader, private texFetcher: TextureFetcher, private isMapBlock: boolean) {
         super(factory);
     }
 
     protected rebuildInternal() {
         // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
         // but then it replaces texmap 0 with shader layer 0 before drawing...
-        const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+        const texMap0 = this.mb.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.cache, this.shader.layers[0].texId!, true)));
         const texCoord0 = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0);
 
         const stage0 = this.mb.genTevStage();
@@ -1765,9 +1766,11 @@ export class MaterialFactory {
     private halfGrayGfxTexture: SFATexture | null = null;
     private halfGrayTexture: TexFunc<MaterialRenderContext>;
     private furFactory: FurFactory | null = null;
+    public cache: GfxRenderCache;
     public scrollSlots: ScrollSlot[] = [];
 
     constructor(public device: GfxDevice) {
+        this.cache = new GfxRenderCache(this.device);
     }
 
     public update(animController: SFAAnimationController) {
@@ -1786,11 +1789,11 @@ export class MaterialFactory {
     }
 
     public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
-        return new StandardObjectMaterial(this.device, this, shader, texFetcher);
+        return new StandardObjectMaterial(this.cache, this, shader, texFetcher);
     }
 
     public buildMapMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
-        return new StandardMapMaterial(this.device, this, shader, texFetcher);
+        return new StandardMapMaterial(this.cache, this, shader, texFetcher);
     }
     
     public buildWaterMaterial(shader: Shader): SFAMaterial {
@@ -1798,27 +1801,27 @@ export class MaterialFactory {
     }
 
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, texIds: number[], isMapBlock: boolean): SFAMaterial {
-        return new FurMaterial(this.device, this, shader, texFetcher, isMapBlock);
+        return new FurMaterial(this.cache, this, shader, texFetcher, isMapBlock);
     }
 
     public getFurFactory(): FurFactory {
         if (this.furFactory !== null)
             return this.furFactory;
 
-        this.furFactory = new FurFactory(this.device);
+        this.furFactory = new FurFactory(this.cache);
         return this.furFactory;
     }
 
     private genColorTexture(r: number, g: number, b: number, a: number): SFATexture {
         const width = 1;
         const height = 1;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -1835,7 +1838,7 @@ export class MaterialFactory {
 
         plot(0, 0, r, g, b, a);
 
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         return new SFATexture(gfxTexture, gfxSampler, width, height);
     }
@@ -1874,13 +1877,13 @@ export class MaterialFactory {
         if (this.greenSphereMapTestTexture === undefined) {
             const width = 1024;
             const height = 1024;
-            const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-            const gfxSampler = this.device.createSampler({
+            const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.cache.createSampler({
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Bilinear,
                 magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 minLOD: 0,
                 maxLOD: 100,
             });
@@ -1907,7 +1910,7 @@ export class MaterialFactory {
                 }
             }
 
-            this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+            this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
             this.greenSphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
@@ -1924,13 +1927,13 @@ export class MaterialFactory {
             const height = 1024;
             const gridWidth = 32;
             const gridHeight = 32;
-            const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-            const gfxSampler = this.device.createSampler({
+            const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            const gfxSampler = this.cache.createSampler({
                 wrapS: GfxWrapMode.Clamp,
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Bilinear,
                 magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 minLOD: 0,
                 maxLOD: 100,
             });
@@ -1957,7 +1960,7 @@ export class MaterialFactory {
                 }
             }
 
-            this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+            this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
             this.sphereMapTestTexture = makeMaterialTexture(new SFATexture(gfxTexture, gfxSampler, width, height));
         }
@@ -1971,13 +1974,13 @@ export class MaterialFactory {
 
         const width = 256;
         const height = 4;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -1998,7 +2001,7 @@ export class MaterialFactory {
                 plot(x, y, I, I, I, I);
         }
 
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.rampGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.rampTexture = makeMaterialTexture(this.rampGfxTexture);
@@ -2015,13 +2018,13 @@ export class MaterialFactory {
         
         const width = 128;
         const height = 128;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -2058,7 +2061,7 @@ export class MaterialFactory {
             }
         }
 
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.causticGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.causticTexture = makeMaterialTexture(this.causticGfxTexture);
@@ -2071,13 +2074,13 @@ export class MaterialFactory {
 
         const width = 128;
         const height = 128;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -2107,7 +2110,7 @@ export class MaterialFactory {
             }
         }
 
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.mapLightGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.mapLightTexture = makeMaterialTexture(this.mapLightGfxTexture);
@@ -2124,13 +2127,13 @@ export class MaterialFactory {
         
         const width = 64;
         const height = 64;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
-        const gfxSampler = this.device.createSampler({
+        const gfxTexture = this.cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
         });
@@ -2159,7 +2162,7 @@ export class MaterialFactory {
             }
         }
 
-        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.cache.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.wavyGfxTexture = new SFATexture(gfxTexture, gfxSampler, width, height);
         this.wavyTexture = makeMaterialTexture(this.wavyGfxTexture);
@@ -2178,5 +2181,6 @@ export class MaterialFactory {
         if (this.wavyGfxTexture !== null)
             this.wavyGfxTexture.destroy(device);
         this.furFactory?.destroy(device);
+        this.cache.destroy();
     }
 }

@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
@@ -106,14 +106,15 @@ function translateDataType(dataType: number): GfxFormat {
 
 class BatchData {
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public primitiveIndexCounts: number[] = [];
     public primitiveIndexStarts: number[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[], triangleIndexCounts: number[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
         const flverInputLayout = flverData.flver.inputLayouts[flverInputState.inputLayoutIndex];
-        const buffers: GfxVertexBufferDescriptor[] = [vertexBuffer];
+        this.vertexBufferDescriptors = [vertexBuffer];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
@@ -141,18 +142,16 @@ class BatchData {
             vertexBufferDescriptors,
         });
 
-        const indexBuffer0 = indexBuffers[0];
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer0);
+        this.indexBufferDescriptor = indexBuffers[0];
 
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
             this.primitiveIndexCounts.push(assertExists(triangleIndexCounts.shift()));
-            this.primitiveIndexStarts.push((coaIndexBuffer.byteOffset - indexBuffer0.byteOffset) / 2);
+            this.primitiveIndexStarts.push((coaIndexBuffer.byteOffset - this.indexBufferDescriptor.byteOffset) / 2);
         }
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -882,7 +881,7 @@ class BatchInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
-        template.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputState);
+        template.setVertexInput(this.batchData.inputLayout, this.batchData.vertexBufferDescriptors, this.batchData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaState);
 
         let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*16);

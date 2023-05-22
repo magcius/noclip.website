@@ -4,7 +4,7 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TexCM } from "../Common/N64/Image";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
 import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers";
@@ -338,7 +338,8 @@ interface SpriteData {
     vertexBuffer: GfxBuffer;
     indexBuffer: GfxBuffer;
     inputLayout: GfxInputLayout;
-    inputState: GfxInputState;
+    vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    indexBufferDescriptor: GfxIndexBufferDescriptor;
 }
 
 interface TextureData {
@@ -368,19 +369,16 @@ export class ParticleManager {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: ParticleProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 },
         ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-        const inputLayout = device.createInputLayout({
+        const inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
-            vertexBufferDescriptors,
+            vertexBufferDescriptors: [
+                { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex },
+            ],
             vertexAttributeDescriptors,
         });
-        const inputState = device.createInputState(inputLayout,
-            [{ buffer: vertexBuffer, byteOffset: 0 }],
-            { buffer: indexBuffer, byteOffset: 0 }
-        );
-        this.spriteData = { vertexBuffer, indexBuffer, inputLayout, inputState };
+        const vertexBufferDescriptors = [{ buffer: vertexBuffer, byteOffset: 0 }];
+        const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
+        this.spriteData = { vertexBuffer, indexBuffer, inputLayout, vertexBufferDescriptors, indexBufferDescriptor };
 
         // create gfx data for all the textures
         for (let particle of level.particleTextures) {
@@ -465,7 +463,7 @@ export class ParticleManager {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.spriteData.inputLayout, this.spriteData.inputState);
+        template.setVertexInput(this.spriteData.inputLayout, this.spriteData.vertexBufferDescriptors, this.spriteData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = SnapPass.MAIN;
@@ -486,8 +484,6 @@ export class ParticleManager {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.spriteData.indexBuffer);
         device.destroyBuffer(this.spriteData.vertexBuffer);
-        device.destroyInputLayout(this.spriteData.inputLayout);
-        device.destroyInputState(this.spriteData.inputState);
 
         // samplers are already handled by the cache, just destroy textures
         for (let i = 0; i < this.levelData.length; i++)

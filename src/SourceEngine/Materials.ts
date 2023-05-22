@@ -3,7 +3,7 @@ import { VMT, parseVMT, vmtParseVector, VKFParamMap } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists, nullify } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode, GfxCompareMode, GfxTextureDimension, GfxTextureUsage, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -1742,7 +1742,7 @@ vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in float t_SeamlessScale) {
 
 vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in bool t_UseSeamless, in vec2 t_TexCoord) {
     if (t_UseSeamless) {
-        return SeamlessSampleTex(PU_SAMPLER_2D(t_Texture), 1.0);
+        return SeamlessSampleTex(PF_SAMPLER_2D(t_Texture), 1.0);
     } else {
         return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord.xy);
     }
@@ -1814,7 +1814,7 @@ void mainPS() {
     bool use_seamless_detail = ${getDefineBool(m, `USE_SEAMLESS_DETAIL`)};
     if (use_seamless_detail) {
         float t_SeamlessDetailScale = u_DetailTextureTransform.mx.x;
-        t_DetailTexture = DebugColorTexture(SeamlessSampleTex(SAMPLER_2D(u_TextureDetail), t_SeamlessDetailScale));
+        t_DetailTexture = DebugColorTexture(SeamlessSampleTex(PP_SAMPLER_2D(u_TextureDetail), t_SeamlessDetailScale));
     } else {
         vec2 t_DetailTexCoord = Mul(u_DetailTextureTransform, vec4(v_TexCoord0.zw, 1.0, 1.0));
         t_DetailTexture = DebugColorTexture(texture(SAMPLER_2D(u_TextureDetail), t_DetailTexCoord));
@@ -4612,8 +4612,9 @@ class Material_SpriteCard extends BaseMaterial {
 class StaticQuad {
     private vertexBufferQuad: GfxBuffer;
     private indexBufferQuad: GfxBuffer;
+    private vertexBufferDescriptorsQuad: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptorQuad: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
-    public inputStateQuad: GfxInputState;
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -4638,18 +4639,18 @@ class StaticQuad {
             0, 1, 2, 2, 1, 3,
         ]).buffer);
 
-        this.inputStateQuad = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptorsQuad = [
             { buffer: this.vertexBufferQuad, byteOffset: 0 },
-        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptorQuad = { buffer: this.indexBufferQuad, byteOffset: 0 };
     }
 
     public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStateQuad);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptorsQuad, this.indexBufferDescriptorQuad);
         renderInst.drawIndexes(6);
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputStateQuad);
         device.destroyBuffer(this.vertexBufferQuad);
         device.destroyBuffer(this.indexBufferQuad);
     }
@@ -4673,7 +4674,7 @@ class StaticResources {
         this.shadowSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
             compareMode: GfxCompareMode.Less,
@@ -4681,7 +4682,7 @@ class StaticResources {
         this.linearClampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
             wrapS: GfxWrapMode.Clamp,
@@ -4690,7 +4691,7 @@ class StaticResources {
         this.linearRepeatSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Bilinear,
             minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
             wrapS: GfxWrapMode.Repeat,
@@ -4699,7 +4700,7 @@ class StaticResources {
         this.pointClampSampler = cache.createSampler({
             magFilter: GfxTexFilterMode.Point,
             minFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0,
             maxLOD: 100,
             wrapS: GfxWrapMode.Clamp,
@@ -5312,7 +5313,7 @@ export class LightmapManager {
         this.gfxSampler = cache.createSampler({
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
         });

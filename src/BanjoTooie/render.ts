@@ -4,7 +4,7 @@ import * as F3DEX2 from '../PokemonSnap/f3dex2';
 
 import { DeviceProgram } from "../Program";
 import { Vertex, DrawCall } from "../BanjoKazooie/f3dex";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxInputState, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, vec3 } from 'gl-matrix';
@@ -604,7 +604,7 @@ export class GeometryRenderer {
     private rootNodeRenderer: GeoNodeRenderer;
     private vertexBuffer: GfxBuffer;
     private vertexBufferData: Float32Array;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
     constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
@@ -635,18 +635,15 @@ export class GeometryRenderer {
                 GfxBufferUsage.Vertex,
                 GfxBufferFrequencyHint.Dynamic
             );
-            this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
-                [{ buffer: this.vertexBuffer, byteOffset: 0, }],
-                { buffer: this.geometryData.renderData.indexBuffer, byteOffset: 0 }
-            );
+
+            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
 
             // allow the render data to destroy the copies later
             this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);
-            this.geometryData.renderData.dynamicStateCopies.push(this.inputState);
         } else {
             this.vertexBufferData = this.geometryData.renderData.vertexBufferData; // shouldn't be necessary
             this.vertexBuffer = this.geometryData.renderData.vertexBuffer;
-            this.inputState = this.geometryData.renderData.inputState;
+            this.vertexBufferDescriptors = this.geometryData.renderData.vertexBufferDescriptors;
         }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -845,7 +842,7 @@ export class GeometryRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.geometryData.renderData.inputLayout, this.inputState);
+        template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;

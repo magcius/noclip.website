@@ -284,7 +284,7 @@ function decompressBC3Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
 
 // Software decompresses from standard BC4/BC5 to RGBA.
 function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA {
-    let bytesPerPixel = 4;
+    const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
     const depth = surface.depth;

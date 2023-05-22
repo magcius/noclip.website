@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { DeviceProgram } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
@@ -20,6 +20,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
@@ -87,7 +88,8 @@ export class MapData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public textures: GfxTexture[] = [];
     public sampler: GfxSampler;
@@ -99,7 +101,7 @@ export class MapData {
     private vertices = 0;
     private indices = 0;
 
-    constructor(device: GfxDevice, bin: Bin.BIN) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, bin: Bin.BIN) {
         this.textures.push(this.translateTextureFromAtlas(device, bin.mapTextureAtlas));
         const skyboxTexIndexMap : Map<number, number> = new Map();
         for (let i = 0; i < bin.sky0TextureBlocks.length; i++) {
@@ -110,7 +112,7 @@ export class MapData {
             this.textures.push(this.translateTexture(device, bin.sky1TextureBlocks[i].textures[0]));
             skyboxTexIndexMap.set(bin.sky1TextureBlocks[i].dataOffs, bin.sky0TextureBlocks.length + i + 1);
         }
-        this.sampler = this.createSampler(device);
+        this.sampler = this.createSampler(cache);
 
         const submeshes: Bin.Submesh[] = [];
         const mapLayers: Layer[] = [];
@@ -229,15 +231,16 @@ export class MapData {
             { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     private createBatchedDrawCalls(isSkybox: boolean, meshes: Bin.Mesh[], skyboxTexIndexMap: Map<number, number>, submeshesOut: Bin.Submesh[], layersOut: Layer[]): DrawCall[] {
@@ -353,13 +356,13 @@ export class MapData {
         return gfxTexture;
     }
 
-    private createSampler(device: GfxDevice) {
-        return device.createSampler({
+    private createSampler(cache: GfxRenderCache) {
+        return cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
     }
@@ -368,11 +371,8 @@ export class MapData {
         for (let i = 0; i < this.textures.length; i++) {
             device.destroyTexture(this.textures[i]);
         }
-        device.destroySampler(this.sampler);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -413,7 +413,7 @@ class DrawCallInstance {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
+        renderInst.setVertexInput(this.mapData.inputLayout, this.mapData.vertexBufferDescriptors, this.mapData.indexBufferDescriptor);
         renderInst.sortKey = this.drawCallIndex;
 
         if (this.gfxProgram === null)
@@ -535,7 +535,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, bin: Bin.BIN) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        this.mapData = new MapData(device, bin);
+        this.mapData = new MapData(device, this.renderHelper.renderCache, bin);
 
         const mapSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.mapDrawCalls, /*isSkybox=*/false);
         this.sceneRenderers.push(mapSceneRenderer);

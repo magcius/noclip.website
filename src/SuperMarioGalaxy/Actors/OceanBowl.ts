@@ -1,7 +1,7 @@
 
 import { vec3, mat4, vec2, ReadonlyVec3 } from "gl-matrix";
 import { SceneObjHolder, getObjectName, SceneObj, SpecialTextureType } from "../Main";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
 import { JMapInfoIter } from "../JMapInfo";
 import { clamp } from "../../MathHelpers";
@@ -78,7 +78,8 @@ export class OceanBowl extends LiveActor {
     private texCoord0Buffer: GfxBuffer;
     private indexCount: number;
     private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private materialHelper: GXMaterialHelperGfx;
     private materialHelperBloom: GXMaterialHelperGfx;
     private gridAxisPointCount: number;
@@ -233,11 +234,12 @@ export class OceanBowl extends LiveActor {
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.positionBuffer, byteOffset: 0, },
             { buffer: this.colorBuffer, byteOffset: 0, },
             { buffer: this.texCoord0Buffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
 
         // Material.
         let mb: GXMaterialBuilder;
@@ -365,7 +367,7 @@ export class OceanBowl extends LiveActor {
         setTextureMatrixST(materialParams.u_TexMtx[0], scale0, this.tex0Trans);
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
         setTextureMatrixST(materialParams.u_TexMtx[2], scale2, this.tex2Trans);
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], camera);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], materialParams.m_TextureMapping[1], camera);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
 
         setTextureMatrixST(materialParams.u_TexMtx[4], scale4, null);
@@ -385,7 +387,7 @@ export class OceanBowl extends LiveActor {
 
         // Now create our draw instance.
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount);
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
@@ -418,7 +420,7 @@ export class OceanBowl extends LiveActor {
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount);
 
         this.materialHelperBloom.setOnRenderInst(device, cache, renderInst);
@@ -442,7 +444,6 @@ export class OceanBowl extends LiveActor {
         device.destroyBuffer(this.colorBuffer);
         device.destroyBuffer(this.texCoord0Buffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

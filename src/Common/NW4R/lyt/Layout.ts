@@ -356,7 +356,8 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     const magFilter: GX.TexFilter = ((flags >>>  2) & 0x03) + 1;
                     const minLOD = 0;
                     const maxLOD = 100;
-                    samplers.push({ textureIndex, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD });
+                    const maxAnisotropy = GX.Anisotropy._1;
+                    samplers.push({ textureIndex, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, maxAnisotropy });
                 }
 
                 const textureMatrices: RLYTTextureMatrix[] = [];

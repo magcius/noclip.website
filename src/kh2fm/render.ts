@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
@@ -18,6 +18,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
@@ -108,7 +109,8 @@ export class MapData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     public layers: Layer[] = [];
     public drawCalls: DrawCall[] = [];
@@ -122,14 +124,14 @@ export class MapData {
     private atlasWidth = 0;
     private atlasHeight = 0;
 
-    constructor(device: GfxDevice, map: MAP.KingdomHeartsIIMap) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, map: MAP.KingdomHeartsIIMap) {
         this.textures.push(this.buildTextureAtlas(device, map));
         this.processTextureAnimations(device, map);
-        this.sampler = this.createSampler(device);
+        this.sampler = this.createSampler(cache);
 
         const meshesInDrawOrder: MAP.MapMesh[] = [];
         this.createBatchedDrawCalls(map, meshesInDrawOrder);
-        this.buildBuffersAndInputState(device, meshesInDrawOrder);
+        this.buildBuffersAndInputState(cache, meshesInDrawOrder);
     }
 
     private processTextureAnimations(device: GfxDevice, map: MAP.KingdomHeartsIIMap) {
@@ -336,18 +338,18 @@ export class MapData {
         return drawCall;
     }
 
-    private createSampler(device: GfxDevice) {
-        return device.createSampler({
+    private createSampler(cache: GfxRenderCache) {
+        return cache.createSampler({
             wrapS: GfxWrapMode.Repeat,
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Bilinear,
             magFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
     }
 
-    private buildBuffersAndInputState(device: GfxDevice, meshesInDrawOrder: MAP.MapMesh[]) {
+    private buildBuffersAndInputState(cache: GfxRenderCache, meshesInDrawOrder: MAP.MapMesh[]) {
         const vBuffer = new Float32Array(this.vertices * 24);
         const iBuffer = new Uint32Array(this.indices);
         let vBufferIndex = 0;
@@ -423,6 +425,7 @@ export class MapData {
             lastInd += mesh.vtx.length;
         }
 
+        const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vBuffer.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, iBuffer.buffer);
 
@@ -439,25 +442,21 @@ export class MapData {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 24*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
-        const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0 };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textures.length; i++) {
             device.destroyTexture(this.textures[i]);
         }
-        device.destroySampler(this.sampler);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -506,7 +505,7 @@ class DrawCallInstance {
             return;
         }
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
+        renderInst.setVertexInput(this.mapData.inputLayout, this.mapData.vertexBufferDescriptors, this.mapData.indexBufferDescriptor);
         renderInst.sortKey = this.drawCallIndex;
         if (this.gfxProgram === null) {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
@@ -621,7 +620,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.mapData = new MapData(device, map);
+        this.mapData = new MapData(device, this.renderHelper.renderCache, map);
         this.sceneRenderers.push(new SceneRenderer(device, this.mapData, this.mapData.drawCalls));
     }
 

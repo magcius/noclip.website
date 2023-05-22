@@ -600,14 +600,16 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    private async spawnActorForRoom(device: GfxDevice, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
+    private async spawnActorForRoom(renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
+        const cache = renderer.getRenderCache();
+
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
         }
 
         function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
-            const cmbData = renderer.modelCache.getModel(device, renderer, gar, modelPath);
-            const cmbRenderer = new CmbInstance(device, renderer.textureHolder, cmbData);
+            const cmbData = renderer.modelCache.getModel(cache, renderer, gar, modelPath);
+            const cmbRenderer = new CmbInstance(cache, renderer.textureHolder, cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
@@ -622,7 +624,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         function parseCMAB(gar: ZAR.ZAR, filename: string) {
             const cmab = CMAB.parse(CMB.Version.Majora, assertExists(ZAR.findFileData(gar, filename)));
-            renderer.textureHolder.addTextures(device, cmab.textures);
+            renderer.textureHolder.addTextures(cache.device, cmab.textures);
             return cmab;
         }
 
@@ -891,6 +893,7 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(zsi.rooms !== null);
 
         const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
+        const cache = renderer.getRenderCache();
         context.destroyablePool.push(renderer);
 
         const roomZSINames: string[] = [];
@@ -909,7 +912,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop()!;
-                const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
+                const roomRenderer = new RoomRenderer(cache, textureHolder, roomSetup.mesh, filename);
                 roomRenderer.roomSetups = roomSetups;
                 if (gar !== null) {
                     const cmabFile = gar.files.find((file) => file.name.startsWith(`ROOM${i}/`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
@@ -923,7 +926,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, renderer, roomRenderer, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(renderer, roomRenderer, roomSetup.actors[j], j);
 
                 if (this.disabledRooms.includes(i))
                     roomRenderer.setVisible(false);

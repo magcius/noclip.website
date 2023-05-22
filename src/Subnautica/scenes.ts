@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, GfxBuffer, GfxInputState, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
@@ -81,7 +81,7 @@ class MeshRenderer {
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.mesh.inputLayout, this.mesh.inputState);
+        renderInst.setVertexInput(this.mesh.inputLayout, this.mesh.vertexBufferDescriptors, this.mesh.indexBufferDescriptor);
         renderInst.drawIndexes(this.mesh.numIndices);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
@@ -97,7 +97,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class SubnauticaRenderer implements Viewer.SceneGfx {
-    public inputState: GfxInputState;
     public scaleFactor = 20;
     private meshRenderers: MeshRenderer[];
     private renderHelper: GfxRenderHelper;
@@ -107,6 +106,10 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         this.meshRenderers = [];
         this.renderHelper = new GfxRenderHelper(device);
         this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.renderCache;
     }
 
     addMesh(mesh: UnityMesh, offset: vec3) {
@@ -186,7 +189,7 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
                 let decoder = new TextDecoder();
                 return JSON.parse(decoder.decode(data.arrayBuffer as ArrayBuffer)).chunks;
             });
-        let assets = new UnityAssetManager('subnautica/resources.assets', context, device);
+        let assets = new UnityAssetManager('subnautica/resources.assets', context, device, renderer.getCache());
         await assets.loadAssetInfo();
 
         chunks.forEach(chunk => {

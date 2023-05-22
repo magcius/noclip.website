@@ -22,6 +22,7 @@ import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
 import { MathConstants, saturate, Vec3NegY } from "../MathHelpers";
 import { GX_Program } from "../gx/gx_material";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
 //#region Water
 export class WaterArea extends AreaObj {
@@ -335,6 +336,8 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
         ddraw.beginDraw();
 
+        const flipY = gfxDeviceNeedsFlipY(sceneObjHolder.modelCache.device);
+
         // getPlayerCenterPos / calcScreenPosition
         const playerCenterX = 0.5;
         const playerCenterY = 0.5;
@@ -342,19 +345,19 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 4);
         ddraw.position3f32(0, 0, 0);
         ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX - 0.5, playerCenterY - 0.5);
-        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, 0.0);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, flipY ? 0.0 : 1.0);
 
         ddraw.position3f32(fbWidth, 0, 0);
         ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX + 0.5, playerCenterY - 0.5);
-        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, 0.0);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, flipY ? 0.0 : 1.0);
 
         ddraw.position3f32(0, fbHeight, 0);
         ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX - 0.5, playerCenterY + 0.5);
-        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, 1.0);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, flipY ? 1.0 : 0.0);
 
         ddraw.position3f32(fbWidth, fbHeight, 0);
         ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX + 0.5, playerCenterY + 0.5);
-        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, 1.0);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, flipY ? 1.0 : 0.0);
         ddraw.end();
 
         const renderInst = ddraw.endDraw(renderInstManager);

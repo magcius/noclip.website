@@ -46,7 +46,7 @@ class BannerBinRenderer extends BasicGXRendererHelper {
         this.resourceCollection.addArcDir(device, arc.findDir('arc/timg')!);
         this.textureHolder = this.resourceCollection.textureHolder;
 
-        this.layout = new Layout(device, this.renderHelper.getCache(), rlyt, this.resourceCollection);
+        this.layout = new Layout(device, this.renderHelper.renderCache, rlyt, this.resourceCollection);
 
         let loopAnimData = arc.findFileData('arc/anim/banner_Loop.brlan');
         if (loopAnimData === null)

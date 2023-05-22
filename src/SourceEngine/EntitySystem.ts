@@ -303,14 +303,17 @@ export class BaseEntity {
     private async fetchStudioModel(renderContext: SourceRenderContext, modelName: string) {
         assert(this.spawnState === SpawnState.ReadyForSpawn);
         this.spawnState = SpawnState.FetchingResources;
-        const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
-        // The Stanley Parable appears to ship models/apartment/picture_frame.mdl without a corresponding VVD/VTX file.
-        if (modelData.bodyPartData.length !== 0) {
-            this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
-            this.modelStudio.setSkin(renderContext, this.skin);
-            this.updateLightingData();
+        try {
+            const modelData = await renderContext.studioModelCache.fetchStudioModelData(modelName!);
+            // The Stanley Parable appears to ship models/apartment/picture_frame.mdl without a corresponding VVD/VTX file.
+            if (modelData.bodyPartData.length !== 0) {
+                this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+                this.modelStudio.setSkin(renderContext, this.skin);
+                this.updateLightingData();
+            }
+        } finally {
+            this.spawnState = SpawnState.ReadyForSpawn;
         }
-        this.spawnState = SpawnState.ReadyForSpawn;
     }
 
     private async fetchSpriteModel(renderContext: SourceRenderContext, modelName: string) {
@@ -619,6 +622,7 @@ export class BaseEntity {
 
 class player extends BaseEntity {
     public currentFogController: env_fog_controller | null = null;
+    private currentColorCorrection: color_correction | null = null;
 
     public lookDir = vec3.create();
 
@@ -632,9 +636,9 @@ class player extends BaseEntity {
     }
 
     private getMasterFogController(entitySystem: EntitySystem): env_fog_controller | null {
-        let controller: env_fog_controller | null = entitySystem.findEntityByType(env_fog_controller);
+        let master: env_fog_controller | null = entitySystem.findEntityByType(env_fog_controller);
 
-        let nextController = controller;
+        let nextController = master;
         while (true) {
             nextController = entitySystem.findEntityByType(env_fog_controller, nextController);
             if (nextController === null)
@@ -642,12 +646,31 @@ class player extends BaseEntity {
 
             // master controller takes priority
             if (nextController.isMaster) {
-                controller = nextController;
+                master = nextController;
                 break;
             }
         }
 
-        return controller;
+        return master;
+    }
+
+    private getMasterColorCorrection(entitySystem: EntitySystem): color_correction | null {
+        let master: color_correction | null = entitySystem.findEntityByType(color_correction);
+
+        let nextController = master;
+        while (true) {
+            nextController = entitySystem.findEntityByType(color_correction, nextController);
+            if (nextController === null)
+                break;
+
+            // master controller takes priority
+            if (nextController.isMaster) {
+                master = nextController;
+                break;
+            }
+        }
+
+        return master;
     }
 
     public override spawn(entitySystem: EntitySystem): void {
@@ -660,6 +683,39 @@ class player extends BaseEntity {
         this.currentFogController = entitySystem.findEntityByTargetName(value) as env_fog_controller;
     }
 
+    private setCurrentColorCorrection(v: color_correction | null): void {
+        // TODO(jstpierre): Fade in / out
+        if (this.currentColorCorrection !== null)
+            this.currentColorCorrection.enabled = false;
+
+        this.currentColorCorrection = v;
+        
+        if (this.currentColorCorrection !== null)
+            this.currentColorCorrection.enabled = true;
+    }
+
+    private updateFogVolume(entitySystem: EntitySystem): void {
+        let firstVolume: fog_volume | null = entitySystem.findEntityByType(fog_volume);
+
+        // No volumes at all, don't do anything here.
+        if (firstVolume === null)
+            return;
+
+        for (let volume: fog_volume | null = firstVolume; volume !== null; volume = entitySystem.findEntityByType(fog_volume, volume)) {
+            this.getAbsOrigin(scratchVec3a);
+            if (volume.contains(scratchVec3a)) {
+                this.currentFogController = volume.fogController !== null ? volume.fogController : this.getMasterFogController(entitySystem);
+                this.setCurrentColorCorrection(volume.colorCorrection !== null ? volume.colorCorrection : this.getMasterColorCorrection(entitySystem));
+                // post-process
+                return;
+            }
+        }
+
+        // Inside nothing, fall back to the master fog controller.
+        this.currentFogController = this.getMasterFogController(entitySystem);
+        this.setCurrentColorCorrection(this.getMasterColorCorrection(entitySystem));
+    }
+
     public override movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
         super.movement(entitySystem, renderContext);
 
@@ -668,6 +724,8 @@ class player extends BaseEntity {
         // Get forward vector
         getMatrixAxisZ(this.lookDir, view.worldFromViewMatrix);
         vec3.negate(this.lookDir, this.lookDir);
+
+        this.updateFogVolume(entitySystem);
     }
 }
 
@@ -2311,6 +2369,9 @@ class color_correction extends BaseEntity {
     private layer: Uint8Array | null = null;
     private weightOverride = -1;
 
+    public isMaster = false;
+    public clientSide = false;
+
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
@@ -2318,6 +2379,14 @@ class color_correction extends BaseEntity {
         this.maxweight = Number(fallbackUndefined(this.entity.maxweight, '1'));
         this.minfalloff = Number(fallbackUndefined(this.entity.minfalloff, '-1'));
         this.maxfalloff = Number(fallbackUndefined(this.entity.maxfalloff, '-1'));
+
+        const enum SpawnFlags {
+            Master = 0x01,
+            ClientSide = 0x02,
+        };
+        const spawnflags: SpawnFlags = Number(fallbackUndefined(this.entity.spawnflags, '0'));
+        this.isMaster = !!(spawnflags & SpawnFlags.Master);
+        this.clientSide = !!(spawnflags & SpawnFlags.ClientSide);
 
         this.fetchLUT(renderContext);
     }
@@ -2338,13 +2407,17 @@ class color_correction extends BaseEntity {
         if (!this.enabled)
             return 0.0;
 
-        this.getAbsOrigin(scratchVec3a);
+        let weight = 1.0;
+
+        // TODO(jstpierre): FadeIn/FadeOut
+
         if (this.minfalloff >= 0 && this.maxfalloff >= 0 && this.minfalloff !== this.maxfalloff) {
+            this.getAbsOrigin(scratchVec3a);
             const dist = vec3.distance(renderContext.currentView.cameraPos, scratchVec3a);
-            return saturate(invlerp(this.minfalloff, this.maxfalloff, dist));
-        } else {
-            return 1.0;
+            weight *= saturate(invlerp(this.minfalloff, this.maxfalloff, dist));
         }
+
+        return weight;
     }
 
     private updateWeight(renderContext: SourceRenderContext): void {
@@ -3120,6 +3193,43 @@ export class env_shake extends BaseEntity {
     }
 }
 
+class fog_volume extends BaseEntity {
+    public static classname = `fog_volume`;
+
+    public fogController: env_fog_controller | null = null;
+    public postProcessController: BaseEntity | null = null;
+    public colorCorrection: color_correction | null = null;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.visible = false;
+    }
+
+    public override spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        if (this.entity.fogname)
+            this.fogController = entitySystem.findEntityByTargetName(this.entity.fogname) as env_fog_controller | null;
+        if (this.entity.postprocessname)
+            this.postProcessController = entitySystem.findEntityByTargetName(this.entity.postprocessname) as BaseEntity | null;
+        if (this.entity.colorcorrectionname)
+            this.colorCorrection = entitySystem.findEntityByTargetName(this.entity.colorcorrectionname) as color_correction | null;
+    }
+
+    public contains(p: ReadonlyVec3): boolean {
+        if (!this.enabled)
+            return false;
+
+        if (this.modelBSP === null)
+            return false;
+
+        mat4.invert(scratchMat4a, this.modelMatrix);
+        transformVec3Mat4w1(scratchVec3a, scratchMat4a, p);
+        return this.modelBSP.model.bbox.containsPoint(p);
+    }
+}
+
 export class point_camera extends BaseEntity {
     public static classname = `point_camera`;
 
@@ -3407,6 +3517,7 @@ export class EntityFactoryRegistry {
         this.registerFactory(env_tonemap_controller);
         this.registerFactory(env_projectedtexture);
         this.registerFactory(env_shake);
+        this.registerFactory(fog_volume);
         this.registerFactory(point_camera);
         this.registerFactory(func_monitor);
         this.registerFactory(info_camera_link);

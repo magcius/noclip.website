@@ -1,10 +1,11 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl";
 import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil";
 import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat";
 import { HashMap, nullHashFunc } from "../../HashMap";
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index";
+import { rust } from "../../rustlib";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;
@@ -69,12 +70,6 @@ interface GfxBindingsP_WebGPU extends GfxBindings {
 interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
     buffers: GPUVertexBufferLayout[];
     indexFormat: GPUIndexFormat | undefined;
-}
-
-interface GfxInputStateP_WebGPU extends GfxInputState {
-    inputLayout: GfxInputLayout;
-    vertexBuffers: (GfxVertexBufferDescriptor | null)[];
-    indexBuffer: GfxIndexBufferDescriptor | null;
 }
 
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
@@ -161,6 +156,12 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RGBA_SRGB)
         return 'rgba8unorm-srgb';
+    else if (format === GfxFormat.S8_R_NORM)
+        return 'r8snorm';
+    else if (format === GfxFormat.S8_RG_NORM)
+        return 'rg8snorm';
+    else if (format === GfxFormat.S8_RGBA_NORM)
+        return 'rgba8snorm';
     else if (format === GfxFormat.U32_R)
         return 'r32uint';
     else if (format === GfxFormat.F16_RGBA)
@@ -244,11 +245,6 @@ function getPlatformBuffer(buffer_: GfxBuffer): GPUBuffer {
 function getPlatformSampler(sampler_: GfxSampler): GPUSampler {
     const sampler = sampler_ as GfxSamplerP_WebGPU;
     return sampler.gpuSampler;
-}
-
-function getPlatformQuerySet(queryPool_: GfxQueryPool): GPUQuerySet {
-    const queryPool = queryPool_ as GfxQueryPoolP_WebGPU;
-    return queryPool.querySet;
 }
 
 function translateTopology(topology: GfxPrimitiveTopology): GPUPrimitiveTopology {
@@ -429,14 +425,28 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'uint8x4';
     else if (format === GfxFormat.U8_RGBA)
         return 'uint8x4';
+    else if (format === GfxFormat.U8_RG_NORM)
+        return 'unorm8x2';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'unorm8x4';
     else if (format === GfxFormat.S8_RGB_NORM)
         return 'snorm8x4';
     else if (format === GfxFormat.S8_RGBA_NORM)
         return 'snorm8x4';
+    else if (format === GfxFormat.U16_RG_NORM)
+        return 'unorm16x2';
+    else if (format === GfxFormat.U16_RGBA_NORM)
+        return 'unorm16x4';
+    else if (format === GfxFormat.S16_RG_NORM)
+        return 'snorm16x2';
+    else if (format === GfxFormat.S16_RGBA_NORM)
+        return 'snorm16x4';
     else if (format === GfxFormat.S16_RG)
         return 'uint16x2';
+    else if (format === GfxFormat.F16_RG)
+        return 'float16x2';
+    else if (format === GfxFormat.F16_RGBA)
+        return 'float16x4';
     else if (format === GfxFormat.F32_R)
         return 'float32';
     else if (format === GfxFormat.F32_RG)
@@ -654,19 +664,16 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.gpuRenderPassEncoder!.setPipeline(gpuRenderPipeline);
     }
 
-    public setInputState(inputState_: GfxInputState | null): void {
-        if (inputState_ === null)
+    public setVertexInput(inputLayout_: GfxInputLayout | null, vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null, indexBuffer: GfxIndexBufferDescriptor | null): void {
+        if (inputLayout_ === null)
             return;
 
-        const inputState = inputState_ as GfxInputStateP_WebGPU;
-        if (inputState.indexBuffer !== null) {
-            const inputLayout = inputState.inputLayout as GfxInputLayoutP_WebGPU;
-            const indexBuffer = inputState.indexBuffer;
+        const inputLayout = inputLayout_ as GfxInputLayoutP_WebGPU;
+        if (indexBuffer !== null)
             this.gpuRenderPassEncoder!.setIndexBuffer(getPlatformBuffer(indexBuffer.buffer), assertExists(inputLayout.indexFormat), indexBuffer.byteOffset);
-        }
 
-        for (let i = 0; i < inputState.vertexBuffers.length; i++) {
-            const b = inputState.vertexBuffers[i];
+        for (let i = 0; i < vertexBuffers!.length; i++) {
+            const b = vertexBuffers![i];
             if (b === null)
                 continue;
             this.gpuRenderPassEncoder!.setVertexBuffer(i, getPlatformBuffer(b.buffer), b.byteOffset);
@@ -926,7 +933,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Filtering');
 
@@ -935,7 +942,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             wrapT: GfxWrapMode.Repeat,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             compareMode: GfxCompareMode.Always,
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Comparison');
@@ -1063,7 +1070,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuSampler = this.device.createSampler({
             addressModeU: translateWrapMode(descriptor.wrapS),
             addressModeV: translateWrapMode(descriptor.wrapT),
-            // TODO(jstpierre): Expose this as a sampler parameter.
             addressModeW: translateWrapMode(descriptor.wrapQ ?? descriptor.wrapS),
             lodMinClamp,
             lodMaxClamp,
@@ -1242,43 +1248,31 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
-        // GfxInputLayout is not a platform object, it's a descriptor in WebGPU.
-
         const buffers: GPUVertexBufferLayout[] = [];
-        for (let i = 0; i < inputLayoutDescriptor.vertexBufferDescriptors.length; i++) {
-            const b = inputLayoutDescriptor.vertexBufferDescriptors[i];
-            if (b === null)
-                continue;
-            const arrayStride = b.byteStride;
-            const stepMode = translateVertexBufferFrequency(b.frequency);
-            const attributes: GPUVertexAttribute[] = [];
-            buffers[i] = { arrayStride, stepMode, attributes };
-        }
-
         for (let i = 0; i < inputLayoutDescriptor.vertexAttributeDescriptors.length; i++) {
             const attr = inputLayoutDescriptor.vertexAttributeDescriptors[i];
-            const b = assertExists(buffers[attr.bufferIndex]);
+
             const attribute: GPUVertexAttribute = {
                 shaderLocation: attr.location,
                 format: translateVertexFormat(attr.format),
                 offset: attr.bufferByteOffset,
             };
-            (b.attributes as GPUVertexAttribute[]).push(attribute);
+
+            if (buffers[attr.bufferIndex] !== undefined) {
+                (buffers[attr.bufferIndex].attributes as GPUVertexAttribute[]).push(attribute);
+            } else {
+                const b = assertExists(inputLayoutDescriptor.vertexBufferDescriptors[attr.bufferIndex]);
+                const arrayStride = b.byteStride;
+                const stepMode = translateVertexBufferFrequency(b.frequency);
+                const attributes: GPUVertexAttribute[] = [attribute];
+                buffers[attr.bufferIndex] = { arrayStride, stepMode, attributes };
+            }
         }
 
         const indexFormat = translateIndexFormat(inputLayoutDescriptor.indexBufferFormat);
 
         const inputLayout: GfxInputLayoutP_WebGPU = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), buffers, indexFormat };
         return inputLayout;
-    }
-
-    public createInputState(inputLayout: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState {
-        // GfxInputState is a GL-only thing, as VAOs suck. We emulate it with a VAO-alike here.
-        const inputState: GfxInputStateP_WebGPU = {
-            _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(),
-            inputLayout, vertexBuffers, indexBuffer,
-        };
-        return inputState;
     }
 
     private _createPipelineLayout(bindingLayouts: GfxBindingLayoutDescriptor[]): GPUPipelineLayout {
@@ -1473,9 +1467,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public destroyInputLayout(o: GfxInputLayout): void {
     }
 
-    public destroyInputState(o: GfxInputState): void {
-    }
-
     public destroyRenderPipeline(o: GfxRenderPipeline): void {
     }
 
@@ -1658,10 +1649,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public queryLimits(): GfxDeviceLimits {
-        // TODO(jstpierre): GPULimits
         return {
-            uniformBufferMaxPageWordSize: 0x10000,
-            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment * 4,
+            uniformBufferMaxPageWordSize: this.device.limits.maxUniformBufferBindingSize >>> 2,
+            uniformBufferWordAlignment: this.device.limits.minUniformBufferOffsetAlignment >>> 2,
             supportedSampleCounts: [1],
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,
@@ -1770,8 +1760,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    const { glsl_compile } = await import('../../../rust/pkg/index');
-    return new GfxImplP_WebGPU(adapter, device, canvas, context, glsl_compile);
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, rust!.glsl_compile);
 }
 
 export function gfxDeviceGetImpl_WebGPU(gfxDevice: GfxDevice): GfxImplP_WebGPU {

@@ -313,7 +313,7 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
         await loadHIP(context.dataFetcher, `${hipPath}.HIP`, this.beta);
 
         const renderer = new BFBBRenderer(gfxDevice);
-        const cache = renderer.renderHelper.getCache();
+        const cache = renderer.renderHelper.renderCache;
 
         while (dataHolder.jsps.length) {
             const jsp = dataHolder.jsps.pop()!;

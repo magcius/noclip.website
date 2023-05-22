@@ -37,9 +37,9 @@ export class Renderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, private worldData: WorldData) {
         this.renderHelper = new GXRenderHelperGfx(device);
         if (worldData.kind === "Stage") {
-            this.world = new StageWorld(device, this.renderHelper.getCache(), worldData);
+            this.world = new StageWorld(device, this.renderHelper.renderCache, worldData);
         } else if (worldData.kind === "Gma" || worldData.kind === "Nl") {
-            this.world = new FileDropWorld(device, this.renderHelper.getCache(), worldData);
+            this.world = new FileDropWorld(device, this.renderHelper.renderCache, worldData);
         }
         const textureCache = this.world.getTextureCache();
         this.textureCache = textureCache;
@@ -121,8 +121,8 @@ export class Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.opaqueInstList.drawOnPassRenderer(this.renderHelper.getCache(), passRenderer);
-                this.translucentInstList.drawOnPassRenderer(this.renderHelper.getCache(), passRenderer);
+                this.opaqueInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.translucentInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

@@ -90,7 +90,7 @@ function createReflectiveProbeMaterial(materialFactory: MaterialFactory, texFetc
         mat4SetTranslation(dst, 0.5, 0.5, 0.0);
     });
     const texCoord = mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
-    const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.device, 0x5dc, false)));
+    const texMap = mb.genTexMap(makeMaterialTexture(texFetcher.getTexture(materialFactory.cache, 0x5dc, false)));
     mb.setTevOrder(stage0, texCoord, texMap, GX.RasColorChannelID.COLOR0A0);
     mb.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASC, GX.CC.RASA, GX.CC.TEXC);
     mb.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
@@ -342,7 +342,7 @@ export class SphereMapManager {
                 wrapT: GfxWrapMode.Clamp,
                 minFilter: GfxTexFilterMode.Bilinear,
                 magFilter: GfxTexFilterMode.Bilinear,
-                mipFilter: GfxMipFilterMode.NoMip,
+                mipFilter: GfxMipFilterMode.Nearest,
                 minLOD: 0,
                 maxLOD: 100,
             });

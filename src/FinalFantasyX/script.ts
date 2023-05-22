@@ -462,13 +462,14 @@ function shouldCleanup(signal: Signal, cutoff: number, mode: SignalStatus): bool
 }
 
 const enum ControllerFlags {
-    ACTIVE = 0x02,
-    ERROR = 0x08, // reversed in game
-    DONE = 0x10,
-    JUST_TURN = 0x20,
-    APPLY = 0x80,
+    NONE            = 0x00,
+    ACTIVE          = 0x02,
+    ERROR           = 0x08, // reversed in game
+    DONE            = 0x10,
+    JUST_TURN       = 0x20,
+    APPLY           = 0x80,
     ALLOW_COLLISION = 0x10000,
-    UPDATE_HIGH = 0x10000000,
+    UPDATE_HIGH     = 0x10000000,
 }
 
 const enum PuppetType {

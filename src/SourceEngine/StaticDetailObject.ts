@@ -5,7 +5,7 @@ import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, BSPRenderer } from "./Main";
-import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
+import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
@@ -183,7 +183,8 @@ export class DetailPropLeafRenderer {
     private vertexData: Float32Array;
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
     private centerPoint = vec3.create();
 
     constructor(renderContext: SourceRenderContext, bspFile: BSPFile, public leaf: number, detailMaterial: string) {
@@ -244,10 +245,11 @@ export class DetailPropLeafRenderer {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
 
         this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
             { buffer: renderContext.materialCache.staticResources.zeroVertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
 
         this.bindMaterial(renderContext, detailMaterial);
     }
@@ -340,7 +342,7 @@ export class DetailPropLeafRenderer {
         device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         mat4.identity(scratchMatrix);
 
         this.materialInstance.setOnRenderInst(renderContext, renderInst);
@@ -376,7 +378,6 @@ export class DetailPropLeafRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
         for (let i = 0; i < this.modelEntries.length; i++)
             this.modelEntries[i].destroy(device);
     }

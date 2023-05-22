@@ -3,7 +3,7 @@ import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
 import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
 import { getImageFormatString, Vertex, DrawCall, RSP_Geometry, RSPSharedOutput, translateCullMode } from "./f3dex";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
@@ -471,14 +471,14 @@ function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32A
 export class RenderData {
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public textures: GfxTexture[] = [];
     public samplers: GfxSampler[] = [];
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
     public dynamicBufferCopies: GfxBuffer[] = [];
-    public dynamicStateCopies: GfxInputState[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput) {
         const textures = sharedOutput.textureCache.textures;
@@ -505,15 +505,14 @@ export class RenderData {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexBufferDescriptors,
             vertexAttributeDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
@@ -521,12 +520,8 @@ export class RenderData {
             device.destroyTexture(this.textures[i]);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
         for (let i = 0; i < this.dynamicBufferCopies.length; i++)
             device.destroyBuffer(this.dynamicBufferCopies[i]);
-        for (let i = 0; i < this.dynamicStateCopies.length; i++)
-            device.destroyInputState(this.dynamicStateCopies[i]);
     }
 }
 
@@ -1109,7 +1104,7 @@ export class GeometryRenderer {
     private rootNodeRenderer: GeoNodeRenderer;
     private vertexBuffer: GfxBuffer;
     private vertexBufferData: Float32Array;
-    private inputState: GfxInputState;
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
     constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
@@ -1143,18 +1138,15 @@ export class GeometryRenderer {
                 GfxBufferUsage.Vertex,
                 GfxBufferFrequencyHint.Dynamic
             );
-            this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
-                [{ buffer: this.vertexBuffer, byteOffset: 0, }],
-                { buffer: this.geometryData.renderData.indexBuffer, byteOffset: 0 }
-            );
+
+            this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
 
             // allow the render data to destroy the copies later
             this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);
-            this.geometryData.renderData.dynamicStateCopies.push(this.inputState);
         } else {
             this.vertexBufferData = this.geometryData.renderData.vertexBufferData; // shouldn't be necessary
             this.vertexBuffer = this.geometryData.renderData.vertexBuffer;
-            this.inputState = this.geometryData.renderData.inputState;
+            this.vertexBufferDescriptors = this.geometryData.renderData.vertexBufferDescriptors;
         }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -1382,7 +1374,7 @@ export class GeometryRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.geometryData.renderData.inputLayout, this.inputState);
+        template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
@@ -1644,7 +1636,8 @@ export class FlipbookRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
+        const renderData = this.flipbookData.renderData;
+        renderInst.setVertexInput(renderData.inputLayout, renderData.vertexBufferDescriptors, renderData.indexBufferDescriptor);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         mat4.getTranslation(flipbookScratch[0], viewerInput.camera.worldMatrix);

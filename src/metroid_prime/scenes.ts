@@ -60,7 +60,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     constructor(public device: GfxDevice, public mlvl: MLVL.MLVL, public game: ResourceGame) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderCache = this.renderHelper.getCache();
+        this.renderCache = this.renderHelper.renderCache;
     }
 
     public adjustCameraController(c: CameraController) {

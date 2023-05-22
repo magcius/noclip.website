@@ -21,6 +21,7 @@ import { SkyRenderer, SkyData } from './Sky';
 import { GeometryData } from './GeometryData';
 import { Fez_Level, Fez_BackgroundPlane } from './XNB_Fez';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class FezProgram {
     public static ub_SceneParams = 0;
@@ -175,7 +176,7 @@ export class FezRenderer implements Viewer.SceneGfx {
 
         for (const backgroundPlane of level.backgroundPlanes.values()) {
             const backgroundPlaneData = assertExists(modelCache.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlane.textureName));
-            const renderer = new BackgroundPlaneRenderer(device, backgroundPlane, backgroundPlaneData, this.backgroundPlaneStaticData);
+            const renderer = new BackgroundPlaneRenderer(modelCache.gfxRenderCache, backgroundPlane, backgroundPlaneData, this.backgroundPlaneStaticData);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
             this.backgroundPlaneRenderers.push(renderer);
         }
@@ -277,7 +278,7 @@ export class FezObjectRenderer {
             return;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setVertexInput(this.geometryData.inputLayout, this.geometryData.vertexBufferDescriptors, this.geometryData.indexBufferDescriptor);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
@@ -308,10 +309,9 @@ export class BackgroundPlaneRenderer {
     private rawScale = vec2.create();
     private xTextureRepeat = false;
     private yTextureRepeat = false;
-    private clampTexture = false;
     private sampler: GfxSampler;
 
-    constructor(device: GfxDevice, backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+    constructor(cache: GfxRenderCache, backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
         const position = vec3.clone(backgroundPlane.position);
         position[0] -= 0.5;
         position[1] -= 0.5;
@@ -343,7 +343,6 @@ export class BackgroundPlaneRenderer {
 
         this.xTextureRepeat = backgroundPlane.xTextureRepeat;
         this.yTextureRepeat = backgroundPlane.yTextureRepeat;
-        this.clampTexture = backgroundPlane.clampTexture;
 
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.Add,
@@ -351,12 +350,12 @@ export class BackgroundPlaneRenderer {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
         });
 
-        this.sampler = device.createSampler({
+        this.sampler = cache.createSampler({
             wrapS: this.xTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
             wrapT: this.yTextureRepeat ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
             minFilter: GfxTexFilterMode.Point,
             magFilter: GfxTexFilterMode.Point,
-            mipFilter: GfxMipFilterMode.NoMip,
+            mipFilter: GfxMipFilterMode.Nearest,
             minLOD: 0, maxLOD: 0,
         });
 
@@ -368,7 +367,7 @@ export class BackgroundPlaneRenderer {
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
+        renderInst.setVertexInput(this.staticData.inputLayout, this.staticData.vertexBufferDescriptors, this.staticData.indexBufferDescriptor);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
@@ -394,6 +393,5 @@ export class BackgroundPlaneRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroySampler(this.sampler);
     }
 }

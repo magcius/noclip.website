@@ -14,7 +14,7 @@ import { assert, align, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
-import * as Pako from 'pako';
+import * as Deflate from '../Common/Compression/Deflate';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { AABB } from '../Geometry';
 import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
@@ -988,9 +988,9 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
                 } else {
                     if (!usesLzo) {
                         // zlib
-                        const compressedSegment = stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize);
-                        const decompressedSegment = Pako.inflate(compressedSegment);
-                        decompressedSegments.push(decompressedSegment);
+                        const compressedSegment = stream.getBuffer().subarray(compressedBlocksIdx, segmentSize);
+                        const decompressedSegment = Deflate.decompress(compressedSegment);
+                        decompressedSegments.push(decompressedSegment.createTypedArray(Uint8Array));
                         compressedBlocksIdx += segmentSize;
                         remainingSize -= decompressedSegment.byteLength;
                     }

@@ -151,6 +151,7 @@ export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width:
         magFilter: GX.TexFilter.LINEAR,
         data,
         lodBias: 0, minLOD: 0, maxLOD: 100, mipCount: 1,
+        maxAnisotropy: GX.Anisotropy._1,
         paletteData: null,
         paletteFormat: GX.TexPalette.IA8,
     };

@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -64,7 +64,7 @@ class Chunk {
     public numVertices: number;
     public posBuffer: GfxBuffer;
     public nrmBuffer: GfxBuffer;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
 
     constructor(device: GfxDevice, public chunk: IV.Chunk, private inputLayout: GfxInputLayout) {
         // Run through our data, calculate normals and such.
@@ -115,17 +115,17 @@ class Chunk {
         this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, posData.buffer);
         this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, nrmData.buffer);
 
-        this.inputState = device.createInputState(inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.posBuffer, byteOffset: 0, },
             { buffer: this.nrmBuffer, byteOffset: 0, },
-        ], null);
+        ];
 
         this.numVertices = chunk.indexData.length;
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
         renderInst.drawPrimitives(this.numVertices);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -133,7 +133,6 @@ class Chunk {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.posBuffer);
         device.destroyBuffer(this.nrmBuffer);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -186,6 +185,9 @@ export class Scene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
+        this.renderHelper = new GfxRenderHelper(device);
+        this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
+
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
@@ -195,14 +197,12 @@ export class Scene implements Viewer.SceneGfx {
             { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
         const indexBufferFormat: GfxFormat | null = null;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        const cache = this.renderHelper.renderCache;
+        this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.ivRenderers = this.ivs.map((iv) => {
             return new IVRenderer(device, iv, this.inputLayout);
         });
-
-        this.renderHelper = new GfxRenderHelper(device);
-        this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
     }
 
     public adjustCameraController(c: CameraController) {
@@ -254,7 +254,6 @@ export class Scene implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy();

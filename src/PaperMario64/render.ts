@@ -3,7 +3,7 @@
 import program_glsl from './program.glsl';
 import * as Viewer from '../viewer';
 import * as Tex from './tex';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
 import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DeviceProgram } from "../Program";
@@ -11,7 +11,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/he
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
-import { assert, nArray, assertExists } from "../util";
+import { assert, nArray, assertExists, setBitFlagEnabled } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
@@ -61,9 +61,10 @@ export class N64Data {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
 
-    constructor(device: GfxDevice, public rspOutput: RSPOutput) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public rspOutput: RSPOutput) {
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexBufferData);
         assert(this.rspOutput.vertices.length <= 0xFFFF);
@@ -79,22 +80,21 @@ export class N64Data {
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        this.vertexBufferDescriptors = [
             { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        ];
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -195,7 +195,7 @@ export class BackgroundBillboardRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
@@ -224,7 +224,7 @@ enum RenderMode {
     OPA, XLU, DEC
 }
 
-const modelViewScratch = mat4.create();
+const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 const bboxScratch = new AABB();
 class ModelTreeLeafInstance {
@@ -245,9 +245,11 @@ class ModelTreeLeafInstance {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private sortKey: number;
+    public modelMatrix = mat4.create();
+    private flags: number = 0;
 
-    constructor(device: GfxDevice, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
-        this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
+        this.n64Data = new N64Data(device, cache, modelTreeLeaf.rspOutput);
 
         const renderModeProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C);
         if (renderModeProp !== undefined && renderModeProp.type === PropertyType.INT)
@@ -293,7 +295,7 @@ class ModelTreeLeafInstance {
                 const image = this.textureEnvironment.images[i];
                 textureHolder.fillTextureMapping(this.textureMapping[i], image.name);
 
-                this.gfxSampler[i] = device.createSampler({
+                this.gfxSampler[i] = cache.createSampler({
                     wrapS: translateCM(image.cms),
                     wrapT: translateCM(image.cmt),
                     minFilter: GfxTexFilterMode.Point,
@@ -355,18 +357,32 @@ class ModelTreeLeafInstance {
         this.texAnimGroup = groupId;
     }
 
-    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance | null {
         if (this.modelTreeLeaf.id === modelId)
             return this;
         return null;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+    public findModelNodeInstance(modelId: number): ModelTreeLeafInstance | null {
+        return this.findModelLeafInstance(modelId);
+    }
+
+    public resetModelMatrix(): void {
+        if (!!(this.flags & 0x01)) {
+            this.flags = setBitFlagEnabled(this.flags, 0x01, false);
+            mat4.identity(this.modelMatrix);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], parentMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
         let depth = -1;
-        bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
+        mat4.mul(scratchMatrix, parentMatrix, this.modelMatrix);
+        bboxScratch.transform(this.modelTreeLeaf.bbox, scratchMatrix);
+        this.flags |= 0x01;
+
         if (viewerInput.camera.frustum.contains(bboxScratch))
             depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, bboxScratch));
         else
@@ -377,7 +393,7 @@ class ModelTreeLeafInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.gfxProgram);
-        template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
+        template.setVertexInput(this.n64Data.inputLayout, this.n64Data.vertexBufferDescriptors, this.n64Data.indexBufferDescriptor);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setMegaStateFlags(this.megaStateFlags);
         template.sortKey = this.sortKey;
@@ -385,8 +401,8 @@ class ModelTreeLeafInstance {
         let offs = template.allocateUniformBuffer(PaperMario64Program.ub_DrawParams, 12 + 8*2);
         const mappedF32 = template.mapUniformBufferF32(PaperMario64Program.ub_DrawParams);
 
-        mat4.mul(modelViewScratch, viewerInput.camera.viewMatrix, modelMatrix);
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, scratchMatrix);
 
         if (this.textureEnvironment !== null) {
             this.computeTextureMatrix(texMatrixScratch, texAnimGroups, 0);
@@ -454,20 +470,36 @@ class ModelTreeLeafInstance {
 
     public destroy(device: GfxDevice): void {
         this.n64Data.destroy(device);
-        for (let i = 0; i < this.gfxSampler.length; i++)
-            device.destroySampler(this.gfxSampler[i]);
     }
 }
 
 class ModelTreeGroupInstance {
-    private modelMatrixScratch = mat4.create();
+    public modelMatrix = mat4.create();
+    private worldMatrix = mat4.create();
 
     constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[], private name = group.name) {
+        mat4.copy(this.modelMatrix, this.group.modelMatrix);
     }
 
-    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+    public resetModelMatrix(): void {
+    }
+
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance | null {
         for (let i = 0; i < this.children.length; i++) {
-            const m = this.children[i].findModelInstance(modelId);
+            const m = this.children[i].findModelLeafInstance(modelId);
+            if (m !== null)
+                return m;
+        }
+
+        return null;
+    }
+
+    public findModelNodeInstance(modelId: number): ModelTreeNodeInstance | null {
+        if (this.group.id === modelId)
+            return this;
+
+        for (let i = 0; i < this.children.length; i++) {
+            const m = this.children[i].findModelNodeInstance(modelId);
             if (m !== null)
                 return m;
         }
@@ -480,10 +512,10 @@ class ModelTreeGroupInstance {
             this.children[i].setVisible(v);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        mat4.mul(this.modelMatrixScratch, modelMatrix, this.group.modelMatrix);
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, texAnimGroups: TexAnimGroup[], parentMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        mat4.mul(this.worldMatrix, parentMatrix, this.modelMatrix);
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, texAnimGroups, this.modelMatrixScratch, viewerInput);
+            this.children[i].prepareToRender(device, renderInstManager, texAnimGroups, this.worldMatrix, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -507,7 +539,7 @@ export class PaperMario64ModelTreeRenderer {
     public modelMatrix = mat4.create();
     public texAnimGroup: TexAnimGroup[] = [];
 
-    constructor(device: GfxDevice, private textureArchive: Tex.TextureArchive, private textureHolder: PaperMario64TextureHolder, private modelTreeRoot: ModelTreeNode) {
+    constructor(device: GfxDevice, private cache: GfxRenderCache, private textureArchive: Tex.TextureArchive, private textureHolder: PaperMario64TextureHolder, private modelTreeRoot: ModelTreeNode) {
         this.modelTreeRootInstance = this.translateModelTreeNode(device, modelTreeRoot);
     }
 
@@ -518,7 +550,7 @@ export class PaperMario64ModelTreeRenderer {
                 children.push(this.translateModelTreeNode(device, modelTreeNode.children[i]));
             return new ModelTreeGroupInstance(modelTreeNode, children);
         } else if (modelTreeNode.type === 'leaf') {
-            return new ModelTreeLeafInstance(device, this.textureArchive, this.textureHolder, modelTreeNode);
+            return new ModelTreeLeafInstance(device, this.cache, this.textureArchive, this.textureHolder, modelTreeNode);
         } else {
             throw "whoops";
         }
@@ -539,16 +571,23 @@ export class PaperMario64ModelTreeRenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
+    public findModelLeafInstance(modelId: number): ModelTreeLeafInstance {
+        return assertExists(this.modelTreeRootInstance.findModelLeafInstance(modelId));
+    }
+
+    public findModelInstance(modelId: number): ModelTreeNodeInstance | null {
+        return this.modelTreeRootInstance.findModelNodeInstance(modelId);
+    }
+
     public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
-        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
-        modelInstance.setTexAnimEnabled(enabled);
+        this.findModelLeafInstance(modelId).setTexAnimEnabled(enabled);
     }
 
     public setModelTexAnimGroup(modelId: number, groupId: number): void {
         if (!this.texAnimGroup[groupId])
             this.texAnimGroup[groupId] = new TexAnimGroup();
 
-        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
+        const modelInstance = this.findModelLeafInstance(modelId);
         modelInstance.setTexAnimGroup(groupId);
         modelInstance.setTexAnimEnabled(true);
     }
@@ -558,8 +597,8 @@ export class PaperMario64ModelTreeRenderer {
             this.texAnimGroup[groupId] = new TexAnimGroup();
 
         const m = this.texAnimGroup[groupId].tileMatrix[tileId];
-        m[12] = transS;
-        m[13] = transT;
+        m[12] = transS / 0x400;
+        m[13] = transT / -0x400;
     }
 
     public destroy(device: GfxDevice): void {

@@ -1,7 +1,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix } from "../Camera";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxProgram, GfxSamplerBinding } from "../gfx/platform/GfxPlatform";
+import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager";
@@ -18,7 +18,8 @@ import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
 
 export interface VertexInfo {
     inputLayout: GfxInputLayout;
-    inputState: GfxInputState;
+    vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    indexBufferDescriptor: GfxIndexBufferDescriptor;
     drawCall: DrawCall;
     textureMappings: NfsTexture[];
     shaderType: number;
@@ -87,7 +88,7 @@ export class NfsRenderer implements SceneGfx {
 
         this.postProcessing = new NfsPostProcessing(map, renderHelper);
 
-        NfsParticleEmitter.init(device);
+        NfsParticleEmitter.init(this.renderHelper.renderCache);
         this.particleProgram = new NfsParticleProgram();
     }
 
@@ -122,7 +123,7 @@ export class NfsRenderer implements SceneGfx {
             if(model === undefined)
                 return;
             model.vertInfos.forEach(vInfo => {
-                template.setInputLayoutAndState(vInfo.inputLayout, vInfo.inputState);
+                template.setVertexInput(vInfo.inputLayout, vInfo.vertexBufferDescriptors, vInfo.indexBufferDescriptor);
                 let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
                 const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
                 const renderInst = renderInstManager.newRenderInst();
@@ -162,7 +163,7 @@ export class NfsRenderer implements SceneGfx {
             if(model === undefined)
                 return;
             model.vertInfos.forEach(vInfo => {
-                template.setInputLayoutAndState(vInfo.inputLayout, vInfo.inputState);
+                template.setVertexInput(vInfo.inputLayout, vInfo.vertexBufferDescriptors, vInfo.indexBufferDescriptor);
                 let offs = template.allocateUniformBuffer(NfsProgram.ub_ObjectParams, 16);
                 const d = template.mapUniformBufferF32(NfsProgram.ub_ObjectParams);
                 const renderInst = renderInstManager.newRenderInst();
@@ -241,7 +242,7 @@ export class NfsRenderer implements SceneGfx {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.particleGfxProgram);
         template.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false, cullMode: GfxCullMode.None});
-        template.setInputLayoutAndState(NfsParticleEmitter.inputLayout, NfsParticleEmitter.inputState);
+        template.setVertexInput(NfsParticleEmitter.inputLayout, NfsParticleEmitter.vertexBufferDescriptors, NfsParticleEmitter.indexBufferDescriptor);
         template.drawIndexes(6);
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
         let offs = template.allocateUniformBuffer(NfsParticleProgram.ub_SceneParams, 16);

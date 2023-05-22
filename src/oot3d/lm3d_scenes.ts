@@ -72,7 +72,9 @@ class SceneDesc implements Viewer.SceneDesc {
             const modelCache = new Map<string, CmbData>();
 
             const renderer = new MultiCmbScene(device, textureHolder);
+            const cache = renderer.getRenderCache();
             const promises: Promise<void>[] = [];
+
             for (let i = 0; i < roomInfo.records.length; i++) {
                 promises.push(dataFetcher.fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`).then((outerRoomGarBuf) => {
                     const outerRoomGar = ZAR.parse(outerRoomGarBuf);
@@ -92,11 +94,11 @@ class SceneDesc implements Viewer.SceneDesc {
                         textureHolder.addCTXB(device, ctxb);
                     }
 
-                    const cmbData = new CmbData(device, cmb);
+                    const cmbData = new CmbData(cache, cmb);
                     textureHolder.addCMB(device, cmb);
                     renderer.cmbData.push(cmbData);
 
-                    const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
+                    const cmbRenderer = new CmbInstance(cache, textureHolder, cmbData, cmb.name);
                     renderer.cmbRenderers.push(cmbRenderer);
 
                     const cmbBasename = firstCMB.name.split('.')[0];
@@ -122,13 +124,13 @@ class SceneDesc implements Viewer.SceneDesc {
                         let cmbData: CmbData | undefined = modelCache.get(cmbFilename);
                         if (cmbData === undefined) {
                             const cmb = CMB.parse(cmbFile.buffer);
-                            cmbData = new CmbData(device, cmb);
+                            cmbData = new CmbData(cache, cmb);
                             textureHolder.addTextures(device, cmb.textures);
                             renderer.cmbData.push(cmbData);
                             modelCache.set(cmbFilename, cmbData);
                         }
 
-                        const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
+                        const cmbRenderer = new CmbInstance(cache, textureHolder, cmbData, cmb.name);
 
                         const rotationX = assertExists(getField<number>(roomFurnitureEntries, record, "dir_x")) / 180 * Math.PI;
                         const rotationY = assertExists(getField<number>(roomFurnitureEntries, record, "dir_y")) / 180 * Math.PI;

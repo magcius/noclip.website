@@ -1,4 +1,4 @@
-import { GfxBuffer, GfxDevice, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatform";
+import { GfxBuffer, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform";
 import { DkrTexture } from "./DkrTexture";
 import { assert } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -30,11 +30,6 @@ export interface DkrFinalVertex {
 }
 
 export class DkrTriangleBatch {
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-    
     private vertices = Array<DkrVertex>();
     private finalVertices = Array<DkrFinalVertex>();
 
@@ -107,13 +102,6 @@ export class DkrTriangleBatch {
                 this.setFinalVertex(verticesStart + v1, this.vertices[v1], uv1);
             }
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 
     public getVertices(): Array<any> {

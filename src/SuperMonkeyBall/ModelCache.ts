@@ -1,17 +1,15 @@
 import { ModelInst } from "./Model";
 import * as Gma from "./Gma";
 import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
-import { GfxCullMode, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { assert, assertExists, nArray } from "../util";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { assertExists } from "../util";
 import { LoadedTexture } from "../TextureHolder";
 import { loadTextureFromMipChain } from "../gx/gx_render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { StageData } from "./World";
-import { AVTpl } from "./AVTpl";
 import * as UI from "../ui";
 import * as Viewer from "../viewer";
 import { GXMaterialHacks } from "../gx/gx_material";
-import * as SD from "./Stagedef";
 
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.

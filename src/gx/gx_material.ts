@@ -645,8 +645,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         assert(texCoordGen.type >= GX.TexGenType.BUMP0 && texCoordGen.type <= GX.TexGenType.BUMP7);
         const lightIdx = (texCoordGen.type - GX.TexGenType.BUMP0);
         const lightDir = `normalize(u_LightParams[${lightIdx}].Position.xyz - v_Position.xyz)`;
-        const b = this.generateMulNrm(1);
-        const t = this.generateMulNrm(2);
+        const b = this.generateMulNrm(`a_Binormal`);
+        const t = this.generateMulNrm(`a_Tangent`);
         return `${src}.xyz + vec3(dot(${lightDir}, ${b}.xyz), dot(${lightDir}, ${t}.xyz), 0.0)`;
     }
 
@@ -888,7 +888,6 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
-        // TODO(jstpierre): Optimize this so we don't repeat this CSE.
         const texScale = this.stageUsesSimpleCoords(stage) ? `` : ` * TextureInvScale(${stage.texMap})`;
         return this.generateTextureSample(stage.texMap, `t_TexCoord${texScale}`);
     }
@@ -1090,27 +1089,23 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     private generateTevTexCoordIndirectMtx(stage: TevStage): string {
         const indTexCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
+        const indTexMtxIdx = ((stage.indTexMatrix) & 0x03) - 1;
 
         switch (stage.indTexMatrix) {
-        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
-        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
-        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._0:
+        case GX.IndTexMtxID._1:
+        case GX.IndTexMtxID._2:
+            return `Mul(u_IndTexMtx[${indTexMtxIdx}], vec4(${indTexCoord}, 0.0))`;
         case GX.IndTexMtxID.S0:
         case GX.IndTexMtxID.S1:
         case GX.IndTexMtxID.S2:
-            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
-            // This assumes scale_exp is 0.
-            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.xx)`;
         case GX.IndTexMtxID.T0:
         case GX.IndTexMtxID.T1:
         case GX.IndTexMtxID.T2:
-            // TODO: Although u_IndTexMtx is ignored, the result is still scaled by the scale_exp argument passed into GXSetIndTexMtx.
-            // This assumes scale_exp is 0.
-            return `(ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
-        // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
+            return `(u_IndTexMtx[${indTexMtxIdx}].mx.w * ReadTexCoord${stage.texCoordId}() * ${indTexCoord}.yy)`;
         default:
-            console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
-            return `${indTexCoord}.xy`;
+            throw "whoops";
         }
     }
 
@@ -1377,10 +1372,8 @@ ${this.generateFogAdj(`t_FogBase`)}
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateMulNrm(which: number): string {
-        const src = (which === 0) ? `vec4(a_Normal.xyz, 0.0)` :
-            (which === 1) ? `vec4(a_Binormal.xyz, 0.0)` : `vec4(a_Tangent.xyz, 0.0)`;
-
+    private generateMulNrm(attr: string): string {
+        const src = `vec4(${attr}.xyz, 0.0)`;
         if (materialUsePnMtxIdx(this.material))
             return `normalize(${this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`)})`;
         else
@@ -1430,7 +1423,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(0) : `vec3(0.0)`};
+    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(`a_Normal`) : `vec3(0.0)`};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;

@@ -9,6 +9,7 @@ import { ViewerRenderInput } from "../../viewer";
 import { RendererStore } from "../Scenes";
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk";
 import { White } from "../../Color";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 
 class ModelPart {
@@ -146,11 +147,11 @@ export class UVMDRenderer {
     // TODO: may not be the best way of organizing this.
     public materialRenderers: Map<Material, MaterialRenderer> = new Map();
 
-    constructor(public uvmd: UVMD, device: GfxDevice, rendererStore: RendererStore) {
+    constructor(public uvmd: UVMD, cache: GfxRenderCache, rendererStore: RendererStore) {
         // Only render LOD0 for now.
         for(let part of this.uvmd.lods[0].modelParts) {
             for(let material of part.materials) {
-                let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, device, rendererStore))
+                let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=> new MaterialRenderer(material, cache, rendererStore))
                 this.materialRenderers.set(material, materialRenderer);
             }
         }

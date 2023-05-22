@@ -101,7 +101,7 @@ function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0): Zelvi
             return;
         }
         
-        const cache = renderer.renderHelper.getCache();
+        const cache = renderer.renderHelper.renderCache;
         const mesh: Mesh = {
             sharedOutput: zelview.sharedOutput,
             rspState: new RSPState(headers.rom, zelview.sharedOutput),

@@ -289,7 +289,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const modelInstance = createModelInstance(device, cache, renderer.extraTextures, bmdFile, btkFile, brkFile, bckFile, bmtFile);
             modelInstance.name = `${rarcBasename}/${basename}`;
 
-            let passMask: ZTPPass = 0;
+            let passMask: ZTPPass;
             if (basename === 'model') {
                 passMask = ZTPPass.OPAQUE;
             } else if (basename === 'model1') {
@@ -305,6 +305,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             } else if (basename === 'model4' || basename === 'model5') {
                 // Light beams? No clue, stick 'em in the transparent pass.
                 passMask = ZTPPass.TRANSPARENT;
+            } else {
+                throw "whoops";
             }
 
             modelInstance.passMask = passMask;

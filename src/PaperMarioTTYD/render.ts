@@ -87,7 +87,7 @@ class BackgroundBillboardRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setInputLayoutAndState(null, null);
+        renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
@@ -524,7 +524,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     public animGroupCache: AnimGroupDataCache | null = null;
     public mobj: MOBJ[] = [];
 
-    public evtctx: evtmgr | null = null;
+    public evtmgr: evtmgr | null = null;
 
     constructor(private device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         super(device);
@@ -544,7 +544,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public spawnMOBJ(mobjName: string, animPoseName: string): MOBJ {
-        const mobj = new MOBJ(this.device, this.renderHelper.getCache(), this.animGroupCache!, mobjName, animPoseName);
+        const mobj = new MOBJ(this.device, this.renderHelper.renderCache, this.animGroupCache!, mobjName, animPoseName);
         this.mobj.push(mobj);
         return mobj;
     }
@@ -585,8 +585,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.evtctx !== null)
-            this.evtctx.exec();
+        if (this.evtmgr !== null)
+            this.evtmgr.exec();
 
         viewerInput.camera.setClipPlanes(1, 32768);
 
