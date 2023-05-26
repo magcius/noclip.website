@@ -4,8 +4,8 @@
 import { quat, vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
-import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName } from '../ActorUtil';
+import { assertExists, fallback, fallbackUndefined } from '../../util';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
@@ -13,7 +13,7 @@ import { getObjectName, SceneObjHolder } from '../Main';
 import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
-import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint } from '../Shadow';
+import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint, onCalcShadowDropPrivateGravity } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor, addHitSensorAtJoint } from '../HitSensor';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
@@ -1651,5 +1651,105 @@ export class Caretaker extends NPCActor<CaretakerNrv> {
         sceneObjHolder.modelCache.requestObjectData('Caretaker');
         const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Caretaker', itemGoodsIdx);
+    }
+}
+
+const enum LuigiNPCNrv { Wait, AfraidWait, ArrestedWait, }
+export class LuigiNPC extends NPCActor<LuigiNPCNrv> {
+    private mode = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        const caps = new NPCActorCaps<LuigiNPCNrv>('LuigiNPC');
+        caps.waitNerve = LuigiNPCNrv.Wait;
+        this.initialize(sceneObjHolder, infoIter, caps);
+
+        this.mode = fallbackUndefined(getJMapInfoArg0(infoIter), -1);
+        if (this.name === 'LuigiEvent')
+            this.mode += 2;
+
+        // registerBranchFunc
+        // registerEventFunc
+
+        this.setWaitAction();
+        if (this.mode === 0) {
+            this.setNerve(LuigiNPCNrv.AfraidWait);
+            this.setAfraidAction();
+        } else if (this.mode === 1) {
+            const luigiRescued = true; // isOnGameEventFlagLuigiRescued();
+            const luigiDisappearFromAstroGalaxyOrHiding = false; // isLuigiDisappearFromAstroGalaxyOrHiding();
+            if (!luigiRescued || luigiDisappearFromAstroGalaxyOrHiding)
+                this.makeActorDead(sceneObjHolder);
+            // tryRegisterDemoForLuigiAndKinopio();
+        } else if (this.mode === 3) {
+            useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+            useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+            this.setNerve(LuigiNPCNrv.ArrestedWait);
+        } else if (this.mode === 4) {
+            onCalcShadowDropPrivateGravity(this);
+            setShadowDropPositionAtJoint(this, null, "Center", vec3.set(scratchVec3, 0.0, 0.0, -25.0));
+        }
+    }
+
+    public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        if (this.mode === 3) {
+            calcFrontVec(scratchVec3, this);
+            vec3.scale(scratchVec3, scratchVec3, 500.0);
+            if (getFirstPolyOnLineToMap(sceneObjHolder, scratchVec3a, null, this.translation, scratchVec3)) {
+                vec3.scaleAndAdd(this.translation, scratchVec3a, scratchVec3, -16.0);
+                onCalcShadow(this);
+                this.calcBinderFlag = false;
+            }
+        }
+    }
+
+    public override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LuigiNPCNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === LuigiNPCNrv.Wait) {
+            if (isFirstStep(this))
+                this.setWaitAction();
+
+            tryTalkNearPlayerAndStartTalkAction(sceneObjHolder, this);
+            // tryStartReactionAndPushNerve();
+        } else if (currentNerve === LuigiNPCNrv.AfraidWait) {
+            if (isFirstStep(this))
+                this.setAfraidAction();
+
+            // this.trySetNerveAfraid(sceneObjHolder);
+        } else if (currentNerve === LuigiNPCNrv.ArrestedWait) {
+            if (isFirstStep(this))
+                this.setAfraidAction();
+            
+            // this.trySetNerveArrested(sceneObjHolder);
+        }
+    }
+
+    private setWaitAction(): void {
+        this.talkParam.waitActionName = "Wait";
+        this.talkParam.waitTurnActionName = "Turn";
+        this.talkParam.talkActionName = "Talk";
+        this.talkParam.talkTurnActionName = "Turn";
+        // this.spinName = 'Spin';
+        // this.trampledName = 'Trampled';
+        // this.pointingName = 'Pointing';
+        // this.reactionName = 'SpinHit';
+        // this.spinNearDistance = 1500.0;
+        // this.reactAction = true;
+    }
+
+    private setAfraidAction(): void {
+        // this.reactAction = false;
+        this.talkParam.waitActionName = "AfraidWait";
+        this.talkParam.waitTurnActionName = "Afraid";
+        this.talkParam.talkActionName = "AfraidTalk";
+        this.talkParam.talkTurnActionName = "Afraid";
+    }
+
+    public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('LuigiNPC');
     }
 }
