@@ -4427,7 +4427,12 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
     };
 }
 
-function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
+function parseResource_JPAC2_10(res: JPAResourceRaw, version: number): JPAResource {
+    // Version Validation since there are small changes in JPAC2_10 and JPAC2_11
+    let isJPAC2_11 : boolean = false;
+    if (version === 11) isJPAC2_11 = true;
+    else if (version != 10) throw "Invalid Version for JPAC2";
+
     const buffer = res.data;
     const view = buffer.createDataView();
 
@@ -4455,7 +4460,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         if (fourcc === 'BEM1') {
             // JPADynamicsBlock
             // Contains emitter settings and details about how the particle simulates.
-
+            // No Apparent Change in JPAC2_11
             const flags = view.getUint32(tableIdx + 0x08);
             const volumeType: VolumeType = (flags >>> 8) & 0x07;
 
@@ -4532,15 +4537,36 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const colorInSelect        =    (flags >>> 15) & 0x07;
             const alphaInSelect        =    (flags >>> 18) & 0x01;
             // 19 = unk
-            const isEnableProjection   = !!((flags >>> 20) & 0x01);
-            const isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
-            const isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
-            // 23 = unk
-            const isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
-            const tilingS              = !!((flags >>> 25) & 0x01) ? 2.0 : 1.0;
-            const tilingT              = !!((flags >>> 26) & 0x01) ? 2.0 : 1.0;
-            const isNoDrawParent       = !!((flags >>> 27) & 0x01);
-            const isNoDrawChild        = !!((flags >>> 28) & 0x01);
+            let isEnableProjection, isDrawFwdAhead, isDrawPrntAhead, 
+                isEnableTexScrollAnm, tilingS, tilingT, isNoDrawParent, 
+                isNoDrawChild : boolean;
+            if (!isJPAC2_11) // JPAC2_10
+            {
+                isEnableProjection   = !!((flags >>> 20) & 0x01);
+                isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
+                isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
+                // 23 = unk
+                isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
+                tilingS              = !!((flags >>> 25) & 0x01) ? 2.0 : 1.0;
+                tilingT              = !!((flags >>> 26) & 0x01) ? 2.0 : 1.0;
+                isNoDrawParent       = !!((flags >>> 27) & 0x01);
+                isNoDrawChild        = !!((flags >>> 28) & 0x01);
+            } 
+            else  // JPAC2_11
+            {
+                // 20 = unk
+                // 21 = unk
+                // 22 = unk
+                isEnableProjection   = !!((flags >>> 22) & 0x01);
+                isDrawFwdAhead       = !!((flags >>> 23) & 0x01);
+                isDrawPrntAhead      = !!((flags >>> 24) & 0x01);
+                // 25 = unk
+                isEnableTexScrollAnm = !!((flags >>> 26) & 0x01);
+                tilingS              = !!((flags >>> 27) & 0x01) ? 2.0 : 1.0;
+                tilingT              = !!((flags >>> 28) & 0x01) ? 2.0 : 1.0;
+                isNoDrawParent       = !!((flags >>> 29) & 0x01);
+                isNoDrawChild        = !!((flags >>> 30) & 0x01);
+            }
 
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
@@ -4637,6 +4663,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // JPAExtraShape
             // Contains misc. extra particle draw settings.
 
+            // JPAC2_11: Flags appear the same
             const flags = view.getUint32(tableIdx + 0x08);
             const isEnableScale   = !!((flags >>>  0) & 0x01);
             const isDiffXY        = !!((flags >>>  1) & 0x01);
@@ -4718,7 +4745,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'SSP1') {
             // JPAChildShape / JPASweepShape
             // Contains child particle draw settings.
-
+            
+            // JPAC2_11: Flags appear the same
             const flags = view.getUint32(tableIdx + 0x08);
             const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
             const dirType: DirType     =    (flags >>>  4) & 0x07;
@@ -4770,22 +4798,24 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             const flags = view.getUint32(tableIdx + 0x08);
 
+            // JPAC2_11 Uses more values. Purpose is currently Unknown
             const p00 = view.getFloat32(tableIdx + 0x0C);
             const p01 = view.getFloat32(tableIdx + 0x10);
             const p02 = view.getFloat32(tableIdx + 0x14);
             const p10 = view.getFloat32(tableIdx + 0x18);
             const p11 = view.getFloat32(tableIdx + 0x1C);
             const p12 = view.getFloat32(tableIdx + 0x20);
-            const scale = Math.pow(2, view.getInt8(tableIdx + 0x24));
+            const scale = Math.pow(2, view.getInt8(tableIdx + (!isJPAC2_11 ? 0x24 : 0x4D)));
             const indTextureMtx = new Float32Array([
                 p00*scale, p01*scale, p02*scale, scale,
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
             const indTextureMode: IndTextureMode = ((flags >>> 0) & 0x01);
-            const indTextureID = view.getUint8(tableIdx + 0x25);
+            // JPAC2_11: Code also checks to make sure offset 0x4C != 0
+            const indTextureID = view.getUint8(tableIdx + (!isJPAC2_11 ? 0x25 : 0x4E));
             const subTextureID = 0;
-            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(tableIdx + 0x26) : -1;
+            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(tableIdx + (!isJPAC2_11 ? 0x26 : 0x4F)) : -1;
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
@@ -4901,488 +4931,16 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         tdb1: assertExists(tdb1),
     };
 }
-function parseResource_JPAC2_11(res: JPAResourceRaw): JPAResource {
-    const buffer = res.data;
-    const view = buffer.createDataView();
 
-    const blockCount = view.getUint16(0x02);
-    const fieldBlockCount = view.getUint8(0x04);
-    const keyBlockCount = view.getUint8(0x05);
-    const tdb1Count = view.getUint8(0x06);
-
-    let bem1: JPADynamicsBlock | null = null;
-    let bsp1: JPABaseShapeBlock | null = null;
-    let esp1: JPAExtraShapeBlock | null = null;
-    let etx1: JPAExTexBlock | null = null;
-    let ssp1: JPAChildShapeBlock | null = null;
-    let fld1: JPAFieldBlock[] = [];
-    let kfa1: JPAKeyBlock[] = [];
-    let tdb1: Uint16Array | null = null;
-
-    // Parse through the blocks.
-    let tableIdx = 0x08;
-    for (let j = 0; j < blockCount; j++) {
-        // blockSize includes the header.
-        const fourcc = readString(buffer, tableIdx + 0x00, 0x04, false);
-        const blockSize = view.getUint32(tableIdx + 0x04);
-
-        if (fourcc === 'BEM1') {
-            // JPADynamicsBlock
-            // Contains emitter settings and details about how the particle simulates.
-
-            const flags = view.getUint32(tableIdx + 0x08);
-            const volumeType: VolumeType = (flags >>> 8) & 0x07;
-
-            // 0x0C = unk
-            const emitterSclX = view.getFloat32(tableIdx + 0x10);
-            const emitterSclY = view.getFloat32(tableIdx + 0x14);
-            const emitterSclZ = view.getFloat32(tableIdx + 0x18);
-            const emitterScl = vec3.fromValues(emitterSclX, emitterSclY, emitterSclZ);
-
-            const emitterTrsX = view.getFloat32(tableIdx + 0x1C);
-            const emitterTrsY = view.getFloat32(tableIdx + 0x20);
-            const emitterTrsZ = view.getFloat32(tableIdx + 0x24);
-            const emitterTrs = vec3.fromValues(emitterTrsX, emitterTrsY, emitterTrsZ);
-
-            const emitterDirX = view.getFloat32(tableIdx + 0x28);
-            const emitterDirY = view.getFloat32(tableIdx + 0x2C);
-            const emitterDirZ = view.getFloat32(tableIdx + 0x30);
-            const emitterDir = vec3.fromValues(emitterDirX, emitterDirY, emitterDirZ);
-            vec3.normalize(emitterDir, emitterDir);
-
-            const initialVelOmni = view.getFloat32(tableIdx + 0x34);
-            const initialVelAxis = view.getFloat32(tableIdx + 0x38);
-            const initialVelRndm = view.getFloat32(tableIdx + 0x3C);
-            const initialVelDir  = view.getFloat32(tableIdx + 0x40);
-
-            const spread = view.getFloat32(tableIdx + 0x44);
-            const initialVelRatio = view.getFloat32(tableIdx + 0x48);
-            const rate = view.getFloat32(tableIdx + 0x4C);
-            const rateRndm = view.getFloat32(tableIdx + 0x50);
-            const lifeTimeRndm = view.getFloat32(tableIdx + 0x54);
-            const volumeSweep = view.getFloat32(tableIdx + 0x58);
-            const volumeMinRad = view.getFloat32(tableIdx + 0x5C);
-            const airResist = view.getFloat32(tableIdx + 0x60);
-            const momentRndm = view.getFloat32(tableIdx + 0x64);
-            const emitterRotX = view.getInt16(tableIdx + 0x68) * MathConstants.DEG_TO_RAD;
-            const emitterRotY = view.getInt16(tableIdx + 0x6A) * MathConstants.DEG_TO_RAD;
-            const emitterRotZ = view.getInt16(tableIdx + 0x6C) * MathConstants.DEG_TO_RAD;
-            const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
-            const maxFrame = view.getInt16(tableIdx + 0x6E);
-            const startFrame = view.getInt16(tableIdx + 0x70);
-            const lifeTime = view.getInt16(tableIdx + 0x72);
-            const volumeSize = view.getInt16(tableIdx + 0x74);
-            const divNumber = view.getInt16(tableIdx + 0x76);
-            const rateStep = view.getUint8(tableIdx + 0x78);
-
-            // airResistRndm was removed in JPAC 2.0.
-            const airResistRndm = 0.0;
-            // moment is always 1.0 in JPAC 2.0.
-            const moment = 1.0;
-            // accel was removed in JPAC 2.0.
-            const accel = 0.0;
-            // accelRndm was removed in JPAC 2.0.
-            const accelRndm = 0.0;
-
-            bem1 = {
-                emitFlags: flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
-                volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
-                initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
-                lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
-            };
-        } else if (fourcc === 'BSP1') {
-            // JPABaseShape
-            // Contains particle draw settings.
-
-            const flags = view.getUint32(tableIdx + 0x08);
-            const shapeType: ShapeType = (flags >>> 0) & 0x0F;
-            const dirType: DirType = (flags >>> 4) & 0x07;
-            const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
-            if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
-                planeType = PlaneType.X;
-            const tilingS = !!((flags >>> 0x1B) & 0x01) ? 2.0 : 1.0;
-            const tilingT = !!((flags >>> 0x1C) & 0x01) ? 2.0 : 1.0;
-
-            const isNoDrawParent = !!(flags & 0x20000000);
-            const isNoDrawChild  = !!(flags & 0x40000000);
-
-            const colorInSelect = (flags >>> 0x0F) & 0x07;
-            const alphaInSelect = (flags >>> 0x12) & 0x01;
-
-            // flags were changed from JPAC2_10 -> JPAC2_11
-            const isEnableTexScrollAnm = !!(flags & 0x04000000);
-            const isDrawFwdAhead       = !!(flags & 0x00800000);
-            const isDrawPrntAhead      = !!(flags & 0x01000000);
-            const isEnableProjection   = !!(flags & 0x00400000);
-            const isGlblTexAnm     = !!(flags & 0x00004000);
-            const isGlblClrAnm   = !!(flags & 0x00001000);
-
-            const baseSizeX = view.getFloat32(tableIdx + 0x10);
-            const baseSizeY = view.getFloat32(tableIdx + 0x14);
-            const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
-
-            const blendModeFlags = view.getUint16(tableIdx + 0x18);
-            const alphaCompareFlags = view.getUint8(tableIdx + 0x1A);
-            const alphaRef0 = view.getUint8(tableIdx + 0x1B);
-            const alphaRef1 = view.getUint8(tableIdx + 0x1C);
-            const zModeFlags = view.getUint8(tableIdx + 0x1D);
-            const texFlags = view.getUint8(tableIdx + 0x1E);
-            const texIdxAnimCount = view.getUint8(tableIdx + 0x1F);
-            const texIdx = view.getUint8(tableIdx + 0x20);
-            const colorFlags = view.getUint8(tableIdx + 0x21);
-
-            const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x26));
-            const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x2A));
-
-            const texCalcIdxType: CalcIdxType = (texFlags >>> 2) & 0x07;
-
-            const anmRndm = view.getUint8(tableIdx + 0x2E);
-            const colorLoopOfstMask = view.getUint8(tableIdx + 0x2F);
-            const texIdxLoopOfstMask = view.getUint8(tableIdx + 0x30);
-
-            let extraDataOffs = tableIdx + 0x34;
-
-            let texInitTransX = 0;
-            let texInitTransY = 0;
-            let texInitScaleX = 0;
-            let texInitScaleY = 0;
-            let texInitRot = 0;
-            let texIncTransX = 0;
-            let texIncTransY = 0;
-            let texIncScaleX = 0;
-            let texIncScaleY = 0;
-            let texIncRot = 0;
-            
-            // flags were changed from JPAC2_10 -> JPAC2_11
-            if (!!(flags & 0x04000000)) {
-                texInitTransX = view.getFloat32(extraDataOffs + 0x00);
-                texInitTransY = view.getFloat32(extraDataOffs + 0x04);
-                texInitScaleX = view.getFloat32(extraDataOffs + 0x08);
-                texInitScaleY = view.getFloat32(extraDataOffs + 0x0C);
-                texInitRot = view.getFloat32(extraDataOffs + 0x10);
-                texIncTransX = view.getFloat32(extraDataOffs + 0x14);
-                texIncTransY = view.getFloat32(extraDataOffs + 0x18);
-                texIncScaleX = view.getFloat32(extraDataOffs + 0x1C);
-                texIncScaleY = view.getFloat32(extraDataOffs + 0x20);
-                texIncRot = view.getFloat32(extraDataOffs + 0x24);
-                extraDataOffs += 0x28;
-            }
-
-            let texIdxAnimData: Uint8Array | null = null;
-
-            const isEnableTextureAnm = !!(texFlags & 0x00000001);
-            if (isEnableTextureAnm)
-                texIdxAnimData = buffer.createTypedArray(Uint8Array, extraDataOffs, texIdxAnimCount, Endianness.BIG_ENDIAN);
-
-            const colorAnimMaxFrm = view.getUint16(tableIdx + 0x24);
-
-            let colorPrmAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x02)) {
-                const colorPrmAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x0C);
-                const colorPrmAnimDataCount = view.getUint8(tableIdx + 0x22);
-                colorPrmAnimData = makeColorTable(buffer.slice(colorPrmAnimDataOffs), colorPrmAnimDataCount, colorAnimMaxFrm);
-            }
-
-            let colorEnvAnimData: Color[] | null = null;
-            if (!!(colorFlags & 0x08)) {
-                const colorEnvAnimDataOffs = tableIdx + view.getUint16(tableIdx + 0x0E);
-                const colorEnvAnimDataCount = view.getUint8(tableIdx + 0x23);
-                colorEnvAnimData = makeColorTable(buffer.slice(colorEnvAnimDataOffs), colorEnvAnimDataCount, colorAnimMaxFrm);
-            }
-
-            const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
-
-            const isEnableTexture = true;
-
-            bsp1 = {
-                shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
-                colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
-                anmRndm,
-                isEnableTexture, isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
-                isEnableTexScrollAnm, isEnableProjection,
-                texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
-                texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
-                isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
-            };
-        } else if (fourcc === 'ESP1') {
-            // JPAExtraShape
-            // Contains misc. extra particle draw settings.
-
-            const flags = view.getUint32(tableIdx + 0x08);
-            const isEnableScale   = !!(flags & 0x00000001);
-            const isDiffXY        = !!(flags & 0x00000002);
-            // isEnableScaleBySpeedX was removed in JPA 2.0.
-            const isEnableScaleBySpeedX = false;
-            // isEnableScaleBySpeedY was removed in JPA 2.0.
-            const isEnableScaleBySpeedY = false;
-            const isEnableAlpha   = !!(flags & 0x00010000);
-            const isEnableSinWave = !!(flags & 0x00020000);
-            const isEnableRotate  = !!(flags & 0x01000000);
-            const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? CalcAlphaWaveType.NrmSin : CalcAlphaWaveType.None;
-            const scaleAnmTypeX   = (flags >>> 0x08) & 0x03;
-            const scaleAnmTypeY   = (flags >>> 0x0A) & 0x03;
-            const pivotX          = (flags >>> 0x0C) & 0x03;
-            const pivotY          = (flags >>> 0x0E) & 0x03;
-
-            const scaleInTiming =  view.getFloat32(tableIdx + 0x0C);
-            const scaleOutTiming = view.getFloat32(tableIdx + 0x10);
-            const scaleInValueX =  view.getFloat32(tableIdx + 0x14);
-            const scaleOutValueX = view.getFloat32(tableIdx + 0x18);
-            const scaleInValueY =  view.getFloat32(tableIdx + 0x1C);
-            const scaleOutValueY = view.getFloat32(tableIdx + 0x20);
-            const scaleOutRandom = view.getFloat32(tableIdx + 0x24);
-            const scaleAnmMaxFrameX = view.getUint16(tableIdx + 0x28);
-            const scaleAnmMaxFrameY = view.getUint16(tableIdx + 0x2A);
-
-            let scaleIncreaseRateX = 1, scaleIncreaseRateY = 1;
-            if (scaleInTiming > 0) {
-                scaleIncreaseRateX = (1.0 - scaleInValueX) / scaleInTiming;
-                scaleIncreaseRateY = (1.0 - scaleInValueY) / scaleInTiming;
-            }
-
-            let scaleDecreaseRateX = 1, scaleDecreaseRateY = 1;
-            if (scaleOutTiming < 1) {
-                scaleDecreaseRateX = (scaleOutValueX - 1.0) / (1.0 - scaleOutTiming);
-                scaleDecreaseRateY = (scaleOutValueY - 1.0) / (1.0 - scaleOutTiming);
-            }
-
-            const alphaInTiming = view.getFloat32(tableIdx + 0x2C);
-            const alphaOutTiming = view.getFloat32(tableIdx + 0x30);
-            const alphaInValue = view.getFloat32(tableIdx + 0x34);
-            const alphaBaseValue = view.getFloat32(tableIdx + 0x38);
-            const alphaOutValue = view.getFloat32(tableIdx + 0x3C);
-
-            let alphaIncreaseRate = 1;
-            if (alphaInTiming > 0)
-                alphaIncreaseRate = (alphaBaseValue - alphaInValue) / alphaInTiming;
-
-            let alphaDecreaseRate = 1;
-            if (alphaOutTiming < 1)
-                alphaDecreaseRate = (alphaOutValue - alphaBaseValue) / (1.0 - alphaOutTiming);
-
-            const alphaWaveFrequency = view.getFloat32(tableIdx + 0x40);
-            const alphaWaveRandom = view.getFloat32(tableIdx + 0x44);
-            const alphaWaveAmplitude = view.getFloat32(tableIdx + 0x48);
-
-            // Put in terms of JPA1 alpha wave parameters.
-            const alphaWaveParam1 = alphaWaveFrequency;
-            const alphaWaveParam2 = 0.0;
-            const alphaWaveParam3 = alphaWaveAmplitude;
-
-            const rotateAngle = view.getFloat32(tableIdx + 0x4C) * MathConstants.TAU / 0xFFFF;
-            const rotateAngleRandom = view.getFloat32(tableIdx + 0x50) * MathConstants.TAU / 0xFFFF;
-            const rotateSpeed = view.getFloat32(tableIdx + 0x54) * MathConstants.TAU / 0xFFFF;
-            const rotateSpeedRandom = view.getFloat32(tableIdx + 0x58);
-            const rotateDirection = view.getFloat32(tableIdx + 0x5C);
-
-            esp1 = {
-                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableScaleBySpeedX, isEnableScaleBySpeedY,
-                isEnableAlpha, alphaWaveType, isEnableRotate, pivotX, pivotY,
-                scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
-                scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
-                scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
-                alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
-                alphaIncreaseRate, alphaDecreaseRate,
-                alphaWaveParam1, alphaWaveParam2, alphaWaveParam3, alphaWaveRandom,
-                rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
-            };
-        } else if (fourcc === 'SSP1') {
-            // JPAChildShape / JPASweepShape
-            // Contains child particle draw settings.
-
-            const flags = view.getUint32(tableIdx + 0x08);
-            const shapeType: ShapeType = (flags >>> 0) & 0x0F;
-            const dirType: DirType = (flags >>> 4) & 0x07;
-            const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
-            if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
-                planeType = PlaneType.X;
-            const posRndm = view.getFloat32(tableIdx + 0x0C);
-            const baseVel = view.getFloat32(tableIdx + 0x10);
-            const baseVelRndm = view.getFloat32(tableIdx + 0x14);
-            const velInfRate = view.getFloat32(tableIdx + 0x18);
-            const gravity = view.getFloat32(tableIdx + 0x1C);
-
-            const globalScale2DX = view.getFloat32(tableIdx + 0x20);
-            const globalScale2DY = view.getFloat32(tableIdx + 0x24);
-            const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
-
-            const isEnableRotate   = !!(flags & 0x01000000);
-            const isEnableAlphaOut = !!(flags & 0x00800000);
-            const isEnableScaleOut = !!(flags & 0x00400000);
-            const isEnableField    = !!(flags & 0x00200000);
-            const isInheritedRGB   = !!(flags & 0x00040000);
-            const isInheritedAlpha = !!(flags & 0x00020000);
-            const isInheritedScale = !!(flags & 0x00010000);
-
-            const inheritScale = view.getFloat32(tableIdx + 0x28);
-            const inheritAlpha = view.getFloat32(tableIdx + 0x2C);
-            const inheritRGB = view.getFloat32(tableIdx + 0x30);
-            const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x34));
-            const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x38));
-            const timing = view.getFloat32(tableIdx + 0x3C);
-            const life = view.getUint16(tableIdx + 0x40);
-            const rate = view.getUint16(tableIdx + 0x42);
-            const step = view.getUint8(tableIdx + 0x44);
-            const texIdx = view.getUint8(tableIdx + 0x45);
-            const rotateSpeed = view.getUint16(tableIdx + 0x46) / 0xFFFF;
-
-            ssp1 = {
-                isEnableRotate, isEnableAlphaOut, isEnableScaleOut, isEnableField, isInheritedRGB, isInheritedAlpha, isInheritedScale,
-                shapeType, dirType, rotType, planeType,
-                posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
-                inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
-                life, rate, step, texIdx, rotateSpeed,
-            };
-        } else if (fourcc === 'ETX1') {
-            // JPAExTexShape
-            // Contains extra texture draw settings.
-
-            // Block was changed from JPAC2_10 -> JPAC2_11
-            // flags stay the same, but more data is present
-            const flags = view.getUint32(tableIdx + 0x08);
-
-            const p00 = view.getFloat32(tableIdx + 0x0C);
-            const p01 = view.getFloat32(tableIdx + 0x10);
-            const p02 = view.getFloat32(tableIdx + 0x14);
-            const p10 = view.getFloat32(tableIdx + 0x18);
-            const p11 = view.getFloat32(tableIdx + 0x1C);
-            const p12 = view.getFloat32(tableIdx + 0x20);
-            const scale = Math.pow(2, view.getInt8(tableIdx + 0x4D));
-            const indTextureMtx = new Float32Array([
-                p00*scale, p01*scale, p02*scale, scale,
-                p10*scale, p11*scale, p12*scale, 0.0,
-            ]);
-
-            const indTextureMode: IndTextureMode = (flags & 0x01);
-            const indTextureID = view.getUint8(tableIdx + 0x4E);
-            const subTextureID = 0;
-            const secondTextureIndex = (!!(flags & 0x00000100)) ? view.getUint8(tableIdx + 0x4F) : -1;
-
-            etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
-        } else if (fourcc === 'KFA1') {
-            // JPAKeyBlock
-            // Contains curve animations for various emitter parameters.
-
-            const keyType: JPAKeyType = view.getUint8(tableIdx + 0x08);
-            const keyCount = view.getUint8(tableIdx + 0x09);
-            const isLoopEnable = !!view.getUint8(tableIdx + 0x0B);
-
-            // The curves are four floats per key, in typical time/value/tangent in/tangent out order.
-            const keyValues = buffer.createTypedArray(Float32Array, tableIdx + 0x0C, keyCount * 4, Endianness.BIG_ENDIAN);
-
-            kfa1.push({ keyType, isLoopEnable, keyValues });
-        } else if (fourcc === 'FLD1') {
-            // JPAFieldBlock
-            // Contains physics simulation fields that act on the particles.
-
-            const flags = view.getUint32(tableIdx + 0x08);
-            const sttFlag = (flags >>> 0x10);
-            const type: FieldType = flags & 0x0F;
-            const velType: FieldAddType = (flags >>> 8) & 0x03;
-
-            // maxDist does not exist in JPA2
-            const maxDist = 0;
-            const maxDistSq = maxDist ** 2.0;
-
-            const posX = view.getFloat32(tableIdx + 0x0C);
-            const posY = view.getFloat32(tableIdx + 0x10);
-            const posZ = view.getFloat32(tableIdx + 0x14);
-            const pos = vec3.fromValues(posX, posY, posZ);
-
-            const dirX = view.getFloat32(tableIdx + 0x18);
-            const dirY = view.getFloat32(tableIdx + 0x1C);
-            const dirZ = view.getFloat32(tableIdx + 0x20);
-            const dir = vec3.fromValues(dirX, dirY, dirZ);
-
-            const param1 = view.getFloat32(tableIdx + 0x24);
-            const param2 = view.getFloat32(tableIdx + 0x28);
-            const param3 = view.getFloat32(tableIdx + 0x2C);
-            const fadeIn = view.getFloat32(tableIdx + 0x30);
-            const fadeOut = view.getFloat32(tableIdx + 0x34);
-            const enTime = view.getFloat32(tableIdx + 0x38);
-            const disTime = view.getFloat32(tableIdx + 0x3C);
-            const cycle = view.getUint8(tableIdx + 0x40);
-
-            let fadeInRate = 1;
-            if (fadeIn > enTime)
-                fadeInRate = 1 / (fadeIn - enTime);
-
-            let fadeOutRate = 1;
-            if (fadeOut < disTime)
-                fadeOutRate = 1 / (disTime - fadeOut);
-
-            // All of our parameters.
-            let mag = 0;
-            let magRndm = 0;
-            let refDistance = -1;
-            let innerSpeed = -1;
-            let outerSpeed = -1;
-
-            if (type === FieldType.Gravity || type === FieldType.Air || type === FieldType.Magnet || type === FieldType.Newton || type === FieldType.Random || type === FieldType.Drag || type === FieldType.Convection) {
-                mag = param1;
-            }
-
-            // magRndm does not exist in JPA2
-            magRndm = 0;
-
-            if (type === FieldType.Newton) {
-                refDistance = param3 ** 2.0;
-            }
-
-            if (type === FieldType.Vortex) {
-                innerSpeed = param1;
-                outerSpeed = param2;
-            }
-
-            if (type === FieldType.Air) {
-                refDistance = param2;
-            }
-
-            if (type === FieldType.Convection) {
-                refDistance = param3;
-            }
-
-            if (type === FieldType.Spin) {
-                innerSpeed = param1;
-            }
-
-            fld1.push({ sttFlag, type, addType: velType, maxDistSq, pos, dir, mag, magRndm, refDistance, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
-        } else if (fourcc === 'TDB1') {
-            // Not a block. Stores a mapping of particle texture indexes
-            // to JPAC texture indices -- I assume this is "Texture Database".
-            tdb1 = buffer.subarray(tableIdx + 0x08).createTypedArray(Uint16Array, 0, tdb1Count, Endianness.BIG_ENDIAN);
-        } else {
-            throw "whoops";
-        }
-
-        tableIdx += blockSize;
-    }
-
-    assert(fld1.length === fieldBlockCount);
-    assert(kfa1.length === keyBlockCount);
-
-    return {
-        bem1: assertExists(bem1),
-        bsp1: assertExists(bsp1),
-        esp1,
-        etx1,
-        ssp1,
-        fld1,
-        kfa1,
-        tdb1: assertExists(tdb1),
-    };
-}
 function parseResource(version: JPACVersion, resRaw: JPAResourceRaw): JPAResource {
     if (version === JPACVersion.JEFFjpa1)
         return parseResource_JEFFjpa1(resRaw);
     else if (version === JPACVersion.JPAC1_00)
         return parseResource_JPAC1_00(resRaw);
     else if (version === JPACVersion.JPAC2_10)
-        return parseResource_JPAC2_10(resRaw);
-        else if (version === JPACVersion.JPAC2_11)
-            return parseResource_JPAC2_11(resRaw);
+        return parseResource_JPAC2_10(resRaw, 10);
+    else if (version === JPACVersion.JPAC2_11)
+        return parseResource_JPAC2_10(resRaw, 11);
     else
         throw "whoops";
 }
@@ -5468,51 +5026,7 @@ function parseJPAC2_10(buffer: ArrayBufferSlice): JPAC {
     const view = buffer.createDataView();
 
     const version = readString(buffer, 0x00, 0x08) as JPACVersion;
-    assert(version === JPACVersion.JPAC2_10);
-
-    const effectCount = view.getUint16(0x08);
-    const textureCount = view.getUint16(0x0A);
-    const textureTableOffs = view.getUint32(0x0C);
-
-    const effects: JPAResourceRaw[] = [];
-    let effectTableIdx = 0x10;
-    for (let i = 0; i < effectCount; i++) {
-        const resourceBeginOffs = effectTableIdx;
-
-        const resourceId = view.getUint16(effectTableIdx + 0x00);
-        const blockCount = view.getUint16(effectTableIdx + 0x02);
-
-        effectTableIdx += 0x08;
-
-        // Quickly skim through the blocks.
-        for (let j = 0; j < blockCount; j++) {
-            // blockSize includes the header.
-            const blockSize = view.getUint32(effectTableIdx + 0x04);
-            effectTableIdx += blockSize;
-        }
-
-        const data = buffer.slice(resourceBeginOffs, effectTableIdx);
-        effects.push({ resourceId, data, texIdBase: 0 });
-    }
-
-    const textures: BTI[] = [];
-    let textureTableIdx = textureTableOffs;
-    for (let i = 0; i < textureCount; i++) {
-        assert(readString(buffer, textureTableIdx + 0x00, 0x04, false) === 'TEX1');
-        const blockSize = view.getUint32(textureTableIdx + 0x04);
-        const textureName = readString(buffer, textureTableIdx + 0x0C, 0x14, true);
-        const texture = BTI.parse(buffer.slice(textureTableIdx + 0x20, textureTableIdx + blockSize), textureName);
-        textures.push(texture);
-        textureTableIdx += blockSize;
-    }
-
-    return { version, effects, textures };
-}
-function parseJPAC2_11(buffer: ArrayBufferSlice): JPAC {
-    const view = buffer.createDataView();
-
-    const version = readString(buffer, 0x00, 0x08) as JPACVersion;
-    assert(version === JPACVersion.JPAC2_11);
+    assert(version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11);
 
     const effectCount = view.getUint16(0x08);
     const textureCount = view.getUint16(0x0A);
@@ -5559,10 +5073,8 @@ export function parse(buffer: ArrayBufferSlice): JPAC {
         return parseJEFFjpa1(buffer);
     else if (version === JPACVersion.JPAC1_00)
         return parseJPAC1_00(buffer);
-    else if (version === JPACVersion.JPAC2_10)
+    else if (version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11)
         return parseJPAC2_10(buffer);
-        else if (version === JPACVersion.JPAC2_11)
-            return parseJPAC2_11(buffer);
     else
         throw "whoops";
 }
