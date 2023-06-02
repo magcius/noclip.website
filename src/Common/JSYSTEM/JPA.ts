@@ -3468,6 +3468,7 @@ const enum JPACVersion {
     JEFFjpa1 = 'JEFFjpa1',
     JPAC1_00 = 'JPAC1-00',
     JPAC2_10 = 'JPAC2-10',
+    JPAC2_11 = 'JPAC2-11',
 }
 
 const scratchColor = colorNewFromRGBA(0, 0, 0, 0);
@@ -4449,7 +4450,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
     };
 }
 
-function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
+function parseResource_JPAC2(res: JPAResourceRaw, version: JPACVersion): JPAResource {
+    assert(version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11);
+
     const buffer = res.data;
     const view = buffer.createDataView();
 
@@ -4477,7 +4480,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         if (fourcc === 'BEM1') {
             // JPADynamicsBlock
             // Contains emitter settings and details about how the particle simulates.
-
+            // No Apparent Change in JPAC2_11
             const flags = view.getUint32(tableIdx + 0x08);
             const volumeType: VolumeType = (flags >>> 8) & 0x07;
 
@@ -4554,15 +4557,37 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const colorInSelect        =    (flags >>> 15) & 0x07;
             const alphaInSelect        =    (flags >>> 18) & 0x01;
             // 19 = unk
-            const isEnableProjection   = !!((flags >>> 20) & 0x01);
-            const isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
-            const isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
-            // 23 = unk
-            const isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
-            const tilingS              = !!((flags >>> 25) & 0x01) ? 2.0 : 1.0;
-            const tilingT              = !!((flags >>> 26) & 0x01) ? 2.0 : 1.0;
-            const isNoDrawParent       = !!((flags >>> 27) & 0x01);
-            const isNoDrawChild        = !!((flags >>> 28) & 0x01);
+
+            let isEnableProjection, isDrawFwdAhead, isDrawPrntAhead;
+            let isEnableTexScrollAnm, tilingS, tilingT, isNoDrawParent;
+            let isNoDrawChild;
+
+            if (version === JPACVersion.JPAC2_10) {
+                isEnableProjection   = !!((flags >>> 20) & 0x01);
+                isDrawFwdAhead       = !!((flags >>> 21) & 0x01);
+                isDrawPrntAhead      = !!((flags >>> 22) & 0x01);
+                // 23 = unk
+                isEnableTexScrollAnm = !!((flags >>> 24) & 0x01);
+                tilingS              = !!((flags >>> 25) & 0x01) ? 2.0 : 1.0;
+                tilingT              = !!((flags >>> 26) & 0x01) ? 2.0 : 1.0;
+                isNoDrawParent       = !!((flags >>> 27) & 0x01);
+                isNoDrawChild        = !!((flags >>> 28) & 0x01);
+            } else if (version === JPACVersion.JPAC2_11) {
+                // 20 = unk
+                // 21 = unk
+                // 22 = unk
+                isEnableProjection   = !!((flags >>> 22) & 0x01);
+                isDrawFwdAhead       = !!((flags >>> 23) & 0x01);
+                isDrawPrntAhead      = !!((flags >>> 24) & 0x01);
+                // 25 = unk
+                isEnableTexScrollAnm = !!((flags >>> 26) & 0x01);
+                tilingS              = !!((flags >>> 27) & 0x01) ? 2.0 : 1.0;
+                tilingT              = !!((flags >>> 28) & 0x01) ? 2.0 : 1.0;
+                isNoDrawParent       = !!((flags >>> 29) & 0x01);
+                isNoDrawChild        = !!((flags >>> 30) & 0x01);
+            } else {
+                throw "whoops";
+            }
 
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
@@ -4659,6 +4684,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // JPAExtraShape
             // Contains misc. extra particle draw settings.
 
+            // JPAC2_11: Flags appear the same
             const flags = view.getUint32(tableIdx + 0x08);
             const isEnableScale   = !!((flags >>>  0) & 0x01);
             const isDiffXY        = !!((flags >>>  1) & 0x01);
@@ -4740,7 +4766,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         } else if (fourcc === 'SSP1') {
             // JPAChildShape / JPASweepShape
             // Contains child particle draw settings.
-
+            
+            // JPAC2_11: Flags appear the same
             const flags = view.getUint32(tableIdx + 0x08);
             const shapeType: ShapeType =    (flags >>>  0) & 0x0F;
             const dirType: DirType     =    (flags >>>  4) & 0x07;
@@ -4798,16 +4825,21 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const p10 = view.getFloat32(tableIdx + 0x18);
             const p11 = view.getFloat32(tableIdx + 0x1C);
             const p12 = view.getFloat32(tableIdx + 0x20);
-            const scale = Math.pow(2, view.getInt8(tableIdx + 0x24));
+
+            // JPAC2_11 adds extra (unknown) fields here.
+            const offs = (version === JPACVersion.JPAC2_11) ? (0x4D - 0x24) : 0;
+
+            const scale = Math.pow(2, view.getInt8(tableIdx + offs + 0x24));
             const indTextureMtx = new Float32Array([
                 p00*scale, p01*scale, p02*scale, scale,
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
             const indTextureMode: IndTextureMode = ((flags >>> 0) & 0x01);
-            const indTextureID = view.getUint8(tableIdx + 0x25);
+            // JPAC2_11: Code also checks to make sure offset 0x4C != 0
+            const indTextureID = view.getUint8(tableIdx + offs + 0x25);
             const subTextureID = 0;
-            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(tableIdx + 0x26) : -1;
+            const secondTextureIndex = (!!((flags >>> 8) & 0x01)) ? view.getUint8(tableIdx + offs + 0x26) : -1;
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
@@ -4929,8 +4961,8 @@ function parseResource(version: JPACVersion, resRaw: JPAResourceRaw): JPAResourc
         return parseResource_JEFFjpa1(resRaw);
     else if (version === JPACVersion.JPAC1_00)
         return parseResource_JPAC1_00(resRaw);
-    else if (version === JPACVersion.JPAC2_10)
-        return parseResource_JPAC2_10(resRaw);
+    else if (version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11)
+        return parseResource_JPAC2(resRaw, version);
     else
         throw "whoops";
 }
@@ -5012,11 +5044,11 @@ function parseJPAC1_00(buffer: ArrayBufferSlice): JPAC {
     return { version, effects, textures };
 }
 
-function parseJPAC2_10(buffer: ArrayBufferSlice): JPAC {
+function parseJPAC2(buffer: ArrayBufferSlice): JPAC {
     const view = buffer.createDataView();
 
     const version = readString(buffer, 0x00, 0x08) as JPACVersion;
-    assert(version === JPACVersion.JPAC2_10);
+    assert(version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11);
 
     const effectCount = view.getUint16(0x08);
     const textureCount = view.getUint16(0x0A);
@@ -5063,8 +5095,8 @@ export function parse(buffer: ArrayBufferSlice): JPAC {
         return parseJEFFjpa1(buffer);
     else if (version === JPACVersion.JPAC1_00)
         return parseJPAC1_00(buffer);
-    else if (version === JPACVersion.JPAC2_10)
-        return parseJPAC2_10(buffer);
+    else if (version === JPACVersion.JPAC2_10 || version === JPACVersion.JPAC2_11)
+        return parseJPAC2(buffer);
     else
         throw "whoops";
 }
