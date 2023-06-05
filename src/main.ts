@@ -74,6 +74,7 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_Portal2 from './SourceEngine/Scenes_Portal2';
 import * as Scenes_TheStanleyParable from './SourceEngine/Scenes_TheStanleyParable';
 import * as Scenes_Infra from './SourceEngine/Scenes_Infra';
+import * as Scenes_NeoTokyo from './SourceEngine/Scenes_NeoTokyo';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
@@ -209,6 +210,7 @@ const sceneGroups = [
     Scenes_Halo1.sceneGroup,
     Scenes_HalfLife.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
+    Scenes_NeoTokyo.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {

@@ -132,7 +132,7 @@ export class ValveKeyValueParser {
     }
 
     private unquote(start: string): string {
-        return this.run(/[0-9a-zA-Z$%<>=/\\_]/, start);
+        return this.run(/[0-9a-zA-Z$%<>=/\\_,]/, start);
     }
 
     public unit(): VKFPairUnit {
@@ -143,7 +143,7 @@ export class ValveKeyValueParser {
             return this.obj();
         else if (tok === '"')
             return this.quote(tok);
-        else if (/[a-zA-Z$%<>=/\\_]/.test(tok))
+        else if (/[a-zA-Z$%<>=/\\_,]/.test(tok))
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);
