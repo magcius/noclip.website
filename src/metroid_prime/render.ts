@@ -262,7 +262,7 @@ class MaterialGroupInstance {
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         // Set up the program.
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        this.materialHelper.setOnRenderInst(cache, renderInst);
 
         renderInst.setUniformBufferOffset(GX_Program.ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
 

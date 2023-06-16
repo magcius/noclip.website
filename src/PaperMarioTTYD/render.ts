@@ -208,9 +208,9 @@ class MaterialInstance {
         return hasAnimation;
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst, textureHolder: TPLTextureHolder): void {
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst, textureHolder: TPLTextureHolder): void {
         // Set up the program.
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        this.materialHelper.setOnRenderInst(cache, renderInst);
 
         this.fillMaterialParams(materialParams, textureHolder);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -235,7 +235,7 @@ class BatchInstance {
         const renderInst = renderInstManager.newRenderInst();
         this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
-        materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
+        materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst, textureHolder);
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
         materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
         renderInstManager.submitRenderInst(renderInst);

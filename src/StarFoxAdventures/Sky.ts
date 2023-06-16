@@ -96,7 +96,7 @@ export class Sky {
         const renderInst = this.skyddraw.makeRenderInst(renderInstManager);
 
         drawParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);
+        setGXMaterialOnRenderInst(renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);
 
         this.skyddraw.endAndUpload(renderInstManager);
 

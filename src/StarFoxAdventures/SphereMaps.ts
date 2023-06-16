@@ -302,7 +302,7 @@ export class SphereMapManager {
         else // SphereMapType.ReflectiveProbe
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
+        setGXMaterialOnRenderInst(renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
 
         this.ddraw.endAndUpload(renderInstManager);
 

@@ -2950,7 +2950,7 @@ class SpinDriverPathDrawer extends LiveActor {
         mat4.identity(texMtx0);
 
         const renderInst = ddraw.endDraw(renderInstManager);
-        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         drawParams.clear();
@@ -3955,7 +3955,7 @@ class WarpPodPathDrawer {
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
         this.ddraw.beginDraw();
         this.drawPath(viewerInput.camera);
@@ -4348,7 +4348,7 @@ export class WaterPlant extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -4773,7 +4773,7 @@ export class SwingRope extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -5008,7 +5008,7 @@ export class Trapeze extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -5194,7 +5194,7 @@ export class Creeper extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -5379,7 +5379,7 @@ class OceanRingDrawer {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -5478,7 +5478,7 @@ class OceanRingPipeOutside extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -5563,7 +5563,7 @@ class OceanRingPipeInside extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -6241,7 +6241,7 @@ export class Flag extends LiveActor {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -6410,7 +6410,7 @@ export class ElectricRailHolder extends NameObj {
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        const device = sceneObjHolder.modelCache.device, cache = renderInstManager.gfxRenderCache;
+        const cache = renderInstManager.gfxRenderCache;
         for (let i = 0; i < ElectricRailType.Count; i++) {
             const modelObj = this.models[i];
             if (modelObj === null)
@@ -6422,7 +6422,7 @@ export class ElectricRailHolder extends NameObj {
             mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
 
             const materialInstance = modelInstance.materialInstances[0];
-            materialInstance.setOnRenderInst(device, cache, template);
+            materialInstance.setOnRenderInst(cache, template);
             materialInstance.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
             for (let j = 0; j < this.rails.length; j++) {
@@ -8075,7 +8075,7 @@ class AstroDomeOrbit extends LiveActor {
         computeModelMatrixR(drawParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
         mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, drawParams.u_PosMtx[0]);
         materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -9048,7 +9048,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         this.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 

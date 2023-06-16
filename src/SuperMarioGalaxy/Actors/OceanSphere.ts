@@ -482,7 +482,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
             const materialHelper = this.materialHelperEnvBack;
             materialHelper.allocateMaterialParamsDataOnInst(renderInstEnvBack, materialParams);
-            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstEnvBack);
+            materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInstEnvBack);
             renderInstManager.submitRenderInst(renderInstEnvBack);
         }
 
@@ -506,7 +506,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         renderInstXluBack.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         materialHelper.allocateMaterialParamsDataOnInst(renderInstXluBack, materialParams);
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstXluBack);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInstXluBack);
         renderInstManager.submitRenderInst(renderInstXluBack);
 
         if (!this.isStartPosCamera && !this.isCameraInside) {
@@ -517,7 +517,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
             const materialHelper = this.materialHelperXluFront;
             materialHelper.allocateMaterialParamsDataOnInst(renderInstFrontFaces, materialParams);
-            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstFrontFaces);
+            materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInstFrontFaces);
             renderInstManager.submitRenderInst(renderInstFrontFaces);
         }
 

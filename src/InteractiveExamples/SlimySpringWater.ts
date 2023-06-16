@@ -246,7 +246,7 @@ class FakeWaterModelInstance {
         this.materialInstance.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         // Push our material instance.
-        this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, drawParams);
         this.plane.prepareToRender(renderInstManager);
 

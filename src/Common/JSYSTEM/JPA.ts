@@ -923,7 +923,7 @@ export class JPAEmitterWorkData {
 
     public fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
         const materialHelper = this.baseEmitter.resData.materialHelper;
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         const materialParams = this.materialParams;
         const drawParams = this.drawParams;

@@ -192,7 +192,7 @@ class SunshineWaterModel {
         const template = renderHelper.pushTemplateRenderInst();
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
+        this.seaMaterialInstance.setOnRenderInst(renderHelper.renderInstManager.gfxRenderCache, template);
 
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
         mat4.mul(drawParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);

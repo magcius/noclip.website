@@ -50,16 +50,11 @@ const scratchSceneParams = new SceneParams();
 const scratchDrawParams = new DrawParams();
 const scratchMaterialParams = new MaterialParams();
 
-export function setGXMaterialOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
-    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+export function setGXMaterialOnRenderInst(renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
+    materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
     materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-}
-
-export function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams, drawParams: DrawParams) {
-    setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, materialParams, drawParams);
-    renderInstManager.submitRenderInst(renderInst);
 }
 
 export class SFARenderer implements Viewer.SceneGfx {
@@ -197,7 +192,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.heatShimmerMaterial!.setOnMaterialParams(scratchMaterialParams, matCtx);
 
         scratchDrawParams.clear();
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
+        setGXMaterialOnRenderInst(renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
 
         this.shimmerddraw.endAndUpload(renderInstManager);
 

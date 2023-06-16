@@ -1631,7 +1631,7 @@ export class ElementGenerator extends BaseGenerator {
         colorCopy(scratchMaterialParams.u_Color[ColorKind.AMB0], this.genDesc.TEXR && !colorEqual(this.moduColor, OpaqueBlack) ? this.moduColor : White);
         this.material.fillMaterialParamsData(renderer.renderHelper.renderInstManager, materialParamsBlockOffs, scratchMaterialParams);
 
-        this.material.setOnRenderInst(renderer.device, renderer.renderCache, renderInst);
+        this.material.setOnRenderInst(renderer.renderCache, renderInst);
         renderInst.setUniformBufferOffset(GX_Program.ub_MaterialParams, materialParamsBlockOffs, this.material.materialParamsBufferSize);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.material.programKey);
         renderInst.setSamplerBindingsFromTextureMappings([this.textureMapping]);

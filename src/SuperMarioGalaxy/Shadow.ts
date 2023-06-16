@@ -360,10 +360,10 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
 
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.material.setOnRenderInst(device, cache, template);
+        this.material.setOnRenderInst(cache, template);
 
         materialParams.u_Color[ColorKind.C0].r = 0x40 / 0xFF;
         this.material.allocateMaterialParamsDataOnInst(template, materialParams);
@@ -474,10 +474,10 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplateRenderInst();
 
-        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        this.materialFront.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, template);
+        this.materialBack.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
         renderInstManager.popTemplateRenderInst();
@@ -815,17 +815,17 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.position3vec3(this.vtx[1]);
         this.ddraw.end();
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(front);
-        this.materialFront.setOnRenderInst(device, cache, front);
+        this.materialFront.setOnRenderInst(cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(back);
-        this.materialBack.setOnRenderInst(device, cache, back);
+        this.materialBack.setOnRenderInst(cache, back);
         renderInstManager.submitRenderInst(back);
     }
 
@@ -916,17 +916,17 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.position3vec3(this.vtx[1]);
         this.ddraw.end();
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(front);
-        this.materialFront.setOnRenderInst(device, cache, front);
+        this.materialFront.setOnRenderInst(cache, front);
         renderInstManager.submitRenderInst(front);
 
         const back = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(back);
-        this.materialBack.setOnRenderInst(device, cache, back);
+        this.materialBack.setOnRenderInst(cache, back);
         renderInstManager.submitRenderInst(back);
     }
 
@@ -1087,7 +1087,7 @@ class AlphaShadow extends NameObj {
         const renderInst = renderInstManager.newRenderInst();
         const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
-        this.materialHelperDrawAlpha.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialHelperDrawAlpha.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);

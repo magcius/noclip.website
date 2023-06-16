@@ -444,7 +444,7 @@ export class CharWriter {
         this.ddraw = ddraw;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        this.font.materialHelper.setOnRenderInst(cache.device, cache, template);
+        this.font.materialHelper.setOnRenderInst(cache, template);
         this.makeMaterialUBO(template);
         this.textureMapping[0].gfxTexture = null;
 

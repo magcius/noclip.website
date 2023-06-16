@@ -610,7 +610,7 @@ class MaterialInstance {
         return (textureCoordinator.mappingMethod << 12) | (textureCoordinator.sourceCoordinate << 8);
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, template: GfxRenderInst, textureHolder: CtrTextureHolder): void {
+    public setOnRenderInst(cache: GfxRenderCache, template: GfxRenderInst, textureHolder: CtrTextureHolder): void {
         let offs = template.allocateUniformBuffer(DMPProgram.ub_MaterialParams, 4*3 + 4+4*6+4*3*3 + 4*3*2 + 4*2);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer);
@@ -865,7 +865,7 @@ class ShapeInstance {
 
         const materialTemplate = renderInstManager.pushTemplateRenderInst();
         materialTemplate.setVertexInput(this.sepdData.inputLayout, this.sepdData.vertexBufferDescriptors, this.sepdData.indexBufferDescriptor);
-        this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, materialTemplate, textureHolder);
+        this.materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, materialTemplate, textureHolder);
 
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
             const prmsData = this.sepdData.prmsData[i];

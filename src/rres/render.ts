@@ -81,7 +81,7 @@ class ShapeInstance {
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
         template.sortKey = setSortKeyBias(template.sortKey, this.sortKeyBias);
 
-        materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
         const usesSkinning = this.shape.mtxIdx < 0;
         assert(usesSkinning === materialInstance.usesSkinning);
@@ -411,8 +411,8 @@ class MaterialInstance {
         dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+        this.materialHelper.setOnRenderInst(cache, renderInst);
     }
 
     public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null, camera: Camera): void {

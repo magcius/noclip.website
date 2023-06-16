@@ -145,7 +145,7 @@ export class ShapeInstance {
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
         template.sortKey = setSortKeyBias(template.sortKey, this.shapeData.sortKeyBias);
 
-        materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        materialInstance.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
         const multi = shape.shapeMtxType === ShapeMtxType.Multi;
         if (!multi)
@@ -343,8 +343,8 @@ export class MaterialInstance {
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+        this.materialHelper.setOnRenderInst(cache, renderInst);
     }
 
     private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, colorRegType: ColorRegType): void {

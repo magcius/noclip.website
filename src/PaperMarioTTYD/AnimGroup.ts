@@ -639,7 +639,7 @@ class AnimGroupInstance_Shape {
 
             const renderInst = renderInstManager.newRenderInst();
             shapeHelper.setOnRenderInst(renderInst);
-            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+            materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
             mat4.mul(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix, modelMatrix);
             materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);

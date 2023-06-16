@@ -60,7 +60,7 @@ class Command_Batch {
         this.shapeHelper.setOnRenderInst(renderInst);
         this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialCommand.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         this.materialCommand.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.computeModelView(drawParams.u_PosMtx[0], viewerInput.camera);
         this.materialCommand.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);

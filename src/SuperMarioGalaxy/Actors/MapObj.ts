@@ -4624,16 +4624,16 @@ class VolumeModelDrawer {
         this.materialClear.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.materialClear.allocateDrawParamsDataOnInst(template, drawParams);
-        this.materialClear.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        this.materialClear.setOnRenderInst(sceneObjHolder.modelCache.cache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        this.materialBack.setOnRenderInst(sceneObjHolder.modelCache.cache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        this.materialFront.setOnRenderInst(sceneObjHolder.modelCache.cache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
-        this.materialBlend.setOnRenderInst(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, template);
+        this.materialBlend.setOnRenderInst(sceneObjHolder.modelCache.cache, template);
         drawSimpleModel(renderInstManager, this.modelData!);
 
         renderInstManager.popTemplateRenderInst();

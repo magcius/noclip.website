@@ -367,8 +367,8 @@ class FurDrawer {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst, materialParams: MaterialParams): void {
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst, materialParams: MaterialParams): void {
+        this.materialHelper.setOnRenderInst(cache, renderInst);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
@@ -478,7 +478,7 @@ class FurCtrl {
 
             const template = renderInstManager.pushTemplateRenderInst();
             this.furDrawer.setupLayerMaterial(materialParams, i);
-            this.furDrawer.setOnRenderInst(device, cache, template, materialParams);
+            this.furDrawer.setOnRenderInst(cache, template, materialParams);
 
             for (let j = 0; j < shape.mtxGroups.length; j++) {
                 if (!prepareShapeMtxGroup(drawParams, shapeInstanceState, shape, shape.mtxGroups[j]))

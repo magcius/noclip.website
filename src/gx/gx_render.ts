@@ -515,7 +515,7 @@ export class GXMaterialHelperGfx {
         fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+    public setOnRenderInst(cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.cacheProgram(cache);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setGfxProgram(this.gfxProgram!);

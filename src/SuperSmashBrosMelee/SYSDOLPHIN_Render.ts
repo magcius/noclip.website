@@ -1047,7 +1047,7 @@ class HSD_MObj_Instance {
             tobj.fillTexMtx(materialParams);
         }
 
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        this.materialHelper.setOnRenderInst(cache, renderInst);
         this.setupTExpConstants(materialParams);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

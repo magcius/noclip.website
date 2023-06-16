@@ -1200,9 +1200,9 @@ function drawGetMaterial(layout: Layout, content: { materialIndex: number }): La
     return material;
 }
 
-function drawSubmitRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, material: LayoutMaterial, alpha: number): void {
+function drawSubmitRenderInst(renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, material: LayoutMaterial, alpha: number): void {
     material.fillMaterialParams(materialParams, alpha);
-    material.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    material.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
     material.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -1282,7 +1282,7 @@ export class LayoutPicture extends LayoutPane {
         const template = renderInstManager.pushTemplateRenderInst();
         this.setOnRenderInst(template);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+        drawSubmitRenderInst(renderInstManager, renderInst, material, alpha);
         renderInstManager.popTemplateRenderInst();
     }
 }
@@ -1535,7 +1535,7 @@ export class LayoutWindow extends LayoutPane {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+        drawSubmitRenderInst(renderInstManager, renderInst, material, alpha);
     }
 
     private getFrameMaterial_FrameFromPosition(position: RLYTBasePosition): RLYTWindowFrame {
@@ -1582,7 +1582,7 @@ export class LayoutWindow extends LayoutPane {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+        drawSubmitRenderInst(renderInstManager, renderInst, material, alpha);
     }
 
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {

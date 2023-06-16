@@ -328,7 +328,7 @@ export class Shape {
 
         const materialHelper = this.material.getGXMaterialHelper();
 
-        setGXMaterialOnRenderInst(device, renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);
+        setGXMaterialOnRenderInst(renderInstManager, renderInst, materialHelper, scratchMaterialParams, drawParams);
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelToWorldMtx: ReadonlyMat4, shapeCtx: ShapeRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], overrideSortDepth?: number, overrideSortLayer?: number) {

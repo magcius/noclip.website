@@ -393,7 +393,7 @@ export class FlowerPacket {
         setColorFromRoomNo(globals, materialParams, roomIdx);
         dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
         model.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-        model.materialHelper.setOnRenderInst(globals.modelCache.device, renderInstManager.gfxRenderCache, template);
+        model.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
         const room = this.rooms[roomIdx];
         for (let i = 0; i < room.length; i++) {
@@ -756,7 +756,7 @@ export class TreePacket {
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
             this.treeModel.shadow.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-            this.treeModel.shadow.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            this.treeModel.shadow.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this.treeModel.shadow.textureMapping);
 
             for (let i = 0; i < room.length; i++) {
@@ -781,7 +781,7 @@ export class TreePacket {
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
             this.treeModel.main.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-            this.treeModel.main.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            this.treeModel.main.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this.treeModel.main.textureMapping);
 
             for (let i = 0; i < room.length; i++) {
@@ -1048,7 +1048,7 @@ export class GrassPacket {
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-            this.grassModel.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            this.grassModel.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];

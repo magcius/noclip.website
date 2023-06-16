@@ -132,10 +132,10 @@ abstract class ClipArea<TNerve extends number = number> extends LiveActor<TNerve
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x00000004);
         clipAreaHolder.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
-        clipAreaHolder.materialFront.setOnRenderInst(cache.device, cache, template);
+        clipAreaHolder.materialFront.setOnRenderInst(cache, template);
         this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.baseMtx, this.scale, viewerInput.camera);
 
-        clipAreaHolder.materialBack.setOnRenderInst(cache.device, cache, template);
+        clipAreaHolder.materialBack.setOnRenderInst(cache, template);
         this.shape.drawVolumeShape(sceneObjHolder, renderInstManager, this.baseMtx, this.scale, viewerInput.camera);
 
         renderInstManager.popTemplateRenderInst();
@@ -466,7 +466,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         ddraw.end();
 
         const renderInst = ddraw.endDraw(renderInstManager);
-        this.materialLaser.setOnRenderInst(renderInstManager.gfxRenderCache.device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialLaser.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x0040F080);
         this.materialLaser.allocateMaterialParamsDataOnInst(renderInst, materialParams);

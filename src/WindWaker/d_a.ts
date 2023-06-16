@@ -1538,7 +1538,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         const tex = this.whichTex === 0 ? this.tex0 : this.tex1!;
         tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
@@ -1576,7 +1576,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
 
         globals.quadStatic.setOnRenderInst(template);
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
 
         let value = this.value;
@@ -2294,7 +2294,7 @@ class dCloth_packet_c {
         this.plot(ddraw, front);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -2776,7 +2776,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.plot(ddraw, front);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }
 

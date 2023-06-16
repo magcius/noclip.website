@@ -428,7 +428,7 @@ class MaterialInst {
         renderParams: RenderParams
     ): void {
         // Shader program
-        this.materialHelper.setOnRenderInst(device, renderCache, inst);
+        this.materialHelper.setOnRenderInst(renderCache, inst);
 
         // Sampler bindings
         const materialParams = scratchMaterialParams;

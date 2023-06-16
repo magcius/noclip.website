@@ -368,7 +368,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.color.a = this.fade / 255.0;
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        this.materialHelper.setOnRenderInst(cache, renderInst);
         renderInst.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);

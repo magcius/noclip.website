@@ -390,7 +390,7 @@ export class OceanBowl extends LiveActor {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount);
 
-        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        this.materialHelper.setOnRenderInst(cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
 
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
@@ -423,7 +423,7 @@ export class OceanBowl extends LiveActor {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.drawIndexes(this.indexCount);
 
-        this.materialHelperBloom.setOnRenderInst(device, cache, renderInst);
+        this.materialHelperBloom.setOnRenderInst(cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelperBloom.programKey);
 
         this.materialHelperBloom.allocateMaterialParamsDataOnInst(renderInst, materialParams);
