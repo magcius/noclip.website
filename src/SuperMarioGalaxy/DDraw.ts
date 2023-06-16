@@ -259,7 +259,7 @@ export class TDDraw extends TDDrawBase {
         renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
     }
 
-    public canMakeRenderInst(): boolean {
+    public hasIndicesToDraw(): boolean {
         return this.currentIndex > this.startIndex;
     }
 
@@ -267,28 +267,24 @@ export class TDDraw extends TDDrawBase {
         this.startIndex = this.currentIndex;
     }
 
-    public makeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        this.flushDeviceObjects(renderInstManager.gfxRenderCache);
+    public makeRenderInst(renderInstManager: GfxRenderInstManager, cache: GfxRenderCache = renderInstManager.gfxRenderCache): GfxRenderInst {
+        this.flushDeviceObjects(cache);
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(renderInst);
         this.next();
         return renderInst;
     }
 
-    private endAndUploadCache(cache: GfxRenderCache): void {
+    public endAndUpload(renderInstManager: GfxRenderInstManager, cache: GfxRenderCache = renderInstManager.gfxRenderCache): void {
         const device = cache.device;
         this.flushDeviceObjects(cache);
         device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
         device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
-    public endAndUpload(renderInstManager: GfxRenderInstManager): void {
-        return this.endAndUploadCache(renderInstManager.gfxRenderCache);
-    }
-
-    public endDraw(renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        this.endAndUpload(renderInstManager);
-        return this.makeRenderInst(renderInstManager);
+    public endDraw(renderInstManager: GfxRenderInstManager, cache: GfxRenderCache = renderInstManager.gfxRenderCache): GfxRenderInst {
+        this.endAndUpload(renderInstManager, cache);
+        return this.makeRenderInst(renderInstManager, cache);
     }
 
     public destroy(device: GfxDevice): void {

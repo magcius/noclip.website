@@ -1412,7 +1412,7 @@ export class LayoutTextbox extends LayoutPane {
 
         vec3.set(charWriter.origin, x0, y0, 0);
         vec3.copy(charWriter.cursor, charWriter.origin);
-        charWriter.drawString(renderInstManager, ddraw, this.str, this.tagProcessor);
+        charWriter.drawString(renderInstManager, renderInstManager.gfxRenderCache, ddraw, this.str, this.tagProcessor);
 
         renderInstManager.popTemplateRenderInst();
     }

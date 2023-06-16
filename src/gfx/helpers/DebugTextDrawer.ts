@@ -18,6 +18,7 @@ import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
 import { GX_Program } from "../../gx/gx_material";
 import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
 import { projectionMatrixConvertClipSpaceNearZ } from "./ProjectionHelpers";
+import { GfxRenderCache } from "../render/GfxRenderCache";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
@@ -26,11 +27,14 @@ const sceneParams = new SceneParams();
 export class DebugTextDrawer {
     private charWriter = new CharWriter();
     private ddraw = new TDDraw();
+    private renderCache: GfxRenderCache;
 
     public textColor = colorNewCopy(White);
     public strokeColor = colorNewCopy(OpaqueBlack);
 
-    constructor(private fontData: ResFont) {
+    constructor(device: GfxDevice, private fontData: ResFont) {
+        this.renderCache = new GfxRenderCache(device);
+
         this.charWriter.setFont(fontData, 0, 0);
 
         const ddraw = this.ddraw;
@@ -79,6 +83,8 @@ export class DebugTextDrawer {
     }
 
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
+        const cache = this.renderCache;
+
         vec3.zero(this.charWriter.origin);
         vec3.copy(this.charWriter.cursor, this.charWriter.origin);
         this.charWriter.calcRect(scratchVec4, str);
@@ -90,7 +96,7 @@ export class DebugTextDrawer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
-        const clipSpaceNearZ = renderInstManager.gfxRenderCache.device.queryVendorInfo().clipSpaceNearZ;
+        const clipSpaceNearZ = cache.device.queryVendorInfo().clipSpaceNearZ;
         this.setSceneParams(template, vw, vh, clipSpaceNearZ);
         this.setDrawParams(template);
 
@@ -100,13 +106,13 @@ export class DebugTextDrawer {
             const theta = i * MathConstants.TAU / strokeNum;
             const sy = strokeWidth * Math.sin(theta), sx = strokeWidth * Math.cos(theta);
             vec3.set(this.charWriter.cursor, x + sx, y + sy, 0);
-            this.charWriter.drawString(renderInstManager, this.ddraw, str);
+            this.charWriter.drawString(renderInstManager, cache, this.ddraw, str);
         }
 
         // Main fill
         colorCopy(this.charWriter.color1, this.textColor);
         vec3.set(this.charWriter.cursor, x, y, 0);
-        this.charWriter.drawString(renderInstManager, this.ddraw, str);
+        this.charWriter.drawString(renderInstManager, cache, this.ddraw, str);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -114,6 +120,7 @@ export class DebugTextDrawer {
     public destroy(device: GfxDevice): void {
         this.fontData.destroy(device);
         this.ddraw.destroy(device);
+        this.renderCache.destroy();
     }
 }
 
@@ -123,6 +130,6 @@ export async function makeDebugTextDrawer(context: SceneContext): Promise<DebugT
         const fontArc = JKRArchive.parse(await decompress(fontArcData));
         const fontBRFNT = parseBRFNT(fontArc.findFileData(`messagefont26.brfnt`)!);
         const fontData = new ResFont(context.device, fontBRFNT);
-        return new DebugTextDrawer(fontData);
+        return new DebugTextDrawer(context.device, fontData);
     });
 }
