@@ -627,7 +627,7 @@ ${fallOutFieldDrawCommon}
 
     public override vert = `
 ${FallOutFieldDrawMaskProgram.Common}
-${GfxShaderLibrary.makeFullscreenVS(reverseDepthForDepthOffset(1.0), 1.0)}
+${GfxShaderLibrary.makeFullscreenVS(glslGenerateFloat(reverseDepthForDepthOffset(1.0)))}
 `;
 
     public override frag = `

@@ -18,6 +18,7 @@ import { DeviceProgram } from "../Program";
 import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect";
 import { TextureMapping } from "../TextureHolder";
 import { assert, assertExists, nArray, readString } from "../util";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 
 //#region Bloom
 
@@ -469,15 +470,7 @@ class EggDOFDrawMode2CombineProgram extends EggDOFBaseProgram {
 
         this.vert = `
 ${EggDOFBaseProgram.BindingsDefinition}
-
-out vec2 v_TexCoord;
-
-void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(u_FocusZClipSpace, 1);
-}
+${GfxShaderLibrary.makeFullscreenVS(`u_FocusZClipSpace`)}
 `;
 
         this.frag = `
@@ -527,7 +520,9 @@ export class EggDrawPathDOF {
         this.focusRange = pdof.focusRange;
 
         this.indTexMat[0] = pdof.indTexScaleS;
-        this.indTexMat[5] = pdof.indTexScaleT * -1; // Y flip for good measure...
+        this.indTexMat[5] = pdof.indTexScaleT;
+        if (gfxDeviceNeedsFlipY(device))
+            this.indTexMat[5] *= -1;
         vec2.set(this.indTexScrollSpeed, pdof.indTexTransSScroll, pdof.indTexTransTScroll);
         vec2.set(this.indTexIndScale, pdof.indTexIndScaleS, pdof.indTexIndScaleT);
 

@@ -66,7 +66,7 @@ vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
 }
 `;
 
-export function makeFullscreenVS(z: number = 1.0, w: number = 1.0): string {
+export function makeFullscreenVS(z: string = `1.0`, w: string = `1.0`): string {
     return `
 out vec2 v_TexCoord;
 
