@@ -1226,7 +1226,7 @@ export class dKankyo_star_Packet {
         dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
         ddraw.beginDraw(globals.modelCache.cache);
-        ddraw.begin(GX.Command.DRAW_TRIANGLES, 4 * envLight.waveCount);
+        ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
 
         const star = this.instances[0];
 

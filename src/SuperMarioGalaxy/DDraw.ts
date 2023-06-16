@@ -143,12 +143,12 @@ abstract class TDDrawBase {
         this.vertexData.setUint32(offs + 0x00, colorToRGBA8(c), false);
     }
 
-    public begin(type: GX.Command, num: number | null = null): void {
+    public begin(type: GX.Command, numVertex: number | null = null): void {
         this.currentPrim = type;
         this.currentPrimVertex = -1;
 
-        if (num !== null)
-            this.allocPrimitives(type, num);
+        if (numVertex !== null)
+            this.allocPrimitives(type, numVertex);
     }
 
     public end(): void {

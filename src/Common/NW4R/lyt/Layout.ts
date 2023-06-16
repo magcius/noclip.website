@@ -1143,6 +1143,31 @@ export class LayoutPane {
         offs += fillMatrix4x3(d, offs, this.worldFromLocalMatrix);
     }
 
+    protected countVertexSelf(layout: Layout): number {
+        return 0;
+    }
+
+    public countVertex(layout: Layout, parentAlpha: number): number {
+        let count = 0;
+
+        if (!this.visible)
+            return count;
+
+        if (this.scale[0] <= 0.0 || this.scale[1] <= 0.0)
+            return count;
+
+        if (this.alpha > 0.0)
+            count += this.countVertexSelf(layout);
+
+        const childAlpha = this.propagateAlpha ? this.alpha : parentAlpha;
+        if (childAlpha > 0.0) {
+            for (let i = 0; i < this.children.length; i++)
+                count += this.children[i].countVertex(layout, childAlpha);
+        }
+
+        return count;
+    }
+
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
     }
 
@@ -1265,6 +1290,10 @@ export class LayoutPicture extends LayoutPane {
             super.setAnimationValueFloat(type, value);
     }
 
+    protected override countVertexSelf(layout: Layout): number {
+        return 4;
+    }
+
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
         const material = drawGetMaterial(layout, this);
         if (material === null)
@@ -1275,7 +1304,7 @@ export class LayoutPicture extends LayoutPane {
         const baseZ = 0.0;
 
         const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
-        ddraw.begin(GX.Command.DRAW_QUADS, 1);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4);
         drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
@@ -1381,6 +1410,25 @@ export class LayoutTextbox extends LayoutPane {
         vec3.set(charWriter.origin, 0, 0, 0);
         vec3.copy(charWriter.cursor, charWriter.origin);
         charWriter.calcRect(dst, this.str, this.tagProcessor);
+    }
+
+    protected override countVertexSelf(layout: Layout): number {
+        if (this.font === null)
+            return 0;
+
+        const material = drawGetMaterial(layout, this);
+        if (material === null)
+            return 0;
+
+        if (this.str.length === 0)
+            return 0;
+
+        const charWriter = layout.charWriter;
+        this.setCharWriterFont(charWriter);
+        // Don't particularly care about the rectangle, but this is how we count vertices...
+        charWriter.calcRect(scratchVec4, this.str, this.tagProcessor);
+
+        return charWriter.numVertex;
     }
 
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
@@ -1514,7 +1562,7 @@ export class LayoutWindow extends LayoutPane {
         const texW = material.getTextureWidth();
         const texH = material.getTextureHeight();
 
-        ddraw.begin(GX.Command.DRAW_QUADS, 4);
+        ddraw.begin(GX.Command.DRAW_QUADS, 16);
 
         x = baseX; y = baseY; w = this.width - texW; h = texH;
         this.drawFrameGetTexCoord(RLYTBasePosition.TopLeft,     scratchTexCoord[0], w, h, texW, texH, RLYTTextureFlip.None);
@@ -1577,12 +1625,21 @@ export class LayoutWindow extends LayoutPane {
         const height = this.height - borderT - borderB;
 
         const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
-        ddraw.begin(GX.Command.DRAW_QUADS, 1);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4);
         drawQuad(ddraw, baseX, baseY, baseZ, width, -height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         drawSubmitRenderInst(renderInstManager, renderInst, material, alpha);
+    }
+
+    protected override countVertexSelf(): number {
+        let count = 4; // content quads
+
+        if (this.frames.length === 1)
+            count += 4 * 4; // frame quads
+
+        return count;
     }
 
     protected override drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
@@ -1807,6 +1864,11 @@ export class Layout {
         this.rootPane.calcMatrix(drawInfo, drawInfo.viewMatrix);
 
         this.ddraw.beginDraw(renderInstManager.gfxRenderCache);
+
+        // XXX(jstpierre): This is assuming we only have quads, which is true for now...
+        const numVertex = this.rootPane.countVertex(this, drawInfo.alpha);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_QUADS, numVertex);
+
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
         this.ddraw.endAndUpload(renderInstManager);
     }

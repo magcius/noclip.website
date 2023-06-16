@@ -271,6 +271,7 @@ export class CharWriter {
 
     public charSpacing: number = 0;
     public lineHeight: number = 0;
+    public numVertex: number = 0;
 
     // Gradient colors
     public colorT = colorNewCopy(White);
@@ -320,10 +321,14 @@ export class CharWriter {
 
         this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
         this.calcRectFromCursor(dst);
+
+        this.numVertex += 4;
     }
 
     public calcRect(dst: vec4, str: string, tagProcessor: TagProcessor | null = null): void {
         let needsSpacing = false;
+
+        this.numVertex = 0;
 
         dst[0] = this.cursor[0];
         dst[1] = this.cursor[1];
@@ -363,7 +368,7 @@ export class CharWriter {
 
         const s1 = (glyf.s1b + glyf.cwdh.width) * glyf.s1m;
 
-        ddraw.begin(GX.Command.DRAW_QUADS, 1);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4);
 
         ddraw.position3f32(x0, y0, z);
         ddraw.color4color(GX.Attr.CLR0, this.colorT);
