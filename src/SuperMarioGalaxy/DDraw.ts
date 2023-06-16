@@ -57,23 +57,15 @@ abstract class TDDrawBase {
     }
 
     public setVtxDesc(attr: GX.Attr, enabled: boolean): void {
+        assert(this.loadedVertexLayout === null);
+
         if (attr === GX.Attr._NBT) {
             attr = GX.Attr.NRM;
             this.useNBT = enabled;
         }
 
         const vcd = assertExists(this.vcd[attr]);
-
-        const type = enabled ? GX.AttrType.DIRECT : GX.AttrType.NONE;
-        if (vcd.type !== type) {
-            vcd.type = type;
-            this.dirtyInputLayout();
-        }
-    }
-
-    private dirtyInputLayout(): void {
-        this.loadedVertexLayout = null;
-        this.inputLayout = null;
+        vcd.type = enabled ? GX.AttrType.DIRECT : GX.AttrType.NONE;
     }
 
     protected abstract ensureIndexBufferData(newSize: number): void;
