@@ -71,7 +71,7 @@ abstract class TDDrawBase {
     protected abstract ensureIndexBufferData(newSize: number): void;
     protected abstract ensureVertexBufferData(newSize: number): void;
 
-    public allocVertices(numVertex: number): void {
+    private allocVertices(numVertex: number): void {
         const vertexCount = this.currentVertex + 1 + numVertex;
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
         this.ensureVertexBufferData(vertexCount * stride);

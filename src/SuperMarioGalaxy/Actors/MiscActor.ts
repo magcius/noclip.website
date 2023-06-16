@@ -4314,6 +4314,7 @@ export class WaterPlant extends LiveActor {
         const waterPlantDrawInit = sceneObjHolder.waterPlantDrawInit!;
 
         this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 8);
 
         for (let i = 0; i < this.plantData.length; i++) {
             const plantData = this.plantData[i];
@@ -4326,7 +4327,6 @@ export class WaterPlant extends LiveActor {
             scratchVec3c[1] += plantData.height * 1.0;
 
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
-            this.ddraw.allocVertices(8);
 
             const dx = waterPlantDrawInit.drawVec[0] * 20.0;
             const dz = waterPlantDrawInit.drawVec[2] * 20.0;
@@ -4732,7 +4732,7 @@ export class SwingRope extends LiveActor {
 
     private drawStop(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
-        this.ddraw.allocVertices(12);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 12);
 
         const ty = 0.13 * (this.height / 50.0);
 
@@ -4864,7 +4864,7 @@ export class Trapeze extends LiveActor {
     }
 
     private drawRope(top: vec3, bottom: vec3, axisX: vec3, axisZ: vec3, txc0: number, txc1: number): void {
-        this.ddraw.allocVertices(12);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 12);
 
         // Rope 1.
         this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);

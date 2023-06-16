@@ -290,7 +290,7 @@ export class SphereMapManager {
             this.ddraw.end();
         }
 
-        const renderInst = this.ddraw.makeRenderInst(renderInstManager);
+        const renderInst = this.ddraw.endDraw(renderInstManager);
 
         scratchDrawParams.clear();
         scratchMaterialParams.clear();
@@ -303,9 +303,6 @@ export class SphereMapManager {
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
         
         setGXMaterialOnRenderInst(renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
-
-        this.ddraw.endAndUpload(renderInstManager);
-
         renderInstManager.popTemplateRenderInst();
 
         const targetID = builder.createRenderTargetID(this.targetDesc, 'Sphere Map Target');

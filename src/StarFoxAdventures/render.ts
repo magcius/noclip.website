@@ -176,7 +176,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
         this.shimmerddraw.end();
 
-        const renderInst = this.shimmerddraw.makeRenderInst(renderInstManager);
+        const renderInst = this.shimmerddraw.endDraw(renderInstManager);
 
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
@@ -193,8 +193,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         scratchDrawParams.clear();
         setGXMaterialOnRenderInst(renderInstManager, renderInst, this.heatShimmerMaterial!.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
-
-        this.shimmerddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
 

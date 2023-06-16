@@ -298,8 +298,6 @@ export class dKankyo_sun_Packet {
     }
 
     private drawSunMoon(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         const envLight = globals.g_env_light;
 
         let drawSun = this.sunAlpha > 0.0;
@@ -430,8 +428,7 @@ export class dKankyo_sun_Packet {
         if (this.visibility <= 0.1)
             return;
 
-        const device = globals.modelCache.device;
-        const envLight = globals.g_env_light;
+       const envLight = globals.g_env_light;
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
@@ -551,7 +548,7 @@ export class dKankyo_sun_Packet {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.ddraw.beginDraw(globals.modelCache.cache);
-        this.ddraw.allocVertices(2048);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLES, 2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
         this.ddraw.endAndUpload(renderInstManager);
@@ -642,7 +639,7 @@ export class dKankyo_vrkumo_Packet {
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-            ddraw.begin(GX.Command.DRAW_QUADS);
+            ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.instances.length);
 
             for (let i = 0; i < this.instances.length; i++) {
                 const kumo = this.instances[i];
@@ -825,8 +822,6 @@ export class dKankyo_rain_Packet {
     }
 
     private drawRain(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         const envLight = globals.g_env_light;
         const ddraw = this.ddraw;
 
@@ -905,8 +900,6 @@ export class dKankyo_rain_Packet {
     }
 
     private drawSibuki(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         // Sibuki means "splash"
         const envLight = globals.g_env_light;
 
@@ -1064,8 +1057,6 @@ export class dKankyo_wave_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         const envLight = globals.g_env_light;
 
         if (envLight.waveCount === 0 || envLight.waveFlatInter >= 1.0)
@@ -1138,10 +1129,8 @@ export class dKankyo_wave_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
-
-        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1209,8 +1198,6 @@ export class dKankyo_star_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         const envLight = globals.g_env_light;
 
         if (envLight.starCount === 0)
@@ -1322,10 +1309,8 @@ export class dKankyo_star_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.makeRenderInst(renderInstManager);
+        const renderInst = ddraw.endDraw(renderInstManager);
         submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
-
-        this.ddraw.endAndUpload(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
