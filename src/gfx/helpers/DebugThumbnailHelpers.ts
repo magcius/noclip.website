@@ -98,34 +98,16 @@ export class DebugThumbnailDrawer {
         const textDrawer = this.helper.getDebugTextDrawer() as TextDrawer | null;
 
         const builderDebug = builder.getDebug();
-
-        const inputPasses = builderDebug.getPasses();
+        const debugThumbnails = builderDebug.getDebugThumbnails();
 
         // Add our passes.
         const resolveTextureIDs: GfxrResolveTextureID[] = [];
-        const renderTargetIDs: GfxrRenderTargetID[] = [];
-        const debugLabels: [string, string][] = [];
 
-        for (let i = 0; i < inputPasses.length; i++) {
-            const pass = inputPasses[i];
-            const debugThumbnails = builderDebug.getPassDebugThumbnails(pass);
-            for (let j = 0; j < debugThumbnails.length; j++) {
-                if (!debugThumbnails[j])
-                    continue;
-
-                // Allocate a resolve texture.
-                const resolveTextureID = builder.resolveRenderTargetPassAttachmentSlot(pass, j);
-                const renderTargetID = builderDebug.getPassRenderTargetID(pass, j);
-                resolveTextureIDs.push(resolveTextureID);
-                renderTargetIDs.push(renderTargetID);
-
-                const passDebugName = builderDebug.getPassDebugName(pass);
-                const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetID);
-                debugLabels.push([passDebugName, thumbnailDebugName]);
-            }
-        }
+        for (let i = 0; i < debugThumbnails.length; i++)
+            resolveTextureIDs.push(builder.resolveRenderTargetPassAttachmentSlot(debugThumbnails[i].pass, debugThumbnails[i].attachmentSlot));
 
         const desc = builder.getRenderTargetDescription(mainColorTargetID);
+
         const fullscreenRect = { x1: 0, y1: 0, x2: desc.width, y2: desc.height };
 
         const renderInst = renderInstManager.newRenderInst();
@@ -141,9 +123,9 @@ export class DebugThumbnailDrawer {
         const y1 = y2 - thumbnailHeight;
 
         const prepareAnim = (i: number) => {
-            const thumbnailDesc = builder.getRenderTargetDescription(renderTargetIDs[i]);
+            const thumbnailDesc = builder.getRenderTargetDescription(debugThumbnails[i].renderTargetID);
 
-            const slotIndex = resolveTextureIDs.length - 1 - i;
+            const slotIndex = debugThumbnails.length - 1 - i;
             const x2 = desc.width - (thumbnailWidth + this.padding) * slotIndex - this.padding;
             const x1 = x2 - thumbnailWidth;
 
@@ -171,13 +153,12 @@ export class DebugThumbnailDrawer {
             template.setUniformBuffer(this.uniformBuffer);
 
             const { t, vw, vh } = anim;
-            const thumbnailDebugLabels = debugLabels[i];
+            const thumbnailDebugLabels = debugThumbnails[i].debugLabel.split('\n');
             for (let i = 0; i < thumbnailDebugLabels.length; i++) {
-                const debugStr = thumbnailDebugLabels[i];
                 textDrawer.textColor.a = lerp(0.6, 1.0, t);
                 textDrawer.setFontScale(lerp(0.5, 1.0, t));
                 const y = lerp(5, 20, t) + textDrawer.getScaledLineHeight() * i;
-                textDrawer.drawString(renderInstManager, vw, vh, debugStr, vw / 2, vh - y);
+                textDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugLabels[i], vw / 2, vh - y);
             }
 
             renderInstManager.popTemplateRenderInst();
@@ -199,36 +180,36 @@ export class DebugThumbnailDrawer {
                 textAnimList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
         };
 
-        for (let i = 0; i < resolveTextureIDs.length; i++)
+        for (let i = 0; i < debugThumbnails.length; i++)
             if (!this.anim[i])
                 this.anim[i] = 0.0;
 
-        const drawOrder = range(0, resolveTextureIDs.length);
+        const drawOrder = range(0, debugThumbnails.length);
         drawOrder.sort((a, b) => (this.anim[a] - this.anim[b]));
 
         builder.pushPass((pass) => {
             pass.setDebugName('Debug Thumbnails');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
 
-            for (let i = 0; i < resolveTextureIDs.length; i++)
+            for (let i = 0; i < debugThumbnails.length; i++)
                 pass.attachResolveTexture(resolveTextureIDs[i]);
 
             pass.exec((passRenderer, scope) => {
-                const anims = resolveTextureIDs.map((tex, i) => prepareAnim(drawOrder[i]));
+                const anims = debugThumbnails.map((tex, i) => prepareAnim(drawOrder[i]));
 
                 let textLists: GfxRenderInstList[] = [];
                 if (textDrawer !== null) {
                     textDrawer.beginDraw();
 
-                    const totalNumChar = debugLabels.flat().map((label) => label.length).reduce((a, b) => a + b);
+                    const totalNumChar = debugThumbnails.map((tex) => tex.debugLabel.length).reduce((a, b) => a + b);
                     textDrawer.reserveString(totalNumChar);
 
-                    textLists = resolveTextureIDs.map((tex, i) => prepareText(textDrawer, drawOrder[i], anims[i]));
+                    textLists = debugThumbnails.map((tex, i) => prepareText(textDrawer, drawOrder[i], anims[i]));
                     textDrawer.endDraw(renderInstManager);
                     this.uniformBuffer.prepareToRender();
                 }
 
-                resolveTextureIDs.forEach((tex, i) => drawThumbnail(scope, passRenderer, drawOrder[i], textLists[i], anims[i]));
+                debugThumbnails.forEach((tex, i) => drawThumbnail(scope, passRenderer, drawOrder[i], textLists[i], anims[i]));
             });
         });
     }

@@ -1426,6 +1426,8 @@ export class SourceWorldViewRenderer {
             });
         }
 
+        builder.pushDebugThumbnail(mainColorTargetID, this.name);
+
         this.outputColorTargetID = mainColorTargetID;
         this.outputColorTextureID = null;
     }
@@ -1929,7 +1931,6 @@ export class SourceRenderer implements SceneGfx {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
@@ -1944,11 +1945,11 @@ export class SourceRenderer implements SceneGfx {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsampleColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur X');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const downsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);
             pass.attachResolveTexture(downsampleResolveTextureID);
@@ -1961,11 +1962,11 @@ export class SourceRenderer implements SceneGfx {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsampleColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur Y');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const downsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);
             pass.attachResolveTexture(downsampleResolveTextureID);
@@ -1978,6 +1979,7 @@ export class SourceRenderer implements SceneGfx {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsampleColorTargetID);
 
         return downsampleColorTargetID;
     }

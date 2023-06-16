@@ -11,7 +11,7 @@ import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
 
 // TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
 // or use HTML5 canvas? It would be helpful to have in any case...
-import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font";
+import { CharWriter, parseBRFNT, ResFont, RFNT } from "../../Common/NW4R/lyt/Font";
 import { decompress } from "../../Common/Compression/Yaz0";
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
 import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
@@ -121,7 +121,8 @@ export async function makeDebugTextDrawer(context: SceneContext): Promise<DebugT
     return context.dataShare.ensureObject<DebugTextDrawer>(`DebugTextDrawer`, async () => {
         const fontArcData = await context.dataFetcher.fetchData(`SuperMarioGalaxy/LayoutData/Font.arc`);
         const fontArc = JKRArchive.parse(await decompress(fontArcData));
-        const fontData = new ResFont(context.device, parseBRFNT(fontArc.findFileData(`messagefont26.brfnt`)!));
+        const fontBRFNT = parseBRFNT(fontArc.findFileData(`messagefont26.brfnt`)!);
+        const fontData = new ResFont(context.device, fontBRFNT);
         return new DebugTextDrawer(fontData);
     });
 }

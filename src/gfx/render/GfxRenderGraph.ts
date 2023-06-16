@@ -96,11 +96,6 @@ export interface GfxrPass extends GfxrPassBase {
     setViewport(x: number, y: number, w: number, h: number): void;
 
     /**
-     * Call when you want to output a debug thumbnail.
-     */
-    pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void;
-
-    /**
      * Attach the given render target with ID {@param renderTargetID} to the given attachment slot.
      *
      * This determines which render targets this pass will render to.
@@ -174,9 +169,6 @@ class PassImpl implements GfxrPass {
     public execFunc: PassExecFunc | ComputePassExecFunc | null = null;
     public postFunc: PassPostFunc | null = null;
 
-    // Misc. state.
-    public debugThumbnails: boolean[] = [];
-
     constructor(public passType: 'render' | 'compute') {
     }
 
@@ -189,10 +181,6 @@ class PassImpl implements GfxrPass {
         this.viewportY = y;
         this.viewportW = w;
         this.viewportH = h;
-    }
-
-    public pushDebugThumbnail(attachmentSlot: GfxrAttachmentSlot): void {
-        this.debugThumbnails[attachmentSlot] = true;
     }
 
     public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: GfxrRenderTargetID, level: number = 0): void {
@@ -259,6 +247,7 @@ class GraphImpl {
 
     // Debugging.
     public renderTargetDebugNames: string[] = [];
+    public debugThumbnails: GfxrDebugThumbnailDesc[] = [];
 }
 
 type PassSetupFunc = (pass: GfxrPass) => void;
@@ -333,17 +322,20 @@ export interface GfxrGraphBuilder {
     getRenderTargetDescription(renderTargetID: GfxrRenderTargetID): Readonly<GfxrRenderTargetDescription>;
 
     /**
+     * Push a debug thumbnail for the current state of {@param renderTargetID} with specified
+     * {@param name}. If no {@param name} is passed, it default to the name of the last pass
+     * that modified it, along with the render target's debug name.
+     */
+    pushDebugThumbnail(renderTargetID: GfxrRenderTargetID, debugLabel?: string): void;
+
+    /**
      * Internal API.
      */
     getDebug(): GfxrGraphBuilderDebug;
 }
 
 export interface GfxrGraphBuilderDebug {
-    getPasses(): GfxrPass[];
-    getPassDebugThumbnails(pass: GfxrPass): boolean[];
-    getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): GfxrRenderTargetID;
-    getRenderTargetIDDebugName(renderTargetID: GfxrRenderTargetID): string;
-    getPassDebugName(pass: GfxrPass): string;
+    getDebugThumbnails(): GfxrDebugThumbnailDesc[];
 }
 
 class RenderTarget {
@@ -512,6 +504,11 @@ interface ResolveParam {
     level: number;
 }
 
+class GfxrDebugThumbnailDesc {
+    constructor(public renderTargetID: GfxrRenderTargetID, public pass: GfxrPass, public attachmentSlot: GfxrAttachmentSlot, public debugLabel: string) {
+    }
+}
+
 export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, GfxrRenderGraphImpl {
     // For scope callbacks.
     private currentPass: PassImpl | null = null;
@@ -641,6 +638,23 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     public getRenderTargetDescription(renderTargetID: number): Readonly<GfxrRenderTargetDescription> {
         return assertExists(this.currentGraph!.renderTargetDescriptions[renderTargetID]);
+    }
+
+    public pushDebugThumbnail(renderTargetID: GfxrRenderTargetID, debugLabel?: string): void {
+        const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
+        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+
+        if (debugLabel === undefined) {
+            const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
+            const renderTargetDebugName = this.currentGraph!.renderTargetDebugNames[renderTargetID];
+            debugLabel = `${renderPass.debugName}\n${renderTargetDebugName}`;
+        }
+
+        this.currentGraph!.debugThumbnails.push(new GfxrDebugThumbnailDesc(renderTargetID, renderPass, attachmentSlot, debugLabel));
+    }
+
+    public getDebug(): GfxrGraphBuilderDebug {
+        return this;
     }
     //#endregion
 
@@ -988,31 +1002,11 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         this.execGraph(graph);
         this.currentGraph = null;
     }
-
-    public getDebug(): GfxrGraphBuilderDebug {
-        return this;
-    }
     //#endregion
 
     //#region GfxrGraphBuilderDebug
-    public getPasses(): GfxrPass[] {
-        return this.currentGraph!.passes;
-    }
-
-    public getPassDebugThumbnails(pass: GfxrPass): boolean[] {
-        return (pass as PassImpl).debugThumbnails;
-    }
-
-    public getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): GfxrRenderTargetID {
-        return (pass as PassImpl).renderTargetIDs[slot];
-    }
-
-    public getRenderTargetIDDebugName(renderTargetID: number): string {
-        return this.currentGraph!.renderTargetDebugNames[renderTargetID];
-    }
-
-    public getPassDebugName(pass: GfxrPass): string {
-        return (pass as PassImpl).debugName;
+    public getDebugThumbnails(): GfxrDebugThumbnailDesc[] {
+        return this.currentGraph!.debugThumbnails;
     }
     //#endregion
 

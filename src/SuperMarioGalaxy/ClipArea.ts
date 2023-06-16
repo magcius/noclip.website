@@ -742,7 +742,6 @@ export class FallOutFieldDraw extends NameObj {
         builder.pushPass((pass) => {
             pass.setDebugName('Clip Area Downsample 1/2');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample2TargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             pass.attachResolveTexture(clipAreaMaskTextureID);
 
@@ -754,6 +753,7 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsample2TargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Clip Area Downsample 1/4');
@@ -785,9 +785,8 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
-
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
+        builder.pushDebugThumbnail(downsample4TargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Clip Area Composite Blur');
@@ -803,9 +802,8 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
-
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
         });
+        builder.pushDebugThumbnail(mainColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Clip Area Mask');

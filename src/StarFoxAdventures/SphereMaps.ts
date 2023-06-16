@@ -313,12 +313,12 @@ export class SphereMapManager {
         builder.pushPass((pass) => {
             pass.setDebugName('Sphere Map');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, targetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             pass.exec((passRenderer, scope) => {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(targetID);
 
         return targetID;
     }

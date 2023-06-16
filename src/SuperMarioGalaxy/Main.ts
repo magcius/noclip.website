@@ -394,9 +394,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 pass.exec((passRenderer) => {
                     this.drawOpa(passRenderer, DrawBufferType.ClippedMapParts);
                 });
-
-                pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
             });
+            builder.pushDebugThumbnail(mainColorTargetID);
 
             const clipAreaMaskTargetID = builder.createRenderTargetID(this.maskDesc, 'Clip Area Mask');
 
@@ -647,7 +646,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
                 builder.pushPass((pass) => {
                     pass.setDebugName('Bloom Objects');
-                    pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
                     pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, bloomObjectsTargetID);
                     pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                     pass.exec((passRenderer) => {
@@ -658,6 +656,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                         this.execute(passRenderer, DrawType.OceanBowlBloomDrawer);
                     });
                 });
+                builder.pushDebugThumbnail(bloomObjectsTargetID);
 
                 sceneObjHolder.bloomEffect!.pushPassesBloom(sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID);
             } else if (imageEffectDirector.currentEffect !== null) {

@@ -268,7 +268,6 @@ export class EggDrawPathBloom {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Threshold & Downsample 1/2');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample2ColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             pass.attachResolveTexture(mainResolveTextureID);
 
@@ -280,6 +279,7 @@ export class EggDrawPathBloom {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsample2ColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample 1/4');
@@ -300,7 +300,6 @@ export class EggDrawPathBloom {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur 0');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample4ColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample4ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -313,6 +312,7 @@ export class EggDrawPathBloom {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsample4ColorTargetID);
 
         const downsample4ColorResolveTextureID = builder.resolveRenderTarget(downsample4ColorTargetID);
         builder.pushPass((pass) => {
@@ -333,7 +333,6 @@ export class EggDrawPathBloom {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur 1');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample8ColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample8ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -346,6 +345,7 @@ export class EggDrawPathBloom {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsample8ColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Composite');
@@ -599,7 +599,6 @@ export class EggDrawPathDOF {
         builder.pushPass((pass) => {
             pass.setDebugName('DOF Downsample 1/2');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample2ColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             pass.attachResolveTexture(mainResolveTextureID);
 
@@ -611,11 +610,11 @@ export class EggDrawPathDOF {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(downsample2ColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('DOF Blur');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurColorTargetID);
-            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample2ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -628,6 +627,7 @@ export class EggDrawPathDOF {
                 renderInst.drawOnPass(cache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(blurColorTargetID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('DOF Combine');
