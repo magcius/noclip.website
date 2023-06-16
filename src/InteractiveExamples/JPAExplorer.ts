@@ -8,7 +8,7 @@ import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstList, GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderInstManager";
 import { assertExists, hexzero, assert, mod } from "../util";
 import { SceneContext } from "../SceneBase";
 import { LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
@@ -197,7 +197,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
     return datalist;
 }
 
-const enum Pass { MAIN, INDIRECT }
+const enum EfGroup { Main, Indirect }
 
 const clearPass = makeAttachmentClearDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
@@ -214,6 +214,9 @@ export class Explorer implements SceneGfx {
     private forceCentered: boolean = false;
     private gridVisible: boolean = true;
 
+    private mainList = new GfxRenderInstList();
+    private indirectList = new GfxRenderInstList();
+
     // UI
     private currentEffectIndexEntry: SimpleTextEntry;
     private currentResourceIdEntry: SimpleTextEntry;
@@ -224,6 +227,7 @@ export class Explorer implements SceneGfx {
         this.uiContainer = context.uiContainer;
 
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.effectSystem = new BasicEffectSystem(this.renderHelper.renderCache, this.jpac);
 
         this.gridPlane = new GridPlane(device, this.renderHelper.renderCache);
@@ -382,7 +386,7 @@ export class Explorer implements SceneGfx {
     private createEmitter(effectIndex = this.currentEffectIndex): void {
         const resourceId = this.jpac.effects[effectIndex].resourceId;
         const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.renderCache, resourceId);
-        newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? Pass.INDIRECT : Pass.MAIN;
+        newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? EfGroup.Indirect : EfGroup.Main;
         this.emitters.push(newEmitter);
     }
 
@@ -410,8 +414,9 @@ export class Explorer implements SceneGfx {
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const baseTemplate = this.renderHelper.pushTemplateRenderInst();
-        baseTemplate.filterKey = Pass.MAIN;
+        const template = this.renderHelper.pushTemplateRenderInst();
+
+        renderInstManager.setCurrentRenderInstList(this.mainList);
 
         if (this.gridVisible)
             this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
@@ -446,28 +451,26 @@ export class Explorer implements SceneGfx {
 
         this.effectSystem.calc(viewerInput);
 
-        const efTemplate = renderInstManager.pushTemplateRenderInst();
-        efTemplate.setBindingLayouts(gxBindingLayouts);
-        efTemplate.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsDataOnTemplate(efTemplate, viewerInput);
+        template.setBindingLayouts(gxBindingLayouts);
+        template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
 
         {
-            efTemplate.filterKey = Pass.MAIN;
+            renderInstManager.setCurrentRenderInstList(this.mainList);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
-            this.effectSystem.draw(device, this.renderHelper.renderInstManager, Pass.MAIN);
+            this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Main);
         }
 
         {
-            efTemplate.filterKey = Pass.INDIRECT;
+            renderInstManager.setCurrentRenderInstList(this.indirectList);
             const texPrjMtx = scratchMatrix;
             texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
-            this.effectSystem.draw(device, this.renderHelper.renderInstManager, Pass.INDIRECT);
+            this.effectSystem.draw(device, this.renderHelper.renderInstManager, EfGroup.Indirect);
         }
 
         renderInstManager.popTemplateRenderInst();
 
-        renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
 
@@ -486,7 +489,7 @@ export class Explorer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, Pass.MAIN);
+                this.mainList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -499,9 +502,8 @@ export class Explorer implements SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 const opaqueSceneTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
-                renderInstManager.setVisibleByFilterKeyExact(Pass.INDIRECT);
-                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
-                executeOnPass(renderInstManager, passRenderer, Pass.INDIRECT);
+                this.indirectList.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
+                this.indirectList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
