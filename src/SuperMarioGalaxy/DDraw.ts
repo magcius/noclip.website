@@ -28,8 +28,8 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
 }
 
 abstract class TDDrawBase {
-    private vcd: GX_VtxDesc[] = [];
-    private useNBT = false;
+    protected vcd: GX_VtxDesc[] = [];
+    protected useNBT = false;
     protected loadedVertexLayout: LoadedVertexLayout | null = null;
     protected inputLayout: GfxInputLayout | null = null;
     protected vertexBuffer: GfxBuffer | null = null;
@@ -74,21 +74,6 @@ abstract class TDDrawBase {
     private dirtyInputLayout(): void {
         this.loadedVertexLayout = null;
         this.inputLayout = null;
-    }
-
-    protected createLoadedVertexLayout(): void {
-        if (this.loadedVertexLayout === null)
-            this.loadedVertexLayout = compileLoadedVertexLayout(this.vcd, this.useNBT);
-    }
-
-    protected createInputLayoutInternal(cache: GfxRenderCache): void {
-        if (this.inputLayout === null)
-            this.inputLayout = createInputLayout(cache, this.loadedVertexLayout!);
-    }
-
-    public createInputLayout(cache: GfxRenderCache): void {
-        this.createLoadedVertexLayout();
-        this.createInputLayoutInternal(cache);
     }
 
     protected abstract ensureIndexBufferData(newSize: number): void;
@@ -186,8 +171,6 @@ abstract class TDDrawBase {
 }
 
 export class TDDraw extends TDDrawBase {
-    private frequencyHint = GfxBufferFrequencyHint.Dynamic;
-
     private recreateVertexBuffer: boolean = true;
     private recreateIndexBuffer: boolean = true;
 
@@ -220,7 +203,8 @@ export class TDDraw extends TDDrawBase {
     }
 
     public beginDraw(): void {
-        this.createLoadedVertexLayout();
+        if (this.loadedVertexLayout === null)
+            this.loadedVertexLayout = compileLoadedVertexLayout(this.vcd, this.useNBT);
 
         this.currentVertex = -1;
         this.currentIndex = 0;
@@ -235,12 +219,13 @@ export class TDDraw extends TDDrawBase {
             // debugger;
         }
 
-        this.createInputLayoutInternal(cache);
+        if (this.inputLayout === null)
+            this.inputLayout = createInputLayout(cache, this.loadedVertexLayout!);
 
         if (this.recreateVertexBuffer) {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, this.frequencyHint);
+            this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic);
             this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
             this.recreateVertexBuffer = false;
         }
@@ -248,7 +233,7 @@ export class TDDraw extends TDDrawBase {
         if (this.recreateIndexBuffer) {
             if (this.indexBuffer !== null)
                 device.destroyBuffer(this.indexBuffer);
-            this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, this.frequencyHint);
+            this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Dynamic);
             this.indexBufferDescriptor.buffer = this.indexBuffer;
             this.recreateIndexBuffer = false;
         }
@@ -305,8 +290,6 @@ export class TDDraw extends TDDrawBase {
 // Static Draw helper for places where we might want to make TDDraw into a buffer
 // that does not change very much.
 export class TSDraw extends TDDrawBase {
-    private frequencyHint = GfxBufferFrequencyHint.Static;
-
     constructor() {
         super();
         this.vertexData = new DataView(new ArrayBuffer(0x400));
@@ -334,7 +317,8 @@ export class TSDraw extends TDDrawBase {
     public beginDraw(): void {
         assert(this.vertexBuffer === null);
         assert(this.indexBuffer === null);
-        this.createLoadedVertexLayout();
+        assert(this.loadedVertexLayout === null);
+        this.loadedVertexLayout = compileLoadedVertexLayout(this.vcd, this.useNBT);
 
         this.currentVertex = -1;
         this.currentIndex = 0;
@@ -342,10 +326,10 @@ export class TSDraw extends TDDrawBase {
 
     private flushDeviceObjects(cache: GfxRenderCache): void {
         const device = cache.device;
-        this.createInputLayoutInternal(cache);
-        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, this.frequencyHint);
+        this.inputLayout = createInputLayout(cache, this.loadedVertexLayout!);
+        this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static);
         this.vertexBufferDescriptors[0].buffer = this.vertexBuffer;
-        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, this.frequencyHint);
+        this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
         this.indexBufferDescriptor.buffer = this.indexBuffer;
     }
 
