@@ -457,8 +457,6 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         if (!isValidDraw(this))
             return;
 
-        const device = sceneObjHolder.modelCache.device;
-
         const template = renderInstManager.pushTemplateRenderInst();
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         this.materialHelperEnvBack.allocateDrawParamsDataOnInst(template, drawParams);
@@ -467,7 +465,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             // TODO(jstpierre)
 
             // loadMaterialBack
-            this.ddrawEnv.beginDraw();
+            this.ddrawEnv.beginDraw(sceneObjHolder.modelCache.cache);
             this.drawSphere(this.ddrawEnv, true);
             const renderInstEnvBack = this.ddrawEnv.endDraw(renderInstManager);
 
@@ -488,7 +486,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         // loadMaterialFace
 
-        this.ddrawXlu.beginDraw();
+        this.ddrawXlu.beginDraw(sceneObjHolder.modelCache.cache);
 
         // GXSetCullMode(GX_CULL_FRONT);
         this.drawSphere(this.ddrawXlu, false);

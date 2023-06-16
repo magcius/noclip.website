@@ -1479,7 +1479,7 @@ export class dDlst_2DStatic_c {
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
 
         const size = 1;
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(cache);
         this.ddraw.begin(GX.Command.DRAW_QUADS, 4);
         this.ddraw.position3f32(-size, -size, 0);
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
@@ -2290,7 +2290,7 @@ class dCloth_packet_c {
         }
     }
 
-    private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
+    private drawSide(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
@@ -2325,11 +2325,10 @@ class dCloth_packet_c {
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
-        const device = globals.modelCache.device;
-        ddraw.beginDraw();
+        ddraw.beginDraw(globals.modelCache.cache);
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, ((this.flyGridSize - 1) * this.hoistGridSize) * 2 * 2);
-        this.drawSide(device, renderInstManager, ddraw, true);
-        this.drawSide(device, renderInstManager, ddraw, false);
+        this.drawSide(renderInstManager, ddraw, true);
+        this.drawSide(renderInstManager, ddraw, false);
         ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
@@ -2772,7 +2771,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         }
     }
 
-    private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
+    private drawSide(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
         this.plot(ddraw, front);
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         const materialHelper = front ? this.materialHelper : this.materialHelperBack;
@@ -2814,11 +2813,10 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.materialHelper.allocateDrawParamsDataOnInst(template, drawParams);
 
         const ddraw = this.ddraw;
-        const device = globals.modelCache.device;
-        ddraw.beginDraw();
+        ddraw.beginDraw(globals.modelCache.cache);
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, (11 + 9 + 7 + 5 + 3 + 1) * 2);
-        this.drawSide(device, renderInstManager, ddraw, true);
-        this.drawSide(device, renderInstManager, ddraw, false);
+        this.drawSide(renderInstManager, ddraw, true);
+        this.drawSide(renderInstManager, ddraw, false);
         ddraw.endAndUpload(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();

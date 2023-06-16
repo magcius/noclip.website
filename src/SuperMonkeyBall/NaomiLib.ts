@@ -490,7 +490,7 @@ class MeshInst {
             this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         }
 
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(renderCache);
 
         if (meshData.mesh.dispList.flags & DispListFlags.Triangles) {
             this.ddraw.begin(GX.Command.DRAW_TRIANGLES);

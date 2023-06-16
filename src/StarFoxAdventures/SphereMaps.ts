@@ -262,7 +262,7 @@ export class SphereMapManager {
         fillSceneParamsData(d, offs, scratchSceneParams);
 
         // TODO: generate geometry once and reuse it for future renders
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(renderInstManager.gfxRenderCache);
         for (let x = 0; x < 16; x++) {
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
             const fx0 = 2.0 * x / 15.0 - 1.0;

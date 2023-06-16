@@ -331,10 +331,10 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
             return;
 
         // Captured already.
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         const ddraw = this.ddraw;
 
-        ddraw.beginDraw();
+        ddraw.beginDraw(cache);
 
         const flipY = gfxDeviceNeedsFlipY(sceneObjHolder.modelCache.device);
 

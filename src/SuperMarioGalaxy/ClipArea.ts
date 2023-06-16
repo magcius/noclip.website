@@ -435,7 +435,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
             return;
 
         const ddraw = this.ddraw;
-        ddraw.beginDraw();
+        ddraw.beginDraw(sceneObjHolder.modelCache.cache);
 
         getCamZdir(scratchVec3b, viewerInput.camera);
 

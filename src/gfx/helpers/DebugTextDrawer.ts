@@ -59,7 +59,7 @@ export class DebugTextDrawer {
     }
 
     public beginDraw(): void {
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(this.renderCache);
     }
 
     public endDraw(renderInstManager: GfxRenderInstManager): void {

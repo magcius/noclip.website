@@ -384,11 +384,11 @@ export class CharWriter {
         ddraw.end();
     }
 
-    private drawStringFlush(renderInstManager: GfxRenderInstManager, cache: GfxRenderCache, ddraw: TDDraw): void {
+    private drawStringFlush(renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
         if (!ddraw.hasIndicesToDraw())
             return;
 
-        const renderInst = ddraw.makeRenderInst(renderInstManager, cache);
+        const renderInst = ddraw.makeRenderInst(renderInstManager);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -400,7 +400,6 @@ export class CharWriter {
     }
 
     private renderInstManager: GfxRenderInstManager;
-    private renderCache: GfxRenderCache;
     private ddraw: TDDraw;
 
     public writeCharacter(char: number, addSpacing: boolean): void {
@@ -414,7 +413,7 @@ export class CharWriter {
         const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
         const textureChanged = gfxTexture !== this.textureMapping[0].gfxTexture;
         if (textureChanged || this.materialChanged) {
-            this.drawStringFlush(this.renderInstManager, this.renderCache, this.ddraw);
+            this.drawStringFlush(this.renderInstManager, this.ddraw);
 
             if (textureChanged)
                 this.textureMapping[0].gfxTexture = gfxTexture;
@@ -441,7 +440,6 @@ export class CharWriter {
         });
 
         this.renderInstManager = renderInstManager;
-        this.renderCache = cache;
         this.ddraw = ddraw;
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -467,11 +465,10 @@ export class CharWriter {
             needsSpacing = true;
         }
 
-        this.drawStringFlush(renderInstManager, cache, ddraw);
+        this.drawStringFlush(renderInstManager, ddraw);
         renderInstManager.popTemplateRenderInst();
 
         this.renderInstManager = null!;
-        this.renderCache = null!;
         this.ddraw = null!;
     }
 }

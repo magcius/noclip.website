@@ -1806,7 +1806,7 @@ export class Layout {
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
         this.rootPane.calcMatrix(drawInfo, drawInfo.viewMatrix);
 
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(renderInstManager.gfxRenderCache);
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
         this.ddraw.endAndUpload(renderInstManager);
     }

@@ -550,9 +550,7 @@ export class dKankyo_sun_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(globals.modelCache.cache);
         this.ddraw.allocVertices(2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
@@ -625,8 +623,6 @@ export class dKankyo_vrkumo_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
-
         assert(this.textures.length > 0);
 
         const envLight = globals.g_env_light;
@@ -638,7 +634,7 @@ export class dKankyo_vrkumo_Packet {
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
 
-        ddraw.beginDraw();
+        ddraw.beginDraw(globals.modelCache.cache);
         ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
 
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
@@ -978,13 +974,12 @@ export class dKankyo_rain_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
         const envLight = globals.g_env_light;
 
         if (envLight.rainCount === 0)
             return;
 
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(globals.modelCache.cache);
         this.drawRain(globals, renderInstManager, viewerInput);
         this.drawSibuki(globals, renderInstManager, viewerInput);
         this.ddraw.endAndUpload(renderInstManager);
@@ -1089,7 +1084,7 @@ export class dKankyo_wave_Packet {
 
         dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
-        this.ddraw.beginDraw();
+        ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * envLight.waveCount);
 
         const txc1 = 0xFA/0xFF;
@@ -1230,7 +1225,7 @@ export class dKankyo_star_Packet {
 
         dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
-        this.ddraw.beginDraw();
+        ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 4 * envLight.waveCount);
 
         const star = this.instances[0];

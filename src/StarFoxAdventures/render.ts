@@ -160,7 +160,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const a1 = (strength * 0xff) >> 8;
         const a0 = (pitchFactor * strength) >> 8;
 
-        this.shimmerddraw.beginDraw();
+        this.shimmerddraw.beginDraw(renderInstManager.gfxRenderCache);
         this.shimmerddraw.begin(GX.Command.DRAW_QUADS);
         this.shimmerddraw.position3f32(0, 0, -8);
         this.shimmerddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, a0);

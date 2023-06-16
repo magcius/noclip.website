@@ -210,7 +210,7 @@ class dDlst_alphaModel_c {
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
 
-        this.orthoQuad.beginDraw();
+        this.orthoQuad.beginDraw(cache);
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
         this.orthoQuad.position3f32(0, 0, 0);
         this.orthoQuad.position3f32(1, 0, 0);

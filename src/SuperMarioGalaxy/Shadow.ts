@@ -371,7 +371,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         mat4.copy(drawParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         this.material.allocateDrawParamsDataOnInst(template, drawParams);
 
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(cache);
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
         const renderInst = this.ddraw.endDraw(renderInstManager);
@@ -774,7 +774,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
         this.makeVertexBuffer();
 
-        this.ddraw.beginDraw();
+        this.ddraw.beginDraw(sceneObjHolder.modelCache.cache);
 
         this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         this.ddraw.position3vec3(this.vtx[0]);
@@ -887,7 +887,8 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         vec3.scaleAndAdd(this.vtx[7], this.vtx[5], dropDirTo, dropLengthTo);
 
         // Now send our points over.
-        this.ddraw.beginDraw();
+        const cache = sceneObjHolder.modelCache.cache;
+        this.ddraw.beginDraw(cache);
 
         this.ddraw.begin(GX.Command.DRAW_QUADS);
         this.ddraw.position3vec3(this.vtx[1]);
@@ -916,7 +917,6 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.position3vec3(this.vtx[1]);
         this.ddraw.end();
 
-        const cache = sceneObjHolder.modelCache.cache;
         this.ddraw.endAndUpload(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
@@ -1054,7 +1054,7 @@ class AlphaShadow extends NameObj {
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
         this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
 
-        this.orthoQuad.beginDraw();
+        this.orthoQuad.beginDraw(sceneObjHolder.modelCache.cache);
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
         this.orthoQuad.position3f32(0, 0, 0);
         this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 0);

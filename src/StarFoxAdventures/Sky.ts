@@ -81,7 +81,7 @@ export class Sky {
         const t0 = (pitchFactor + fovRollFactor) / tex.height;
         const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
 
-        this.skyddraw.beginDraw();
+        this.skyddraw.beginDraw(renderInstManager.gfxRenderCache);
         this.skyddraw.begin(GX.Command.DRAW_QUADS);
         this.skyddraw.position3f32(-1, -1, -1);
         this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);

@@ -280,7 +280,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
 
         const workData = emitter.emitterManager.workData;
         const ddraw = this.ddraw;
-        ddraw.beginDraw();
+        ddraw.beginDraw(renderInstManager.gfxRenderCache);
 
         const vertsPerFan = (emitter.aliveParticlesBase.length + 1);
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_FAN, vertsPerFan * this.collapsePos.length);
@@ -380,7 +380,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         const workData = emitter.emitterManager.workData;
         const ddraw = this.ddraw;
-        ddraw.beginDraw();
+        ddraw.beginDraw(renderInstManager.gfxRenderCache);
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, 6 * (trackCount - 1));
 
         // Start from the back.
