@@ -94,14 +94,14 @@ abstract class TDDrawBase {
     protected abstract ensureIndexBufferData(newSize: number): void;
     protected abstract ensureVertexBufferData(newSize: number): void;
 
-    public allocVertices(num: number): void {
-        const vertexCount = this.currentVertex + 1 + num;
+    public allocVertices(numVertex: number): void {
+        const vertexCount = this.currentVertex + 1 + numVertex;
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
         this.ensureVertexBufferData(vertexCount * stride);
     }
 
-    public allocPrimitives(type: GX.Command, num: number): void {
-        const vertexCount = this.currentVertex + 1 + num;
+    public allocPrimitives(type: GX.Command, numVertex: number): void {
+        const vertexCount = this.currentVertex + 1 + numVertex;
         const topology = getGfxToplogyFromCommand(type);
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
         this.ensureVertexBufferData(vertexCount * stride);

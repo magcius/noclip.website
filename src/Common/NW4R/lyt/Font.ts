@@ -12,7 +12,6 @@ import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../.
 import { vec3, vec4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../../../TextureHolder";
-import { LayoutTextbox } from "./Layout";
 
 const enum RFNTGlyphType {
     Glyph, Texture,

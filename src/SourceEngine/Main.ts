@@ -1416,7 +1416,7 @@ export class SourceWorldViewRenderer {
                 pass.setDebugName('Translucent');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-                
+
                 this.lateBindTextureAttachPass(renderContext, builder, pass);
 
                 pass.exec((passRenderer, scope) => {

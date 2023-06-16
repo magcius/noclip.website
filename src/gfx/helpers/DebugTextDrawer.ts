@@ -71,6 +71,13 @@ export class DebugTextDrawer {
         return this.charWriter.getScaledLineHeight();
     }
 
+    public reserveString(numChars: number, strokeNum: number = 4): void {
+        const numQuadsPerChar = 1 + strokeNum;
+        // a bit overeager, but should be OK
+        const numQuads = numQuadsPerChar * numChars;
+        this.ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4 * numQuads);
+    }
+
     public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
         vec3.zero(this.charWriter.origin);
         vec3.copy(this.charWriter.cursor, this.charWriter.origin);

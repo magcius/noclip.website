@@ -288,6 +288,10 @@ export class DetailPropLeafRenderer {
             entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePoint(view.viewFromWorldMatrix, entry.origin);
             sortList.push(entry);
         }
+
+        if (sortList.length === 0)
+            return;
+
         sortList.sort((a, b) => b.cameraDepth - a.cameraDepth);
 
         for (let i = 0; i < sortList.length; i++) {

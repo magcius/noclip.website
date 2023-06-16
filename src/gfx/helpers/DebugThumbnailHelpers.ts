@@ -43,6 +43,7 @@ export interface TextDrawer {
     getScaledLineHeight(): number;
     beginDraw(): void;
     endDraw(renderInstManager: GfxRenderInstManager): void;
+    reserveString(numChars: number, strokeNum?: number): void;
     drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth?: number, strokeNum?: number): void;
 }
 
@@ -133,15 +134,18 @@ export class DebugThumbnailDrawer {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.drawPrimitives(3);
 
+        const thumbnailWidth = this.thumbnailWidth * window.devicePixelRatio;
+        const thumbnailHeight = this.thumbnailHeight * window.devicePixelRatio;
+
         const y2 = desc.height - this.padding;
-        const y1 = y2 - this.thumbnailHeight;
+        const y1 = y2 - thumbnailHeight;
 
         const prepareAnim = (i: number) => {
             const thumbnailDesc = builder.getRenderTargetDescription(renderTargetIDs[i]);
 
             const slotIndex = resolveTextureIDs.length - 1 - i;
-            const x2 = desc.width - (this.thumbnailWidth + this.padding) * slotIndex - this.padding - 50;
-            const x1 = x2 - this.thumbnailWidth;
+            const x2 = desc.width - (thumbnailWidth + this.padding) * slotIndex - this.padding;
+            const x1 = x2 - thumbnailWidth;
 
             const location = { x1, y1, x2, y2 };
             const t = this.adjustAnim(i, location, mouseLocation);
@@ -215,6 +219,10 @@ export class DebugThumbnailDrawer {
                 let textLists: GfxRenderInstList[] = [];
                 if (textDrawer !== null) {
                     textDrawer.beginDraw();
+
+                    const totalNumChar = debugLabels.flat().map((label) => label.length).reduce((a, b) => a + b);
+                    textDrawer.reserveString(totalNumChar);
+
                     textLists = resolveTextureIDs.map((tex, i) => prepareText(textDrawer, drawOrder[i], anims[i]));
                     textDrawer.endDraw(renderInstManager);
                     this.uniformBuffer.prepareToRender();

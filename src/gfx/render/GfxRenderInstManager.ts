@@ -255,6 +255,8 @@ export class GfxRenderInst {
             for (let j = 0; j < bd.bindingLayout.numUniformBuffers; j++)
                 assert(bd.uniformBufferBindings[j].wordCount > 0);
         }
+
+        assert(this._drawCount > 0);
     }
 
     /**
