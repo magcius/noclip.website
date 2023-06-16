@@ -176,6 +176,7 @@ export class TDDraw extends TDDrawBase {
 
     protected ensureVertexBufferData(newByteSize: number): void {
         if (newByteSize > this.vertexData.byteLength) {
+            assert(this.startIndex === 0);
             const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
             const newData = new Uint8Array(newByteSizeAligned);
             newData.set(new Uint8Array(this.vertexData.buffer));
@@ -186,8 +187,9 @@ export class TDDraw extends TDDrawBase {
 
     protected ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
-            const newSizeAligned = align(newSize, this.indexData.byteLength);
-            const newData = new Uint16Array(newSizeAligned);
+            assert(this.startIndex === 0);
+            const newByteSizeAligned = align(newSize, this.indexData.byteLength);
+            const newData = new Uint16Array(newByteSizeAligned);
             newData.set(this.indexData);
             this.indexData = newData;
             this.recreateIndexBuffer = true;
@@ -207,11 +209,6 @@ export class TDDraw extends TDDrawBase {
     }
 
     private flushDeviceObjects(device: GfxDevice): void {
-        if ((this.recreateVertexBuffer || this.recreateIndexBuffer) && this.startIndex > 0) {
-            console.warn(`DDraw: Recreating buffers when render insts already made. This will cause illegal warnings. Use allocatePrimitives() to prevent this.`);
-            // debugger;
-        }
-
         if (this.recreateVertexBuffer) {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);
@@ -238,27 +235,23 @@ export class TDDraw extends TDDrawBase {
         return this.currentIndex > this.startIndex;
     }
 
-    public next(): void {
-        this.startIndex = this.currentIndex;
-    }
-
     public makeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(renderInstManager.gfxRenderCache.device);
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(renderInst);
-        this.next();
+        this.startIndex = this.currentIndex;
         return renderInst;
     }
 
-    public endAndUpload(renderInstManager: GfxRenderInstManager): void {
+    public endDraw(renderInstManager: GfxRenderInstManager): void {
         const device = renderInstManager.gfxRenderCache.device;
         this.flushDeviceObjects(device);
         device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
         device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
-    public endDraw(renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        this.endAndUpload(renderInstManager);
+    public endDrawAndMakeRenderInst(renderInstManager: GfxRenderInstManager): GfxRenderInst {
+        this.endDraw(renderInstManager);
         return this.makeRenderInst(renderInstManager);
     }
 

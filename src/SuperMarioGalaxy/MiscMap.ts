@@ -360,7 +360,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, flipY ? 1.0 : 0.0);
         ddraw.end();
 
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         const materialParams = this.materialParams;
         computeRotationZAroundPoint(materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD, 0.5, 0.5);

@@ -467,7 +467,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             // loadMaterialBack
             this.ddrawEnv.beginDraw(sceneObjHolder.modelCache.cache);
             this.drawSphere(this.ddrawEnv, true);
-            const renderInstEnvBack = this.ddrawEnv.endDraw(renderInstManager);
+            const renderInstEnvBack = this.ddrawEnv.endDrawAndMakeRenderInst(renderInstManager);
 
             this.oceanSphereEnvRefTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
             renderInstEnvBack.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -490,7 +490,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         // GXSetCullMode(GX_CULL_FRONT);
         this.drawSphere(this.ddrawXlu, false);
-        const renderInstXluBack = this.ddrawXlu.endDraw(renderInstManager);
+        const renderInstXluBack = this.ddrawXlu.endDrawAndMakeRenderInst(renderInstManager);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x4880BE1C);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Front);

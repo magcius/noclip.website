@@ -63,7 +63,7 @@ export class DebugTextDrawer {
     }
 
     public endDraw(renderInstManager: GfxRenderInstManager): void {
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public setFontScale(scale: number): void {

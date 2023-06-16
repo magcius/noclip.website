@@ -465,7 +465,7 @@ export class ClipAreaDropLaser extends LiveActor<ClipAreaDropLaserNrv> {
         }
         ddraw.end();
 
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         this.materialLaser.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x0040F080);

@@ -2950,7 +2950,7 @@ class SpinDriverPathDrawer extends LiveActor {
         const texMtx0 = materialParams.u_TexMtx[0];
         mat4.identity(texMtx0);
 
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -3960,7 +3960,7 @@ class WarpPodPathDrawer {
 
         this.ddraw.beginDraw(cache);
         this.drawPath(viewerInput.camera);
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();
@@ -4339,7 +4339,7 @@ export class WaterPlant extends LiveActor {
             this.ddraw.end();
         }
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
@@ -4762,7 +4762,7 @@ export class SwingRope extends LiveActor {
         this.sendPoint(scratchVec3b, p.axisX, p.axisZ, -43.0,  -3.0, swingRopeColorMinusX, 1.0, ty);
         this.ddraw.end();
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
@@ -4996,7 +4996,7 @@ export class Trapeze extends LiveActor {
         vec3.scaleAndAdd(scratchVec3b, this.swingRopePoint.position, this.axisX, 60.0);
         this.drawRope(scratchVec3a, scratchVec3b, this.swingRopePoint.axisX, this.swingRopePoint.axisZ, 0.0, 0.003 * this.height);
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
@@ -5182,7 +5182,7 @@ export class Creeper extends LiveActor {
         }
         this.ddraw.end();
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -5354,7 +5354,7 @@ class OceanRingDrawer {
             this.ddraw.end();
         }
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -6225,7 +6225,7 @@ export class Flag extends LiveActor {
             this.ddraw.end();
         }
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -8058,7 +8058,7 @@ class AstroDomeOrbit extends LiveActor {
         this.drawCeiling(ddraw, width, false, height);
         this.drawSide(ddraw, width, true, height);
         this.drawSide(ddraw, width, false, height);
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
@@ -9025,7 +9025,7 @@ export class WhirlPoolAccelerator extends LiveActor {
         this.drawPlane(this.ddraw, -0.5, -Math.SQRT1_2,  0.5, -Math.SQRT1_2, this.texCoordS + 3/6, this.texCoordS + 4/6);
         this.drawPlane(this.ddraw,  0.5, -Math.SQRT1_2,  1.0,  0.0,          this.texCoordS + 4/6, this.texCoordS + 5/6);
         this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         materialParams.clear();
         this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);

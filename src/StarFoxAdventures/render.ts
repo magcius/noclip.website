@@ -176,7 +176,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
         this.shimmerddraw.end();
 
-        const renderInst = this.shimmerddraw.endDraw(renderInstManager);
+        const renderInst = this.shimmerddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         if (this.heatShimmerMaterial === undefined)
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);

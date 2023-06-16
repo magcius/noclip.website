@@ -374,7 +374,7 @@ class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
         this.ddraw.beginDraw(cache);
         vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
         drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
@@ -816,7 +816,7 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         this.ddraw.end();
 
         const cache = sceneObjHolder.modelCache.cache;
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(front);
@@ -917,7 +917,7 @@ class ShadowVolumeLine extends ShadowVolumeDrawer {
         this.ddraw.position3vec3(this.vtx[1]);
         this.ddraw.end();
 
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
 
         const front = renderInstManager.newRenderInst();
         this.ddraw.setOnRenderInst(front);

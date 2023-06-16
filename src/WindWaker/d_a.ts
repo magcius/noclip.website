@@ -2329,7 +2329,7 @@ class dCloth_packet_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, ((this.flyGridSize - 1) * this.hoistGridSize) * 2 * 2);
         this.drawSide(renderInstManager, ddraw, true);
         this.drawSide(renderInstManager, ddraw, false);
-        ddraw.endAndUpload(renderInstManager);
+        ddraw.endDraw(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -2817,7 +2817,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, (11 + 9 + 7 + 5 + 3 + 1) * 2);
         this.drawSide(renderInstManager, ddraw, true);
         this.drawSide(renderInstManager, ddraw, false);
-        ddraw.endAndUpload(renderInstManager);
+        ddraw.endDraw(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }

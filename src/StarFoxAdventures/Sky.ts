@@ -93,7 +93,7 @@ export class Sky {
         this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
         this.skyddraw.end();
 
-        const renderInst = this.skyddraw.endDraw(renderInstManager);
+        const renderInst = this.skyddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         drawParams.clear();
         setGXMaterialOnRenderInst(renderInstManager, renderInst, this.materialHelperSky, materialParams, drawParams);

@@ -551,7 +551,7 @@ export class dKankyo_sun_Packet {
         this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLES, 2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -759,7 +759,7 @@ export class dKankyo_vrkumo_Packet {
             submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
 
-        ddraw.endAndUpload(renderInstManager);
+        ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -975,7 +975,7 @@ export class dKankyo_rain_Packet {
         this.ddraw.beginDraw(globals.modelCache.cache);
         this.drawRain(globals, renderInstManager, viewerInput);
         this.drawSibuki(globals, renderInstManager, viewerInput);
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1129,7 +1129,7 @@ export class dKankyo_wave_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
     }
 
@@ -1309,7 +1309,7 @@ export class dKankyo_star_Packet {
 
         ddraw.end();
 
-        const renderInst = ddraw.endDraw(renderInstManager);
+        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
         submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
     }
 

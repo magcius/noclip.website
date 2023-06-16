@@ -1870,7 +1870,7 @@ export class Layout {
         this.ddraw.allocPrimitives(GX.Command.DRAW_QUADS, numVertex);
 
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
-        this.ddraw.endAndUpload(renderInstManager);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {

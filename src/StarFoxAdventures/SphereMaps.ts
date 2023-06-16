@@ -290,7 +290,7 @@ export class SphereMapManager {
             this.ddraw.end();
         }
 
-        const renderInst = this.ddraw.endDraw(renderInstManager);
+        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         scratchDrawParams.clear();
         scratchMaterialParams.clear();
