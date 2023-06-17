@@ -5716,7 +5716,7 @@ class OceanRingPipe extends LiveActor {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
             { location: getVertexInputLocation(VertexAttributeInput.NRM), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 3*0x04, },
-            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 6*0x04, },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },

@@ -576,7 +576,7 @@ export class BloomEffectSimple extends ImageEffectBase {
 class DepthOfFieldProgram extends DeviceProgram {
     public static Common = `
 uniform sampler2D u_TextureColor;
-uniform sampler2D u_TextureDepth;
+uniform sampler2D u_TextureFramebufferDepth;
 
 layout(std140) uniform ub_Params {
     vec4 u_Misc[1];
@@ -602,7 +602,7 @@ in vec2 v_TexCoord;
 ${generateBlurFunction(`Blur`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
 
 void main() {
-    float t_DepthSample = texture(SAMPLER_2D(u_TextureDepth), v_TexCoord).r;
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord).r;
     if (u_IsDepthReversed != 0.0)
         t_DepthSample = 1.0 - t_DepthSample;
 

@@ -820,6 +820,7 @@ export class FallOutFieldDraw extends NameObj {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
+        builder.pushDebugThumbnail(mainColorTargetID);
     }
 }
 
