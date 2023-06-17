@@ -87,6 +87,7 @@ interface GfxComputePipelineP_WebGPU extends GfxComputePipeline {
 interface GfxReadbackP_WebGPU extends GfxReadback {
     cpuBuffer: GPUBuffer;
     done: boolean;
+    destroyed: boolean;
 }
 
 interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
@@ -94,6 +95,7 @@ interface GfxQueryPoolP_WebGPU extends GfxQueryPool {
     resolveBuffer: GPUBuffer;
     cpuBuffer: GPUBuffer;
     results: BigUint64Array | null;
+    destroyed: boolean;
 }
 
 function translateBufferUsage(usage_: GfxBufferUsage): GPUBufferUsageFlags {
@@ -1415,7 +1417,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const o: GfxReadbackP_WebGPU = {
             _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(),
             cpuBuffer: this.device.createBuffer({ size: byteCount, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
-            done: false,
+            done: false, destroyed: false,
         };
         return o;
     }
@@ -1431,6 +1433,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             resolveBuffer: this.device.createBuffer({ size: elemCount * 8, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }),
             cpuBuffer: this.device.createBuffer({ size: elemCount * 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
             results: null,
+            destroyed: false,
         };
         return o;
     }
@@ -1475,14 +1478,20 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public destroyReadback(o: GfxReadback): void {
         const readback = o as GfxReadbackP_WebGPU;
-        readback.cpuBuffer.destroy();
+        if (readback.cpuBuffer.mapState === 'pending')
+            readback.destroyed = true;
+        else
+            readback.cpuBuffer.destroy();
     }
 
     public destroyQueryPool(o: GfxQueryPool): void {
         const queryPool = o as GfxQueryPoolP_WebGPU;
         queryPool.querySet.destroy();
         queryPool.resolveBuffer.destroy();
-        queryPool.cpuBuffer.destroy();
+        if (queryPool.cpuBuffer.mapState === 'pending')
+            queryPool.destroyed = true;
+        else
+            queryPool.cpuBuffer.destroy();
     }
 
     public pipelineQueryReady(o: GfxRenderPipeline): boolean {
@@ -1543,6 +1552,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const readback = this._readbacksSubmitted[i];
             readback.cpuBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 readback.done = true;
+
+                if (readback.destroyed)
+                    readback.cpuBuffer.destroy();
             });
         }
         this._readbacksSubmitted.length = 0;
@@ -1551,6 +1563,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const queryPool = this._queryPoolsSubmitted[i];
             queryPool.cpuBuffer.mapAsync(GPUMapMode.READ).then(() => {
                 queryPool.results = new BigUint64Array(queryPool.cpuBuffer.getMappedRange());
+
+                if (queryPool.destroyed)
+                    queryPool.cpuBuffer.destroy();
             });
         }
         this._queryPoolsSubmitted.length = 0;
