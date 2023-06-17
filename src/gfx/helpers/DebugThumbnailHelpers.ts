@@ -1,6 +1,6 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxColor, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
+import { GfxColor, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSamplerBinding } from '../platform/GfxPlatform';
 import { GfxShaderLibrary } from './GfxShaderLibrary';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -11,6 +11,8 @@ import { lerp, saturate, smoothstep } from '../../MathHelpers';
 import { GfxRenderHelper } from '../render/GfxRenderHelper';
 import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer';
 import { gfxDeviceNeedsFlipY } from './GfxDeviceHelpers';
+import { FormatFlags } from '../platform/GfxPlatformFormat';
+import { getFormatFlags } from '../platform/GfxPlatformFormat';
 
 interface MouseLocation {
     mouseX: number;
@@ -49,6 +51,7 @@ export interface TextDrawer {
 
 export class DebugThumbnailDrawer {
     private blitProgram: GfxProgram;
+    private blitProgramSRGB: GfxProgram;
     private anim: number[] = [];
     private textureMapping: GfxSamplerBinding[] = nArray(1, gfxSamplerBindingNew);
 
@@ -65,6 +68,17 @@ export class DebugThumbnailDrawer {
 
         const blitProgram = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS);
         this.blitProgram = cache.createProgramSimple(blitProgram);
+
+        const blitProgramSRGB = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / 2.2));
+}
+`);
+        this.blitProgramSRGB = cache.createProgramSimple(blitProgramSRGB);
 
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
@@ -100,6 +114,9 @@ export class DebugThumbnailDrawer {
         const builderDebug = builder.getDebug();
         const debugThumbnails = builderDebug.getDebugThumbnails();
 
+        if (debugThumbnails.length === 0)
+            return;
+
         // Add our passes.
         const resolveTextureIDs: GfxrResolveTextureID[] = [];
 
@@ -112,7 +129,6 @@ export class DebugThumbnailDrawer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-        renderInst.setGfxProgram(this.blitProgram);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.drawPrimitives(3);
 
@@ -166,6 +182,14 @@ export class DebugThumbnailDrawer {
             return renderInstList;
         };
 
+        const calcBlitProgram = (desc: GfxrRenderTargetDescription) => {
+            const formatFlags = getFormatFlags(desc.pixelFormat);
+            if (!!(formatFlags & FormatFlags.sRGB))
+                return this.blitProgramSRGB;
+            else
+                return this.blitProgram;
+        };
+
         const drawThumbnail = (scope: GfxrPassScope, passRenderer: GfxRenderPass, i: number, textAnimList: GfxRenderInstList | undefined, anim: ReturnType<typeof prepareAnim>) => {
             const gfxTexture = scope.getResolveTextureForID(resolveTextureIDs[i]);
             this.textureMapping[0].gfxTexture = gfxTexture;
@@ -173,6 +197,10 @@ export class DebugThumbnailDrawer {
             const { location, vx, vy, vw, vh } = anim;
             passRenderer.setViewport(vx, vy, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
+
+            const desc = builder.getRenderTargetDescription(debugThumbnails[i].renderTargetID);
+            renderInst.setGfxProgram(calcBlitProgram(desc));
+
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
 

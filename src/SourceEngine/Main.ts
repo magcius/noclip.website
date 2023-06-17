@@ -1376,6 +1376,7 @@ export class SourceWorldViewRenderer {
                 renderer.executeOnPass(passRenderer, this.mainView.mainList);
             });
         });
+        builder.pushDebugThumbnail(mainColorTargetID);
 
         if (this.drawIndirect && this.mainView.indirectList.renderInsts.length > 0) {
             builder.pushPass((pass) => {
@@ -1409,6 +1410,7 @@ export class SourceWorldViewRenderer {
                     renderer.executeOnPass(passRenderer, this.mainView.indirectList);
                 });
             });
+            builder.pushDebugThumbnail(mainColorTargetID);
         }
 
         if (this.mainView.translucentList.renderInsts.length > 0) {
@@ -1425,8 +1427,7 @@ export class SourceWorldViewRenderer {
                 });
             });
         }
-
-        builder.pushDebugThumbnail(mainColorTargetID, this.name);
+        builder.pushDebugThumbnail(mainColorTargetID, `${this.name}\nFinal Output`);
 
         this.outputColorTargetID = mainColorTargetID;
         this.outputColorTextureID = null;
