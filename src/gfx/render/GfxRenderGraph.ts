@@ -509,49 +509,40 @@ class GfxrDebugThumbnailDesc {
     }
 }
 
-export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, GfxrRenderGraphImpl {
-    // For scope callbacks.
+export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, GfxrGraphBuilderDebug, GfxrPassScope {
     private currentPass: PassImpl | null = null;
-
-    //#region Resource Creation & Caching
-    private renderTargetDeadPool: RenderTarget[] = [];
-    private singleSampledTextureDeadPool: SingleSampledTexture[] = [];
 
     constructor(private device: GfxDevice) {
     }
 
-    private acquireRenderTargetForDescription(desc: Readonly<GfxrRenderTargetDescription>): RenderTarget {
-        for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
-            const freeRenderTarget = this.renderTargetDeadPool[i];
-            if (freeRenderTarget.matchesDescription(desc)) {
-                // Pop it off the list.
-                freeRenderTarget.reset(desc);
-                this.renderTargetDeadPool.splice(i--, 1);
-                return freeRenderTarget;
-            }
-        }
-
-        // Allocate a new render target.
-        return new RenderTarget(this.device, desc);
+    //#region GfxrRenderGraph
+    public newGraphBuilder(): GfxrGraphBuilder {
+        this.beginGraphBuilder();
+        return this;
     }
 
-    private acquireSingleSampledTextureForDescription(desc: Readonly<GfxrRenderTargetDescription>): SingleSampledTexture {
-        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++) {
-            const freeSingleSampledTexture = this.singleSampledTextureDeadPool[i];
-            if (freeSingleSampledTexture.matchesDescription(desc)) {
-                // Pop it off the list.
-                freeSingleSampledTexture.reset(desc);
-                this.singleSampledTextureDeadPool.splice(i--, 1);
-                return freeSingleSampledTexture;
-            }
-        }
+    public execute(builder: GfxrGraphBuilder): void {
+        assert(builder === this);
+        const graph = assertExists(this.currentGraph);
+        this.execGraph(graph);
+        this.currentGraph = null;
+    }
 
-        // Allocate a new resolve texture.
-        return new SingleSampledTexture(this.device, desc);
+    public destroy(): void {
+        // At the time this is called, we shouldn't have anything alive.
+        for (let i = 0; i < this.renderTargetAliveForID.length; i++)
+            assert(this.renderTargetAliveForID[i] === undefined);
+        for (let i = 0; i < this.singleSampledTextureForResolveTextureID.length; i++)
+            assert(this.singleSampledTextureForResolveTextureID[i] === undefined);
+
+        for (let i = 0; i < this.renderTargetDeadPool.length; i++)
+            this.renderTargetDeadPool[i].destroy(this.device);
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++)
+            this.singleSampledTextureDeadPool[i].destroy(this.device);
     }
     //#endregion
 
-    //#region Graph Builder
+    //#region GfxrGraphBuilder
     private currentGraph: GraphImpl | null = null;
 
     public beginGraphBuilder() {
@@ -655,6 +646,72 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     public getDebug(): GfxrGraphBuilderDebug {
         return this;
+    }
+    //#endregion
+
+    //#region GfxrGraphBuilderDebug
+    public getDebugThumbnails(): GfxrDebugThumbnailDesc[] {
+        return this.currentGraph!.debugThumbnails;
+    }
+    //#endregion
+
+    //#region GfxrPassScope
+    public getResolveTextureForID(resolveTextureID: GfxrResolveTextureID): GfxTexture {
+        const currentGraphPass = this.currentPass!;
+        const i = currentGraphPass.resolveTextureInputIDs.indexOf(resolveTextureID);
+        assert(i >= 0);
+        return assertExists(currentGraphPass.resolveTextureInputTextures[i]);
+    }
+
+    public getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null {
+        const currentGraphPass = this.currentPass!;
+        const renderTarget = currentGraphPass.renderTargets[slot];
+        if (!renderTarget)
+            return null;
+        return renderTarget.attachment;
+    }
+
+    public getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null {
+        const currentGraphPass = this.currentPass!;
+        const renderTarget = currentGraphPass.renderTargets[slot];
+        if (!renderTarget)
+            return null;
+        return renderTarget.texture;
+    }
+    //#endregion
+
+    //#region Resource Creation & Caching
+    private renderTargetDeadPool: RenderTarget[] = [];
+    private singleSampledTextureDeadPool: SingleSampledTexture[] = [];
+
+    private acquireRenderTargetForDescription(desc: Readonly<GfxrRenderTargetDescription>): RenderTarget {
+        for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
+            const freeRenderTarget = this.renderTargetDeadPool[i];
+            if (freeRenderTarget.matchesDescription(desc)) {
+                // Pop it off the list.
+                freeRenderTarget.reset(desc);
+                this.renderTargetDeadPool.splice(i--, 1);
+                return freeRenderTarget;
+            }
+        }
+
+        // Allocate a new render target.
+        return new RenderTarget(this.device, desc);
+    }
+
+    private acquireSingleSampledTextureForDescription(desc: Readonly<GfxrRenderTargetDescription>): SingleSampledTexture {
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++) {
+            const freeSingleSampledTexture = this.singleSampledTextureDeadPool[i];
+            if (freeSingleSampledTexture.matchesDescription(desc)) {
+                // Pop it off the list.
+                freeSingleSampledTexture.reset(desc);
+                this.singleSampledTextureDeadPool.splice(i--, 1);
+                return freeSingleSampledTexture;
+            }
+        }
+
+        // Allocate a new resolve texture.
+        return new SingleSampledTexture(this.device, desc);
     }
     //#endregion
 
@@ -943,32 +1000,23 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     //#region Execution
     private execRenderPass(pass: PassImpl): void {
         const renderPass = this.device.createRenderPass(pass.descriptor);
-
         renderPass.beginDebugGroup(pass.debugName);
-
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
-
         if (pass.execFunc !== null)
             (pass.execFunc as PassExecFunc)(renderPass, this);
-
         renderPass.endDebugGroup();
         this.device.submitPass(renderPass);
-
         if (pass.postFunc !== null)
             pass.postFunc(this);
     }
 
     private execComputePass(pass: PassImpl): void {
         const computePass = this.device.createComputePass();
-
         computePass.beginDebugGroup(pass.debugName);
-
         if (pass.execFunc !== null)
             (pass.execFunc as ComputePassExecFunc)(computePass, this);
-
         computePass.endDebugGroup();
         this.device.submitPass(computePass);
-
         if (pass.postFunc !== null)
             pass.postFunc(this);
     }
@@ -995,61 +1043,5 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         // Clear our transient scope state.
         this.singleSampledTextureForResolveTextureID.length = 0;
     }
-
-    public execute(builder: GfxrGraphBuilder): void {
-        assert(builder === this);
-        const graph = assertExists(this.currentGraph);
-        this.execGraph(graph);
-        this.currentGraph = null;
-    }
     //#endregion
-
-    //#region GfxrGraphBuilderDebug
-    public getDebugThumbnails(): GfxrDebugThumbnailDesc[] {
-        return this.currentGraph!.debugThumbnails;
-    }
-    //#endregion
-
-    //#region GfxrPassScope
-    public getResolveTextureForID(resolveTextureID: GfxrResolveTextureID): GfxTexture {
-        const currentGraphPass = this.currentPass!;
-        const i = currentGraphPass.resolveTextureInputIDs.indexOf(resolveTextureID);
-        assert(i >= 0);
-        return assertExists(currentGraphPass.resolveTextureInputTextures[i]);
-    }
-
-    public getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null {
-        const currentGraphPass = this.currentPass!;
-        const renderTarget = currentGraphPass.renderTargets[slot];
-        if (!renderTarget)
-            return null;
-        return renderTarget.attachment;
-    }
-
-    public getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null {
-        const currentGraphPass = this.currentPass!;
-        const renderTarget = currentGraphPass.renderTargets[slot];
-        if (!renderTarget)
-            return null;
-        return renderTarget.texture;
-    }
-    //#endregion
-
-    public newGraphBuilder(): GfxrGraphBuilder {
-        this.beginGraphBuilder();
-        return this;
-    }
-
-    public destroy(): void {
-        // At the time this is called, we shouldn't have anything alive.
-        for (let i = 0; i < this.renderTargetAliveForID.length; i++)
-            assert(this.renderTargetAliveForID[i] === undefined);
-        for (let i = 0; i < this.singleSampledTextureForResolveTextureID.length; i++)
-            assert(this.singleSampledTextureForResolveTextureID[i] === undefined);
-
-        for (let i = 0; i < this.renderTargetDeadPool.length; i++)
-            this.renderTargetDeadPool[i].destroy(this.device);
-        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++)
-            this.singleSampledTextureDeadPool[i].destroy(this.device);
-    }
 }
