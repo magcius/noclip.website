@@ -49,6 +49,14 @@ void main() {
     gl_Position.xy = p * vec2(2) - vec2(1);
     gl_Position.zw = vec2(${reverseDepthForDepthOffset(1)}, 1);
     v_TexCoord = p * u_ScaleOffset.xy + u_ScaleOffset.zw;
+
+#if defined GFX_CLIPSPACE_NEAR_ZERO
+    gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
+#endif
+
+#if defined GFX_VIEWPORT_ORIGIN_TL
+    v_TexCoord.y = 1.0 - v_TexCoord.y;
+#endif
 }
 `;
 

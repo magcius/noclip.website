@@ -24,7 +24,6 @@ import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
 import { UberShaderInstanceBasic, UberShaderTemplateBasic } from "./UberShader";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
 import { ParticleSystemCache } from "./ParticleSystem";
-import { HitInfo } from "../SuperMarioGalaxy/Collision";
 
 //#region Base Classes
 const scratchColor = colorNewCopy(White);

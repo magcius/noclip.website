@@ -186,7 +186,7 @@ vec2 uv3 = Mul(u_MapTransform3, vec4(v_UV, 1.0, 1.0));
             fragBody.push(`vec4 t0 = texture(SAMPLER_2D(u_Texture0), uv0);`);
         } else {
             fragBody.push(`vec3 t_EyeWorld = normalize(u_PlayerPos - v_Position);`);
-            fragBody.push(`vec4 t0 = texture(SAMPLER_CUBE(u_TextureCube), t_EyeWorld);`);
+            fragBody.push(`vec4 t0 = texture(SAMPLER_Cube(u_TextureCube), t_EyeWorld);`);
         }
 
         fragBody.push(`
@@ -813,7 +813,7 @@ void mainPS() {
     vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
     vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
 
-    vec3 reflectionColor = texture(SAMPLER_CUBE(u_TextureCube, N.xyz)).xyz;
+    vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube, N.xyz)).xyz;
     vec3 specularColor = pow(reflectionColor, vec3(8.0));
 
     vec3 t_MixColor = mix(u_PerpendicularTint.rgb, u_ParallelTint.rgb, 0.5);
@@ -1339,7 +1339,7 @@ void mainVS() {
     private getReflectionSection(fragBody: String[]): void {
         fragBody.push(`
 vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
-vec3 reflectionColor = texture(SAMPLER_CUBE(u_TextureCube, N.xyz)).xyz;
+vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube, N.xyz)).xyz;
 vec3 specularColor = pow(reflectionColor, vec3(8.0));
 float diffuseReflection = pow(dot(t_NormalWorld, t_EyeWorld), 2.0);
 float attenuation = mix(u_ReflectionParallelColor.a, u_ReflectionPerpendicularColor.a, diffuseReflection);

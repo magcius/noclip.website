@@ -142,6 +142,9 @@ export class FezRenderer implements Viewer.SceneGfx {
 
             const trileData = trilesetData.triles.get(trileId)!;
 
+            if (trileData.geometry.indexCount === 0)
+                continue;
+
             const trileRenderer = new FezObjectRenderer(trilesetData, trileData.geometry);
             mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
             mat4.rotateY(trileRenderer.modelMatrix, trileRenderer.modelMatrix, rotateY);
