@@ -12,13 +12,14 @@ import { ParticleManager } from "./particles";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
     public throwBalls = true;
     public playFlute = false;
 
-    public collision: CollisionTree | null = null;
+    public level: Level;
     public currentSong = 0;
     public songStart = 0;
     public allActors: Actor[] = [];
@@ -38,7 +39,26 @@ export class LevelGlobals {
 
     public particles: ParticleManager;
 
+    private zeroOneData: RenderData;
+    private projData: RenderData[] = [];
+
     constructor(private context: SceneContext, public id: string) { }
+
+    public init(cache: GfxRenderCache, level: Level): void {
+        const device = cache.device;
+
+        this.level = level;
+        this.zeroOneData = new RenderData(device, cache, level.zeroOne.sharedOutput);
+        this.projData = level.projectiles.map((proj) => {
+            return new RenderData(device, cache, proj.sharedOutput);
+        });
+    }
+
+    private createProjectile(type: number): Projectile {
+        const proj = new Projectile(this.projData[type], this.level.projectiles[type], type === 1);
+        this.projectiles.push(proj);
+        return proj;
+    }
 
     public update(viewerInput: ViewerRenderInput): void {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
@@ -65,33 +85,29 @@ export class LevelGlobals {
         }
 
         if (shouldThrow) {
-            let didThrow = false;
-
             // if we're above ground, throw the next type of projectile
-            if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
+            if (this.translation[1] > findGroundHeight(this.level.collision, this.translation[0], this.translation[2]) + 20) {
                 getMatrixAxisZ(throwScratch[0], viewerInput.camera.worldMatrix);
                 vec3.scale(throwScratch[0], throwScratch[0], -1);
                 if (viewerInput.deltaTime > 0) {
                     vec3.scale(throwScratch[1], viewerInput.camera.linearVelocity, 1000 / viewerInput.deltaTime);
                     transformVec3Mat4w0(throwScratch[1], viewerInput.camera.worldMatrix, throwScratch[1]);
-                } else
+                } else {
                     vec3.copy(throwScratch[1], Vec3Zero);
-
-                for (let i = 0; i < this.projectiles.length; i++) {
-                    if (this.projectiles[i].isPester === this.pesterNext && this.projectiles[i].tryThrow(this.translation, throwScratch[0], throwScratch[1])) {
-                        didThrow = true;
-                        break;
-                    }
                 }
-            }
 
-            if (didThrow) {
+                const projectileType = this.pesterNext ? 1 : 0;
+                const proj = this.createProjectile(projectileType);
+                proj.tryThrow(this.translation, throwScratch[0], throwScratch[1]);
+
                 this.lastThrow = viewerInput.time;
                 this.pesterNext = !this.pesterNext; // alternate apple and pester ball
-            } else {
-                this.lastThrow += 500; // wait a bit, then try again
             }
         }
+
+        for (let i = 0; i < this.projectiles.length; i++)
+            if (!this.projectiles[i].visible)
+                this.projectiles.splice(i--, 1);
     }
 
     public spawnFish(pos: vec3): void {
@@ -157,29 +173,18 @@ export class LevelGlobals {
         }
     }
 
-    public buildTempObjects(defs: ObjectDef[], data: RenderData[], zeroOneData: RenderData, projData: RenderData[], level: Level): ModelRenderer[] {
+    public buildTempObjects(defs: ObjectDef[], data: RenderData[], level: Level): ModelRenderer[] {
         const out: ModelRenderer[] = [];
 
-        this.zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
+        this.zeroOne = new ModelRenderer(this.zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
         this.zeroOne.setAnimation(0);
-        out.push(this.zeroOne);
-
-        // projectiles
-        for (let t = 0; t < 2; t++) {
-            for (let i = 0; i < 5; i++) {
-                const proj = new Projectile(projData[t], level.projectiles[t], t === 1);
-                this.projectiles.push(proj);
-                out.push(proj);
-            }
-        }
 
         // projectile splashes
         for (let t = 2; t < 4; t++) {
             const type = t === 2 ? SplashType.AppleWater : SplashType.AppleLava;
             for (let i = 0; i < 3; i++) {
-                const splash = new Splash(projData[t], level.projectiles[t].nodes, level.projectiles[t].animations, type, projectileScale);
+                const splash = new Splash(this.projData[t], level.projectiles[t].nodes, level.projectiles[t].animations, type, projectileScale);
                 this.splashes.push(splash);
-                out.push(splash);
             }
         }
 
@@ -189,7 +194,6 @@ export class LevelGlobals {
             for (let i = 0; i < 5; i++) {
                 const splash = new Splash(data[splashIndex], splashDef.nodes, splashDef.stateGraph.animations, SplashType.Water, splashDef.scale);
                 this.splashes.push(splash);
-                out.push(splash);
             }
         }
 
@@ -262,6 +266,24 @@ export class LevelGlobals {
         }
 
         return out;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        this.particles.prepareToRender(device, renderInstManager, viewerInput);
+
+        this.zeroOne.prepareToRender(device, renderInstManager, viewerInput, this);
+
+        for (let i = 0; i < this.projectiles.length; i++)
+            this.projectiles[i].prepareToRender(device, renderInstManager, viewerInput, this);
+
+        for (let i = 0; i < this.splashes.length; i++)
+            this.splashes[i].prepareToRender(device, renderInstManager, viewerInput, this);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.zeroOneData.destroy(device);
+        for (let i = 0; i < this.projData.length; i++)
+            this.projData[i].destroy(device);
     }
 }
 
@@ -349,7 +371,7 @@ export class Projectile extends ModelRenderer {
     }
 
     private hitGround(viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
-        const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
+        const ground = findGroundPlane(globals.level.collision, this.translation[0], this.translation[2]);
         const height = computePlaneHeight(ground, this.translation[0], this.translation[2]);
         if (this.translation[1] > height)
             return false;
@@ -521,7 +543,7 @@ class Splash extends ModelRenderer {
 }
 
 function groundHeightAt(globals: LevelGlobals, pos: ReadonlyVec3): number {
-    return findGroundHeight(globals.collision, pos[0], pos[2]);
+    return findGroundHeight(globals.level.collision, pos[0], pos[2]);
 }
 
 const cameraScratch = vec3.create();
@@ -577,7 +599,7 @@ export class Actor extends ModelRenderer {
         this.visible = true;
         this.hidden = false;
         this.tangible = true;
-        const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
+        const ground = findGroundPlane(globals.level.collision, this.translation[0], this.translation[2]);
         this.motionData.groundHeight = computePlaneHeight(ground, this.translation[0], this.translation[2]);
         this.motionData.groundType = ground.type;
 
@@ -1999,7 +2021,7 @@ class Crater extends Actor {
         const state = this.def.stateGraph.states[this.currState];
         if (state.startAddress === 0x802DE95C) {
             let edgeIndex = 0;
-            if (this.target && findGroundPlane(globals.collision, this.target.translation[0], this.target.translation[2]).type === 0xFF4C19)
+            if (this.target && findGroundPlane(globals.level.collision, this.target.translation[0], this.target.translation[2]).type === 0xFF4C19)
                 edgeIndex = 1;
             this.followEdge(state.blocks[0].edges[edgeIndex], globals);
             return;

@@ -863,14 +863,14 @@ export function yawTowards(end: vec3, start: vec3): number {
 const moveScratch = vec3.create();
 // attempt to apply the given displacement, returning whether motion was blocked
 export function attemptMove(pos: vec3, end: vec3, data: MotionData, globals: LevelGlobals, flags: number): boolean {
-    if (!data.ignoreGround && !groundOkay(globals.collision, end[0], end[2]))
+    if (!data.ignoreGround && !groundOkay(globals.level.collision, end[0], end[2]))
         return true;
     vec3.sub(moveScratch, end, pos);
     vec3.normalize(moveScratch, moveScratch); // then multiplies by some scale factor?
-    if (!data.ignoreGround && !groundOkay(globals.collision, pos[0] + moveScratch[0], pos[2] + moveScratch[2]))
+    if (!data.ignoreGround && !groundOkay(globals.level.collision, pos[0] + moveScratch[0], pos[2] + moveScratch[2]))
         return true;
 
-    const ground = findGroundPlane(globals.collision, end[0], end[2]);
+    const ground = findGroundPlane(globals.level.collision, end[0], end[2]);
     data.groundType = ground.type;
     data.groundHeight = computePlaneHeight(ground, end[0], end[2]);
 
@@ -937,7 +937,7 @@ export function followPath(pos: vec3, euler: vec3, data: MotionData, block: Foll
     if (block.flags & MoveFlags.ConstHeight)
         pos[1] = oldY;
     else if (block.flags & MoveFlags.Ground)
-        pos[1] = findGroundHeight(globals.collision, pos[0], pos[2]);
+        pos[1] = findGroundHeight(globals.level.collision, pos[0], pos[2]);
     if (block.flags & (MoveFlags.SmoothTurn | MoveFlags.SnapTurn)) {
         getPathTangent(tangentScratch, data.path, data.pathParam);
         const yaw = Math.atan2(tangentScratch[0], tangentScratch[2]);
@@ -1067,7 +1067,7 @@ export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals:
             if (done) {
                 vec3.copy(pos, data.destination);
                 if (block.flags & MoveFlags.Ground)
-                    pos[1] = findGroundHeight(globals.collision, pos[0], pos[2]);
+                    pos[1] = findGroundHeight(globals.level.collision, pos[0], pos[2]);
             }
         } break;
         case ApproachGoal.GoodGround:

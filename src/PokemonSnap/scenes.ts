@@ -29,6 +29,7 @@ class SnapRenderer implements Viewer.SceneGfx {
     constructor(context: SceneContext, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(context.device);
         this.globals = new LevelGlobals(context, id);
+        context.destroyablePool.push(this.globals);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -95,7 +96,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
-        this.globals.particles.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.globals.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -172,7 +173,7 @@ class SceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
-            sceneRenderer.globals.collision = level.collision;
+            sceneRenderer.globals.init(sceneRenderer.renderHelper.renderCache, level);
 
             const cache = sceneRenderer.renderHelper.renderCache;
             sceneActorInit();
@@ -191,9 +192,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     viewerTextures.push(textureToCanvas(skyboxData.sharedOutput.textureCache.textures[j]));
                 }
             }
-
-            const zeroOneData = new RenderData(device, cache, level.zeroOne.sharedOutput);
-            sceneRenderer.renderData.push(zeroOneData);
 
             const projData: RenderData[] = [];
             for (let i = 0; i < level.projectiles.length; i++)
@@ -228,7 +226,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     viewerTextures.push(textureToCanvas(texture));
 
             sceneRenderer.modelRenderers.push(
-                ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
+                ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, level)
             );
             sceneRenderer.globals.particles = new ParticleManager(device, cache, level.levelParticles, level.pesterParticles);
 
