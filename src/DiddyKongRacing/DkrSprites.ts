@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
     GfxVertexAttributeDescriptor, 
     GfxVertexBufferDescriptor, 
@@ -189,15 +189,18 @@ export class DkrSprites {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, layer: number) {
-        if(!this.spritesInfo || !this.spriteInstances || !DkrControlGlobals.ENABLE_TEXTURES.on) {
+        if (!this.spritesInfo || !this.spriteInstances || !DkrControlGlobals.ENABLE_TEXTURES.on)
             return;
-        }
+
+        const layerInstances = this.spriteInstances[layer];
+        if (layerInstances.length === 0)
+            return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts([{ numUniformBuffers: 3, numSamplers: 1, },]);
         template.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
-        if(layer === SPRITE_LAYER_TRANSPARENT) {
+        if (layer === SPRITE_LAYER_TRANSPARENT) {
             this.checkCameraDistanceToObjects(viewerInput.camera, layer);
             this.sortInstances(layer);
             template.setMegaStateFlags(setAttachmentStateSimple({
@@ -208,14 +211,12 @@ export class DkrSprites {
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             }));
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            if(viewerInput.deltaTime > 0.0) {
+            if (viewerInput.deltaTime > 0.0)
                 this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
-            }
         }
 
-        if (this.gfxProgram === null) {
+        if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
-        }
 
         const renderInst = renderInstManager.newRenderInst();
 
@@ -231,9 +232,9 @@ export class DkrSprites {
 
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
 
-        assert(this.spriteInstances[layer].length <= MAX_NUM_OF_SPRITE_INSTANCES);
-        for(let i = 0; i < this.spriteInstances[layer].length; i++) {
-            const instanceObject: DkrObject = this.spriteInstances[layer][i];
+        assert(layerInstances.length <= MAX_NUM_OF_SPRITE_INSTANCES);
+        for (let i = 0; i < layerInstances.length; i++) {
+            const instanceObject: DkrObject = layerInstances[i];
             const spriteIndex = instanceObject.getSpriteIndex();
             d[offs + 0] = this.spriteIndexOffsets[spriteIndex];
             d[offs + 1] = this.spritesInfo[spriteIndex].length;
@@ -241,12 +242,8 @@ export class DkrSprites {
             d[offs + 3] = instanceObject.isSpriteCentered() ? 0.0 : 500.0;
             offs += 4;
             const color = instanceObject.getSpriteColor();
-            d[offs + 0] = color[0];
-            d[offs + 1] = color[1];
-            d[offs + 2] = color[2];
-            d[offs + 3] = color[3];
-            offs += 4;
-            if(DkrControlGlobals.ADV2_MIRROR.on) {
+            offs += fillVec4v(d, offs, color);
+            if (DkrControlGlobals.ADV2_MIRROR.on) {
                 mat4.mul(viewMatrixCalcScratch, mirrorMatrix, instanceObject.getModelMatrix());
                 mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
             } else {
@@ -259,14 +256,10 @@ export class DkrSprites {
         // Set tex parameters
         let offs2 = renderInst.allocateUniformBuffer(F3DDKR_Sprite_Program.ub_TexParams, 4 * MAX_NUM_OF_SPRITE_FRAMES);
         const d2 = renderInst.mapUniformBufferF32(F3DDKR_Sprite_Program.ub_TexParams);
-
         d2.set(this.spriteData, offs2);
 
         renderInst.setGfxProgram(this.gfxProgram);
-
-        if(this.spriteInstances[layer].length > 0) {
-            renderInst.drawIndexesInstanced(6, this.spriteInstances[layer].length);
-        }
+        renderInst.drawIndexesInstanced(6, layerInstances.length);
 
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();

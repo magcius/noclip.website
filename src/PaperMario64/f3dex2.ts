@@ -63,9 +63,11 @@ export class RSPOutput {
     }
 
     public newDrawCall(): DrawCall {
-        this.currentDrawCall = new DrawCall();
-        this.currentDrawCall.firstIndex = this.indices.length;
-        this.drawCalls.push(this.currentDrawCall);
+        if (this.currentDrawCall === undefined || this.currentDrawCall.indexCount > 0) {
+            this.currentDrawCall = new DrawCall();
+            this.currentDrawCall.firstIndex = this.indices.length;
+            this.drawCalls.push(this.currentDrawCall);
+        }
         return this.currentDrawCall;
     }
 }

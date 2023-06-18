@@ -11,6 +11,7 @@ import { ObjectDef } from "./room";
 import { ParticleManager } from "./particles";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { SceneContext } from "../SceneBase";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
@@ -37,7 +38,7 @@ export class LevelGlobals {
 
     public particles: ParticleManager;
 
-    constructor(public id: string) { }
+    constructor(private context: SceneContext, public id: string) { }
 
     public update(viewerInput: ViewerRenderInput): void {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
@@ -54,8 +55,18 @@ export class LevelGlobals {
         if (this.lastThrow < 0)
             this.lastThrow = viewerInput.time + 2000; // extra wait before the first throw
 
-        if (this.throwBalls && (viewerInput.time > this.lastThrow + 2500)) {
+        let shouldThrow = false;
+        if (this.throwBalls) {
+            if (viewerInput.time > this.lastThrow + 2500)
+                shouldThrow = true;
+
+            if (this.context.inputManager.isKeyDownEventTriggered('KeyF'))
+                shouldThrow = true;
+        }
+
+        if (shouldThrow) {
             let didThrow = false;
+
             // if we're above ground, throw the next type of projectile
             if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
                 getMatrixAxisZ(throwScratch[0], viewerInput.camera.worldMatrix);
@@ -73,6 +84,7 @@ export class LevelGlobals {
                     }
                 }
             }
+
             if (didThrow) {
                 this.lastThrow = viewerInput.time;
                 this.pesterNext = !this.pesterNext; // alternate apple and pester ball

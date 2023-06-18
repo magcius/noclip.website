@@ -45,28 +45,28 @@ void main() {
 #endif
 
 #ifdef FRAG
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
-    return textureLod(t_Texture, t_TexCoord, t_LodLevel);
+vec4 Texture2D_N64_Point(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
+    return textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
 }
 
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
+vec4 Texture2D_N64_Average(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
     // Unimplemented.
-    return textureLod(t_Texture, t_TexCoord, t_LodLevel);
+    return textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
 }
 
-// Implements N64-style "triangle bilienar filtering" with three taps.
+// Implements N64-style "triangle bilinear filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord, float t_LodLevel) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
     t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = textureLod(t_Texture, t_TexCoord - t_Offs / t_Size, t_LodLevel);
-    vec4 t_S1 = textureLod(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size, t_LodLevel);
-    vec4 t_S2 = textureLod(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size, t_LodLevel);
+    vec4 t_S0 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - t_Offs / t_Size, t_LodLevel);
+    vec4 t_S1 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size, t_LodLevel);
+    vec4 t_S2 = textureLod(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size, t_LodLevel);
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
-vec4 Texture2D_N64(sampler2D t_Texture, vec2 t_TexCoord) {
+vec4 Texture2D_N64(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     vec2 t_Dx = abs(dFdx(t_TexCoord)) * u_ScreenSize;
     float t_Lod = max(t_Dx.x, t_Dx.y);
     float t_LodTile = floor(log2(floor(t_Lod)));
@@ -76,11 +76,11 @@ vec4 Texture2D_N64(sampler2D t_Texture, vec2 t_TexCoord) {
     t_LodLevel += u_LodBias;
 
 #if defined(USE_TEXTFILT_POINT)
-    return Texture2D_N64_Point(t_Texture, t_TexCoord, t_LodLevel);
+    return Texture2D_N64_Point(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
 #elif defined(USE_TEXTFILT_AVERAGE)
-    return Texture2D_N64_Average(t_Texture, t_TexCoord, t_LodLevel);
+    return Texture2D_N64_Average(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
 #elif defined(USE_TEXTFILT_BILERP)
-    return Texture2D_N64_Bilerp(t_Texture, t_TexCoord, t_LodLevel);
+    return Texture2D_N64_Bilerp(PF_SAMPLER_2D(t_Texture), t_TexCoord, t_LodLevel);
 #endif
 }
 
@@ -89,11 +89,11 @@ void main() {
 
 #ifdef USE_TEXTURE
 
-    vec4 t_Texel0 = Texture2D_N64(u_Texture0, v_TexCoord.xy);
+    vec4 t_Texel0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture0), v_TexCoord.xy);
 
 #ifdef USE_2CYCLE_MODE
 
-    vec4 t_Texel1 = Texture2D_N64(u_Texture1, v_TexCoord.zw);
+    vec4 t_Texel1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture1), v_TexCoord.zw);
 #if defined(USE_COMBINE_MODULATE)
     t_Color = t_Texel0 * t_Texel1 * v_Color;
 #elif defined(USE_COMBINE_DIFFERENCE)

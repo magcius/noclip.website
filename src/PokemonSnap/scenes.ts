@@ -26,9 +26,9 @@ class SnapRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     public globals: LevelGlobals;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, id: string) {
-        this.renderHelper = new GfxRenderHelper(device);
-        this.globals = new LevelGlobals(id);
+    constructor(context: SceneContext, public textureHolder: TextureHolder<any>, id: string) {
+        this.renderHelper = new GfxRenderHelper(context.device);
+        this.globals = new LevelGlobals(context, id);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -167,7 +167,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const viewerTextures: Viewer.Texture[] = [];
             const holder = new FakeTextureHolder(viewerTextures);
 
-            const sceneRenderer = new SnapRenderer(device, holder, this.id);
+            const sceneRenderer = new SnapRenderer(context, holder, this.id);
             const level = parseLevel(archives);
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));

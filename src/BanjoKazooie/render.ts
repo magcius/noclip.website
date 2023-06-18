@@ -248,7 +248,7 @@ vec4 Texture2D_N64_Average(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord);
 }
 
-// Implements N64-style "triangle bilienar filtering" with three taps.
+// Implements N64-style "triangle bilinear filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
 vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));

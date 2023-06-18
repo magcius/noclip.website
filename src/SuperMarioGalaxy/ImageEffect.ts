@@ -7,7 +7,6 @@ import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
 import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
 import { fallback } from "../util";
-import { ViewerRenderInput } from "../viewer";
 import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
