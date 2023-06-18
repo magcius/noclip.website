@@ -445,6 +445,8 @@ function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
         return 'snorm16x4';
     else if (format === GfxFormat.S16_RG)
         return 'uint16x2';
+    else if (format === GfxFormat.S16_RGBA)
+        return 'uint16x4';
     else if (format === GfxFormat.F16_RG)
         return 'float16x2';
     else if (format === GfxFormat.F16_RGBA)

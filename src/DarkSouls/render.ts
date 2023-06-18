@@ -84,10 +84,10 @@ function translateDataType(dataType: number): GfxFormat {
         return GfxFormat.U8_RGBA_NORM;
     case 21:
         // One set of UVs -- two shorts.
-        return GfxFormat.S16_RG;
+        return GfxFormat.S16_RG_NORM;
     case 22:
         // Two sets of UVs -- four shorts.
-        return GfxFormat.S16_RGBA;
+        return GfxFormat.S16_RGBA_NORM;
     case 26:
         // Bone weight -- four shorts.
         return GfxFormat.S16_RGBA_NORM;
@@ -307,7 +307,9 @@ precision mediump float;
 ${DKSProgram.BindingDefinitions}
 
 varying vec4 v_Color;
-varying vec2 v_TexCoord[3];
+varying vec2 v_TexCoord0;
+varying vec2 v_TexCoord1;
+varying vec2 v_TexCoord2;
 varying vec3 v_PositionWorld;
 
 // 3x3 matrix for our tangent space basis.
@@ -351,9 +353,9 @@ void main() {
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_Color = a_Color;
-    v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll0.xy;
-    v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll1.xy;
-    v_TexCoord[2] = ((a_TexCoord1.xy) / 1024.0) + u_TexScroll2.xy;
+    v_TexCoord0 = (a_TexCoord0.xy * 32.0) + u_TexScroll0.xy;
+    v_TexCoord1 = (a_TexCoord0.zw * 32.0) + u_TexScroll1.xy;
+    v_TexCoord2 = (a_TexCoord1.xy * 32.0) + u_TexScroll2.xy;
 }
 `;
 
@@ -373,7 +375,7 @@ void main() {
     private buildTexAccess(texParam: MTDTexture): string {
         const texAssign = getTexAssign(this.mtd, texParam.name);
         assert(texAssign > -1);
-        return `texture(SAMPLER_2D(u_Texture${texAssign}), v_TexCoord[${texParam.uvNumber}])`;
+        return `texture(SAMPLER_2D(u_Texture${texAssign}), v_TexCoord${texParam.uvNumber})`;
     }
 
     private genDiffuse(): string {
@@ -564,8 +566,13 @@ void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWor
 const float M_PI = ${Math.PI};
 
 struct LightScatteringParams {
-    float BetaRay, BetaMie, HGg, DistanceMul, BlendCoeff;
-    vec3 SunDirection, SunColor;
+    float BetaRay;
+    float BetaMie;
+    float HGg;
+    float DistanceMul;
+    float BlendCoeff;
+    vec3 SunDirection;
+    vec3 SunColor;
 };
 
 void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightScatteringParams, in vec3 t_PositionWorld, in float t_Distance) {
