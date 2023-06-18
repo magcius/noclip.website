@@ -53,10 +53,6 @@ void main() {
 #if defined GFX_CLIPSPACE_NEAR_ZERO
     gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
 #endif
-
-#if defined GFX_VIEWPORT_ORIGIN_TL
-    v_TexCoord.y = 1.0 - v_TexCoord.y;
-#endif
 }
 `;
 
