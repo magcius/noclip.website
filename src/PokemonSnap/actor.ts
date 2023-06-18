@@ -60,6 +60,25 @@ export class LevelGlobals {
         return proj;
     }
 
+    public createSplash(type: SplashType, pos: vec3, scale = Vec3One): void {
+        if (type === SplashType.AppleWater) {
+            const projData = this.projData[2], projDef = this.level.projectiles[2];
+            const splash = new Splash(projData, projDef.nodes, projDef.animations, type, projectileScale);
+            splash.tryStart(pos, scale, this);
+            this.splashes.push(splash);
+        } else if (type === SplashType.AppleLava) {
+            const projData = this.projData[3], projDef = this.level.projectiles[3];
+            const splash = new Splash(projData, projDef.nodes, projDef.animations, type, projectileScale);
+            splash.tryStart(pos, scale, this);
+            this.splashes.push(splash);
+        } else {
+            for (let i = 0; i < this.splashes.length; i++) {
+                if (this.splashes[i].type === type && this.splashes[i].tryStart(pos, scale, this))
+                    break;
+            }
+        }
+    }
+
     public update(viewerInput: ViewerRenderInput): void {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
 
@@ -108,6 +127,10 @@ export class LevelGlobals {
         for (let i = 0; i < this.projectiles.length; i++)
             if (!this.projectiles[i].visible)
                 this.projectiles.splice(i--, 1);
+
+        for (let i = 0; i < this.splashes.length; i++)
+            if ((this.splashes[i].type === SplashType.AppleWater || this.splashes[i].type === SplashType.AppleLava) && !this.splashes[i].visible)
+                this.splashes.splice(i--, 1);
     }
 
     public spawnFish(pos: vec3): void {
@@ -151,13 +174,6 @@ export class LevelGlobals {
         return chosen;
     }
 
-    public createSplash(type: SplashType, pos: vec3, scale = Vec3One): void {
-        for (let i = 0; i < this.splashes.length; i++) {
-            if (this.splashes[i].type === type && this.splashes[i].tryStart(pos, scale, this))
-                break;
-        }
-    }
-
     public sendGlobalSignal(source: Target | null, signal: number): void {
         for (let i = 0; i < this.allActors.length; i++) {
             this.allActors[i].receiveSignal(source, signal, this);
@@ -178,15 +194,6 @@ export class LevelGlobals {
 
         this.zeroOne = new ModelRenderer(this.zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
         this.zeroOne.setAnimation(0);
-
-        // projectile splashes
-        for (let t = 2; t < 4; t++) {
-            const type = t === 2 ? SplashType.AppleWater : SplashType.AppleLava;
-            for (let i = 0; i < 3; i++) {
-                const splash = new Splash(this.projData[t], level.projectiles[t].nodes, level.projectiles[t].animations, type, projectileScale);
-                this.splashes.push(splash);
-            }
-        }
 
         const splashIndex = defs.findIndex((d) => d.id === 1003);
         if (splashIndex >= 0) {
