@@ -4,7 +4,7 @@ import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } f
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { mat4, vec3 } from "gl-matrix";
+import { ReadonlyMat4, mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
@@ -278,7 +278,7 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrices: mat4[], modelMatrices: mat4[], textureMatrix: mat4, currentPalette: number): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrices: mat4[], modelMatrices: mat4[], textureMatrix: ReadonlyMat4, currentPalette: number): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
