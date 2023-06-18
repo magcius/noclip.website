@@ -842,7 +842,7 @@ export class StandardMapMaterial extends StandardMaterial {
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
 
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
     }
 }
 
@@ -1337,13 +1337,13 @@ class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.mb.setTexMtx(0, (dst: mat4, ctx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, 1);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, -ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
         this.mb.setTexMtx(1, (dst: mat4, ctx: MaterialRenderContext) => {
             // Unflipped
-            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, -1);
+            texProjCameraSceneTex(dst, ctx.sceneCtx.viewerInput.camera, ctx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, ctx.modelToViewMtx);
         });
 
@@ -1549,7 +1549,7 @@ class FurMaterial extends MaterialBase {
         if (this.isMapBlock)
             this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         this.mb.setCullMode(GX.CullMode.BACK);
         this.mb.setZMode(true, GX.CompareType.LEQUAL, false);

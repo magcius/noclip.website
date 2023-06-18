@@ -20,6 +20,7 @@ import { DepthResampler } from './depthresampler';
 import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
 import { World } from './world';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
 
 export interface SceneUpdateContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -30,6 +31,7 @@ export interface SceneRenderContext {
     worldToViewMtx: mat4;
     viewToWorldMtx: mat4;
     animController: SFAAnimationController;
+    flipYScale: number;
     world?: World;
 }
 
@@ -305,6 +307,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             worldToViewMtx: mat4.create(),
             viewToWorldMtx: mat4.create(),
             animController: this.animController,
+            flipYScale: gfxDeviceNeedsFlipY(device) ? -1 : 1,
             world: this.world,
         };
 
