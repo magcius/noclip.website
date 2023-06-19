@@ -562,28 +562,9 @@ export function createInputLayout(cache: GfxRenderCache, loadedVertexLayout: Loa
 export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    private zeroBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, vertexBuffers: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
-        let usesZeroBuffer = false;
-        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
-            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
-            if (attrib === undefined) {
-                usesZeroBuffer = true;
-                break;
-            }
-        }
-
         this.vertexBufferDescriptors = vertexBuffers.slice();
-        if (usesZeroBuffer) {
-            // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
-            this.vertexBufferDescriptors.push({
-                buffer: this.zeroBuffer,
-                byteOffset: 0,
-            });
-        }
-
         this.inputLayout = createInputLayout(cache, loadedVertexLayout);
     }
 
@@ -601,8 +582,6 @@ export class GXShapeHelperGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.zeroBuffer !== null)
-            device.destroyBuffer(this.zeroBuffer);
     }
 }
 

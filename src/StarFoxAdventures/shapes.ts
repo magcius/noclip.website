@@ -28,20 +28,10 @@ class MyShapeHelper {
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
-    private zeroBuffer: GfxBuffer | null = null;
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean, dynamicIndices: boolean) {
-        let usesZeroBuffer = false;
-        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
-            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
-            if (attrib === undefined) {
-                usesZeroBuffer = true;
-                break;
-            }
-        }
-
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
             const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.Vertex,
                 dynamicVertices ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
@@ -49,15 +39,6 @@ class MyShapeHelper {
 
             this.vertexBufferDescriptors.push({
                 buffer: vertexBuffer,
-                byteOffset: 0,
-            });
-        }
-
-        if (usesZeroBuffer) {
-            // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
-            this.vertexBufferDescriptors.push({
-                buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
         }
@@ -95,8 +76,6 @@ class MyShapeHelper {
 
     public destroy(device: GfxDevice): void {
         // Do not destroy inputLayout; it is owned by the render cache.
-        if (this.zeroBuffer !== null)
-            device.destroyBuffer(this.zeroBuffer);
         for (let buffer of this.vertexBuffers)
             device.destroyBuffer(buffer);
         device.destroyBuffer(this.indexBuffer);
