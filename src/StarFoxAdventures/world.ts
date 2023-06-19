@@ -47,7 +47,7 @@ export class World {
     public worldLights: WorldLights = new WorldLights();
     public renderCache: GfxRenderCache;
 
-    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
+    private constructor(public context: SceneContext, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
         this.renderCache = this.materialFactory.cache;
     }
 
@@ -55,14 +55,14 @@ export class World {
         this.animController = new SFAAnimationController();
         this.envfxMan = await EnvfxManager.create(this, dataFetcher);
         
-        const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
+        const resCollPromise = ResourceCollection.create(this.context.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
         const texFetcherPromise = async () => {
             return (await resCollPromise).texFetcher;
         };
 
         const [resColl, blockFetcher, objectMan] = await Promise.all([
             resCollPromise,
-            SFABlockFetcher.create(this.gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texFetcherPromise()),
+            SFABlockFetcher.create(this.gameInfo, dataFetcher, this.context.device, this.materialFactory, this.animController, texFetcherPromise()),
             ObjectManager.create(this, dataFetcher, false),
         ]);
         this.resColl = resColl;
@@ -70,8 +70,8 @@ export class World {
         this.objectMan = objectMan;
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory): Promise<World> {
-        const self = new World(device, gameInfo, subdirs, materialFactory);
+    public static async create(context: SceneContext, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory): Promise<World> {
+        const self = new World(context, gameInfo, subdirs, materialFactory);
         await self.init(dataFetcher);
         return self;
     }
@@ -186,7 +186,7 @@ class WorldRenderer extends SFARenderer {
     private sphereMapMan: SphereMapManager;
 
     constructor(protected override world: World, materialFactory: MaterialFactory) {
-        super(world.device, world.animController, materialFactory);
+        super(world.context, world.animController, materialFactory);
         if (this.world.resColl.texFetcher instanceof SFATextureFetcher)
             this.textureHolder = this.world.resColl.texFetcher.textureHolder;
         this.sky = new Sky(this.world);
@@ -288,7 +288,7 @@ class WorldRenderer extends SFARenderer {
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
         this.world.envfxMan.enableAmbientLighting = this.enableAmbient;
         this.world.envfxMan.enableFog = this.enableFog;
-        this.world.envfxMan.update(this.world.device, { viewerInput });
+        this.world.envfxMan.update(this.world.context.device, { viewerInput });
         
         const updateCtx: ObjectUpdateContext = {
             viewerInput,
@@ -408,7 +408,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const materialFactory = new MaterialFactory(device);
-        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs, materialFactory);
+        const world = await World.create(context, this.gameInfo, dataFetcher, this.subdirs, materialFactory);
 
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {

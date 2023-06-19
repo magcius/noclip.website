@@ -21,6 +21,7 @@ import { BlurFilter } from './blur';
 import { getMatrixAxisZ } from '../MathHelpers';
 import { World } from './world';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { SceneContext } from '../SceneBase';
 
 export interface SceneUpdateContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -79,11 +80,11 @@ export class SFARenderer implements Viewer.SceneGfx {
     private enableHeatShimmer: boolean = false; // TODO: set by camera triggers
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
 
-    constructor(device: GfxDevice, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
-        this.renderHelper = new GXRenderHelperGfx(device, null, this.materialFactory.cache);
+    constructor(context: SceneContext, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
+        this.renderHelper = new GXRenderHelperGfx(context.device, context, this.materialFactory.cache);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
-        this.depthResampler = new DepthResampler(device, this.renderHelper.renderInstManager.gfxRenderCache);
+        this.depthResampler = new DepthResampler(context.device, this.renderHelper.renderInstManager.gfxRenderCache);
 
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);
