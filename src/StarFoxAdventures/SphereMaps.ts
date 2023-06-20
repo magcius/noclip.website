@@ -1,7 +1,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
 import { Blue, Color, colorCopy, colorNewFromRGBA, Red, TransparentBlack, White } from '../Color';
-import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPass, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { ColorKind, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx, MaterialParams, DrawParams, SceneParams } from '../gx/gx_render';
 import { projectionMatrixForCuboid } from '../MathHelpers';
-import { TDDraw } from "../SuperMarioGalaxy/DDraw";
+import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { SFAMaterialBuilder } from './MaterialBuilder';
@@ -19,6 +19,9 @@ import { TextureFetcher } from './textures';
 import { mat4SetTranslation } from './util';
 import { World } from './world';
 import { LightType } from './WorldLights';
+import { ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { gxBindingLayouts } from '../gx/gx_render';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 
 const scratchMaterialParams = new MaterialParams();
 const scratchDrawParams = new DrawParams();
@@ -126,7 +129,7 @@ interface RenderedSphereMap {
 export class SphereMapManager {
     private targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private params: SphereMapParams[] = nArray(6, () => { return { type: SphereMapType.HemisphericProbe, attenFactors: [0, 0], matColorFactors: [0, 0] }; });
-    private ddraw = new TDDraw();
+    private ddraw = new TSDraw();
     private hemisphericMaterial: SFAMaterialBuilder<World>;
     private reflectiveMaterial: SFAMaterialBuilder;
     
@@ -163,6 +166,36 @@ export class SphereMapManager {
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.NRM, true);
+
+        // TODO: generate geometry once and reuse it for future renders
+        this.ddraw.beginDraw(world.renderCache);
+        for (let x = 0; x < 16; x++) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
+            const fx0 = 2.0 * x / 15.0 - 1.0;
+            const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
+
+            for (let y = 0; y < 17; y++) {
+                const fy = 2.0 * y / 15.0 - 1.0;
+
+                this.ddraw.position3f32(fx0, fy, -2.0);
+                let z0 = fx0 * fx0 + fy * fy;
+                if (z0 >= 1.0)
+                    z0 = 0.0;
+                else
+                    z0 = Math.sqrt(1.0 - z0);
+                this.ddraw.normal3f32(fx0, fy, z0);
+
+                this.ddraw.position3f32(fx1, fy, -2.0);
+                let z1 = fx1 * fx1 + fy * fy;
+                if (z1 >= 1.0)
+                    z1 = 0.0;
+                else
+                    z1 = Math.sqrt(1.0 - z1);
+                this.ddraw.normal3f32(fx1, fy, z1);
+            }
+            this.ddraw.end();
+        }
+        this.ddraw.endDraw(world.renderCache);
 
         this.hemisphericMaterial = createHemisphericProbeMaterial(this.materialFactory);
         this.reflectiveMaterial = createReflectiveProbeMaterial(this.materialFactory, this.world.resColl.texFetcher);
@@ -250,47 +283,17 @@ export class SphereMapManager {
         return this.reflectiveMaterial;
     }
 
-    private renderMap(mapIdx: number, device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
-        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
-        // to obtain a local SceneParams buffer
-        const template = renderHelper.pushTemplateRenderInst();
+    private renderMap(device: GfxDevice, mapIdx: number, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
+        const renderInst = renderHelper.renderInstManager.newRenderInst();
+
+        renderInst.setBindingLayouts(gxBindingLayouts);
 
         // Setup to draw in clip space
         fillSceneParams(scratchSceneParams, SPHERE_MAP_PROJECTION_MTX, SPHERE_MAP_DIM, SPHERE_MAP_DIM);
-        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        projectionMatrixConvertClipSpaceNearZ(scratchSceneParams.u_Projection, device.queryVendorInfo().clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+        let offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
         fillSceneParamsData(d, offs, scratchSceneParams);
-
-        // TODO: generate geometry once and reuse it for future renders
-        this.ddraw.beginDraw(renderInstManager.gfxRenderCache);
-        for (let x = 0; x < 16; x++) {
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 34);
-            const fx0 = 2.0 * x / 15.0 - 1.0;
-            const fx1 = 2.0 * (x + 1) / 15.0 - 1.0;
-
-            for (let y = 0; y < 17; y++) {
-                const fy = 2.0 * y / 15.0 - 1.0;
-
-                this.ddraw.position3f32(fx0, fy, -2.0);
-                let z0 = fx0 * fx0 + fy * fy;
-                if (z0 >= 1.0)
-                    z0 = 0.0;
-                else
-                    z0 = Math.sqrt(1.0 - z0);
-                this.ddraw.normal3f32(fx0, fy, z0);
-
-                this.ddraw.position3f32(fx1, fy, -2.0);
-                let z1 = fx1 * fx1 + fy * fy;
-                if (z1 >= 1.0)
-                    z1 = 0.0;
-                else
-                    z1 = Math.sqrt(1.0 - z1);
-                this.ddraw.normal3f32(fx1, fy, z1);
-            }
-            this.ddraw.end();
-        }
-
-        const renderInst = this.ddraw.endDrawAndMakeRenderInst(renderInstManager);
 
         scratchDrawParams.clear();
         scratchMaterialParams.clear();
@@ -301,11 +304,11 @@ export class SphereMapManager {
             material = this.setupToRenderHemisphericProbe(mapIdx, scratchMaterialParams, sceneCtx);
         else // SphereMapType.ReflectiveProbe
             material = this.setupToRenderReflectiveProbe(mapIdx, scratchMaterialParams, sceneCtx);
-        
-        setGXMaterialOnRenderInst(renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
-        renderInstManager.popTemplateRenderInst();
 
-        const targetID = builder.createRenderTargetID(this.targetDesc, 'Sphere Map Target');
+        this.ddraw.setOnRenderInst(renderInst);
+        setGXMaterialOnRenderInst(renderInstManager, renderInst, material.getGXMaterialHelper(), scratchMaterialParams, scratchDrawParams);
+
+        const targetID = builder.createRenderTargetID(this.targetDesc, `Sphere Map ${mapIdx} Target`);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Sphere Map');
@@ -322,7 +325,7 @@ export class SphereMapManager {
 
     public renderMaps(device: GfxDevice, builder: GfxrGraphBuilder, renderHelper: GXRenderHelperGfx, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         for (let i = 0; i < 6; i++)
-            this.sphereMaps[i].targetID = this.renderMap(i, device, builder, renderHelper, renderInstManager, sceneCtx);
+            this.sphereMaps[i].targetID = this.renderMap(device, i, builder, renderHelper, renderInstManager, sceneCtx);
     }
 
     public attachResolveTextures(builder: GfxrGraphBuilder, pass: GfxrPass) {
@@ -352,5 +355,9 @@ export class SphereMapManager {
             this.sphereMaps[i].textureMapping.height = SPHERE_MAP_DIM;
             renderList.resolveLateSamplerBinding(`sphere-map-${i}`, this.sphereMaps[i].textureMapping);
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }

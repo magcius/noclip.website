@@ -383,6 +383,7 @@ class WorldRenderer extends SFARenderer {
         super.destroy(device);
         this.world.destroy(device);
         this.sky.destroy(device);
+        this.sphereMapMan.destroy(device);
     }
 }
 

@@ -1,6 +1,6 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxColor, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSamplerBinding } from '../platform/GfxPlatform';
+import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxTexFilterMode, GfxWrapMode } from '../platform/GfxPlatform';
 import { GfxShaderLibrary } from './GfxShaderLibrary';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -79,6 +79,16 @@ void main() {
 }
 `);
         this.blitProgramSRGB = cache.createProgramSimple(blitProgramSRGB);
+
+        this.textureMapping[0].gfxSampler = cache.createSampler({
+            magFilter: GfxTexFilterMode.Bilinear,
+            minFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+        });
 
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
