@@ -114,7 +114,7 @@ export class GXMaterialBuilder {
     private indTexStages: IndTexStage[] = [];
     private alphaTest: AlphaTest;
     private ropInfo: RopInfo;
-    private usePnMtxIdx?: boolean;
+    private usePnMtxIdx: boolean;
 
     constructor(private name: string | null = null) {
         this.reset();
@@ -130,15 +130,14 @@ export class GXMaterialBuilder {
         this.alphaTest = {} as AlphaTest;
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
-        this.ropInfo = {
-        } as RopInfo;
+        this.ropInfo = {} as RopInfo;
         this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
         this.setColorUpdate(true);
         this.setAlphaUpdate(false);
 
-        this.usePnMtxIdx = undefined;
+        this.usePnMtxIdx = true;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {
@@ -146,10 +145,8 @@ export class GXMaterialBuilder {
     }
 
     private ensureTexCoordGen(idx: GX.TexCoordID): TexGen {
-        if (this.texGens[idx] === undefined) {
+        if (this.texGens[idx] === undefined)
             this.texGens[idx] = {} as TexGen;
-        }
-
         return this.texGens[idx];
     }
 
