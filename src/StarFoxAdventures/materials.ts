@@ -11,7 +11,7 @@ import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTra
 import { mat4, vec3 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack } from '../Color';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Red, Blue } from '../Color';
 import { SceneRenderContext } from './render';
 import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
 import { clamp } from '../MathHelpers';
@@ -1200,6 +1200,24 @@ class StandardObjectMaterial extends StandardMaterial {
         }
     }
 
+    private addRedOrBlueStage(condition: boolean) {
+        // XXX: for testing: Display red if a condition is true, otherwise display blue.
+        const fooFlag = !!(this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor);
+        // Pre-probe layers
+        this.setupShaderLayers(true, fooFlag); // Just put this here to get layer 0 setup
+        const stage = this.mb.genTevStage();
+        const color = condition ? Red : Blue;
+        const kc = this.mb.genKonstColor((dst: Color) => {
+            colorCopy(dst, color);
+        });
+        this.mb.setTevDirect(stage);
+        this.mb.setTevKColorSel(stage, getGXKonstColorSel(kc));
+        this.mb.setTevKAlphaSel(stage, getGXKonstAlphaSel(kc));
+        this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.KONST);
+        this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+    }
+
     protected rebuildSpecialized() {
         this.cprevIsValid = false;
         this.aprevIsValid = false;
@@ -1239,8 +1257,29 @@ class StandardObjectMaterial extends StandardMaterial {
         }
 
         if (false) {
+            // XXX: for testing: display red if shader asks for vertex colors while the shape doesn't have any.
+            const wantsVertexColors = !!(this.shader.normalFlags & NormalFlags.HasVertexColor) || !!(this.shader.normalFlags & NormalFlags.HasVertexAlpha);
+            const hasVertexColors = !!(this.shader.attrFlags & ShaderAttrFlags.CLR);
+            this.addRedOrBlueStage(wantsVertexColors && !hasVertexColors);
+        } else if (false) {
+            // XXX: for testing: display red if shape has vertex colors
+            this.addRedOrBlueStage(!!(this.shader.attrFlags & ShaderAttrFlags.CLR));
+        } else if (false) {
+            // XXX: for testing: display red if shape has normals
+            this.addRedOrBlueStage(!!(this.shader.attrFlags & ShaderAttrFlags.NRM));
+        } else if (false) {
+            // XXX: for testing: show only COLOR0
+            const fooFlag = !!(this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor);
+            // Pre-probe layers
+            this.setupShaderLayers(true, fooFlag); // Just put this here to get layer 0 setup
+            const stage = this.mb.genTevStage();
+            this.mb.setTevDirect(stage);
+            this.mb.setTevOrder(stage, null, null, GX.RasColorChannelID.COLOR0A0);
+            this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+            this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        } else if (false) {
             // XXX: for testing: show only hemispheric ambient lighting
-            const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
+            const fooFlag = !!(this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor);
             // Pre-probe layers
             this.setupShaderLayers(true, fooFlag); // Just put this here to get layer 0 setup
             const stage = this.mb.genTevStage();
@@ -1249,7 +1288,7 @@ class StandardObjectMaterial extends StandardMaterial {
             this.mb.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C1);
             this.mb.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         } else {
-            const fooFlag = !!((this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor));
+            const fooFlag = !!(this.shader.lightFlags & LightFlags.OverrideLighting) && !(this.shader.normalFlags & NormalFlags.HasVertexColor);
 
             // Pre-probe layers
             this.setupShaderLayers(true, fooFlag);
@@ -1327,7 +1366,6 @@ class StandardObjectMaterial extends StandardMaterial {
                 0xff,
                 GX.DiffuseFunction.CLAMP,
                 GX.AttenuationFunction.SPOT);
-            // TODO: utilize channel 1
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
     }
