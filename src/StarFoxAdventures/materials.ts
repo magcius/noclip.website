@@ -914,10 +914,9 @@ class StandardObjectMaterial extends StandardMaterial {
 
     private getAmbientProbeTexCoord(): TexCoord {
         if (this.ambProbeTexCoord === undefined) {
-            const ptmtx = this.mb.genPostTexMtx((dst: mat4) => {
+            const ptmtx = this.mb.genPostTexMtx((dst: mat4, ctx: MaterialRenderContext) => {
                 mat4.fromTranslation(dst, [0.5, 0.5, 1.0]);
-                const flipY = -1; // XXX: the flipY situation is confusing. Is this the solution or can it be handled elsewhere?
-                mat4.scale(dst, dst, [-0.5, -0.5 * flipY, 0.0]);
+                mat4.scale(dst, dst, [-0.5, -0.5 * ctx.sceneCtx.flipYScale, 0.0]);
             });
             // Matrix comes from TEX0MTXIDX (or TEX2MTXIDX if NBT textures are used)
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
