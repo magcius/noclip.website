@@ -794,7 +794,7 @@ export class StandardMapMaterial extends StandardMaterial {
 
         this.mb.setTexMtx(2, (dst: mat4, matCtx: MaterialRenderContext) => {
             // Flipped
-            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, 1);
+            texProjCameraSceneTex(dst, matCtx.sceneCtx.viewerInput.camera, -matCtx.sceneCtx.flipYScale);
             mat4.mul(dst, dst, matCtx.modelToViewMtx);
             return dst;
         });
