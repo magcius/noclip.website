@@ -739,7 +739,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                 if (fields.isMapBlock)
                     model.materials[num] = materialFactory.buildMapMaterial(curShader, texFetcher);
                 else
-                    model.materials[num] = materialFactory.buildObjectMaterial(curShader, texFetcher);
+                    model.materials[num] = materialFactory.buildObjectMaterial(curShader, texFetcher, fields.hasBones && jointCount >= 2);
             }
             curMaterial = model.materials[num];
         }

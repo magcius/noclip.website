@@ -853,6 +853,10 @@ class StandardObjectMaterial extends StandardMaterial {
     private enableHemisphericProbe = false;
     private enableReflectiveProbe = false;
 
+    constructor(cache: GfxRenderCache, factory: MaterialFactory, shader: Shader, texFetcher: TextureFetcher, private hasSkeleton: boolean) {
+        super(cache, factory, shader, texFetcher);
+    }
+
     // Perturbed normals, e.g. the Arwing
     private addNBTTextureStage(): number { // Returns scale to use for nbtTexCoord
         const indStage = this.mb.genIndTexStage();
@@ -889,10 +893,10 @@ class StandardObjectMaterial extends StandardMaterial {
         });
         // Matrix comes from TEX0MTXIDX
         const binrmTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.BINRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
-        this.mb.setTexCoordUsesMtxIdx(binrmTexCoord);
+        this.mb.setTexCoordUsesMtxIdx(binrmTexCoord, this.hasSkeleton);
         // Matrix comes from TEX1MTXIDX
         const tanTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.TANGENT, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(pttexmtx));
-        this.mb.setTexCoordUsesMtxIdx(tanTexCoord);
+        this.mb.setTexCoordUsesMtxIdx(tanTexCoord, this.hasSkeleton);
 
         const stage0 = this.mb.genTevStage();
         this.mb.setTevIndirect(stage0, indStage, GX.IndTexFormat._8, GX.IndTexBiasSel.ST, getGXIndTexMtxID_S(indTexMtx), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
@@ -920,7 +924,7 @@ class StandardObjectMaterial extends StandardMaterial {
             });
             // Matrix comes from TEX0MTXIDX (or TEX2MTXIDX if NBT textures are used)
             this.ambProbeTexCoord = this.mb.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0, false, getGXPostTexGenMatrix(ptmtx));
-            this.mb.setTexCoordUsesMtxIdx(this.ambProbeTexCoord);
+            this.mb.setTexCoordUsesMtxIdx(this.ambProbeTexCoord, this.hasSkeleton);
         }
 
         return this.ambProbeTexCoord;
@@ -1224,7 +1228,7 @@ class StandardObjectMaterial extends StandardMaterial {
         this.enableHemisphericProbe = this.shader.hasHemisphericProbe;
         this.enableReflectiveProbe = this.shader.hasReflectiveProbe;
 
-        this.mb.setUsePnMtxIdx(true);
+        this.mb.setUsePnMtxIdx(this.hasSkeleton);
 
         let nbtScale = 0;
         if ((this.enableHemisphericProbe || this.enableReflectiveProbe) && this.shader.hasNBTTexture)
@@ -1256,6 +1260,9 @@ class StandardObjectMaterial extends StandardMaterial {
         }
 
         if (false) {
+            // XXX: for testing: display red if shape has skeleton
+            this.addRedOrBlueStage(this.hasSkeleton);
+        } else if (false) {
             // XXX: for testing: display red if shader asks for vertex colors while the shape doesn't have any.
             const wantsVertexColors = !!(this.shader.normalFlags & NormalFlags.HasVertexColor) || !!(this.shader.normalFlags & NormalFlags.HasVertexAlpha);
             const hasVertexColors = !!(this.shader.attrFlags & ShaderAttrFlags.CLR);
@@ -1825,8 +1832,8 @@ export class MaterialFactory {
         return this.scrollSlots.length - 1;
     }
 
-    public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {
-        return new StandardObjectMaterial(this.cache, this, shader, texFetcher);
+    public buildObjectMaterial(shader: Shader, texFetcher: TextureFetcher, hasSkeleton: boolean): SFAMaterial {
+        return new StandardObjectMaterial(this.cache, this, shader, texFetcher, hasSkeleton);
     }
 
     public buildMapMaterial(shader: Shader, texFetcher: TextureFetcher): SFAMaterial {

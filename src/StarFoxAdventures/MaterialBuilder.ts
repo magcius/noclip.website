@@ -275,10 +275,10 @@ export class SFAMaterialBuilder<RenderContext = undefined> {
     }
 
     // Enable if TexCoord uses a TEX*MTXIDX vertex attribute.
-    public setTexCoordUsesMtxIdx(texCoord: TexCoord) {
+    public setTexCoordUsesMtxIdx(texCoord: TexCoord, enable: boolean) {
         if (this.texCoordUsesMtxIndex === undefined)
             this.texCoordUsesMtxIndex = nArray(8, () => false);
-        this.texCoordUsesMtxIndex[texCoord] = true;
+        this.texCoordUsesMtxIndex[texCoord] = enable;
     }
 
     public setOnMaterialParams(params: MaterialParams, ctx: RenderContext) {
