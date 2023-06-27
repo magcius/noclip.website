@@ -24,6 +24,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureLevel.pixels), textureLevel.width, textureLevel.height);
@@ -88,8 +89,8 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_MatAmbientColor;
     vec4 u_MaterialFlags;
     DirectionalLight u_SceneLights[2];
-    vec4 u_fogColor;
-    vec4 u_fogStartEnd;
+    vec4 u_FogColor;
+    vec4 u_FogStartEnd;
 
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
@@ -97,8 +98,8 @@ layout(std140) uniform ub_MaterialParams {
 };
 
 // xyz are used by GenerateTextureCoord
-#define u_FogStart         (u_fogStartEnd.x)
-#define u_FogEnd           (u_fogStartEnd.y)
+#define u_FogStart         (u_FogStartEnd.x)
+#define u_FogEnd           (u_FogStartEnd.y)
 #define u_IsVertexLighting (u_MaterialFlags.x)
 #define u_IsFogEnabled     (u_MaterialFlags.y)
 #define u_RenderFog        (u_MaterialFlags.z)
@@ -303,7 +304,7 @@ void main() {
     {
         //(M-1): Hack for now
         float t_FogFactor = smoothstep(u_FogStart - v_Depth, u_FogEnd + v_Depth, v_Depth);
-        t_ResultColor.rgb = mix(t_ResultColor.rgb, u_fogColor.rgb, t_FogFactor);
+        t_ResultColor.rgb = mix(t_ResultColor.rgb, u_FogColor.rgb, t_FogFactor);
     }
 
     gl_FragColor = t_ResultColor;
@@ -320,6 +321,7 @@ class OoT3DProgram extends DMPProgram {
         this.vert = `
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
+${GfxShaderLibrary.MulNormalMatrix}
 
 layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
 layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
@@ -435,14 +437,12 @@ void main() {
     vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
     gl_Position = Mul(u_Projection, t_ViewPosition);
 
-    // TODO(jstpierre): Use a separate normal matrix to determine the view-space normal.
-    vec3 t_ModelNormal = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Normal, 0.0)).xyz;
+    vec3 t_ModelNormal = Mul(t_BoneMatrix, a_Normal);
     v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
 
     v_Depth = gl_Position.w;
 
-    if(u_IsVertexLighting > 0.0)
-    {
+    if (u_IsVertexLighting > 0.0) {
         vec4 t_VertexLightingColor = vec4(0);
         for (int i = 0; i < 2; i++) {
             vec4 t_Diffuse = u_SceneLights[i].DiffuseColor * u_MatDiffuseColor;
@@ -455,9 +455,7 @@ void main() {
             v_Color = t_VertexLightingColor * a_Color;
         else
             v_Color = t_VertexLightingColor;
-    }
-    else
-    {
+    } else {
         v_Color = u_MatDiffuseColor;
         if (u_UseVertexColor > 0.0)
             v_Color = a_Color;
@@ -624,30 +622,26 @@ class MaterialInstance {
 
         offs += fillColor(mapped, offs, this.material.diffuseColor)
         offs += fillColor(mapped, offs, this.material.ambientColor)
-        offs += fillVec4(mapped, offs, this.material.isVertexLightingEnabled ? 1:0, this.material.isFogEnabled? 1:0, this.renderFog ? 1:0)
+        offs += fillVec4(mapped, offs, this.material.isVertexLightingEnabled ? 1:0, this.material.isFogEnabled? 1:0, this.renderFog ? 1:0);
 
-        if(this.isActor)
-        {
-
+        if (this.isActor) {
             offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightColor, 1)
             offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightDir);
             offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightColor, 1);
             offs += fillVec4(mapped, offs, 0, 0, 0, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightDir);
-        }
-        else
-        {
-            offs += fillVec4(mapped, offs, 0, 0, 0, 1)
+        } else {
+            offs += fillVec4(mapped, offs, 0, 0, 0, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.primaryLightDir);
-            offs += fillVec4(mapped, offs, 0, 0, 0, 1)
+            offs += fillVec4(mapped, offs, 0, 0, 0, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.ambientLightColor, 1);
             offs += fillVec3v(mapped, offs, this.environmentSettings.secondaryLightDir);
         }
 
-        offs += fillVec3v(mapped, offs, this.environmentSettings.fogColor, 0)
-        offs += fillVec4(mapped, offs, this.environmentSettings.fogStart, this.environmentSettings.fogEnd)
+        offs += fillVec3v(mapped, offs, this.environmentSettings.fogColor, 0);
+        offs += fillVec4(mapped, offs, this.environmentSettings.fogStart, this.environmentSettings.fogEnd);
 
         for (let i = 0; i < 6; i++) {
             if (this.colorAnimators[i]) {
