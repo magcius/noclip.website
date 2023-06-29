@@ -437,7 +437,7 @@ void main() {
     vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
     gl_Position = Mul(u_Projection, t_ViewPosition);
 
-    vec3 t_ModelNormal = Mul(t_BoneMatrix, a_Normal);
+    vec3 t_ModelNormal = MulNormalMatrix(t_BoneMatrix, a_Normal);
     v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
 
     v_Depth = gl_Position.w;
