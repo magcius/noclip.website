@@ -466,6 +466,7 @@ export interface GfxDevice {
     copySubTexture2D(dst: GfxTexture, dstX: number, dstY: number, src: GfxTexture, srcX: number, srcY: number): void;
 
     // Data submission
+    zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void;
     uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 

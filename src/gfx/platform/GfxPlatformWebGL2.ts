@@ -1265,6 +1265,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.clearBufferfv(gl.COLOR, 0, [0.0, 0.0, 0.0, 1.0]);
     }
 
+    public zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void {
+        this.uploadBufferData(buffer, dstByteOffset, new Uint8Array(byteCount));
+    }
+
     public copySubTexture2D(dst_: GfxTexture, dstX: number, dstY: number, src_: GfxTexture, srcX: number, srcY: number): void {
         const gl = this.gl;
 

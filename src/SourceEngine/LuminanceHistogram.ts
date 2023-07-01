@@ -492,7 +492,7 @@ class ImplCompute {
         const frame = this.getFrame();
 
         // Clear bucket buffer
-        device.uploadBufferData(this.bucketBuffer, 0, new Uint8Array(bucketCount * 4));
+        device.zeroBuffer(this.bucketBuffer, 0, bucketCount * 4);
 
         builder.pushComputePass((pass) => {
             pass.setDebugName('Luminance Histogram Compute');

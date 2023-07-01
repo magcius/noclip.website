@@ -1583,6 +1583,10 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         this._frameCommandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [src.width, src.height, 1]);
     }
 
+    public zeroBuffer(buffer: GfxBuffer, dstByteOffset: number, byteCount: number): void {
+        this._frameCommandEncoder!.clearBuffer(getPlatformBuffer(buffer), dstByteOffset, byteCount);
+    }
+
     public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void {
         if (byteCount === undefined)
             byteCount = data.byteLength;
