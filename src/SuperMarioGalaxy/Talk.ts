@@ -64,7 +64,6 @@ class TalkNodeCtrl {
     constructor(sceneObjHolder: SceneObjHolder) {
     }
 
-    private messageKey: string;
     public createFlowNode(sceneObjHolder: SceneObjHolder, messageCtrl: TalkMessageCtrl, infoIter: JMapInfoIter, actorName: string): void {
         const messageID = assertExists(getJMapInfoMessageID(infoIter));
         const zoneName = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter)!.zoneName;
@@ -77,7 +76,6 @@ class TalkNodeCtrl {
         if (sceneData === null)
             return;
 
-        this.messageKey = messageKey;
         this.rootNode = sceneData.findNode(messageKey);
         this.currentNode = this.rootNode;
         this.tempFlowNode = this.rootNode;
@@ -477,14 +475,16 @@ export class TalkDirector extends NameObj {
     private talkCtrlPotential: TalkMessageCtrl | null = null;
     private talkCtrlCurrent: TalkMessageCtrl | null = null;
 
+    public enabled = false;
+
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'TalkDirector');
         connectToScene(sceneObjHolder, this, MovementType.TalkDirector, CalcAnimType.None, DrawBufferType.None, DrawType.None);
     }
 
     public request(sceneObjHolder: SceneObjHolder, messageCtrl: TalkMessageCtrl, force: boolean): boolean {
-        // TODO(jstpierre): Turn this on eventually
-        return false;
+        if (!this.enabled)
+            return false;
 
         if (messageCtrl.rootNodeAutomatic)
             messageCtrl.rootNodePre(sceneObjHolder, false);

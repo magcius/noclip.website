@@ -139,7 +139,7 @@ export class MessageData {
             if (escapeNumChars === 0) {
                 if (c === 0x001A) {
                     // Tag.
-                    escapeNumChars = (dat1.getUint8(dat1Offs + 0x02) >>> 1);
+                    escapeNumChars = (dat1.getUint8(dat1Offs + 0x02) >>> 1) - 1;
                 } else if (c === 0x0000) {
                     break;
                 }

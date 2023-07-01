@@ -151,8 +151,8 @@ void main() {
             const entry = frame.entries[i];
 
             // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
-            entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width + 0.5) | 0;
-            entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height + 0.5) | 0;
+            entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width) | 0;
+            entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height) | 0;
 
             device.readPixelFromTexture(frame.readback, i, depthColorTexture, entry.attachmentX, entry.attachmentY);
         }
