@@ -4,12 +4,12 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixT, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, lerpAngle, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped, clampVecAngleRad, connectToSceneEnemyDecorationMovementCalcAnim, isExistRail, getRailPointArg0, getRailPointCoord } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, rotateVecDegree, calcSideVec, connectToSceneMapObj, makeMtxSideUp, makeMtxSideFront, appearStarPieceToDirection, isNearPlayerAnyTime, addVelocityMoveToTarget, addVelocityAwayFromTarget, blendMtx, getRailPos, getRailTotalLength, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, getRailCoord, calcRailPosAtCoord, calcRailDirectionAtCoord, moveRailRider, getCurrentRailPointNo, getNextRailPointNo, moveCoordAndTransToRailPoint, getBckFrameMaxNamed, clampVecAngleDeg, connectToSceneEnvironment, isBtkExist, isBtkStopped, clampVecAngleRad, connectToSceneEnemyDecorationMovementCalcAnim, isExistRail, getRailPointArg0, getRailPointCoord, calcReboundVelocity, calcReboundVelocitySimple, calcNerveEaseInOutValue } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, getGroundNormal, isExistMapCollision, isExistMoveLimitCollision, getFirstPolyOnLineToMap, setBinderOffsetVec, setBinderExceptActor, setBinderIgnoreMovingCollision, setBinderRadius } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitMtx, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy, calcSensorDirectionNormalize, setSensorRadius } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, sendMsgEnemyAttackStrong, isSensorPressObj, clearHitSensors, sendMsgEnemyAttackElectric, addHitSensorMtx, addBodyMessageSensorEnemy, calcSensorDirectionNormalize, setSensorRadius, calcSensorHorizonNormalize } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, resetPosition, ZoneAndLayer } from '../LiveActor';
@@ -1809,6 +1809,104 @@ class WalkerStateChase extends ActorStateBaseInterface<WalkerStateChaseNrv> {
     }
 }
 
+function setVelocitySeparateHV(actor: LiveActor, velocity: ReadonlyVec3, horizonSpeed: number, gravitySpeed: number): void {
+    vecKillElement(scratchVec3a, velocity, actor.gravityVector);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    vec3.scale(actor.velocity, scratchVec3a, -horizonSpeed);
+    vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, gravitySpeed);
+}
+
+function addVelocityClockwiseToDirection(actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
+    vec3.normalize(scratchVec3a, direction);
+
+    vec3.cross(scratchVec3a, actor.gravityVector, scratchVec3a);
+    calcVelocityMoveToDirection(scratchVec3a, actor, scratchVec3a, speed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3a);
+}
+
+function addVelocityClockwiseToTarget(actor: LiveActor, position: ReadonlyVec3, speed: number): void {
+    vec3.sub(scratchVec3a, position, actor.translation);
+    addVelocityClockwiseToDirection(actor, scratchVec3a, speed);
+}
+
+interface WalkerStateStaggerParam {
+    horizonPunchSpeed: number;
+    gravityPunchSpeed: number;
+    clockwisePunchSpeed: number;
+    staggerStep: number;
+    minStep: number;
+    maxStep: number;
+    moveSpeed: number;
+    clockwiseSpeed: number;
+    clockwiseWaveSpeed: number;
+    rotateSpeedDegree: number;
+}
+
+enum WalkerStateStaggerNrv { Stagger, StaggerEnd }
+class WalkerStateStagger extends ActorStateBaseInterface<WalkerStateStaggerNrv> {
+    private direction = vec3.create();
+
+    constructor(private actor: LiveActor, private front: vec3, private param: WalkerStateParam, private paramStagger: WalkerStateStaggerParam) {
+        super();
+
+        this.initNerve(WalkerStateStaggerNrv.Stagger);
+    }
+
+    public override appear(): void {
+        super.appear();
+        this.setNerve(WalkerStateStaggerNrv.Stagger);
+    }
+
+    private reboundWall(): void {
+        if (isBindedWall(this.actor)) {
+            const wallNormal = this.actor.binder!.wallHitInfo.faceNormal;
+            if (calcReboundVelocitySimple(this.actor.velocity, wallNormal, 0.9)) {
+                vecKillElement(this.direction, this.actor.velocity, this.actor.gravityVector);
+                vec3.normalize(this.direction, this.direction);
+            }
+        }
+    }
+
+    public setPunchDirection(otherSensor: HitSensor, thisSensor: HitSensor): void {
+        calcSensorHorizonNormalize(this.direction, this.actor.gravityVector, otherSensor, thisSensor);
+        deleteEffectAll(this.actor);
+        setVelocitySeparateHV(this.actor, this.direction, this.paramStagger.horizonPunchSpeed, this.paramStagger.gravityPunchSpeed);
+        addVelocityClockwiseToTarget(this.actor, otherSensor.center, this.paramStagger.clockwisePunchSpeed);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WalkerStateStaggerNrv, deltaTimeFrames: number): void {
+        if (currentNerve === WalkerStateStaggerNrv.Stagger) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'StaggerStart');
+
+            if (isBckOneTimeAndStopped(this.actor))
+                startAction(this.actor, 'Stagger');
+
+            const speedT = calcNerveEaseInOutValue(this.actor, this.paramStagger.minStep, this.paramStagger.maxStep, 1.0, 0.0);
+
+            mat4.fromRotation(scratchMatrix, this.paramStagger.rotateSpeedDegree * MathConstants.DEG_TO_RAD * deltaTimeFrames, this.actor.gravityVector);
+            transformVec3Mat4w0(this.front, scratchMatrix, this.front);
+
+            const clockwiseWave = Math.sin(this.getNerveStep() * this.paramStagger.clockwiseWaveSpeed * MathConstants.DEG_TO_RAD);
+            addVelocityClockwiseToDirection(this.actor, this.direction, this.paramStagger.clockwiseSpeed * speedT * clockwiseWave * deltaTimeFrames);
+            addVelocityMoveToDirection(this.actor, this.direction, this.paramStagger.moveSpeed * speedT * deltaTimeFrames);
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+            this.reboundWall();
+            if (isGreaterStep(this, this.paramStagger.staggerStep))
+                this.setNerve(WalkerStateStaggerNrv.StaggerEnd);
+        } else if (currentNerve === WalkerStateStaggerNrv.StaggerEnd) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'StaggerEnd');
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+            if (isBckStopped(this.actor))
+                this.kill();
+        }
+    }
+}
+
 function updateActorState(sceneObjHolder: SceneObjHolder, actor: LiveActor, state: ActorStateBaseInterface, deltaTimeFrames: number): boolean {
     if (isFirstStep(actor))
         state.appear();
@@ -1938,7 +2036,7 @@ class ItemGenerator {
     }
 }
 
-const enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase, PressDown }
+const enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase, PressDown, Stagger }
 export class Kuribo extends LiveActor<KuriboNrv> {
     private poseQuat = quat.create();
     private axisZ = vec3.create();
@@ -1946,6 +2044,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     private stateWander: WalkerStateWander;
     private stateFindPlayer: WalkerStateFindPlayer;
     private stateChase: WalkerStateChase;
+    private stateStagger: WalkerStateStagger;
     private itemGenerator = new ItemGenerator();
     public generateItem = true;
 
@@ -2040,6 +2139,19 @@ export class Kuribo extends LiveActor<KuriboNrv> {
             forceEndStep: 300,
             endStep: 14,
         });
+
+        this.stateStagger = new WalkerStateStagger(this, this.axisZ, param, {
+            horizonPunchSpeed: 10.0,
+            gravityPunchSpeed: 10.0,
+            clockwisePunchSpeed: 10.0,
+            staggerStep: 180,
+            minStep: 60,
+            maxStep: 120,
+            moveSpeed: 0.35,
+            clockwiseSpeed: 0.5,
+            clockwiseWaveSpeed: 3.0,
+            rotateSpeedDegree: 40.0,
+        });
     }
 
     private initAppearState(infoIter: JMapInfoIter): void {
@@ -2084,6 +2196,8 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         } else if (currentNerve === KuriboNrv.Chase) {
             if (updateActorStateAndNextNerve(sceneObjHolder, this, this.stateChase, KuriboNrv.Wander, deltaTimeFrames))
                 this.stateWander.setWanderCenter(this.translation);
+        } else if (currentNerve === KuriboNrv.Stagger) {
+            updateActorStateAndNextNerve(sceneObjHolder, this, this.stateStagger, KuriboNrv.Wander, deltaTimeFrames);
         } else if (currentNerve === KuriboNrv.PressDown) {
             if (isFirstStep(this))
                 vec3.zero(this.velocity);
@@ -2113,9 +2227,26 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         return false;
     }
 
+    private isEnablePanch(): boolean {
+        // FlatDown, HipDropDown, PressDown, BlowDown, Blow
+        if (this.isNerve(KuriboNrv.PressDown))
+            return false;
+        return true;
+    }
+
     private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
         // should never happen in practice
         throw "whoops";
+    }
+
+    private requestStagger(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+        if (this.isEnablePanch()) {
+            this.stateStagger.setPunchDirection(otherSensor, thisSensor);
+            this.setNerve(KuriboNrv.Stagger);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private requestDead(): boolean {
@@ -2180,7 +2311,9 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         if (isSensorEnemy(otherSensor) || isSensorRide(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(thisSensor)) || this.isEnablePushMove())
             addVelocityFromPush(this, 1.5, otherSensor, thisSensor);
 
-        if (messageType === MessageType.InhaleBlackHole) {
+        if (messageType === MessageType.StarPieceAttack) {
+            return this.requestStagger(sceneObjHolder, otherSensor, thisSensor);
+        } else if (messageType === MessageType.InhaleBlackHole) {
             this.itemGenerator.setTypeNone();
             this.makeActorDead(sceneObjHolder);
             return true;
@@ -2211,13 +2344,14 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     }
 }
 
-const enum KuriboMiniNrv { Wander, FindPlayer, Chase }
+const enum KuriboMiniNrv { Wander, FindPlayer, Chase, Stagger }
 export class KuriboMini extends LiveActor<KuriboMiniNrv> {
     private poseQuat = quat.create();
     private axisZ = vec3.create();
     private stateWander: WalkerStateWander;
     private stateFindPlayer: WalkerStateFindPlayer;
     private stateChase: WalkerStateChase;
+    private stateStagger: WalkerStateStagger;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'KuriboMini');
@@ -2294,8 +2428,20 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
             forceEndStep: 300,
             endStep: 14,
         });
-    }
 
+        this.stateStagger = new WalkerStateStagger(this, this.axisZ, param, {
+            horizonPunchSpeed: 10.0,
+            gravityPunchSpeed: 10.0,
+            clockwisePunchSpeed: 10.0,
+            staggerStep: 180,
+            minStep: 60,
+            maxStep: 120,
+            moveSpeed: 0.35,
+            clockwiseSpeed: 0.5,
+            clockwiseWaveSpeed: 3.0,
+            rotateSpeedDegree: 40.0,
+        });
+    }
 
     protected override calcAndSetBaseMtx(): void {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
@@ -2328,6 +2474,10 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
                 this.stateWander.setWanderCenter(this.translation);
             if (this.tryDeadMap(sceneObjHolder))
                 return;
+        } else if (currentNerve === KuriboMiniNrv.Stagger) {
+            updateActorStateAndNextNerve(sceneObjHolder, this, this.stateStagger, KuriboMiniNrv.Wander, deltaTimeFrames);
+            if (this.tryDeadMap(sceneObjHolder))
+                return;
         }
     }
 
@@ -2358,9 +2508,24 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
         return true;
     }
 
+    private isDown(): boolean {
+        // FlatDown, HipDropDown, PressDown, BlowDown
+        return false;
+    }
+
     private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
         // should never happen in practice
         throw "whoops";
+    }
+
+    private requestStagger(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+        if (!this.isDown()) {
+            this.stateStagger.setPunchDirection(otherSensor, thisSensor);
+            this.setNerve(KuriboMiniNrv.Stagger);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public override attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
@@ -2386,7 +2551,10 @@ export class KuriboMini extends LiveActor<KuriboMiniNrv> {
         if (isSensorEnemy(otherSensor) || isSensorRide(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(thisSensor)) || this.isEnablePushMove())
             addVelocityFromPush(this, 1.5, otherSensor, thisSensor);
 
-        if (messageType === MessageType.InhaleBlackHole) {
+        if (messageType === MessageType.StarPieceAttack) {
+            if (!this.isDown())
+                return this.requestStagger(sceneObjHolder, otherSensor, thisSensor);
+        } else if (messageType === MessageType.InhaleBlackHole) {
             this.makeActorDead(sceneObjHolder);
             return true;
         }

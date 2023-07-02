@@ -8,7 +8,7 @@ import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInst
 import { LiveActor } from "./LiveActor";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
-import { assert, nullify } from "../util";
+import { assert, nArray, nullify } from "../util";
 import { ub_SceneParamsBufferSize } from "../gx/gx_render";
 import { GX_Program } from "../gx/gx_material";
 
@@ -27,16 +27,20 @@ export const enum MovementType {
     ClippingDirector               = 0x04,
     SensorHitChecker               = 0x05,
     MsgSharedGroup                 = 0x06,
+    MovementType_0x07              = 0x07,
     AudCameraWatcher               = 0x09,
     TalkDirector                   = 0x0A,
     DemoDirector                   = 0x0B,
+    MovementType_0x0C              = 0x0C,
     AreaObj                        = 0x0D,
     Layout                         = 0x0E,
     LayoutDecoration               = 0x0F,
-    Movie                          = 0x01,
+    Movie                          = 0x10,
     WipeLayout                     = 0x11,
     LayoutOnPause                  = 0x12,
     MovieSubtitles                 = 0x13,
+    MovementType_0x14              = 0x14,
+    MovementType_0x15              = 0x15,
     MirrorCamera                   = 0x16,
     ImageEffect                    = 0x17,
     AudEffectDirector              = 0x18,
@@ -61,6 +65,7 @@ export const enum MovementType {
     EnemyDecoration                = 0x2B,
     Item                           = 0x2C,
     ShadowControllerHolder         = 0x2D,
+    Count
 }
 
 export const enum CalcAnimType {
@@ -83,8 +88,10 @@ export const enum CalcAnimType {
     LayoutDecoration               = 0x0E,
     MovieSubtitles                 = 0x0F,
     Item                           = 0x10,
+    CalcAnimType_0x12              = 0x12,
     AnimParticle                   = 0x13,
     AnimParticleIgnorePause        = 0x14,
+    Count,
 }
 
 export const enum DrawBufferType {
@@ -113,6 +120,8 @@ export const enum DrawBufferType {
     Player                              = 0x14,
     PlayerDecoration                    = 0x15,
     CrystalBox                          = 0x16,
+    DrawBufferType_0x17                 = 0x17,
+    DrawBufferType_0x18                 = 0x18,
     IndirectMapObj                      = 0x19,
     IndirectMapObjStrongLight           = 0x1A,
     IndirectNpc                         = 0x1B,
@@ -128,7 +137,7 @@ export const enum DrawBufferType {
     MirrorMapObj                        = 0x27,
 
     // noclip additions
-    AstroMapBoard                       = 0x60,
+    AstroMapBoard,
 }
 
 export const enum DrawType {
@@ -307,11 +316,35 @@ export class NameObjHolder {
     }
 }
 
+class NameObjCategoryList<TCategory extends number> {
+    public categoryInfo: NameObj[][];
+
+    constructor(count: number) {
+        this.categoryInfo = nArray(count, () => []);
+    }
+
+    public register(nameObj: NameObj, category: TCategory): void {
+        this.categoryInfo[category].push(nameObj);
+    }
+
+    public unregister(nameObj: NameObj, category: TCategory): void {
+        const idx = this.categoryInfo[category].indexOf(nameObj);
+        this.categoryInfo[category].splice(idx, 1);
+    }
+
+    public getList(category: TCategory): NameObj[] {
+        return this.categoryInfo[category];
+    }
+}
+
 // This is also NameObjExecuteHolder and NameObjListExecutor for our purposes... at least for now.
 export class SceneNameObjListExecutor {
     public drawBufferHolder: DrawBufferHolder;
     public executeDrawRenderInstList: GfxRenderInstList[] = [];
     public nameObjExecuteInfos: NameObjExecuteInfo[] = [];
+
+    private movementList = new NameObjCategoryList<MovementType>(MovementType.Count);
+    private calcAnimList = new NameObjCategoryList<CalcAnimType>(CalcAnimType.Count);
 
     constructor() {
         this.drawBufferHolder = new DrawBufferHolder(drawBufferInitialTable);
@@ -323,6 +356,11 @@ export class SceneNameObjListExecutor {
         info.setConnectInfo(this, actor, movementType, calcAnimType, drawBufferType, drawType);
         actor.nameObjExecuteInfoIndex = this.nameObjExecuteInfos.length;
         this.nameObjExecuteInfos.push(info);
+
+        if (movementType !== MovementType.None)
+            this.movementList.register(actor, movementType);
+        if (calcAnimType !== CalcAnimType.None)
+            this.calcAnimList.register(actor, calcAnimType);
     }
 
     // NameObjListExecutor::findLightInfo
@@ -337,16 +375,16 @@ export class SceneNameObjListExecutor {
         return this.drawBufferHolder.findLightType(info.drawBufferType);
     }
 
-    public executeMovement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
-            if (this.nameObjExecuteInfos[i].movementType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder);
+    public executeMovement(sceneObjHolder: SceneObjHolder, movementType: MovementType): void {
+        const list = this.movementList.getList(movementType);
+        for (let i = 0; i < list.length; i++)
+            list[i].movement(sceneObjHolder);
     }
 
-    public executeCalcAnim(sceneObjHolder: SceneObjHolder): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
-            if (this.nameObjExecuteInfos[i].calcAnimType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder);
+    public executeCalcAnim(sceneObjHolder: SceneObjHolder, calcAnimType: CalcAnimType): void {
+        const list = this.calcAnimList.getList(calcAnimType);
+        for (let i = 0; i < list.length; i++)
+            list[i].calcAnim(sceneObjHolder);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, drawCameraType: DrawCameraType, viewerInput: ViewerRenderInput): void {

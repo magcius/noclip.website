@@ -9,7 +9,6 @@ import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor, ResourceHolder } from "./
 import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation, Vec3Zero } from "../MathHelpers";
 import { connectToScene, vecKillElement } from "./ActorUtil";
-import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { AABB } from "../Geometry";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -1251,7 +1250,7 @@ export class Binder {
         this.ceilingHitInfo.distance = -99999.0;
     }
 
-    public setTriangleFilter(filter: TriangleFilterFunc): void {
+    public setTriangleFilter(filter: TriangleFilterFunc | null): void {
         this.triangleFilter = filter;
     }
 
@@ -1262,6 +1261,20 @@ export class Binder {
     public setExCollisionParts(parts: CollisionParts | null): void {
         this.exCollisionParts = parts;
         this.exCollisionPartsValid = this.exCollisionParts !== null;
+    }
+
+    public iterHitInfo(cb: (h: HitInfo) => void): void {
+        if (this.hitInfos === scratchHitInfo) {
+            if (this.floorHitInfo.distance >= 0.0)
+                cb(this.floorHitInfo);
+            if (this.wallHitInfo.distance >= 0.0)
+                cb(this.wallHitInfo);
+            if (this.ceilingHitInfo.distance >= 0.0)
+                cb(this.ceilingHitInfo);
+        } else {
+            for (let i = 0; i < this.hitInfoCount; i++)
+                cb(this.hitInfos[i]);
+        }
     }
 
     public debugDrawHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, hitInfo: HitInfo): void {
@@ -1321,7 +1334,7 @@ export function isBinded(actor: LiveActor): boolean {
     return isBindedGround(actor) || isBindedRoof(actor) || isBindedWall(actor);
 }
 
-export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc): void {
+export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc | null): void {
     actor.binder!.setTriangleFilter(triFilter);
 }
 
@@ -1345,6 +1358,26 @@ export function setBinderIgnoreMovingCollision(actor: LiveActor): void {
 
 export function getBindedFixReactionVector(actor: LiveActor): ReadonlyVec3 {
     return actor.binder!.fixReactionVector;
+}
+
+export function getBindedPosition(actor: LiveActor): ReadonlyVec3 {
+    if (isBindedGround(actor))
+        return actor.binder!.floorHitInfo.strikeLoc;
+    if (isBindedWall(actor))
+        return actor.binder!.wallHitInfo.strikeLoc;
+    if (isBindedRoof(actor))
+        return actor.binder!.ceilingHitInfo.strikeLoc;
+    return actor.binder!.floorHitInfo.strikeLoc;
+}
+
+export function getBindedNormal(actor: LiveActor): ReadonlyVec3 {
+    if (isBindedGround(actor))
+        return actor.binder!.floorHitInfo.faceNormal;
+    if (isBindedWall(actor))
+        return actor.binder!.wallHitInfo.faceNormal;
+    if (isBindedRoof(actor))
+        return actor.binder!.ceilingHitInfo.faceNormal;
+    return actor.binder!.floorHitInfo.faceNormal;
 }
 
 function getWallCode(sceneObjHolder: SceneObjHolder, triangle: Triangle): WallCode {

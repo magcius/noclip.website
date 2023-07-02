@@ -154,6 +154,19 @@ class TalkNodeCtrl {
         this.updateMessage(sceneObjHolder);
     }
 
+    public recordTempFlowNode(): void {
+        this.tempFlowNode = this.currentNode;
+    }
+
+    public resetFlowNode(sceneObjHolder: SceneObjHolder): void {
+        if (this.currentNode === this.rootNode)
+            return;
+
+        this.currentNode = this.rootNode;
+        this.tempFlowNode = this.rootNode;
+        this.updateMessage(sceneObjHolder);
+    }
+
     public forwardFlowNode(sceneObjHolder: SceneObjHolder): void {
         if (this.currentNode === null)
             return;
@@ -187,7 +200,7 @@ const scratchVec3b = vec3.create();
 
 export class TalkMessageCtrl {
     private offset = vec3.create();
-    private talkNodeCtrl: TalkNodeCtrl;
+    public talkNodeCtrl: TalkNodeCtrl;
     public balloonPos = vec3.create();
     public rootNodeAutomatic = false;
     public talkState = TalkState.None;
@@ -216,6 +229,10 @@ export class TalkMessageCtrl {
         default:
             return false;
         }
+    }
+
+    public onTalkStateNone(): void {
+        this.talkState = TalkState.None;
     }
 
     public rootNodePre(sceneObjHolder: SceneObjHolder, shouldContinue: boolean): void {
@@ -551,6 +568,17 @@ export function tryTalkNearPlayer(sceneObjHolder: SceneObjHolder, messageCtrl: T
         return talkDirector.start(sceneObjHolder, messageCtrl);
 
     return false;
+}
+
+export function resetAndForwardNode(sceneObjHolder: SceneObjHolder, talk: TalkMessageCtrl, count: number): void {
+    talk.onTalkStateNone();
+    talk.talkNodeCtrl.resetFlowNode(sceneObjHolder);
+
+    for (let i = 0; i < count; i++) {
+        talk.onTalkStateNone();
+        talk.talkNodeCtrl.forwardFlowNode(sceneObjHolder);
+        talk.talkNodeCtrl.recordTempFlowNode()
+    }
 }
 
 export function createTalkCtrl(sceneObjHolder: SceneObjHolder, host: LiveActor, infoIter: JMapInfoIter, actorName: string, offset: ReadonlyVec3 = Vec3Zero, hostMtx: ReadonlyMat4 | null): TalkMessageCtrl | null {

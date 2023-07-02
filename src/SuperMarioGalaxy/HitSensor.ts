@@ -2,10 +2,11 @@
 import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
-import { connectToScene, getGroupFromArray, getJointMtxByName } from "./ActorUtil";
+import { calcGravityVector, connectToScene, getGroupFromArray, getJointMtxByName, vecKillElement } from "./ActorUtil";
 import { NameObj, MovementType } from "./NameObj";
 import { arrayRemove, assertExists } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export const enum HitSensorType {
     _Player_Start               = 0x00,
@@ -360,7 +361,7 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.rideGroup;
         else if (sensor.isType(HitSensorType.Eye))
             sensor.group = this.eyeGroup;
-        else if (sensor.isType(HitSensorType.Coin) || sensor.isType(HitSensorType.StarPiece) || sensor.isType(HitSensorType.EnemySimple) || sensor.isType(HitSensorType.MapObjSimple) || sensor.isType(0x1F) || isSensorRush(sensor) || isSensorAutoRush(sensor))
+        else if (sensor.isType(HitSensorType.Coin) || sensor.isType(HitSensorType.StarPiece) || sensor.isType(HitSensorType.EnemySimple) || sensor.isType(HitSensorType.MapObjSimple) || sensor.isType(HitSensorType.PlayerAutoJump) || isSensorRush(sensor) || isSensorAutoRush(sensor))
             sensor.group = this.simpleGroup;
         else if (isSensorMapObj(sensor))
             sensor.group = this.mapObjGroup;
@@ -517,12 +518,33 @@ export function sendMsgToGroupMember<T extends LiveActor>(sceneObjHolder: SceneO
         actor.receiveMessage(sceneObjHolder, messageType, sendSensor, actor.getSensor(recvSensorName));
 }
 
+export function sendMsgToBindedSensor(sceneObjHolder: SceneObjHolder, messageType: MessageType, actor: LiveActor, thisSensor: HitSensor): boolean {
+    if (actor.binder === null)
+        return false;
+
+    let result = false;
+    actor.binder.iterHitInfo((h) => {
+        if (h.hitSensor === null)
+            return;
+
+        if (h.hitSensor.receiveMessage(sceneObjHolder, messageType, thisSensor))
+            result = true;
+    });
+    return result;
+}
+
 export function isSensorNear(a: HitSensor, b: HitSensor, radius: number): boolean {
     return vec3.squaredDistance(a.center, b.center) < (radius ** 2.0);
 }
 
 export function calcSensorDirectionNormalize(dst: vec3, a: HitSensor, b: HitSensor): void {
     vec3.sub(dst, b.center, a.center);
+    vec3.normalize(dst, dst);
+}
+
+export function calcSensorHorizonNormalize(dst: vec3, gravity: ReadonlyVec3, a: HitSensor, b: HitSensor): void {
+    vec3.sub(dst, b.center, a.center);
+    vecKillElement(dst, dst, gravity);
     vec3.normalize(dst, dst);
 }
 

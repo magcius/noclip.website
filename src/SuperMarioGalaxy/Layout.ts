@@ -228,7 +228,7 @@ class CustomTagProcessor implements TagProcessor {
         const oldFont = writer.font;
         writer.setFont(this.layout.resourceCollection.getFontByName('PictureFont.brfnt')!);
 
-        if (this.colorType === 0 && !this.isSha)
+        if (!this.isSha)
             writer.setColorMapping(TransparentBlack, White);
 
         const pictureChar = 0x30 + picture;
@@ -238,7 +238,7 @@ class CustomTagProcessor implements TagProcessor {
             writer.writeCharacter(pictureChar, true);
         writer.setFont(oldFont);
 
-        if (this.colorType === 0 && !this.isSha)
+        if (!this.isSha)
             this.setColor(writer, this.colorType);
     }
 

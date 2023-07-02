@@ -29,7 +29,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { DrawCameraType } from './DrawBuffer';
-import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits, MovementType, CalcAnimType } from './NameObj';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
 import { EffectSystem, ParticleResourceHolder } from './EffectSystem';
@@ -58,6 +58,7 @@ import { GalaxyMapController } from './Actors/GalaxyMap';
 import { KameckBeamHolder, KameckBeamTurtleHolder, KameckFireBallHolder, TakoHeiInkHolder } from './Actors/Enemy';
 import { dfLabel, dfShow } from '../DebugFloaters';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
+import InputManager from '../InputManager';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -304,6 +305,87 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListExecute(drawType));
     }
 
+    private executeMovementList(): void {
+        const sceneObjHolder = this.sceneObjHolder;
+        const executor = sceneObjHolder.sceneNameObjListExecutor;
+
+        // executeRequirementDisconnectDrawDelay
+        executor.executeMovement(sceneObjHolder, MovementType.StopSceneDelayRequest);
+        executor.executeMovement(sceneObjHolder, MovementType.Camera);
+        executor.executeMovement(sceneObjHolder, MovementType.MirrorCamera);
+        // setStarPointerCameraMtxAtGameScene
+        // loadViewMtx
+        executor.executeMovement(sceneObjHolder, MovementType.ClippingDirector);
+        // executeRequirementConnectMovement
+        // executeRequirementConnectDraw
+        // executeRequirementDisconnectMovement
+        // executeRequirementDisconnectDraw
+        executor.executeMovement(sceneObjHolder, MovementType.ScreenEffect);
+        executor.executeMovement(sceneObjHolder, MovementType.SensorHitChecker);
+        executor.executeMovement(sceneObjHolder, MovementType.MsgSharedGroup);
+        executor.executeMovement(sceneObjHolder, MovementType.MovementType_0x07);
+        executor.executeMovement(sceneObjHolder, MovementType.MovementType_0x14);
+        executor.executeMovement(sceneObjHolder, MovementType.TalkDirector);
+        executor.executeMovement(sceneObjHolder, MovementType.DemoDirector);
+        executor.executeMovement(sceneObjHolder, MovementType.MovementType_0x0C);
+        executor.executeMovement(sceneObjHolder, MovementType.ClippedMapParts);
+        executor.executeMovement(sceneObjHolder, MovementType.Planet);
+        executor.executeMovement(sceneObjHolder, MovementType.CollisionMapObj);
+        executor.executeMovement(sceneObjHolder, MovementType.CollisionEnemy);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.ClippedMapParts);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Planet);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.CollisionMapObj);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.CollisionEnemy);
+        executor.executeMovement(sceneObjHolder, MovementType.CollisionDirector);
+        executor.executeMovement(sceneObjHolder, MovementType.Environment);
+        executor.executeMovement(sceneObjHolder, MovementType.MapObj);
+        executor.executeMovement(sceneObjHolder, MovementType.MapObjDecoration);
+        executor.executeMovement(sceneObjHolder, MovementType.MovementType_0x15);
+        executor.executeMovement(sceneObjHolder, MovementType.Npc);
+        executor.executeMovement(sceneObjHolder, MovementType.Ride);
+        executor.executeMovement(sceneObjHolder, MovementType.Player);
+        executor.executeMovement(sceneObjHolder, MovementType.PlayerDecoration);
+        executor.executeMovement(sceneObjHolder, MovementType.Enemy);
+        executor.executeMovement(sceneObjHolder, MovementType.EnemyDecoration);
+        executor.executeMovement(sceneObjHolder, MovementType.Item);
+        executor.executeMovement(sceneObjHolder, MovementType.PlayerMessenger);
+        executor.executeMovement(sceneObjHolder, MovementType.AreaObj);
+        executor.executeMovement(sceneObjHolder, MovementType.Layout);
+        executor.executeMovement(sceneObjHolder, MovementType.LayoutDecoration);
+        executor.executeMovement(sceneObjHolder, MovementType.MovieSubtitles);
+        executor.executeMovement(sceneObjHolder, MovementType.WipeLayout);
+        executor.executeMovement(sceneObjHolder, MovementType.Movie);
+        executor.executeMovement(sceneObjHolder, MovementType.Sky);
+        executor.executeMovement(sceneObjHolder, MovementType.ImageEffect);
+        executor.executeMovement(sceneObjHolder, MovementType.AudEffectDirector);
+        executor.executeMovement(sceneObjHolder, MovementType.AudBgmConductor);
+        executor.executeMovement(sceneObjHolder, MovementType.AudCameraWatcher);
+        executor.executeMovement(sceneObjHolder, MovementType.CameraCover);
+        executor.executeMovement(sceneObjHolder, MovementType.SwitchWatcherHolder);
+    }
+
+    private executeCalcAnimList(): void {
+        const sceneObjHolder = this.sceneObjHolder;
+        const executor = sceneObjHolder.sceneNameObjListExecutor;
+
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Environment);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.MapObj);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Npc);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Ride);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Enemy);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Player);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.PlayerDecoration);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.MapObjDecoration);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Item);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.Layout);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.LayoutDecoration);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.CalcAnimType_0x12);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.MirrorMapObj);
+        executor.executeMovement(sceneObjHolder, MovementType.ShadowControllerHolder);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.AnimParticle);
+        executor.executeCalcAnim(sceneObjHolder, CalcAnimType.AnimParticleIgnorePause);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const sceneObjHolder = this.sceneObjHolder;
 
@@ -317,8 +399,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         sceneObjHolder.drawSyncManager.beginFrame(device);
 
         sceneObjHolder.deltaTimeFrames = getDeltaTimeFrames(viewerInput);
-        executor.executeMovement(sceneObjHolder, viewerInput);
-        executor.executeCalcAnim(sceneObjHolder);
+
+        this.executeMovementList();
+        this.executeCalcAnimList();
 
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
@@ -448,13 +531,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Crystal);
 
                 this.drawOpa(passRenderer, DrawBufferType.Planet);
-                this.drawOpa(passRenderer, 0x05); // planet strong light?
-                // execute(0x19);
+                this.drawOpa(passRenderer, DrawBufferType.PlanetLow);
+                this.execute(passRenderer, DrawType.FlexibleSphere);
                 this.drawOpa(passRenderer, DrawBufferType.Environment);
                 this.drawOpa(passRenderer, DrawBufferType.MapObj);
                 this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
                 this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
-                this.drawOpa(passRenderer, 0x1F); // player light?
+                this.drawOpa(passRenderer, DrawBufferType.TripodBoss);
             });
         });
 
@@ -503,7 +586,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.Ride);
                 this.drawOpa(passRenderer, DrawBufferType.Enemy);
                 this.drawOpa(passRenderer, DrawBufferType.EnemyDecoration);
-                this.drawOpa(passRenderer, 0x15);
+                this.drawOpa(passRenderer, DrawBufferType.PlayerDecoration);
                 if (!isExistPriorDrawAir(sceneObjHolder)) {
                     this.drawOpa(passRenderer, DrawBufferType.Sky);
                     this.drawOpa(passRenderer, DrawBufferType.Air);
@@ -526,16 +609,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.execute(passRenderer, DrawType.WhirlPoolAccelerator);
                 this.execute(passRenderer, DrawType.Flag);
 
-                this.drawOpa(passRenderer, 0x18);
+                this.drawOpa(passRenderer, DrawBufferType.DrawBufferType_0x18);
 
                 // executeDrawBufferListNormalXlu()
                 this.drawXlu(passRenderer, DrawBufferType.Planet);
-                this.drawXlu(passRenderer, 0x05);
+                this.drawXlu(passRenderer, DrawBufferType.PlanetLow);
                 this.drawXlu(passRenderer, DrawBufferType.Environment);
                 this.drawXlu(passRenderer, DrawBufferType.EnvironmentStrongLight);
                 this.drawXlu(passRenderer, DrawBufferType.MapObj);
                 this.drawXlu(passRenderer, DrawBufferType.MapObjWeakLight);
-                this.drawXlu(passRenderer, 0x1F);
+                this.drawXlu(passRenderer, DrawBufferType.TripodBoss);
                 this.drawXlu(passRenderer, DrawBufferType.MapObjStrongLight);
                 this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObj);
                 this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
@@ -552,7 +635,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.execute(passRenderer, DrawType.VolumeModel);
                 this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.execute(passRenderer, DrawType.ClipAreaDropLaser);
-                this.drawXlu(passRenderer, 0x18);
+                this.drawXlu(passRenderer, DrawBufferType.DrawBufferType_0x18);
 
                 this.execute(passRenderer, DrawType.ShadowSurface);
                 this.execute(passRenderer, DrawType.EffectDraw3D);
@@ -578,16 +661,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.IndirectNpc);
                 this.drawOpa(passRenderer, DrawBufferType.IndirectEnemy);
                 this.drawOpa(passRenderer, DrawBufferType.GlaringLight);
-                this.drawOpa(passRenderer, 0x17);
-                this.drawOpa(passRenderer, 0x16);
+                this.drawOpa(passRenderer, DrawBufferType.DrawBufferType_0x17);
+                this.drawOpa(passRenderer, DrawBufferType.CrystalBox);
                 this.drawXlu(passRenderer, DrawBufferType.IndirectPlanet);
                 this.drawXlu(passRenderer, DrawBufferType.IndirectMapObj);
                 this.drawXlu(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
                 this.drawXlu(passRenderer, DrawBufferType.IndirectNpc);
                 this.drawXlu(passRenderer, DrawBufferType.IndirectEnemy);
                 this.drawXlu(passRenderer, DrawBufferType.GlaringLight);
-                this.drawXlu(passRenderer, 0x17);
-                this.drawXlu(passRenderer, 0x16);
+                this.drawXlu(passRenderer, DrawBufferType.DrawBufferType_0x17);
+                this.drawXlu(passRenderer, DrawBufferType.CrystalBox);
                 this.execute(passRenderer, DrawType.ElectricRailHolder);
                 this.execute(passRenderer, DrawType.OceanRing);
                 this.execute(passRenderer, DrawType.OceanBowl);
@@ -1164,6 +1247,7 @@ export class SceneObjHolder {
     public renderParams = new RenderParams();
     public graphBuilder: GfxrGraphBuilder;
     public viewerInput: Viewer.ViewerRenderInput;
+    public inputManager: InputManager;
     public uiContainer: HTMLElement;
     public debugUtils = new DebugUtils();
 
@@ -1789,6 +1873,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
         sceneObjHolder.viewerInput = context.viewerInput;
+        sceneObjHolder.inputManager = context.inputManager;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.renderCache);
         sceneObjHolder.requestArchives();

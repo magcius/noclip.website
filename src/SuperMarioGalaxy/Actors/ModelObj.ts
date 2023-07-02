@@ -10,12 +10,12 @@ export class ModelObj<T extends number = number> extends LiveActor<T> {
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (this.transformMatrix !== null)
             mat4.getTranslation(this.translation, this.transformMatrix);
-        if (movementType < -1)
-            movementType = 0x08;
-        if (calcAnimType < -1)
-            calcAnimType = 0x23;
-        if (drawBufferType < -1)
+        if (drawBufferType === -2)
             drawBufferType = DrawBufferType.NoShadowedMapObj;
+        if (movementType === -2)
+            movementType = MovementType.MapObjDecoration;
+        if (calcAnimType === -2)
+            calcAnimType = CalcAnimType.MapObjDecoration;
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
         this.initEffectKeeper(sceneObjHolder, null);
         this.makeActorAppeared(sceneObjHolder);

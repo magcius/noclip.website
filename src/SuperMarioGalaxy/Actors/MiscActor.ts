@@ -483,6 +483,12 @@ export function appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: N
     sceneObjHolder.coinHolder!.appearCoinPopToDirection(sceneObjHolder, host, position, direction, count);
 }
 
+export function appearCoinFix(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, count: number): void {
+    if (sceneObjHolder.coinHolder === null)
+        return;
+    sceneObjHolder.coinHolder!.appearCoinFix(sceneObjHolder, host, position, count);
+}
+
 class CoinHostInfo {
     public declaredCount = 0;
     public aliveCount = 0;
@@ -565,6 +571,11 @@ export class CoinHolder extends LiveActorGroup<Coin> {
         vec3.scale(scratchVec3a, scratchVec3a, -25.0)
         const speed = count === 1 ? 0.0 : 4.0;
         this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
+    }
+
+    public appearCoinFix(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, count: number): void {
+        const speed = count === 1 ? 0.0 : 4.0;
+        this.appearCoin(sceneObjHolder, host, position, Vec3Zero, count, -1, -1, speed);
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder): void {

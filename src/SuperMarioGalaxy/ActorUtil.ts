@@ -8,7 +8,7 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj, isInAreaObj } from "./AreaObj";
@@ -22,6 +22,7 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from ".
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
 import { TextureMapping } from "../TextureHolder";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -537,6 +538,14 @@ export function isActionStart(actor: LiveActor, action: string): boolean {
 
 export function isActionEnd(actor: LiveActor): boolean {
     return isBckStopped(actor);
+}
+
+export function isActionLoopedOrStopped(actor: LiveActor): boolean {
+    const bckCtrl = actor.modelManager!.getBckCtrl();
+    if (bckCtrl.loopMode === LoopMode.ONCE)
+        return isBckStopped(actor);
+    else
+        return isBckLooped(actor);
 }
 
 export function tryStartAction(actor: LiveActor, action: string): boolean {
@@ -1527,6 +1536,10 @@ export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityV
     makeMtxUpFrontPos(dst, scratchVec3b, front, actor.translation);
 }
 
+export function getCamXdir(v: vec3, camera: Camera): void {
+    getMatrixAxisX(v, camera.worldMatrix);
+}
+
 export function getCamYdir(v: vec3, camera: Camera): void {
     getMatrixAxisY(v, camera.worldMatrix);
 }
@@ -1763,6 +1776,16 @@ export function calcReboundVelocity(velocity: vec3, faceNormal: ReadonlyVec3, bo
     }
 }
 
+export function calcReboundVelocitySimple(velocity: vec3, faceNormal: ReadonlyVec3, bounce: number): boolean {
+    const dot = vec3.dot(velocity, faceNormal);
+    if (dot < 0.0) {
+        vec3.scaleAndAdd(velocity, velocity, faceNormal, -dot * (1.0 + bounce));
+        return true;
+    } else {
+        return false;
+    }
+}
+
 export function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {
     if (!isBinded(actor))
         return false;
@@ -1924,4 +1947,9 @@ export class ProjmapEffectMtxSetter {
         mat4.mul(scratchMatrix, scratchMatrix, this.model.modelMatrix);
         mat4.invert(this.effectMtx, scratchMatrix);
     }
+}
+
+export function calcNerveEaseInOutValue(actor: LiveActor, minStep: number, maxStep: number, minValue: number, maxValue: number): number {
+    const t = saturate(invlerp(minStep, maxStep, actor.getNerveStep()));
+    return getEaseInOutValue(t, minValue, maxValue);
 }

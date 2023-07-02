@@ -9,7 +9,7 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, Gfxr
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fallback, mod, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { calcRailPointPos, connectToScene, drawSimpleModel, getCamZdir, getEaseInOutValue, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppear, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil";
+import { calcNerveEaseInOutValue, calcRailPointPos, connectToScene, drawSimpleModel, getCamZdir, getEaseInOutValue, getEaseOutValue, getRailPointArg0, getRailPointNum, initDefaultPos, isOnSwitchAppear, isOnSwitchB, isRailReachedGoal, isValidSwitchAppear, isValidSwitchB, listenStageSwitchOnOffAppear, listenStageSwitchOnOffAppearCtrl, moveCoordAndTransToRailStartPoint, moveTransToCurrentRailPos, useStageSwitchReadAppear, useStageSwitchWriteB } from "./ActorUtil";
 import { getJMapInfoArg0, getJMapInfoBool, JMapInfoIter } from "./JMapInfo";
 import { dynamicSpawnZoneAndLayer, LiveActor, LiveActorGroup, makeMtxTRFromActor, ZoneAndLayer } from "./LiveActor";
 import { getObjectName, SceneObj, SceneObjHolder } from "./Main";
@@ -236,11 +236,6 @@ export function createClipAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder:
 
 export function requestArchivesClipAreaSphere(sceneObjHolder: SceneObjHolder): void {
     ClipAreaShapeSphere.requestArchives(sceneObjHolder);
-}
-
-function calcNerveEaseInOutValue(actor: LiveActor, minStep: number, maxStep: number, minValue: number, maxValue: number): number {
-    const t = saturate(invlerp(minStep, maxStep, actor.getNerveStep()));
-    return getEaseInOutValue(t, minValue, maxValue);
 }
 
 function calcNerveEaseOutValue(actor: LiveActor, maxStep: number, minValue: number, maxValue: number): number {
