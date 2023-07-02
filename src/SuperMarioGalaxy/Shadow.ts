@@ -122,6 +122,7 @@ class ShadowController {
     }
 
     public setDropPosMtxPtr(mtx: ReadonlyMat4 | null, offs: ReadonlyVec3): void {
+        this.dropPosRef = null;
         this.dropPosMtxRef = mtx;
         this.dropPosTxformMtxRef = mtx;
         vec3.copy(this.dropPosFix, offs);

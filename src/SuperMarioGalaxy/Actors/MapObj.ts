@@ -15,7 +15,7 @@ import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec
 import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getBindedNormal, getBindedPosition, getFirstPolyOnLineToMap, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, setBinderRadius, setBindTriangleFilter, tryCreateCollisionMoveLimit, validateCollisionParts } from '../Collision';
 import { registerDemoActionNerve, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
-import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitPos, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
+import { deleteEffect, deleteEffectAll, emitEffect, emitEffectHitPos, emitEffectWithScale, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
 import { addBaseMatrixFollowTarget } from '../Follow';
 import { initMultiFur } from '../Fur';
 import { addBodyMessageSensorMapObj, addBodyMessageSensorReceiver, addHitSensor, addHitSensorCallbackMapObj, addHitSensorEnemy, addHitSensorEnemyAttack, addHitSensorEye, addHitSensorMapObj, addHitSensorMapObjSimple, HitSensor, HitSensorType, invalidateHitSensors, isSensorEnemy, isSensorEnemyAttack, isSensorEye, isSensorMapObj, isSensorPlayer, sendArbitraryMsg, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToBindedSensor, validateHitSensor, validateHitSensors } from '../HitSensor';
@@ -31,7 +31,7 @@ import { initShadowFromCSV, initShadowVolumeBox, initShadowVolumeCylinder, initS
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { GalaxyMapController } from './GalaxyMap';
-import { appearCoinFix, appearCoinPop, createBloomModel, createIndirectPlanetModel, declareCoin, isEqualStageName } from './MiscActor';
+import { appearCoinFix, appearCoinPop, appearCoinPopToDirection, createBloomModel, createIndirectPlanetModel, declareCoin, isEqualStageName } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStrongLight, ModelObj } from './ModelObj';
 import { PartsModel } from './PartsModel';
 import * as GX from "../../gx/gx_enum";
@@ -1836,27 +1836,58 @@ export class WatchTowerRotateStep extends LiveActor<WatchTowerRotateStepNrv> {
     }
 }
 
-const enum TreasureSpotNrv { Wait }
+const enum TreasureSpotNrv { Wait, Spout, End }
 export class TreasureSpot extends MapObjActor<TreasureSpotNrv> {
     private isCoinFlower: boolean;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo<TreasureSpotNrv>();
         setupInitInfoSimpleMapObj(initInfo);
-        // initInfo.setupHitSensor();
-        // initInto.setupHitSensorParam();
+        initInfo.setupHitSensor();
+        initInfo.setupHitSensorParam(4, 80.0, vec3.set(scratchVec3a, 0.0, 30.0, 0.0));
         initInfo.setupNerve(TreasureSpotNrv.Wait);
         // initInfo.setupSound();
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
 
         this.isCoinFlower = this.isObjectName('CoinFlower');
         // initStarPointerTarget
-        // declareCoin
+        declareCoin(sceneObjHolder, this, 1);
     }
 
     protected override control(sceneObjHolder: SceneObjHolder): void {
         super.control(sceneObjHolder);
         this.switchEmitGlow(sceneObjHolder);
+    }
+
+    protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureSpotNrv, deltaTimeFrames: number): void {
+        if (currentNerve === TreasureSpotNrv.Spout) {
+            if (isFirstStep(this)) {
+                forceDeleteEffectAll(sceneObjHolder, this);
+                calcUpVec(scratchVec3a, this);
+                appearCoinPopToDirection(sceneObjHolder, this, this.translation, scratchVec3a, 1);
+                if (this.isCoinFlower) {
+                    startBck(this, "Bloom");
+                } else {
+                    this.setNerve(TreasureSpotNrv.End);
+                    this.makeActorDead(sceneObjHolder);
+                }
+            }
+
+            if (this.isCoinFlower && isBckStopped(this))
+                this.setNerve(TreasureSpotNrv.End);
+        }
+    }
+
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.StarPieceAttack) {
+            if (this.isNerve(TreasureSpotNrv.Wait)) {
+                this.setNerve(TreasureSpotNrv.Spout);
+                return true;
+            }
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
     private switchEmitGlow(sceneObjHolder: SceneObjHolder): void {

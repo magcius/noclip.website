@@ -568,7 +568,7 @@ export class CoinHolder extends LiveActorGroup<Coin> {
 
     public appearCoinPopToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, position: ReadonlyVec3, direction: ReadonlyVec3, count: number): void {
         vec3.normalize(scratchVec3a, direction);
-        vec3.scale(scratchVec3a, scratchVec3a, -25.0)
+        vec3.scale(scratchVec3a, scratchVec3a, 25.0);
         const speed = count === 1 ? 0.0 : 4.0;
         this.appearCoin(sceneObjHolder, host, position, scratchVec3a, count, -1, -1, speed);
     }
@@ -979,7 +979,7 @@ class Coin extends LiveActor<CoinNrv> {
 
     public override scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         if (!this.isPurpleCoin) {
-            const visible = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer) && isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder);
+            const visible = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer) && !isGalaxyDarkCometAppearInCurrentStage(sceneObjHolder);
             this.setVisibleScenario(sceneObjHolder, visible);
         } else {
             super.scenarioChanged(sceneObjHolder);
