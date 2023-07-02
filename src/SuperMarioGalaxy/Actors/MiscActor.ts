@@ -4549,7 +4549,7 @@ export class ChooChooTrain extends LiveActor {
         this.speed = fallback(getJMapInfoArg1(infoIter), 5);
 
         for (let i = 0; i < numTrainBodies; i++) {
-            const trainBody = new ModelObj(zoneAndLayer, sceneObjHolder, 'ChooChooTrainBody', 'ChooChooTrainBody', null, -2, 0x1E, 2);
+            const trainBody = new ModelObj(zoneAndLayer, sceneObjHolder, 'ChooChooTrainBody', 'ChooChooTrainBody', null, -2, MovementType.CollisionMapObj, CalcAnimType.CollisionMapObj);
             initCollisionParts(sceneObjHolder, trainBody, 'ChooChooTrainBody', bodySensor, null);
             this.trainBodies.push(trainBody);
         }
@@ -4565,9 +4565,11 @@ export class ChooChooTrain extends LiveActor {
         for (let i = 0; i < this.trainBodies.length; i++) {
             moveCoord(this, 1080 * this.scale[1]);
             moveTransToOtherActorRailPos(this.trainBodies[i], this);
+            this.trainBodies[i].makeActorAppeared(sceneObjHolder);
             startBck(this.trainBodies[i], 'Run');
         }
 
+        reverseRailDirection(this);
         setRailCoord(this, coord);
         startBck(this, 'Run');
     }
