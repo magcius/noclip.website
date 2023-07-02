@@ -801,7 +801,7 @@ class SepdData {
             perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
         }
 
-        const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
             { byteStride: 0, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];

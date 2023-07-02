@@ -174,6 +174,7 @@ class MeshFragData {
     private posNrmBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer | null;
     private uvBuffer: GfxBuffer | null;
+    private zeroBuffer: GfxBuffer | null = null;
     private idxBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
@@ -184,6 +185,10 @@ class MeshFragData {
         const device = cache.device;
 
         this.posNrmBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamPosNrm);
+
+        if (meshFrag.streamColor === null || meshFrag.streamUV === null)
+            this.zeroBuffer = device.createBuffer(32, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static)
+
         this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.Vertex, meshFrag.streamColor) : null;
 
         if (meshFrag.streamUVCount > 0) {
@@ -205,10 +210,10 @@ class MeshFragData {
             { location: PsychonautsProgram.a_TexCoord0, bufferIndex: 2, bufferByteOffset: 0x00, format: GfxFormat.F32_RG },
             { location: PsychonautsProgram.a_TexCoord1, bufferIndex: 2, bufferByteOffset: 0x08 * (meshFrag.streamUVCount - 1), format: GfxFormat.F32_RG },
         ];
-        const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, },
-            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerVertex } : null,
-            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PerVertex } : null,
+            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerInstance },
+            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerInstance },
         ];
 
         this.inputLayout = cache.createInputLayout({
@@ -218,8 +223,8 @@ class MeshFragData {
         });
         this.vertexBufferDescriptors = [
             { buffer: this.posNrmBuffer, byteOffset: 0 },
-            this.colorBuffer ? { buffer: this.colorBuffer, byteOffset: 0, } : null,
-            this.uvBuffer    ? { buffer: this.uvBuffer, byteOffset: 0, } : null,
+            { buffer: this.colorBuffer !== null ? this.colorBuffer : this.zeroBuffer!, byteOffset: 0, },
+            { buffer: this.uvBuffer !== null ? this.uvBuffer : this.zeroBuffer!, byteOffset: 0, },
         ];
         this.indexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
     }
@@ -230,6 +235,8 @@ class MeshFragData {
             device.destroyBuffer(this.colorBuffer);
         if (this.uvBuffer !== null)
             device.destroyBuffer(this.uvBuffer);
+        if (this.zeroBuffer !== null)
+            device.destroyBuffer(this.zeroBuffer);
         device.destroyBuffer(this.idxBuffer);
     }
 }
