@@ -47,24 +47,12 @@ Temporary Items
 .apdisk
 
 node_modules
-yarn-error.log
-
-assemblyscript/
-parcel/
-.cache/
-.parcel-cache/??/
-.parcel-cache/dist/*
-!.parcel-cache/dist/data
-dist/*
-!dist/data
-!dist/.htaccess
-post*.html
-
-deploy_rsa
-deploy_rsa.pub
-
-*.psd
 
 rust/target/
-data/
 .pnpm-debug.log
+.cache/
+
+data/*
+!data/.empty
+dist/*
+!dist/.htaccess
