@@ -140,7 +140,7 @@ export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
         canvas.style.left = '0';
         canvas.style.pointerEvents = 'none';
 
-        document.body.appendChild(canvas);
+        window.main.toplevel.insertBefore(canvas, window.main.canvas);
         _debugOverlayCanvas = ctx;
 
         prepareFrameDebugOverlayCanvas2D();
