@@ -55,6 +55,7 @@
     "nc-crg1tool": "./src/tools/crg1tool.ts",
     "nc-witnessassettool": "./src/tools/witnessassettool.ts"
   },
+  "type": "module",
   "browserslist": [
     "last 2 Chrome versions"
   ]
