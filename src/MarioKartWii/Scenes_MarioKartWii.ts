@@ -1038,7 +1038,7 @@ const sceneDescs = [
     new MarioKartWiiSceneDesc('old_waluigi_gc', "GCN Waluigi Stadium"),
     "Leaf Cup",
     new MarioKartWiiSceneDesc('old_desert_ds', "DS Desert Hills"),
-    new MarioKartWiiSceneDesc('old_koopa_gba', "GBA Bowser's Castle 3"),
+    new MarioKartWiiSceneDesc('old_koopa_gba', "GBA Bowser Castle 3"),
     new MarioKartWiiSceneDesc('old_donkey_64', "N64 DK's Jungle Parkway"),
     new MarioKartWiiSceneDesc('old_mario_gc', "GCN Mario Circuit"),
     "Lightning Cup",
