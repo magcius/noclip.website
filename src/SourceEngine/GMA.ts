@@ -2,8 +2,8 @@
 // Garry's Mod ADdon
 // https://github.com/Facepunch/gmad/blob/master/include/AddonReader.h
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
 
 class Stream {
     private offset: number = 0;

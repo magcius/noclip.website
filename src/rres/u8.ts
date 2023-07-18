@@ -3,8 +3,8 @@
 // http://wiki.tockdom.com/wiki/U8_(File_Format)
 // http://wiibrew.org/wiki/U8_archive
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 
 export interface U8File {
     kind: 'file';

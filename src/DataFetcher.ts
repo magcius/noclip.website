@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from './ArrayBufferSlice';
-import { assert, assertExists } from './util';
-import { IS_DEVELOPMENT } from './BuildVersion';
-import { ProgressMeter } from './SceneBase';
+import ArrayBufferSlice from './ArrayBufferSlice.js';
+import { assert, assertExists } from './util.js';
+import { IS_DEVELOPMENT } from './BuildVersion.js';
+import { ProgressMeter } from './SceneBase.js';
 
 export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;

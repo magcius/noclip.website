@@ -1,23 +1,23 @@
 
-import * as JPA from '../Common/JSYSTEM/JPA';
+import * as JPA from '../Common/JSYSTEM/JPA.js';
 
-import { createCsvParser, JMapInfoIter } from "./JMapInfo";
-import { ModelCache, SceneObjHolder } from "./Main";
-import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { createCsvParser, JMapInfoIter } from "./JMapInfo.js";
+import { ModelCache, SceneObjHolder } from "./Main.js";
+import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR, getMatrixTranslation, vec3SetAll } from "../MathHelpers";
-import { DrawType, NameObj } from "./NameObj";
-import { LiveActor } from './LiveActor';
-import { TextureMapping } from '../TextureHolder';
-import { XanimePlayer } from './Animation';
-import { getJointMtxByName } from './ActorUtil';
-import { Texture } from '../viewer';
-import { Binder, Triangle, getFloorCodeIndex, FloorCode } from './Collision';
-import { Frustum } from '../Geometry';
-import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { colorNewCopy, White, colorCopy, Color } from "../Color.js";
+import { computeModelMatrixR, getMatrixTranslation, vec3SetAll } from "../MathHelpers.js";
+import { DrawType, NameObj } from "./NameObj.js";
+import { LiveActor } from './LiveActor.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { XanimePlayer } from './Animation.js';
+import { getJointMtxByName } from './ActorUtil.js';
+import { Texture } from '../viewer.js';
+import { Binder, Triangle, getFloorCodeIndex, FloorCode } from './Collision.js';
+import { Frustum } from '../Geometry.js';
+import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader.js';
 
 export class ParticleResourceHolder {
     private effectNameToIndex = new Map<string, number>();

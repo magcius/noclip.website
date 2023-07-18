@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 
 // Dark Souls BND307D7R6 (Binder)
 // https://github.com/JKAnderson/SoulsFormats/blob/master/SoulsFormats/Formats/BND3.cs

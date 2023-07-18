@@ -1,13 +1,13 @@
 
-import { BitmapFormat, HaloBitmapMetadata, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg";
-import { TextureMapping } from "../TextureHolder";
-import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
-import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { rust } from "../rustlib";
+import { BitmapFormat, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg";
+import { TextureMapping } from "../TextureHolder.js";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
+import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { rust } from "../rustlib.js";
 
 function getImageFormatBPP(fmt: GfxFormat): number {
     switch (fmt) {

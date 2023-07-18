@@ -1,25 +1,25 @@
 
 import * as rw from 'librw';
 import meta from './scenes.json';
-import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
-import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
-import { decompress } from '../Common/Compression/Deflate';
-import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { DataFetcher } from '../DataFetcher';
-import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
-import { SceneContext, Destroyable } from '../SceneBase';
-import { assert, assertExists, leftPad } from '../util';
-import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item';
-import { parseTimeCycle, ColorSet } from './time';
-import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
+import { SceneDesc, SceneGroup, SceneGfx } from '../viewer.js';
+import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal/index.js';
+import { decompress } from '../Common/Compression/Deflate.js';
+import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render.js';
+import { SceneContext, Destroyable } from '../SceneBase.js';
+import { assert, assertExists, leftPad } from '../util.js';
+import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item.js';
+import { parseTimeCycle, ColorSet } from './time.js';
+import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water.js';
 import { mat4 } from 'gl-matrix';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { colorNewCopy, OpaqueBlack } from '../Color';
-import { MathConstants } from '../MathHelpers';
-import { serializeMat4 } from '../Camera';
-import { btoa } from '../Ascii85';
-import { decompressBC } from '../Common/bc_texture';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { colorNewCopy, OpaqueBlack } from '../Color.js';
+import { MathConstants } from '../MathHelpers.js';
+import { serializeMat4 } from '../Camera.js';
+import { btoa } from '../Ascii85.js';
+import { decompressBC } from '../Common/bc_texture.js';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;

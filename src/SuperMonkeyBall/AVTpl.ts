@@ -1,10 +1,10 @@
 // AmusementVision's texture format
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as GX from "../gx/gx_enum";
-import { TextureInputGX } from "../gx/gx_texture";
-import { assert, leftPad } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as GX from "../gx/gx_enum.js";
+import { TextureInputGX } from "../gx/gx_texture.js";
+import { assert, leftPad } from "../util.js";
 
 function parseAVTplHeader(
     texHeaderBuffer: ArrayBufferSlice,

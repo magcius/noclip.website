@@ -1,11 +1,11 @@
 
-import { LiveActor } from "./LiveActor";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { Camera } from "../Camera";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { DrawBufferType } from "./NameObj";
-import { GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { range } from "../MathHelpers";
+import { LiveActor } from "./LiveActor.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { Camera } from "../Camera.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { DrawBufferType } from "./NameObj.js";
+import { GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { range } from "../MathHelpers.js";
 
 export const enum LightType {
     None   = -1,

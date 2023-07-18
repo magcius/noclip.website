@@ -1,12 +1,12 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor";
-import { SceneObjHolder, SceneObj } from "./Main";
-import { calcGravityVector, connectToScene, getGroupFromArray, getJointMtxByName, vecKillElement } from "./ActorUtil";
-import { NameObj, MovementType } from "./NameObj";
-import { arrayRemove, assertExists } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor.js";
+import { SceneObjHolder, SceneObj } from "./Main.js";
+import { calcGravityVector, connectToScene, getGroupFromArray, getJointMtxByName, vecKillElement } from "./ActorUtil.js";
+import { NameObj, MovementType } from "./NameObj.js";
+import { arrayRemove, assertExists } from "../util.js";
+import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 export const enum HitSensorType {
     _Player_Start               = 0x00,

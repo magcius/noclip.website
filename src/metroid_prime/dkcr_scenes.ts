@@ -1,17 +1,17 @@
-import * as PAK from './pak';
-import * as MLVL from './mlvl';
-import * as MREA from './mrea';
-import { ResourceGame, ResourceSystem } from './resource';
-import { MREARenderer } from './render';
+import * as PAK from './pak.js';
+import * as MLVL from './mlvl.js';
+import * as MREA from './mrea.js';
+import { ResourceGame, ResourceSystem } from './resource.js';
+import { MREARenderer } from './render.js';
 
-import * as Viewer from '../viewer';
-import { assert, assertExists } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { RetroSceneRenderer } from './scenes';
-import { SceneContext } from '../SceneBase';
-import { colorFromRGBA } from '../Color';
-import { CameraController } from '../Camera';
+import * as Viewer from '../viewer.js';
+import { assert, assertExists } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { RetroSceneRenderer } from './scenes.js';
+import { SceneContext } from '../SceneBase.js';
+import { colorFromRGBA } from '../Color.js';
+import { CameraController } from '../Camera.js';
 
 class DKCRSceneRenderer extends RetroSceneRenderer {
     public override adjustCameraController(c: CameraController) {

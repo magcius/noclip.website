@@ -1,23 +1,23 @@
 
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix } from '../Camera';
-import { colorCopy, colorNewFromRGBA } from '../Color';
-import { AABB } from '../Geometry';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager";
-import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
-import { createInputLayout, MaterialParams, DrawParams } from '../gx/gx_render';
-import { transformVec3Mat4w1 } from '../MathHelpers';
-import { nArray } from '../util';
-import * as GX_Material from '../gx/gx_material';
-import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials';
-import { ModelRenderContext } from './models';
-import { setGXMaterialOnRenderInst } from './render';
-import { mat4SetTranslation } from './util';
-import { LightType } from './WorldLights';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { Camera, computeViewMatrix } from '../Camera.js';
+import { colorCopy, colorNewFromRGBA } from '../Color.js';
+import { AABB } from '../Geometry.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist.js';
+import { createInputLayout, MaterialParams, DrawParams } from '../gx/gx_render.js';
+import { transformVec3Mat4w1 } from '../MathHelpers.js';
+import { nArray } from '../util.js';
+import * as GX_Material from '../gx/gx_material.js';
+import { MaterialRenderContext, SFAMaterial, StandardMapMaterial } from './materials.js';
+import { ModelRenderContext } from './models.js';
+import { setGXMaterialOnRenderInst } from './render.js';
+import { mat4SetTranslation } from './util.js';
+import { LightType } from './WorldLights.js';
 
 export interface ShapeRenderContext {
     modelCtx: ModelRenderContext;

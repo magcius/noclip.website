@@ -1,21 +1,21 @@
 import { mat4, vec3, quat } from 'gl-matrix';
-import { DataFetcher } from '../DataFetcher';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import * as GX_Material from '../gx/gx_material';
-import { colorNewFromRGBA } from '../Color';
-import { computeViewMatrix } from '../Camera';
-import { ViewerRenderInput } from '../viewer';
-import { SFA_CLASSES } from './Objects/Classes';
-import { SFAClass } from './Objects/SFAClass';
+import { DataFetcher } from '../DataFetcher.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import * as GX_Material from '../gx/gx_material.js';
+import { colorNewFromRGBA } from '../Color.js';
+import { computeViewMatrix } from '../Camera.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { SFA_CLASSES } from './Objects/Classes.js';
+import { SFAClass } from './Objects/SFAClass.js';
 
-import { ModelInstance } from './models';
-import { dataSubarray, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
-import { Anim, Keyframe, applyAnimationToModel } from './animation';
-import { World } from './world';
-import { SceneRenderContext, SFARenderLists } from './render';
-import { getMatrixTranslation } from '../MathHelpers';
-import { LightType } from './WorldLights';
+import { ModelInstance } from './models.js';
+import { dataSubarray, readVec3, mat4FromSRT, readUint32, readUint16 } from './util.js';
+import { Anim, Keyframe, applyAnimationToModel } from './animation.js';
+import { World } from './world.js';
+import { SceneRenderContext, SFARenderLists } from './render.js';
+import { getMatrixTranslation } from '../MathHelpers.js';
+import { LightType } from './WorldLights.js';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();

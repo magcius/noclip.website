@@ -1,8 +1,8 @@
 
 import { vec3, vec2, quat } from 'gl-matrix';
-import { TransparentBlack, colorCopy, Color } from '../Color';
-import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE, ObjectFlags } from './item';
-import { MeshFragData } from './render';
+import { TransparentBlack, colorCopy, Color } from '../Color.js';
+import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE, ObjectFlags } from './item.js';
+import { MeshFragData } from './render.js';
 
 export function parseWaterPro(view: DataView, [originX, originY]: number[]): ItemPlacement {
     const numLevels = view.getInt32(0, true);

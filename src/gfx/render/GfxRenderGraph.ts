@@ -1,7 +1,7 @@
 
-import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxComputePass } from "../platform/GfxPlatform";
-import { GfxQueryPool } from "../platform/GfxPlatformImpl";
-import { assert, assertExists } from "../platform/GfxPlatformUtil";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxComputePass } from "../platform/GfxPlatform.js";
+import { GfxQueryPool } from "../platform/GfxPlatformImpl.js";
+import { assert, assertExists } from "../platform/GfxPlatformUtil.js";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
 // The API is slightly in flux for improved ergonomics.

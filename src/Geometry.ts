@@ -1,8 +1,8 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
-import { IS_DEPTH_REVERSED } from "./gfx/helpers/ReversedDepthHelpers";
-import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform";
-import { nArray } from "./util";
+import { IS_DEPTH_REVERSED } from "./gfx/helpers/ReversedDepthHelpers.js";
+import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
+import { nArray } from "./util.js";
 
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();

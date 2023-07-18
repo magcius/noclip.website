@@ -1,8 +1,8 @@
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import * as Viewer from '../viewer';
-import { loadArchive } from "./archive";
-import { ROTFDRenderer } from './render';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import * as Viewer from '../viewer.js';
+import { loadArchive } from "./archive.js";
+import { ROTFDRenderer } from './render.js';
 
 /*
 TODO:

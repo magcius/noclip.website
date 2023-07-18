@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from './ArrayBufferSlice';
+import ArrayBufferSlice from './ArrayBufferSlice.js';
 
 export function assert(b: boolean, message: string = ""): asserts b {
     if (!b) {

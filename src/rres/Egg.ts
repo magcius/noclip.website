@@ -1,12 +1,12 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
-import { Color, colorNewFromRGBA8, colorNewFromRGBA, colorNewCopy, White, colorCopy } from "../Color";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
+import { Color, colorNewFromRGBA8, colorNewFromRGBA, colorNewCopy, White, colorCopy } from "../Color.js";
 
-import * as GX from '../gx/gx_enum';
+import * as GX from '../gx/gx_enum.js';
 import { vec3 } from "gl-matrix";
-import { LightObj, LightSetting } from "./brres";
-import { clamp } from "../MathHelpers";
+import { LightObj, LightSetting } from "./brres.js";
+import { clamp } from "../MathHelpers.js";
 
 // EGG is a helper library for NintendoWare, used by Wii Sports, Mario Kart: Wii,
 // Wii Sports Resort, and probably others.

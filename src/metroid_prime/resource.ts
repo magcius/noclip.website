@@ -1,28 +1,28 @@
 // Resource System
 
-import * as Deflate from '../Common/Compression/Deflate';
-import { decompress as lzoDecompress } from '../Common/Compression/LZO';
+import * as Deflate from '../Common/Compression/Deflate.js';
+import { decompress as lzoDecompress } from '../Common/Compression/LZO.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, readString, assertExists } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { assert, hexzero, readString, assertExists } from '../util.js';
 
-import { PAK, FileResource, CompressionMethod } from './pak';
+import { PAK, FileResource, CompressionMethod } from './pak.js';
 
-import * as MLVL from './mlvl';
-import * as MREA from './mrea';
-import * as STRG from './strg';
-import * as TXTR from './txtr';
-import * as CMDL from './cmdl';
-import * as ANCS from './ancs';
-import * as CHAR from './char';
-import * as ANIM from './anim';
-import * as EVNT from './evnt';
-import * as CSKR from './cskr';
-import * as CINF from './cinf';
-import * as PART from './part';
-import * as SWHC from './swhc';
-import * as ELSC from './elsc';
-import { InputStream } from './stream';
+import * as MLVL from './mlvl.js';
+import * as MREA from './mrea.js';
+import * as STRG from './strg.js';
+import * as TXTR from './txtr.js';
+import * as CMDL from './cmdl.js';
+import * as ANCS from './ancs.js';
+import * as CHAR from './char.js';
+import * as ANIM from './anim.js';
+import * as EVNT from './evnt.js';
+import * as CSKR from './cskr.js';
+import * as CINF from './cinf.js';
+import * as PART from './part.js';
+import * as SWHC from './swhc.js';
+import * as ELSC from './elsc.js';
+import { InputStream } from './stream.js';
 
 export const enum ResourceGame {
     MP1,

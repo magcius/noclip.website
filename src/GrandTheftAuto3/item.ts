@@ -1,7 +1,7 @@
 
 import { vec3, quat } from "gl-matrix";
-import { AABB } from "../Geometry";
-import { assert } from "../util";
+import { AABB } from "../Geometry.js";
+import { assert } from "../util.js";
 
 function readItems(text: string, cb: (section: string, line: string[]) => void) {
     const lines = text.split("\n");

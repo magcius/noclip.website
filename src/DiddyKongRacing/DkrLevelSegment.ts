@@ -1,14 +1,14 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { ViewerRenderInput } from "../viewer";
-import { DkrTextureCache } from "./DkrTextureCache";
-import { IDENTITY_MATRIX } from "./DkrUtil";
-import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch";
-import { DkrTexture } from "./DkrTexture";
-import { DkrDrawCall } from "./DkrDrawCall";
-import { CURRENT_LEVEL_ID, DkrLevel } from "./DkrLevel";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
+import { IDENTITY_MATRIX } from "./DkrUtil.js";
+import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch.js";
+import { DkrTexture } from "./DkrTexture.js";
+import { DkrDrawCall } from "./DkrDrawCall.js";
+import { CURRENT_LEVEL_ID, DkrLevel } from "./DkrLevel.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 const SIZE_OF_BATCH_INFO = 12;
 

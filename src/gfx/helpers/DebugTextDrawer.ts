@@ -1,24 +1,24 @@
 
-import { SceneContext } from "../../SceneBase";
-import { GfxClipSpaceNearZ, GfxDevice } from "../platform/GfxPlatform";
+import { SceneContext } from "../../SceneBase.js";
+import { GfxClipSpaceNearZ, GfxDevice } from "../platform/GfxPlatform.js";
 
-import * as GX from '../../gx/gx_enum';
-import { GfxRenderInst, GfxRenderInstManager } from "../render/GfxRenderInstManager";
-import { fillMatrix4x3 } from "./UniformBufferHelpers";
+import * as GX from '../../gx/gx_enum.js';
+import { GfxRenderInst, GfxRenderInstManager } from "../render/GfxRenderInstManager.js";
+import { fillMatrix4x3 } from "./UniformBufferHelpers.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { projectionMatrixForCuboid, MathConstants } from "../../MathHelpers";
-import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
+import { projectionMatrixForCuboid, MathConstants } from "../../MathHelpers.js";
+import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color.js";
 
 // TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
 // or use HTML5 canvas? It would be helpful to have in any case...
-import { CharWriter, parseBRFNT, ResFont, RFNT } from "../../Common/NW4R/lyt/Font";
-import { decompress } from "../../Common/Compression/Yaz0";
-import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive";
-import { TDDraw } from "../../SuperMarioGalaxy/DDraw";
-import { GX_Program } from "../../gx/gx_material";
-import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
-import { projectionMatrixConvertClipSpaceNearZ } from "./ProjectionHelpers";
-import { GfxRenderCache } from "../render/GfxRenderCache";
+import { CharWriter, parseBRFNT, ResFont, RFNT } from "../../Common/NW4R/lyt/Font.js";
+import { decompress } from "../../Common/Compression/Yaz0.js";
+import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
+import { TDDraw } from "../../SuperMarioGalaxy/DDraw.js";
+import { GX_Program } from "../../gx/gx_material.js";
+import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
+import { projectionMatrixConvertClipSpaceNearZ } from "./ProjectionHelpers.js";
+import { GfxRenderCache } from "../render/GfxRenderCache.js";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();

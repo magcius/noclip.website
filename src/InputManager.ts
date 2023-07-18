@@ -1,6 +1,6 @@
 
-import { SaveManager, GlobalSaveManager } from "./SaveManager";
-import { GlobalGrabManager } from './GrabManager';
+import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
+import { GlobalGrabManager } from './GrabManager.js';
 
 function isModifier(key: string) {
     switch (key) {

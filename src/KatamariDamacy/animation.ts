@@ -1,9 +1,9 @@
 import { quat, vec3, mat4 } from "gl-matrix";
-import { getPointHermite } from "../Spline";
-import { lerp } from "../MathHelpers";
-import { align, assert } from "../util";
-import { Endianness } from "../endian";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { getPointHermite } from "../Spline.js";
+import { lerp } from "../MathHelpers.js";
+import { align, assert } from "../util.js";
+import { Endianness } from "../endian.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 const enum CurveKind {
     Spline,

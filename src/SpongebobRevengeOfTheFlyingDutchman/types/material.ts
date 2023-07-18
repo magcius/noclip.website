@@ -1,4 +1,4 @@
-import { DataStream } from "../util";
+import { DataStream } from "../util.js";
 
 export const MaterialFlags = {
     FLAG_HIDDEN: 0x20,

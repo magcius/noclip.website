@@ -1,25 +1,25 @@
 
 // Implements Retro's MREA format as seen in Metroid Prime 1.
 
-import * as GX_Material from '../gx/gx_material';
-import * as GX from '../gx/gx_enum';
+import * as GX_Material from '../gx/gx_material.js';
+import * as GX from '../gx/gx_enum.js';
 
-import * as Script from './script';
-import * as Collision from './collision';
-import { InputStream } from './stream';
-import { TXTR } from './txtr';
+import * as Script from './script.js';
+import * as Collision from './collision.js';
+import { InputStream } from './stream.js';
+import { TXTR } from './txtr.js';
 
-import { ResourceSystem } from './resource';
-import { assert, align, assertExists } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist';
+import { ResourceSystem } from './resource.js';
+import { assert, align, assertExists } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist.js';
 import { mat4, vec3 } from 'gl-matrix';
-import * as Deflate from '../Common/Compression/Deflate';
-import { decompress as lzoDecompress } from '../Common/Compression/LZO';
-import { AABB } from '../Geometry';
-import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
-import { MathConstants } from '../MathHelpers';
-import { CSKR } from './cskr';
+import * as Deflate from '../Common/Compression/Deflate.js';
+import { decompress as lzoDecompress } from '../Common/Compression/LZO.js';
+import { AABB } from '../Geometry.js';
+import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color.js';
+import { MathConstants } from '../MathHelpers.js';
+import { CSKR } from './cskr.js';
 
 export interface MREA {
     materialSet: MaterialSet;

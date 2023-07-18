@@ -1,6 +1,6 @@
 
-import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
-import { assert, assertExists, alignNonPowerOfTwo } from "../platform/GfxPlatformUtil";
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform.js";
+import { assert, assertExists, alignNonPowerOfTwo } from "../platform/GfxPlatformUtil.js";
 
 // This is a very basic linear allocator. We allocate offsets in-order.
 export class GfxRenderDynamicUniformBuffer {

@@ -1,10 +1,10 @@
-import { CharAnimTime } from './char_anim_time';
+import { CharAnimTime } from './char_anim_time.js';
 import { quat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { InputStream } from '../stream';
-import { PART } from '../part';
-import { ResourceGame, ResourceSystem } from '../resource';
-import { ELSC } from '../elsc';
-import { SWHC } from '../swhc';
+import { InputStream } from '../stream.js';
+import { PART } from '../part.js';
+import { ResourceGame, ResourceSystem } from '../resource.js';
+import { ELSC } from '../elsc.js';
+import { SWHC } from '../swhc.js';
 
 export class AdvancementDeltas {
     constructor(public translationDelta: vec3 = vec3.create(),

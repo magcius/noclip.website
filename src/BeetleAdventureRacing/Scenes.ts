@@ -1,20 +1,20 @@
-import { CameraController } from "../Camera";
-import { colorNewFromRGBA } from "../Color";
-import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import InputManager from "../InputManager";
-import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import * as UI from '../ui';
-import { assert } from "../util";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { Filesystem, loadFilesystem } from "./Filesystem";
-import { UVEN, UVENRenderer } from "./ParsedFiles/UVEN";
-import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
-import { UVTS } from "./ParsedFiles/UVTS";
-import { TexScrollAnim, TexSeqAnim, UVTX } from "./ParsedFiles/UVTX";
-import { getTrackData, TrackDataRenderer } from "./TrackData";
+import { CameraController } from "../Camera.js";
+import { colorNewFromRGBA } from "../Color.js";
+import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import InputManager from "../InputManager.js";
+import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import * as UI from '../ui.js';
+import { assert } from "../util.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { Filesystem, loadFilesystem } from "./Filesystem.js";
+import { UVEN, UVENRenderer } from "./ParsedFiles/UVEN.js";
+import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR.js";
+import { UVTS } from "./ParsedFiles/UVTS.js";
+import { TexScrollAnim, TexSeqAnim, UVTX } from "./ParsedFiles/UVTX.js";
+import { getTrackData, TrackDataRenderer } from "./TrackData.js";
 
 export const DEBUGGING_TOOLS_STATE = {
     showTextureIndices: false,

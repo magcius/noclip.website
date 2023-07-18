@@ -1,12 +1,12 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 import { mat4, vec3, quat } from "gl-matrix";
 
-import * as GX from "../gx/gx_enum";
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist';
-import * as GX_Material from '../gx/gx_material';
-import { AABB } from "../Geometry";
+import * as GX from "../gx/gx_enum.js";
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, GX_VtxDescOutputMode } from '../gx/gx_displaylist.js';
+import * as GX_Material from '../gx/gx_material.js';
+import { AABB } from "../Geometry.js";
 
 export interface BIN {
     samplers: Sampler[];

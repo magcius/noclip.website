@@ -1,8 +1,8 @@
-import { commonSetup } from './Common';
-import { SFAClass } from './SFAClass';
-import { ObjectInstance, CommonObjectParams_SIZE, ObjectUpdateContext } from '../objects';
-import { Plane } from '../../Geometry';
-import { dataSubarray, getCamPos, mat4FromSRT } from '../util';
+import { commonSetup } from './Common.js';
+import { SFAClass } from './SFAClass.js';
+import { ObjectInstance, CommonObjectParams_SIZE, ObjectUpdateContext } from '../objects.js';
+import { Plane } from '../../Geometry.js';
+import { dataSubarray, getCamPos, mat4FromSRT } from '../util.js';
 import { vec3, mat4 } from 'gl-matrix';
 
 const OBJTYPE_TrigPln = 0x4c;

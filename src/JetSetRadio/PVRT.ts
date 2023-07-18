@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
 
 
 // Ported for JSR to TS from

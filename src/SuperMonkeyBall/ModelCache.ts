@@ -1,15 +1,15 @@
-import { ModelInst } from "./Model";
-import * as Gma from "./Gma";
-import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { assertExists } from "../util";
-import { LoadedTexture } from "../TextureHolder";
-import { loadTextureFromMipChain } from "../gx/gx_render";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { StageData } from "./World";
-import * as UI from "../ui";
-import * as Viewer from "../viewer";
-import { GXMaterialHacks } from "../gx/gx_material";
+import { ModelInst } from "./Model.js";
+import * as Gma from "./Gma.js";
+import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { assertExists } from "../util.js";
+import { LoadedTexture } from "../TextureHolder.js";
+import { loadTextureFromMipChain } from "../gx/gx_render.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { StageData } from "./World.js";
+import * as UI from "../ui.js";
+import * as Viewer from "../viewer.js";
+import { GXMaterialHacks } from "../gx/gx_material.js";
 
 // Cache loaded models by name and textures by unique name. Not much advantage over loading
 // everything at once but oh well.

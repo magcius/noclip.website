@@ -1,6 +1,6 @@
 
-import { Destroyable } from "./SceneBase";
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
+import { Destroyable } from "./SceneBase.js";
+import { GfxDevice } from "./gfx/platform/GfxPlatform.js";
 
 // The DataShare lets two scenes share objects that might want to be kept between scenes.
 

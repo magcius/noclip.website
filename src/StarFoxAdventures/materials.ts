@@ -1,21 +1,21 @@
-import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import * as GX from '../gx/gx_enum';
-import { SwapTable } from '../gx/gx_material';
-import { GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
-import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { TextureMapping } from '../TextureHolder';
-import { texProjCameraSceneTex } from '../Camera';
+import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
+import * as GX from '../gx/gx_enum.js';
+import { SwapTable } from '../gx/gx_material.js';
+import { GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render.js';
+import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { texProjCameraSceneTex } from '../Camera.js';
 
-import { SFATexture, TextureFetcher } from './textures';
-import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTranslation } from './util';
+import { SFATexture, TextureFetcher } from './textures.js';
+import { mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor, mat4SetTranslation } from './util.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { FurFactory } from './fur';
-import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Red, Blue } from '../Color';
-import { SceneRenderContext } from './render';
-import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder';
-import { clamp } from '../MathHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { FurFactory } from './fur.js';
+import { SFAAnimationController } from './animation.js';
+import { colorFromRGBA, Color, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Red, Blue } from '../Color.js';
+import { SceneRenderContext } from './render.js';
+import { ColorFunc, getGXIndTexMtxID, getGXIndTexMtxID_S, getGXIndTexMtxID_T, getGXKonstAlphaSel, getGXKonstColorSel, getGXPostTexGenMatrix, IndTexStage, SFAMaterialBuilder, TevStage, TexCoord, TexFunc, TexMap } from './MaterialBuilder.js';
+import { clamp } from '../MathHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export interface ShaderLayer {
     texId: number | null;

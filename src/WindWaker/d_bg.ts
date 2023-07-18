@@ -3,13 +3,13 @@
 
 // Handles BG (e.g. DZB) collision
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4, vec3 } from "gl-matrix";
-import { Plane, AABB } from "../Geometry";
-import { nArray, readString, assert } from "../util";
-import { Endianness } from "../endian";
-import { MathConstants } from "../MathHelpers";
-import { fopAc_ac_c } from "./framework";
+import { Plane, AABB } from "../Geometry.js";
+import { nArray, readString, assert } from "../util.js";
+import { Endianness } from "../endian.js";
+import { MathConstants } from "../MathHelpers.js";
+import { fopAc_ac_c } from "./framework.js";
 
 export const enum cBgW_Flags {
     None      = 0x00,

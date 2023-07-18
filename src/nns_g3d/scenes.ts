@@ -1,17 +1,17 @@
 
-import { MDL0Renderer, nnsG3dBindingLayouts } from "./render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { FakeTextureHolder } from "../TextureHolder";
-import { ViewerRenderInput, SceneGfx } from "../viewer";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { assertExists } from "../util";
-import { parseNSBMD } from "./NNS_G3D";
-import { NITRO_Program } from "../SuperMario64DS/render";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { MDL0Renderer, nnsG3dBindingLayouts } from "./render.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { FakeTextureHolder } from "../TextureHolder.js";
+import { ViewerRenderInput, SceneGfx } from "../viewer.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { assertExists } from "../util.js";
+import { parseNSBMD } from "./NNS_G3D.js";
+import { NITRO_Program } from "../SuperMario64DS/render.js";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 class BasicNSBMDRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;

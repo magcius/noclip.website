@@ -1,8 +1,8 @@
 
-import * as GX from "../gx/gx_enum";
-import { assert, nArray, assertExists } from "../util";
-import { SwapTable } from "../gx/gx_material";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import * as GX from "../gx/gx_enum.js";
+import { assert, nArray, assertExists } from "../util.js";
+import { SwapTable } from "../gx/gx_material.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 
 export enum HSD_TExpType {
     TE_ZERO = 0,

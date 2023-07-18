@@ -1,22 +1,22 @@
-import * as Textures from './textures';
-import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { assert } from "../util";
+import * as Textures from './textures.js';
+import * as Viewer from '../viewer.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { assert } from "../util.js";
 
-import { SRC_FRAME_TO_MS } from './timing';
-import { angularDistance, subtractAngles, radianModulo, radianLerp } from "./util";
+import { SRC_FRAME_TO_MS } from './timing.js';
+import { angularDistance, subtractAngles, radianModulo, radianLerp } from "./util.js";
 
 import { vec3, quat, mat4 } from "gl-matrix";
 
-import { GenericRenderable, SceneLighting } from './render';
-import { ObjectDirectory } from './scenes';
-import { GloverActorRenderer } from './actor';
-import { ParticlePool } from './particles';
-import { Collidable, Collision, projectOntoTerrain } from './shadows';
+import { GenericRenderable, SceneLighting } from './render.js';
+import { ObjectDirectory } from './scenes.js';
+import { GloverActorRenderer } from './actor.js';
+import { ParticlePool } from './particles.js';
+import { Collidable, Collision, projectOntoTerrain } from './shadows.js';
 
-import { GloverLevel } from './parsers';
+import { GloverLevel } from './parsers/index.js';
 
 export const enum EnemyType {
     bovva = 7, // giant bee

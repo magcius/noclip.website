@@ -1,8 +1,8 @@
-import { LiveActor, ZoneAndLayer } from "../LiveActor";
-import { SceneObjHolder } from "../Main";
+import { LiveActor, ZoneAndLayer } from "../LiveActor.js";
+import { SceneObjHolder } from "../Main.js";
 import { mat4 } from "gl-matrix";
-import { connectToScene } from "../ActorUtil";
-import { DrawBufferType, MovementType, CalcAnimType } from "../NameObj";
+import { connectToScene } from "../ActorUtil.js";
+import { DrawBufferType, MovementType, CalcAnimType } from "../NameObj.js";
 
 export class ModelObj<T extends number = number> extends LiveActor<T> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType | -2, movementType: MovementType | -2, calcAnimType: CalcAnimType | -2) {

@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { GfxFormat } from "../platform/GfxPlatform";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { GfxFormat } from "../platform/GfxPlatform.js";
 
 function setImageDataS8(dst: ImageData, src: Int8Array): void {
     for (let i = 0; i < src.length; i++)

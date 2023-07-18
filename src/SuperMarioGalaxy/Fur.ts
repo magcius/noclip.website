@@ -1,27 +1,27 @@
 
 import { vec4, vec3, mat4, ReadonlyVec4 } from "gl-matrix";
-import { assert, decodeString, assertExists, nullify } from "../util";
+import { assert, decodeString, assertExists, nullify } from "../util.js";
 
-import { J3DModelData, ShapeData, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { LiveActor } from "./LiveActor";
-import { BTI_Texture, BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
-import { Color, colorNewFromRGBA8, colorNewCopy, White, colorCopy } from "../Color";
-import { LightType } from "./DrawBuffer";
-import { SceneObjHolder, SceneObj } from "./Main";
-import { NameObj, DrawType } from "./NameObj";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { lerp, saturate, computeModelMatrixS } from "../MathHelpers";
-import * as GX from "../gx/gx_enum";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil";
-import { TextureMapping } from "../TextureHolder";
-import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
-import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { ViewerRenderInput } from "../viewer";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { J3DModelData, ShapeData, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LiveActor } from "./LiveActor.js";
+import { BTI_Texture, BTIData, BTI } from "../Common/JSYSTEM/JUTTexture.js";
+import { Color, colorNewFromRGBA8, colorNewCopy, White, colorCopy } from "../Color.js";
+import { LightType } from "./DrawBuffer.js";
+import { SceneObjHolder, SceneObj } from "./Main.js";
+import { NameObj, DrawType } from "./NameObj.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { lerp, saturate, computeModelMatrixS } from "../MathHelpers.js";
+import * as GX from "../gx/gx_enum.js";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
+import { coalesceBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 interface FurParam {
     numLayers: number;

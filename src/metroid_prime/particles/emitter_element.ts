@@ -1,10 +1,10 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator';
-import { GetVectorElement, VectorElement } from './vector_element';
-import { GetRealElement, RealElement } from './real_element';
-import { computeModelMatrixSRT, MathConstants, randomRange } from '../../MathHelpers';
-import { InputStream } from '../stream';
-import { assert } from '../../util';
+import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator.js';
+import { GetVectorElement, VectorElement } from './vector_element.js';
+import { GetRealElement, RealElement } from './real_element.js';
+import { computeModelMatrixSRT, MathConstants, randomRange } from '../../MathHelpers.js';
+import { InputStream } from '../stream.js';
+import { assert } from '../../util.js';
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();

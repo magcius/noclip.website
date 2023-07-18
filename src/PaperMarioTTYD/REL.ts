@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 const enum RelocationOp {
     R_INVALID = -1,

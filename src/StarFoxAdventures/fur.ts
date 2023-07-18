@@ -1,9 +1,9 @@
-import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { lerp } from '../MathHelpers';
+import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { lerp } from '../MathHelpers.js';
 
-import { SFATexture } from './textures';
+import { SFATexture } from './textures.js';
 
 interface Hair {
     layerCount: number;

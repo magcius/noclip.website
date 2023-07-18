@@ -1,11 +1,11 @@
 
 // Valve Texture File
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform";
-import { readString, assert, nArray, assertExists } from "../util";
-import { TextureMapping } from "../TextureHolder";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage } from "../gfx/platform/GfxPlatform.js";
+import { readString, assert, nArray, assertExists } from "../util.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 const enum ImageFormat {
     RGBA8888      = 0x00,

@@ -1,16 +1,16 @@
 
 import { vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { DataManager } from "./DataManager";
-import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall";
-import { DkrObjectAnimation } from "./DkrObjectAnimation";
-import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
-import { DkrTextureCache } from "./DkrTextureCache";
-import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DataManager } from "./DataManager.js";
+import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall.js";
+import { DkrObjectAnimation } from "./DkrObjectAnimation.js";
+import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
+import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
 
 const SIZE_OF_BATCH_INFO = 12;
 

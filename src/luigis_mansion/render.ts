@@ -1,18 +1,18 @@
 
-import * as Viewer from "../viewer";
-import * as UI from '../ui';
-import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
+import * as Viewer from "../viewer.js";
+import * as UI from '../ui.js';
+import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin.js";
 
-import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { assert } from "../util";
+import * as GX_Texture from '../gx/gx_texture.js';
+import { MaterialParams, DrawParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { assert } from "../util.js";
 import { mat4 } from "gl-matrix";
-import { AABB } from "../Geometry";
-import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
-import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
-import { Camera, computeViewMatrix, CameraController } from "../Camera";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { AABB } from "../Geometry.js";
+import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
+import { Camera, computeViewMatrix, CameraController } from "../Camera.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 
 class Command_Material {
     public materialHelper: GXMaterialHelperGfx;

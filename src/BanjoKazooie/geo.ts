@@ -1,14 +1,14 @@
 
-import * as F3DEX from "./f3dex";
-import * as F3DEX2 from "../PokemonSnap/f3dex2";
-import * as RDP from "../Common/N64/RDP";
+import * as F3DEX from "./f3dex.js";
+import * as F3DEX2 from "../PokemonSnap/f3dex2.js";
+import * as RDP from "../Common/N64/RDP.js";
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, nArray, align } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, hexzero, assertExists, nArray, align } from "../util.js";
 import { vec3 } from "gl-matrix";
-import { Endianness } from "../endian";
-import { ImageFormat, ImageSize, TexCM } from "../Common/N64/Image";
-import { DataMap, DataRange } from "../PokemonSnap/room";
+import { Endianness } from "../endian.js";
+import { ImageFormat, ImageSize, TexCM } from "../Common/N64/Image.js";
+import { DataMap, DataRange } from "../PokemonSnap/room.js";
 
 // Banjo-Kazooie Geometry
 

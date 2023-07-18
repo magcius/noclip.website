@@ -1,16 +1,16 @@
 import { mat4, vec2 } from 'gl-matrix';
-import { AABB, Frustum, IntersectionState } from '../Geometry';
-import { makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
-import { GfxBuffer, GfxTexture } from '../gfx/platform/GfxPlatformImpl';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { TextureMapping } from '../TextureHolder';
-import { assert } from '../util';
-import { NfsNode, NodeType } from './datanode';
-import { NfsMap, RegionConnections } from './map';
-import { NfsParticleEmitterGroup } from './particles';
-import { VertexInfo } from './render';
+import { AABB, Frustum, IntersectionState } from '../Geometry.js';
+import { makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
+import { GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform.js';
+import { GfxBuffer, GfxTexture } from '../gfx/platform/GfxPlatformImpl.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { assert } from '../util.js';
+import { NfsNode, NodeType } from './datanode.js';
+import { NfsMap, RegionConnections } from './map.js';
+import { NfsParticleEmitterGroup } from './particles.js';
+import { VertexInfo } from './render.js';
 
 export type DataSection = {
     node?: NfsNode,

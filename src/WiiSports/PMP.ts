@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
-import { assertExists, readString } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assertExists, readString } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export class PMP {
     public static parse(buffer: ArrayBufferSlice): PMP {

@@ -1,23 +1,22 @@
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { colorNewFromRGBA } from "../Color";
-import { CameraController } from '../Camera';
-import { F3DDKR_Program } from './F3DDKR_Program';
-import { DataManager } from './DataManager';
-import { DkrLevel } from './DkrLevel';
-import { DkrTextureCache } from './DkrTextureCache';
-import { DkrObjectCache } from './DkrObjectCache';
-import { DkrSprites } from './DkrSprites';
-import { Checkbox, COOL_BLUE_COLOR, Panel, SingleSelect, Slider } from '../ui';
-import { DkrControlGlobals } from './DkrControlGlobals';
-import { IMG_LOADING_ASSETS } from './DkrLoadingMessage'
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { trackParams } from './scenes_TrackParams';
+import { CameraController } from '../Camera.js';
+import { colorNewFromRGBA } from "../Color.js";
+import { SceneContext } from '../SceneBase.js';
+import { GfxrAttachmentClearDescriptor, makeAttachmentClearDescriptor, makeBackbufferDescSimple } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { COOL_BLUE_COLOR, Checkbox, Panel, SingleSelect, Slider } from '../ui.js';
+import { DataManager } from './DataManager.js';
+import { DkrControlGlobals } from './DkrControlGlobals.js';
+import { DkrLevel } from './DkrLevel.js';
+import { IMG_LOADING_ASSETS } from './DkrLoadingMessage.js';
+import { DkrObjectCache } from './DkrObjectCache.js';
+import { DkrSprites } from './DkrSprites.js';
+import { DkrTextureCache } from './DkrTextureCache.js';
+import { trackParams } from './scenes_TrackParams.js';
 
 const pathBase = `DiddyKongRacing`;
 const dkrVersion = 'us_1.0';

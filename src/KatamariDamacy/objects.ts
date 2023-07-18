@@ -1,18 +1,18 @@
 
 import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
-import { Green, Magenta, Red } from "../Color";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB } from "../Geometry";
-import { GfxRenderInstManager, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ, Vec3NegX } from "../MathHelpers";
-import { assert, hexzero, nArray } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
-import { BINModelInstance, BINModelSectorData } from "./render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { ObjectAnimationList, applyCurve } from "./animation";
-import { AdjustableAnimationController } from "../BanjoKazooie/render";
+import { Green, Magenta, Red } from "../Color.js";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB } from "../Geometry.js";
+import { GfxRenderInstManager, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ, Vec3NegX } from "../MathHelpers.js";
+import { assert, hexzero, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin.js";
+import { BINModelInstance, BINModelSectorData } from "./render.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { ObjectAnimationList, applyCurve } from "./animation.js";
+import { AdjustableAnimationController } from "../BanjoKazooie/render.js";
 
 const scratchVec3 = vec3.create();
 

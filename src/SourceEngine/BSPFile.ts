@@ -1,20 +1,20 @@
 
 // Source Engine BSP.
 
-import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice";
-import { readString, assert, nArray, decodeString, ensureInList } from "../util";
+import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice.js";
+import { readString, assert, nArray, decodeString, ensureInList } from "../util.js";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
-import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
-import { parseZipFile, ZipFile } from "../ZipFile";
-import { Plane, AABB } from "../Geometry";
-import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
-import BitMap from "../BitMap";
-import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
-import { Color, colorNewFromRGBA } from "../Color";
-import { unpackColorRGBExp32 } from "./Materials";
-import { lerp, saturate } from "../MathHelpers";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT";
-import { downloadBuffer, downloadBufferSlice } from "../DownloadUtils";
+import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
+import { parseZipFile, ZipFile } from "../ZipFile.js";
+import { Plane, AABB } from "../Geometry.js";
+import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject.js";
+import BitMap from "../BitMap.js";
+import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA.js';
+import { Color, colorNewFromRGBA } from "../Color.js";
+import { unpackColorRGBExp32 } from "./Materials.js";
+import { lerp, saturate } from "../MathHelpers.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
+import { downloadBuffer, downloadBufferSlice } from "../DownloadUtils.js";
 
 const enum LumpType {
     ENTITIES                  = 0,

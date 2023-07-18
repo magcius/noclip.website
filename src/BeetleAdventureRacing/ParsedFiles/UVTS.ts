@@ -1,6 +1,6 @@
-import { UVFile, Filesystem } from "../Filesystem";
-import { assert } from "../../util";
-import { TexSeqAnimMode, UVTX } from "./UVTX";
+import { UVFile, Filesystem } from "../Filesystem.js";
+import { assert } from "../../util.js";
+import { TexSeqAnimMode, UVTX } from "./UVTX.js";
 
 class UVTSFrame {
     public uvtx: UVTX | null;

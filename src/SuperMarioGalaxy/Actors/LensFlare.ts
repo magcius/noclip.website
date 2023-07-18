@@ -1,22 +1,22 @@
 
-import { NameObj } from "../NameObj";
-import { SceneObjHolder, SceneObj } from "../Main";
-import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "../ActorUtil";
-import { ViewerRenderInput } from "../../viewer";
+import { NameObj } from "../NameObj.js";
+import { SceneObjHolder, SceneObj } from "../Main.js";
+import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "../ActorUtil.js";
+import { ViewerRenderInput } from "../../viewer.js";
 import { vec3, vec2, vec4, mat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
-import { AreaObj, AreaFormType } from "../AreaObj";
-import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo";
-import { fallback } from "../../util";
-import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../LiveActor";
-import { isFirstStep } from "../Spine";
-import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
-import { divideByW } from "../../Camera";
-import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
-import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform/GfxPlatform";
-import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
-import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers";
+import { AreaObj, AreaFormType } from "../AreaObj.js";
+import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo.js";
+import { fallback } from "../../util.js";
+import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../LiveActor.js";
+import { isFirstStep } from "../Spine.js";
+import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
+import { divideByW } from "../../Camera.js";
+import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ.js";
+import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform/GfxPlatform.js";
+import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers.js";
+import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { gfxDeviceNeedsFlipY } from "../../gfx/helpers/GfxDeviceHelpers.js";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);

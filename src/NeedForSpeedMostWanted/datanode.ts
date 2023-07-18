@@ -1,4 +1,4 @@
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 export class NfsNode {
     public children: NfsNode[] = [];

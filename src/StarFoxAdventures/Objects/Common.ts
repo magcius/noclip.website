@@ -1,6 +1,6 @@
-import { ObjectInstance } from '../objects';
-import { SFAClass } from './SFAClass';
-import { angle16ToRads } from '../util';
+import { ObjectInstance } from '../objects.js';
+import { SFAClass } from './SFAClass.js';
+import { angle16ToRads } from '../util.js';
 
 export function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number) {
     if (yawOffs !== undefined)

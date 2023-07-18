@@ -2,18 +2,18 @@
 // Source "Studio" models, which seem to be named because of their original ties to 3D Studio Max
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { assert, readString, nArray, assertExists, align } from "../util";
-import { SourceFileSystem, SourceRenderContext } from "./Main";
-import { AABB } from "../Geometry";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
-import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { assert, readString, nArray, assertExists, align } from "../util.js";
+import { SourceFileSystem, SourceRenderContext } from "./Main.js";
+import { AABB } from "../Geometry.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials.js";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 
 // Encompasses the MDL, VVD & VTX formats.
 

@@ -1,18 +1,18 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
 import { mat4 } from "gl-matrix";
-import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import * as GX from "../gx/gx_enum";
-import { GXMaterialHacks, SwapTable } from "../gx/gx_material";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
-import { assertExists } from "../util";
-import * as Gma from "./Gma";
-import { RenderParams } from "./Model";
-import { TevLayerInst } from "./TevLayer";
+import { Color, colorCopy, colorMult, colorNewCopy, White } from "../Color.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from "../gx/gx_enum.js";
+import { GXMaterialHacks, SwapTable } from "../gx/gx_material.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { assertExists } from "../util.js";
+import * as Gma from "./Gma.js";
+import { RenderParams } from "./Model.js";
+import { TevLayerInst } from "./TevLayer.js";
 
 const SWAP_TABLES: SwapTable[] = [
     [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A],

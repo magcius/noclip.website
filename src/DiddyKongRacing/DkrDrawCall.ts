@@ -1,21 +1,21 @@
 
 import { mat4 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
-import { assert } from '../util';
-import { ViewerRenderInput } from '../viewer';
-import { DkrControlGlobals } from './DkrControlGlobals';
-import { DkrTexture } from './DkrTexture';
-import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch';
-import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program';
-import { DkrObjectAnimation } from './DkrObjectAnimation';
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { makeTriangleIndexBuffer } from '../gfx/helpers/TopologyHelpers';
-import { GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { computeViewMatrix } from '../Camera.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
+import { assert } from '../util.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { DkrControlGlobals } from './DkrControlGlobals.js';
+import { DkrTexture } from './DkrTexture.js';
+import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch.js';
+import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program.js';
+import { DkrObjectAnimation } from './DkrObjectAnimation.js';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { makeTriangleIndexBuffer } from '../gfx/helpers/TopologyHelpers.js';
+import { GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
 
 // Currently known flags
 const FLAG_ENABLE_DEPTH_WRITE    = 0x00000010;

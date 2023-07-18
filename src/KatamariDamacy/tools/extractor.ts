@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { readString, hexzero, leftPad } from "../../util";
+import { readString, hexzero, leftPad } from "../../util.js";
 import { assert } from "console";
 
 // Ported from "unpack.py" by Murugo.

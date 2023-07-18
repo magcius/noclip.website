@@ -1,30 +1,30 @@
 
-import * as GX from "../gx/gx_enum";
-import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
+import * as GX from "../gx/gx_enum.js";
+import { DrawParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render.js";
 
-import { LiveActor } from "./LiveActor";
-import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
-import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement, drawSimpleModel } from "./ActorUtil";
-import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
+import { LiveActor } from "./LiveActor.js";
+import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main.js";
+import { GravityInfo, GravityTypeMask } from './Gravity.js';
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos, vecKillElement, drawSimpleModel } from "./ActorUtil.js";
+import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj.js";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers";
-import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { assertExists, fallback, assert, nArray } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { TSDraw, TDDraw } from "./DDraw";
-import { GX_Program } from "../gx/gx_material";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { colorFromRGBA } from "../Color";
-import { TextureMapping } from "../TextureHolder";
-import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform";
-import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers";
+import { HitSensor } from "./HitSensor.js";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, projectionMatrixForCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants, isNearZero } from "../MathHelpers.js";
+import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision.js";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo.js";
+import { assertExists, fallback, assert, nArray } from "../util.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { TSDraw, TDDraw } from "./DDraw.js";
+import { GX_Program } from "../gx/gx_material.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { colorFromRGBA } from "../Color.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/ProjectionHelpers.js";
 
 export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);

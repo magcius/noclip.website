@@ -5,26 +5,26 @@
 // models are used in some cases though, such as the LCD timer models on the goal and the goaltape.
 
 import { mat4, vec2, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, colorScale } from "../Color";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import * as GX from "../gx/gx_enum";
-import { GXMaterialHacks } from "../gx/gx_material";
-import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render";
-import { TextureInputGX } from "../gx/gx_texture";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw";
-import { LoadedTexture } from "../TextureHolder";
-import { assertExists } from "../util";
-import { AVTpl } from "./AVTpl";
-import { RenderParams } from "./Model";
-import { TextureCache } from "./ModelCache";
-import { RenderContext } from "./Render";
-import { parseVec2f, parseVec3f } from "./Utils";
-import { ModelInterface } from "./World";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color, colorCopy, colorNewFromRGBA, colorNewFromRGBA8, colorScale } from "../Color.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from "../gx/gx_enum.js";
+import { GXMaterialHacks } from "../gx/gx_material.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { TextureInputGX } from "../gx/gx_texture.js";
+import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { LoadedTexture } from "../TextureHolder.js";
+import { assertExists } from "../util.js";
+import { AVTpl } from "./AVTpl.js";
+import { RenderParams } from "./Model.js";
+import { TextureCache } from "./ModelCache.js";
+import { RenderContext } from "./Render.js";
+import { parseVec2f, parseVec3f } from "./Utils.js";
+import { ModelInterface } from "./World.js";
 
 const VTX_SIZE = 0x20;
 const VTX_OFFSET_DESC_SIZE = 0x8;

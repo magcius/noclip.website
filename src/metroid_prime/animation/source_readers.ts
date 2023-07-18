@@ -1,8 +1,8 @@
-import { AdvancementDeltas, AdvancementResults, BoolPOINode, IAnimReader, Int32POINode, ParentedMode, ParticlePOINode, PerSegmentData, POIKey, POINode, SoundPOINode, SteadyStateAnimInfo } from './base_reader';
-import { CharAnimTime } from './char_anim_time';
-import { AnimSource, AnimSourceCompressed } from './data_source';
+import { AdvancementDeltas, AdvancementResults, BoolPOINode, IAnimReader, Int32POINode, ParentedMode, ParticlePOINode, PerSegmentData, POIKey, POINode, SoundPOINode, SteadyStateAnimInfo } from './base_reader.js';
+import { CharAnimTime } from './char_anim_time.js';
+import { AnimSource, AnimSourceCompressed } from './data_source.js';
 import { quat, vec3 } from 'gl-matrix';
-import { EVNT } from '../evnt';
+import { EVNT } from '../evnt.js';
 
 interface BoolState {
     name: string;

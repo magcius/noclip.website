@@ -1,13 +1,11 @@
 import { vec3 } from "gl-matrix";
-import { Color, colorCopy, colorNewCopy } from "../Color";
-import { SpotFunction } from "../gx/gx_enum";
-import * as GX_Material from "../gx/gx_material";
-import {
-    transformVec3Mat4w0, Vec3Zero
-} from "../MathHelpers";
-import * as Viewer from "../viewer";
-import { BgInfo } from "./StageInfo";
-import { S16_TO_RADIANS } from "./Utils";
+import { Color, colorCopy, colorNewCopy } from "../Color.js";
+import { SpotFunction } from "../gx/gx_enum.js";
+import * as GX_Material from "../gx/gx_material.js";
+import { transformVec3Mat4w0, Vec3Zero } from "../MathHelpers.js";
+import * as Viewer from "../viewer.js";
+import { BgInfo } from "./StageInfo.js";
+import { S16_TO_RADIANS } from "./Utils.js";
 
 export class Lighting {
     public ambientColor: Color;

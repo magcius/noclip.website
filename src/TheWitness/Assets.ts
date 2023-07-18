@@ -1,22 +1,22 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as LZ4 from "../Common/Compression/LZ4";
-import { assert, nArray, nullify } from "../util";
-import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile";
-import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { Color } from "../Color";
-import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
-import { Entity } from "./Entity";
-import { load_entities } from "./Entity_Types";
-import { Stream_read_Color, Stream, Stream_read_Vector3, Stream_read_Vector2, Stream_read_Vector4 } from "./Stream";
-import { AABB } from "../Geometry";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as LZ4 from "../Common/Compression/LZ4.js";
+import { assert, nArray, nullify } from "../util.js";
+import { ZipFile, parseZipFile, decompressZipFileEntry } from "../ZipFile.js";
+import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { Color } from "../Color.js";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { Entity } from "./Entity.js";
+import { load_entities } from "./Entity_Types.js";
+import { Stream_read_Color, Stream, Stream_read_Vector3, Stream_read_Vector2, Stream_read_Vector4 } from "./Stream.js";
+import { AABB } from "../Geometry.js";
 import { vec3, vec2, ReadonlyVec4 } from "gl-matrix";
-import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
-import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat";
-import { Destroyable } from "../SceneBase";
-import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { TextureMapping } from "../TextureHolder";
+import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat.js";
+import { Destroyable } from "../SceneBase.js";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { TextureMapping } from "../TextureHolder.js";
 
 export const enum Asset_Type {
     Texture,

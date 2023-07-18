@@ -1,17 +1,17 @@
 
-import { DeviceProgram } from "../Program";
-import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { White, colorNewCopy } from "../Color";
+import { DeviceProgram } from "../Program.js";
+import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { White, colorNewCopy } from "../Color.js";
 import { mat4 } from "gl-matrix";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers.js";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;

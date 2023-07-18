@@ -1,12 +1,12 @@
 // Implements Retro's CMDL format as seen in Metroid Prime 1.
 
-import { assert, align } from '../util';
+import { assert, align } from '../util.js';
 
-import { ResourceSystem } from './resource';
-import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from './mrea';
-import { AABB } from '../Geometry';
-import { InputStream } from './stream';
-import { CSKR } from './cskr';
+import { ResourceSystem } from './resource.js';
+import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from './mrea.js';
+import { AABB } from '../Geometry.js';
+import { InputStream } from './stream.js';
+import { CSKR } from './cskr.js';
 
 export interface CMDL {
     bbox: AABB;

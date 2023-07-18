@@ -1,5 +1,5 @@
-import { clamp } from '../../MathHelpers';
-import { InputStream } from '../stream';
+import { clamp } from '../../MathHelpers.js';
+import { InputStream } from '../stream.js';
 
 export const enum AnimTimeState {
     NonZero,

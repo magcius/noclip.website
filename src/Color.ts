@@ -1,6 +1,6 @@
 
-import { lerp, saturate, clamp } from "./MathHelpers";
-import { assert, mod } from "./util";
+import { lerp, saturate, clamp } from "./MathHelpers.js";
+import { assert, mod } from "./util.js";
 
 // Color utilities
 

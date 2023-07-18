@@ -1,27 +1,27 @@
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as Geo from './geo';
-import * as Flipbook from './flipbook';
-import * as BYML from '../byml';
-import * as Actors from './actors';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as Geo from './geo.js';
+import * as Flipbook from './flipbook.js';
+import * as BYML from '../byml.js';
+import * as Actors from './actors.js';
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render.js';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, assertExists } from '../util';
-import { DataFetcher } from '../DataFetcher';
-import { MathConstants, scaleMatrix } from '../MathHelpers';
-import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { SceneContext } from '../SceneBase.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { assert, hexzero, assertExists } from '../util.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { MathConstants, scaleMatrix } from '../MathHelpers.js';
+import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 
 const pathBase = `BanjoKazooie`;
 

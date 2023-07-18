@@ -1,17 +1,17 @@
 
 import { mat4 } from "gl-matrix";
-import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../../../gx/gx_render";
-import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
-import * as TPL from "../../../PaperMarioTTYD/tpl";
-import * as U8 from "../../../rres/u8";
-import * as CX from "../../Compression/CX"
-import { SceneContext } from "../../../SceneBase";
-import { assertExists } from "../../../util";
-import { SceneDesc, SceneGfx, SceneGroup, ViewerRenderInput } from "../../../viewer";
-import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollectionBasic, parseBRLAN, parseBRLYT } from "./Layout";
-import { getTimeInFrames } from '../../../AnimationController';
-import ArrayBufferSlice from "../../../ArrayBufferSlice";
+import { GfxDevice } from "../../../gfx/platform/GfxPlatform.js";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../../../gx/gx_render.js";
+import { TPLTextureHolder } from "../../../PaperMarioTTYD/render.js";
+import * as TPL from "../../../PaperMarioTTYD/tpl.js";
+import * as U8 from "../../../rres/u8.js";
+import * as CX from "../../Compression/CX.js";
+import { SceneContext } from "../../../SceneBase.js";
+import { assertExists } from "../../../util.js";
+import { SceneDesc, SceneGfx, SceneGroup, ViewerRenderInput } from "../../../viewer.js";
+import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollectionBasic, parseBRLAN, parseBRLYT } from "./Layout.js";
+import { getTimeInFrames } from '../../../AnimationController.js';
+import ArrayBufferSlice from "../../../ArrayBufferSlice.js";
 
 export class ArcLayoutResourceCollection extends LayoutResourceCollectionBasic {
     public addTextureData(device: GfxDevice, name: string, buffer: ArrayBufferSlice): void {

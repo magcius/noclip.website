@@ -1,16 +1,16 @@
 
-import { LiveActor, MessageType, isDead, resetPosition } from './LiveActor';
-import { assertExists, fallback } from '../util';
-import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
-import { NameObj } from './NameObj';
+import { LiveActor, MessageType, isDead, resetPosition } from './LiveActor.js';
+import { assertExists, fallback } from '../util.js';
+import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine.js';
+import { NameObj } from './NameObj.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
-import { SceneObjHolder } from './Main';
-import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection, getRailPointNum } from './ActorUtil';
-import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
-import { getRailArg } from './RailRider';
+import { JMapInfoIter } from './JMapInfo.js';
+import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers.js';
+import { SceneObjHolder } from './Main.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection, getRailPointNum } from './ActorUtil.js';
+import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow.js';
+import { getRailArg } from './RailRider.js';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveConditionType {

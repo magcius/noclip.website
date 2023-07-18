@@ -1,6 +1,6 @@
 
 import { mat4 } from "gl-matrix";
-import { GfxClipSpaceNearZ } from "../platform/GfxPlatform";
+import { GfxClipSpaceNearZ } from "../platform/GfxPlatform.js";
 
 const mtxOpenGLFromD3D = mat4.fromValues(
     1, 0,  0, 0,

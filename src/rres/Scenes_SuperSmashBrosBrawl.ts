@@ -1,17 +1,17 @@
 
-import * as Viewer from '../viewer';
-import * as BRRES from './brres';
-import * as CX from "../Common/Compression/CX";
-import * as UI from '../ui';
+import * as Viewer from '../viewer.js';
+import * as BRRES from './brres.js';
+import * as CX from "../Common/Compression/CX.js";
+import * as UI from '../ui.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align } from "../util";
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
-import AnimationController from '../AnimationController';
-import { GXMaterialHacks } from '../gx/gx_material';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { SceneContext } from '../SceneBase';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, align } from "../util.js";
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render.js';
+import AnimationController from '../AnimationController.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { SceneContext } from '../SceneBase.js';
 
 interface ARCFileEntry {
     fileType: number;

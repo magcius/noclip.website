@@ -1,7 +1,7 @@
 
-import * as BYML from '../../byml';
+import * as BYML from '../../byml.js';
 import { readFileSync } from 'fs';
-import ArrayBufferSlice from '../../ArrayBufferSlice';
+import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

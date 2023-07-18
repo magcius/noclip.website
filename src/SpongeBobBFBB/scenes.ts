@@ -1,18 +1,18 @@
 
 import * as rw from 'librw';
-import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { DataFetcher } from '../DataFetcher';
-import { initializeBasis } from '../vendor/basis_universal';
+import * as Viewer from '../viewer.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { initializeBasis } from '../vendor/basis_universal/index.js';
 
-import { ModelCache, BFBBRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer, PlayerRenderer, NPC, textureNameRW3, Pickup, DestructObj, PickupRenderer } from './render';
-import { Ent, Button, Platform, Player, SimpleObj } from './render';
-import { parseHIP, Asset } from './hip';
-import * as Assets from './assets';
-import { DataStream, parseRWChunks, createRWStreamFromChunk, DataCacheIDName } from './util';
-import { assert } from '../util';
-import { AssetType } from './enums';
+import { ModelCache, BFBBRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer, PlayerRenderer, NPC, textureNameRW3, Pickup, DestructObj, PickupRenderer } from './render.js';
+import { Ent, Button, Platform, Player, SimpleObj } from './render.js';
+import { parseHIP, Asset } from './hip.js';
+import * as Assets from './assets.js';
+import { DataStream, parseRWChunks, createRWStreamFromChunk, DataCacheIDName } from './util.js';
+import { assert } from '../util.js';
+import { AssetType } from './enums.js';
 
 const dataPath = 'bfbb/xbox';
 

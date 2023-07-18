@@ -3,20 +3,20 @@
 
 import { mat4, quat, vec3 } from 'gl-matrix';
 
-import ArrayBufferSlice from '../../../ArrayBufferSlice';
-import { Endianness } from '../../../endian';
-import { assert, assertExists, readString } from '../../../util';
+import ArrayBufferSlice from '../../../ArrayBufferSlice.js';
+import { Endianness } from '../../../endian.js';
+import { assert, assertExists, readString } from '../../../util.js';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
-import * as GX from '../../../gx/gx_enum';
-import * as GX_Material from '../../../gx/gx_material';
-import { ColorKind } from '../../../gx/gx_render';
-import { AABB } from '../../../Geometry';
-import BitMap from '../../../BitMap';
-import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8, White, TransparentBlack } from '../../../Color';
-import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
-import { quatFromEulerRadians } from '../../../MathHelpers';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist.js';
+import * as GX from '../../../gx/gx_enum.js';
+import * as GX_Material from '../../../gx/gx_material.js';
+import { ColorKind } from '../../../gx/gx_render.js';
+import { AABB } from '../../../Geometry.js';
+import BitMap from '../../../BitMap.js';
+import { autoOptimizeMaterial } from '../../../gx/gx_render.js';
+import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8, White, TransparentBlack } from '../../../Color.js';
+import { readBTI_Texture, BTI_Texture } from '../JUTTexture.js';
+import { quatFromEulerRadians } from '../../../MathHelpers.js';
 
 //#region Helpers
 // ResNTAB / JUTNameTab

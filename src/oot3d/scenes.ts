@@ -1,22 +1,22 @@
 
-import * as CMAB from './cmab';
-import * as CSAB from './csab';
-import * as CTXB from './ctxb';
-import * as CMB from './cmb';
-import * as ZAR from './zar';
-import * as LzS from './LzS';
+import * as CMAB from './cmab.js';
+import * as CSAB from './csab.js';
+import * as CTXB from './ctxb.js';
+import * as CMB from './cmb.js';
+import * as ZAR from './zar.js';
+import * as LzS from './LzS.js';
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
 
-import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render";
-import { GfxDevice, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { OrbitCameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render.js";
+import { GfxDevice, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { OrbitCameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {

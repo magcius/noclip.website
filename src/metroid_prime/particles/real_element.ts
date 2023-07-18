@@ -1,12 +1,12 @@
-import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator';
-import { InputStream } from '../stream';
-import { clamp, lerp, MathConstants, randomRange } from '../../MathHelpers';
-import { GetIntElement, IntElement } from './int_element';
-import { GetVectorElement, VectorElement } from './vector_element';
-import { ColorElement, GetColorElement } from './color_element';
+import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator.js';
+import { InputStream } from '../stream.js';
+import { clamp, lerp, MathConstants, randomRange } from '../../MathHelpers.js';
+import { GetIntElement, IntElement } from './int_element.js';
+import { GetVectorElement, VectorElement } from './vector_element.js';
+import { ColorElement, GetColorElement } from './color_element.js';
 import { vec3 } from 'gl-matrix';
-import { colorNewFromRGBA } from '../../Color';
-import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes';
+import { colorNewFromRGBA } from '../../Color.js';
+import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes.js';
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();

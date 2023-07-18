@@ -1,5 +1,5 @@
 
-import { ViewerRenderInput } from "./viewer";
+import { ViewerRenderInput } from "./viewer.js";
 
 export default class AnimationController {
     private timeInFrames: number = 0;

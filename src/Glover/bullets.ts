@@ -1,20 +1,20 @@
-import * as Textures from './textures';
-import * as Viewer from '../viewer';
+import * as Textures from './textures.js';
+import * as Viewer from '../viewer.js';
 
-import { GenericRenderable, SceneLighting } from './render';
-import { Flipbook, ParticlePool, framesets } from './particles';
-import { GloverFlipbookRenderer } from './sprite';
-import { GloverActorRenderer } from './actor';
-import { ObjectDirectory, GloverWaterVolume } from './scenes';
-import { SRC_FRAME_TO_MS } from './timing';
-import { hashStr } from './util';
+import { GenericRenderable, SceneLighting } from './render.js';
+import { Flipbook, ParticlePool, framesets } from './particles.js';
+import { GloverFlipbookRenderer } from './sprite.js';
+import { GloverActorRenderer } from './actor.js';
+import { ObjectDirectory, GloverWaterVolume } from './scenes.js';
+import { SRC_FRAME_TO_MS } from './timing.js';
+import { hashStr } from './util.js';
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
-import { assert } from '../util';
+import { assert } from '../util.js';
 
 const identityRotation: quat = quat.create();
 

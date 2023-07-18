@@ -1,18 +1,18 @@
 
 // GX materials.
 
-import * as GX from './gx_enum';
+import * as GX from './gx_enum.js';
 
-import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
-import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
+import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color.js';
+import { GfxFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { vec3, mat4 } from 'gl-matrix';
-import { Camera } from '../Camera';
-import { assert } from '../util';
-import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
-import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers';
-import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
-import { DeviceProgram } from '../Program';
-import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
+import { Camera } from '../Camera.js';
+import { assert } from '../util.js';
+import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers.js';
+import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist.js';
+import { DeviceProgram } from '../Program.js';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;

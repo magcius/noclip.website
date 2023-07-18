@@ -1,23 +1,23 @@
 
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { SceneDesc, SceneContext } from "../SceneBase";
-import { GfxDevice, GfxTexture, GfxProgram, GfxBuffer, GfxFormat, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxCullMode, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { assert, nArray } from "../util";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { DeviceProgram } from "../Program";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { SceneDesc, SceneContext } from "../SceneBase.js";
+import { GfxDevice, GfxTexture, GfxProgram, GfxBuffer, GfxFormat, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxCullMode, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { assert, nArray } from "../util.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { DeviceProgram } from "../Program.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMatrixAxisZ, MathConstants, transformVec3Mat4w1 } from "../MathHelpers";
-import { DataFetcher } from "../DataFetcher";
-import { TextureMapping } from "../TextureHolder";
-import { Blue, Cyan, Green, Magenta, OpaqueBlack, Red, Yellow } from "../Color";
-import { dfLabel, dfRange, dfShow } from "../DebugFloaters";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMatrixAxisZ, MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { Blue, Cyan, Green, Magenta, OpaqueBlack, Red, Yellow } from "../Color.js";
+import { dfLabel, dfRange, dfShow } from "../DebugFloaters.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 class PatchProgram extends DeviceProgram {
     public static a_TexCoord = 0;

@@ -1,7 +1,7 @@
 import { mat3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color } from "../Color";
-import { lerp } from "../MathHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color } from "../Color.js";
+import { lerp } from "../MathHelpers.js";
 
 export const SIZE_F32 = 4;
 export const SIZE_VEC3 = 12;

@@ -2,7 +2,7 @@
 // Reversed depth support
 
 import { mat4 } from "gl-matrix";
-import { GfxCompareMode } from "../platform/GfxPlatform";
+import { GfxCompareMode } from "../platform/GfxPlatform.js";
 
 export const IS_DEPTH_REVERSED = true;
 

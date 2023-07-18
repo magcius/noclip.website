@@ -1,9 +1,9 @@
 
-import * as F3DZEX from './f3dzex';
-import { runDL_F3DZEX, RSPOutput, RSPState, RSPSharedOutput } from './f3dzex';
-import * as Viewer from '../viewer';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, hexzero, assertExists } from '../util';
+import * as F3DZEX from './f3dzex.js';
+import { runDL_F3DZEX, RSPOutput, RSPState, RSPSharedOutput } from './f3dzex.js';
+import * as Viewer from '../viewer.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { readString, hexzero, assertExists } from '../util.js';
 
 // Loads the ZELVIEW0 format.
 

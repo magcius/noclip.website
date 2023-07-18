@@ -1,15 +1,15 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
-import { DkrLevelSegment } from "./DkrLevelSegment";
-import { IDENTITY_MATRIX } from "./DkrUtil";
-import { ViewerRenderInput } from "../viewer";
-import { DkrTextureCache } from "./DkrTextureCache";
-import { assert } from "../util";
-import { Camera } from "../Camera";
-import { DkrLevel } from "./DkrLevel";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SIZE_OF_TEXTURE_INFO } from "./DkrTexture.js";
+import { DkrLevelSegment } from "./DkrLevelSegment.js";
+import { IDENTITY_MATRIX } from "./DkrUtil.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
+import { assert } from "../util.js";
+import { Camera } from "../Camera.js";
+import { DkrLevel } from "./DkrLevel.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 const SIZE_OF_BSP_NODE = 0x08;
 const SIZE_OF_LEVEL_SEGMENT_HEADER = 0x44;

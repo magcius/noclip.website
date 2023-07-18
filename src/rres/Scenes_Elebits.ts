@@ -1,20 +1,20 @@
 
 // Elebits
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as BRRES from './brres';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as BRRES from './brres.js';
 
-import { leftPad } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import AnimationController from '../AnimationController';
-import { GXMaterialHacks } from '../gx/gx_material';
-import { SceneContext } from '../SceneBase';
-import { range } from '../MathHelpers';
-import { CameraController } from '../Camera';
+import { leftPad } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render.js';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import AnimationController from '../AnimationController.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import { SceneContext } from '../SceneBase.js';
+import { range } from '../MathHelpers.js';
+import { CameraController } from '../Camera.js';
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);

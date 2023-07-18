@@ -1,18 +1,18 @@
 
-import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxTexFilterMode, GfxWrapMode } from '../platform/GfxPlatform';
-import { GfxShaderLibrary } from './GfxShaderLibrary';
-import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
-import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
-import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../render/GfxRenderGraph';
+import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil.js';
+import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxTexFilterMode, GfxWrapMode } from '../platform/GfxPlatform.js';
+import { GfxShaderLibrary } from './GfxShaderLibrary.js';
+import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler.js';
+import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager.js';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from '../render/GfxRenderGraph.js';
 
-import { lerp, saturate, smoothstep } from '../../MathHelpers';
-import { GfxRenderHelper } from '../render/GfxRenderHelper';
-import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer';
-import { gfxDeviceNeedsFlipY } from './GfxDeviceHelpers';
-import { FormatFlags } from '../platform/GfxPlatformFormat';
-import { getFormatFlags } from '../platform/GfxPlatformFormat';
+import { lerp, saturate, smoothstep } from '../../MathHelpers.js';
+import { GfxRenderHelper } from '../render/GfxRenderHelper.js';
+import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer.js';
+import { gfxDeviceNeedsFlipY } from './GfxDeviceHelpers.js';
+import { FormatFlags } from '../platform/GfxPlatformFormat.js';
+import { getFormatFlags } from '../platform/GfxPlatformFormat.js';
 
 interface MouseLocation {
     mouseX: number;

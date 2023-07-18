@@ -1,16 +1,16 @@
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding, GfxDevice, GfxSamplerDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { DeviceProgram } from "../Program";
-import { TextureMapping } from "../TextureHolder";
-import { ViewerRenderInput } from "../viewer";
-import { NfsMap } from "./map";
-import { NfsTexture } from "./region";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding, GfxDevice, GfxSamplerDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { NfsMap } from "./map.js";
+import { NfsTexture } from "./region.js";
 
 
 export class NfsPostProcessing {

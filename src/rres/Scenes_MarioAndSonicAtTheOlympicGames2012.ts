@@ -1,8 +1,8 @@
 
-import * as Viewer from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { createBasicRRESRendererFromU8Buffer } from "./scenes";
-import { SceneContext } from "../SceneBase";
+import * as Viewer from "../viewer.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { createBasicRRESRendererFromU8Buffer } from "./scenes.js";
+import { SceneContext } from "../SceneBase.js";
 
 const dataPath = `MarioAndSonicAtTheOlympicGames2012`;
 

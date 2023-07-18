@@ -1,6 +1,6 @@
 
-import * as Viewer from './viewer';
-import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
+import * as Viewer from './viewer.js';
+import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform.js';
 
 export interface TextureOverride {
     gfxTexture: GfxTexture | null;

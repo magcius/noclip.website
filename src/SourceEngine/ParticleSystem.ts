@@ -1,20 +1,20 @@
 
 import { mat4, ReadonlyVec3, ReadonlyVec4, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { IS_DEVELOPMENT } from "../BuildVersion";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
-import { Color, colorNewCopy, Magenta, White } from "../Color";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB } from "../Geometry";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { computeModelMatrixR, getMatrixAxisZ, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, smoothstep, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitX, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
-import { assert, assertExists } from "../util";
-import * as DMX from "./DMX";
-import { SourceEngineViewType, SourceFileSystem, SourceRenderContext } from "./Main";
-import { BaseMaterial } from "./Materials";
-import { computeMatrixForForwardDir } from "./StaticDetailObject";
-import { ValveKeyValueParser, VKFPair } from "./VMT";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { Color, colorNewCopy, Magenta, White } from "../Color.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB } from "../Geometry.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { computeModelMatrixR, getMatrixAxisZ, invlerp, lerp, MathConstants, saturate, scaleMatrix, setMatrixTranslation, smoothstep, transformVec3Mat4w0, transformVec3Mat4w1, Vec3One, Vec3UnitX, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { assert, assertExists } from "../util.js";
+import * as DMX from "./DMX.js";
+import { SourceEngineViewType, SourceFileSystem, SourceRenderContext } from "./Main.js";
+import { BaseMaterial } from "./Materials.js";
+import { computeMatrixForForwardDir } from "./StaticDetailObject.js";
+import { ValveKeyValueParser, VKFPair } from "./VMT.js";
 
 class SeededRNG {
     public state: number;

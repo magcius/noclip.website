@@ -1,13 +1,13 @@
 
-import { nArray, assert, assertExists, spliceBisectRight, setBitFlagEnabled } from "../../util";
-import { clamp } from "../../MathHelpers";
+import { nArray, assert, assertExists, spliceBisectRight, setBitFlagEnabled } from "../../util.js";
+import { clamp } from "../../MathHelpers.js";
 
-import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform.js";
 
-import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
+import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 
-import { GfxRenderCache } from "./GfxRenderCache";
-import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
+import { GfxRenderCache } from "./GfxRenderCache.js";
+import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.js";
 
 // The "Render" subsystem provides high-level scene graph utiltiies, built on top of gfx/platform and gfx/helpers. A
 // rough overview of the design:

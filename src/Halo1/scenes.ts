@@ -1,28 +1,28 @@
 
 import { mat4, ReadonlyMat4, vec3, vec4 } from 'gl-matrix';
-import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index';
-import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
-import { Color, colorCopy, colorNewCopy, White } from '../Color';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { GfxFormat } from "../gfx/platform/GfxPlatformFormat";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers';
-import { DeviceProgram } from '../Program';
-import { rust } from '../rustlib';
-import { SceneContext } from '../SceneBase';
-import { TextureMapping } from '../TextureHolder';
-import { assert, nArray } from '../util';
-import * as Viewer from '../viewer';
-import { TextureCache } from './tex';
+import { AnimationFunction, FramebufferBlendFunction, FunctionSource, HaloBitmapReader, HaloBSP, HaloLightmap, HaloMaterial, HaloModel, HaloModelPart, HaloSceneManager, HaloScenery, HaloSceneryInstance, HaloShaderEnvironment, HaloShaderModel, HaloShaderTransparencyChicago, HaloShaderTransparencyGeneric, HaloShaderTransparentChicagoMap, HaloShaderTransparentGenericMap, HaloShaderTransparentWater, HaloShaderTransparentWaterRipple, HaloSky, ShaderAlphaInput, ShaderInput, ShaderMapping, ShaderOutput, ShaderOutputFunction, ShaderOutputMapping, ShaderTransparentChicagoColorFunction } from '../../rust/pkg/index.js';
+import { CameraController, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
+import { Color, colorCopy, colorNewCopy, White } from '../Color.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
+import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers.js';
+import { DeviceProgram } from '../Program.js';
+import { rust } from '../rustlib.js';
+import { SceneContext } from '../SceneBase.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { assert, nArray } from '../util.js';
+import * as Viewer from '../viewer.js';
+import { TextureCache } from './tex.js';
 
 /**
  * todo:

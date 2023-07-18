@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import type { NamedArrayBufferSlice } from "../DataFetcher";
-import { assert, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import type { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { assert, readString } from "../util.js";
 
 export interface AFS {
     files: NamedArrayBufferSlice[];

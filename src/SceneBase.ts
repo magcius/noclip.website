@@ -1,10 +1,10 @@
 
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput } from "./viewer";
-import { DataFetcher } from "./DataFetcher";
-import { DataShare } from "./DataShare";
-import { GfxRenderInstManager } from "./gfx/render/GfxRenderInstManager";
-import InputManager from "./InputManager";
+import { GfxDevice } from "./gfx/platform/GfxPlatform.js";
+import { SceneGfx, ViewerRenderInput } from "./viewer.js";
+import { DataFetcher } from "./DataFetcher.js";
+import { DataShare } from "./DataShare.js";
+import { GfxRenderInstManager } from "./gfx/render/GfxRenderInstManager.js";
+import InputManager from "./InputManager.js";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;

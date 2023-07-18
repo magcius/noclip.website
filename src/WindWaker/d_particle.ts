@@ -2,24 +2,24 @@
 // particle
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { Color, colorCopy } from "../Color";
-import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA";
-import { Frustum } from "../Geometry";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
-import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import { TextureMapping } from "../TextureHolder";
-import { nArray } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { dKy_get_seacolor } from "./d_kankyo";
-import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
-import { dGlobals } from "./zww_scenes";
-import * as GX from '../gx/gx_enum';
-import { ColorKind } from "../gx/gx_render";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { Color, colorCopy } from "../Color.js";
+import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA.js";
+import { Frustum } from "../Geometry.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
+import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { dKy_get_seacolor } from "./d_kankyo.js";
+import { cLib_addCalc2, cM__Short2Rad } from "./SComponent.js";
+import { dGlobals } from "./zww_scenes.js";
+import * as GX from '../gx/gx_enum.js';
+import { ColorKind } from "../gx/gx_render.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {

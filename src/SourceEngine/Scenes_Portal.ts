@@ -1,10 +1,10 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { BSPEntity } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem";
-import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
-import { createScene } from "./Scenes";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { BSPEntity } from "./BSPFile.js";
+import { BaseEntity, EntityFactoryRegistry, EntitySystem } from "./EntitySystem.js";
+import { BSPRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main.js";
+import { createScene } from "./Scenes.js";
 
 class npc_portal_turret_floor extends BaseEntity {
     public static classname = 'npc_portal_turret_floor';

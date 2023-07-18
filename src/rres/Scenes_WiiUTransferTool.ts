@@ -1,15 +1,15 @@
 
-import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { BasicGXRendererHelper, ub_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import * as BRRES from "./brres";
-import AnimationController from "../AnimationController";
-import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { IS_DEVELOPMENT } from "../BuildVersion";
-import { GX_Program } from "../gx/gx_material";
+import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { BasicGXRendererHelper, ub_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import * as BRRES from "./brres.js";
+import AnimationController from "../AnimationController.js";
+import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { IS_DEVELOPMENT } from "../BuildVersion.js";
+import { GX_Program } from "../gx/gx_material.js";
 
 class BgStage {
     private modelData: MDL0Model;

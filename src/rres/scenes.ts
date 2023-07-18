@@ -1,20 +1,20 @@
 
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as BRRES from './brres';
-import * as U8 from './u8';
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import * as BRRES from './brres.js';
+import * as U8 from './u8.js';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
 
-import { U8Archive } from "./u8";
-import { createMarioKartWiiSceneFromU8Archive } from "../MarioKartWii/Scenes_MarioKartWii";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
-import { GXMaterialHacks } from '../gx/gx_material';
-import AnimationController from '../AnimationController';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { SceneContext } from '../SceneBase';
+import { U8Archive } from "./u8.js";
+import { createMarioKartWiiSceneFromU8Archive } from "../MarioKartWii/Scenes_MarioKartWii.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import AnimationController from '../AnimationController.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { SceneContext } from '../SceneBase.js';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,

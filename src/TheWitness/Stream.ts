@@ -1,6 +1,6 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
-import { colorNewFromRGBA, Color } from "../Color";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
+import { colorNewFromRGBA, Color } from "../Color.js";
 import { vec2, vec3, quat, vec4 } from "gl-matrix";
 
 export class Stream {

@@ -1,5 +1,5 @@
-import { readMaterial } from "./material";
-import { DataStream } from "../util";
+import { readMaterial } from "./material.js";
+import { DataStream } from "../util.js";
 import * as CRC32 from "crc-32";
 
 export function readNode(data: DataStream) {

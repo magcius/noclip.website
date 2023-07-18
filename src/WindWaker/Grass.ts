@@ -1,26 +1,26 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { nArray } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { nArray } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
-import * as GX from '../gx/gx_enum';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { dGlobals } from './zww_scenes';
-import { Endianness } from '../endian';
+import * as GX from '../gx/gx_enum.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { dGlobals } from './zww_scenes.js';
+import { Endianness } from '../endian.js';
 
-import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist';
-import { parseMaterial, GXMaterial } from '../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ColorKind, DrawParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
-import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { ViewerRenderInput } from '../viewer';
-import { colorCopy, colorFromRGBA } from '../Color';
-import { dKy_GxFog_set } from './d_kankyo';
-import { cBgS_GndChk } from './d_bg';
-import { getMatrixTranslation } from '../MathHelpers';
+import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist.js';
+import { parseMaterial, GXMaterial } from '../gx/gx_material.js';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist.js';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
+import { ColorKind, DrawParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { colorCopy, colorFromRGBA } from '../Color.js';
+import { dKy_GxFog_set } from './d_kankyo.js';
+import { cBgS_GndChk } from './d_bg.js';
+import { getMatrixTranslation } from '../MathHelpers.js';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     // Patch material.

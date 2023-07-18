@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../platform/GfxPlatform";
+import { GfxColor, GfxDevice, GfxFormat, GfxTexture, makeTextureDescriptor2D } from "../platform/GfxPlatform.js";
 
 export function makeSolidColorTexture2D(device: GfxDevice, color: GfxColor): GfxTexture {
     const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));

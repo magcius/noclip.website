@@ -1,23 +1,23 @@
 
-import * as GX from '../../gx/gx_enum';
-import { LiveActor, ZoneAndLayer, isDead } from "../LiveActor";
+import * as GX from '../../gx/gx_enum.js';
+import { LiveActor, ZoneAndLayer, isDead } from "../LiveActor.js";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
-import { assert } from "../../util";
-import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../../MathHelpers";
-import { SceneObjHolder, SceneObj } from "../Main";
-import { JMapInfoIter } from "../JMapInfo";
-import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "../ActorUtil";
-import { DrawType, MovementType } from "../NameObj";
-import { BTIData } from "../../Common/JSYSTEM/JUTTexture";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { isEqualStageName } from "./MiscActor";
-import { ViewerRenderInput } from "../../viewer";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../../gx/gx_render';
-import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color';
-import { WaterAreaHolder, WaterInfo } from '../MiscMap';
+import { assert } from "../../util.js";
+import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../../MathHelpers.js";
+import { SceneObjHolder, SceneObj } from "../Main.js";
+import { JMapInfoIter } from "../JMapInfo.js";
+import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "../ActorUtil.js";
+import { DrawType, MovementType } from "../NameObj.js";
+import { BTIData } from "../../Common/JSYSTEM/JUTTexture.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { isEqualStageName } from "./MiscActor.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { TDDraw } from "../DDraw.js";
+import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from '../../gx/gx_render.js';
+import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder.js';
+import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color.js';
+import { WaterAreaHolder, WaterInfo } from '../MiscMap.js';
 
 class OceanSpherePoint {
     // Center of the sphere (translation of the owning actor).

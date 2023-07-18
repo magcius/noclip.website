@@ -2,10 +2,10 @@
 // https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/ttydasm/ttydasm.cpp
 // https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { MathConstants } from "../MathHelpers";
-import { hexzero0x, hexzero, decodeString, readString, assert, nullify } from "../util";
-import { WorldRenderer } from "./render";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { MathConstants } from "../MathHelpers.js";
+import { hexzero0x, hexzero, decodeString, readString, assert, nullify } from "../util.js";
+import { WorldRenderer } from "./render.js";
 
 enum op {
 	END = 0x01,

@@ -1,4 +1,4 @@
-import { assert, setBitFlagEnabled } from "./util";
+import { assert, setBitFlagEnabled } from "./util.js";
 
 // Moderately memory-efficient way of storing some number of bits.
 

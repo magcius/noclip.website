@@ -1,15 +1,15 @@
-import { Filesystem, UVFile } from "../Filesystem";
-import { assert, leftPad } from "../../util";
+import { Filesystem, UVFile } from "../Filesystem.js";
+import { assert, leftPad } from "../../util.js";
 import { mat4, vec3 } from "gl-matrix";
-import { parseMatrix, parseMaterial, Material, RenderOptionsFlags } from "./Common";
-import { MaterialRenderer } from "../MaterialRenderer";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../../viewer";
-import { RendererStore } from "../Scenes";
-import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk";
-import { White } from "../../Color";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { parseMatrix, parseMaterial, Material, RenderOptionsFlags } from "./Common.js";
+import { MaterialRenderer } from "../MaterialRenderer.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { RendererStore } from "../Scenes.js";
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk.js";
+import { White } from "../../Color.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 
 class ModelPart {

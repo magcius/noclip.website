@@ -1,10 +1,10 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec3, ReadonlyVec3 } from "gl-matrix";
-import { assertExists, nArray, assert } from "../util";
-import { isNearZero, Vec3One } from "../MathHelpers";
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { isSameDirection } from "./ActorUtil";
+import { assertExists, nArray, assert } from "../util.js";
+import { isNearZero, Vec3One } from "../MathHelpers.js";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo.js";
+import { isSameDirection } from "./ActorUtil.js";
 
 export class KC_PrismData {
     public height: number = 0.0;

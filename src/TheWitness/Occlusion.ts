@@ -1,14 +1,14 @@
 
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
-import { Color, colorNewCopy, Cyan, Green, Magenta, OpaqueBlack, Red, White } from "../Color";
-import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform";
-import { GfxQueryPool } from "../gfx/platform/GfxPlatformImpl";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
-import { gfxRenderInstCompareNone, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { Entity_Cluster } from "./Entity";
-import { TheWitnessGlobals } from "./Globals";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { Color, colorNewCopy, Cyan, Green, Magenta, OpaqueBlack, Red, White } from "../Color.js";
+import { drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice, GfxFormat, GfxQueryPoolType } from "../gfx/platform/GfxPlatform.js";
+import { GfxQueryPool } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
+import { gfxRenderInstCompareNone, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { Entity_Cluster } from "./Entity.js";
+import { TheWitnessGlobals } from "./Globals.js";
 
 class Occlusion_Cluster {
     public renderInstList = new GfxRenderInstList(gfxRenderInstCompareNone);

@@ -1,20 +1,20 @@
-import * as Textures from './textures';
-import * as Viewer from '../viewer';
+import * as Textures from './textures.js';
+import * as Viewer from '../viewer.js';
 
-import { SRC_FRAME_TO_MS, CONVERT_FRAMERATE } from './timing';
+import { SRC_FRAME_TO_MS, CONVERT_FRAMERATE } from './timing.js';
 
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { Color, colorNewFromRGBA } from "../Color";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
 
-import { GenericRenderable } from './render';
-import { GloverWaterVolume } from './scenes';
-import { GloverFlipbookRenderer } from './sprite';
-import { GloverActorRenderer } from './actor';
-import { pushAlongLookatVector } from './util';
+import { GenericRenderable } from './render.js';
+import { GloverWaterVolume } from './scenes.js';
+import { GloverFlipbookRenderer } from './sprite.js';
+import { GloverActorRenderer } from './actor.js';
+import { pushAlongLookatVector } from './util.js';
 
 const identityRotation: quat = quat.create();
 

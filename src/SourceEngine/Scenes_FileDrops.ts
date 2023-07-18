@@ -1,10 +1,10 @@
 
-import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher";
-import { SceneContext } from "../SceneBase";
-import { assertExists } from "../util";
-import { BSPFile } from "./BSPFile";
-import { GMA } from "./GMA";
-import { BSPRenderer, SkyboxRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext, SourceRenderer } from "./Main";
+import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher.js";
+import { SceneContext } from "../SceneBase.js";
+import { assertExists } from "../util.js";
+import { BSPFile } from "./BSPFile.js";
+import { GMA } from "./GMA.js";
+import { BSPRenderer, SkyboxRenderer, SourceFileSystem, SourceLoadContext, SourceRenderContext, SourceRenderer } from "./Main.js";
 
 export async function createKitchenSinkSourceFilesytem(dataFetcher: DataFetcher): Promise<SourceFileSystem> {
     const filesystem = new SourceFileSystem(dataFetcher);

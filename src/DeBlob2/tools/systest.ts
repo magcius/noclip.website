@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, assertExists, hexzero0x, readString } from "../../util";
-import * as TRB from '../TRB';
-import * as BYML from "../../byml";
+import { assert, assertExists, hexzero0x, readString } from "../../util.js";
+import * as TRB from '../TRB.js';
+import * as BYML from "../../byml.js";
 import { Console } from "console";
-import * as DDS from '../../Common/dds';
+import * as DDS from '../../Common/dds.js';
 
 
 function fetchDataSync(path: string): ArrayBufferSlice {

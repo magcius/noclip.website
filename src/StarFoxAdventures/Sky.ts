@@ -1,20 +1,20 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxClipSpaceNearZ, GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph';
-import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render';
-import { getMatrixAxisZ } from '../MathHelpers';
+import { GfxClipSpaceNearZ, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph.js';
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import * as GX from '../gx/gx_enum.js';
+import * as GX_Material from '../gx/gx_material.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
+import { DrawParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, GXRenderHelperGfx } from '../gx/gx_render.js';
+import { getMatrixAxisZ } from '../MathHelpers.js';
 
-import { ObjectRenderContext } from './objects';
-import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from './render';
-import { vecPitch } from './util';
-import { getCamPos } from './util';
-import { World } from './world';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
+import { ObjectRenderContext } from './objects.js';
+import { SceneRenderContext, SFARenderLists, setGXMaterialOnRenderInst } from './render.js';
+import { vecPitch } from './util.js';
+import { getCamPos } from './util.js';
+import { World } from './world.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();

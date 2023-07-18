@@ -1,12 +1,12 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { vec3, quat, mat4 } from 'gl-matrix';
-import { align } from '../util';
+import { align } from '../util.js';
 import * as rw from 'librw';
-import { Color, colorNewFromRGBA } from '../Color';
-import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
-import { AABB } from '../Geometry';
-import { clamp } from '../MathHelpers';
+import { Color, colorNewFromRGBA } from '../Color.js';
+import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
+import { AABB } from '../Geometry.js';
+import { clamp } from '../MathHelpers.js';
 
 export function stringHash(str: string): number {
     let hash = 0;

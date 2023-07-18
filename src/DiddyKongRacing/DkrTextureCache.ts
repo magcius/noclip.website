@@ -1,8 +1,8 @@
 
-import { DkrTexture } from './DkrTexture';
-import { DataManager } from "./DataManager";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { DkrTexture } from './DkrTexture.js';
+import { DataManager } from "./DataManager.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class DkrTextureCache {
     private textures3d: { [k: string]: DkrTexture } = {};

@@ -1,17 +1,17 @@
-import { InputStream } from '../stream';
+import { InputStream } from '../stream.js';
 import { ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { clamp } from '../../MathHelpers';
-import { AABB } from '../../Geometry';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
-import * as Viewer from '../../viewer';
-import { ResourceSystem } from '../resource';
-import { assert } from '../../util';
-import { CMDL } from '../cmdl';
-import { noclipSpaceFromPrimeSpace } from '../render';
-import { Color, colorNewFromRGBA } from '../../Color';
-import { ElementGenerator, ElementGeneratorMaterialHelper } from './element_generator';
-import * as GX_Material from '../../gx/gx_material';
-import { RetroSceneRenderer } from '../scenes';
+import { clamp } from '../../MathHelpers.js';
+import { AABB } from '../../Geometry.js';
+import { GfxDevice } from '../../gfx/platform/GfxPlatform.js';
+import * as Viewer from '../../viewer.js';
+import { ResourceSystem } from '../resource.js';
+import { assert } from '../../util.js';
+import { CMDL } from '../cmdl.js';
+import { noclipSpaceFromPrimeSpace } from '../render.js';
+import { Color, colorNewFromRGBA } from '../../Color.js';
+import { ElementGenerator, ElementGeneratorMaterialHelper } from './element_generator.js';
+import * as GX_Material from '../../gx/gx_material.js';
+import { RetroSceneRenderer } from '../scenes.js';
 
 const scratchAABB = new AABB();
 

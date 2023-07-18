@@ -1,15 +1,15 @@
 import {
     AnimTreeAnimReaderContainer, AnimTreeBlend, AnimTreeLoopIn, AnimTreeNode, AnimTreeSequence,
     AnimTreeTimeScale, AnimTreeTransition, LinearAnimationTimeScale
-} from './tree_nodes';
-import { InputStream } from '../stream';
-import { CharAnimTime } from './char_anim_time';
-import { ANIM } from '../anim';
-import { AnimSource } from './data_source';
-import { AnimSourceReader, AnimSourceReaderBase, AnimSourceReaderCompressed } from './source_readers';
-import { randomRange, saturate } from '../../MathHelpers';
-import { ResourceSystem } from '../resource';
-import { EVNT } from '../evnt';
+} from './tree_nodes.js';
+import { InputStream } from '../stream.js';
+import { CharAnimTime } from './char_anim_time.js';
+import { ANIM } from '../anim.js';
+import { AnimSource } from './data_source.js';
+import { AnimSourceReader, AnimSourceReaderBase, AnimSourceReaderCompressed } from './source_readers.js';
+import { randomRange, saturate } from '../../MathHelpers.js';
+import { ResourceSystem } from '../resource.js';
+import { EVNT } from '../evnt.js';
 
 export interface Animation {
     name: string;

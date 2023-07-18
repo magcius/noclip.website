@@ -1,12 +1,12 @@
 import { vec2 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher } from '../DataFetcher';
-import { AABB } from '../Geometry';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { assert } from '../util';
-import { NfsNode, NodeType } from './datanode';
-import { NfsRegion, NfsModel, NfsTexture, DataSection, RegionType } from './region';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { AABB } from '../Geometry.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { assert } from '../util.js';
+import { NfsNode, NodeType } from './datanode.js';
+import { NfsRegion, NfsModel, NfsTexture, DataSection, RegionType } from './region.js';
 
 export class NfsMap {
     public regions: {[id: number]: NfsRegion};

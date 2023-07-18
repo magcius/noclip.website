@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from "./ArrayBufferSlice";
+import ArrayBufferSlice from "./ArrayBufferSlice.js";
 
 function downloadHref(filename: string, href: string): void {
     const elem = document.createElement('a');

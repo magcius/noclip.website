@@ -6,10 +6,10 @@
  */
 
 import { vec2, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
-import { decompressLZ } from "./AVLZ";
-import { parseVec2f, parseVec3f } from "./Utils";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
+import { decompressLZ } from "./AVLZ.js";
+import { parseVec2f, parseVec3f } from "./Utils.js";
 
 export const enum BananaType {
     Single,

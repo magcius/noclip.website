@@ -1,8 +1,8 @@
 
-import { SceneGroup } from "../SceneBase";
-import { FoxFur } from "./FoxFur";
-import { TessSceneDesc } from "./Tess";
-import { SlimySpringWaterDesc } from "./SlimySpringWater";
+import { SceneGroup } from "../SceneBase.js";
+import { FoxFur } from "./FoxFur.js";
+import { TessSceneDesc } from "./Tess.js";
+import { SlimySpringWaterDesc } from "./SlimySpringWater.js";
 
 const sceneDescs = [
     new FoxFur('FoxFur', 'FoxFur'),

@@ -1,5 +1,5 @@
-import { vec3 } from "gl-matrix";
-import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
+
+import { Color, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
 import {
     BackgroundConstructor,
     BgBonus,
@@ -12,7 +12,7 @@ import {
     BgStorm,
     BgSunset,
     BgWater,
-} from "./Background";
+} from "./Background.js";
 
 export const enum StageId {
     St001_Plain = 1,

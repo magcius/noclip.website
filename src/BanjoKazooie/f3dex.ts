@@ -1,10 +1,10 @@
-import * as RDP from '../Common/N64/RDP';
+import * as RDP from '../Common/N64/RDP.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assert, assertExists, hexzero } from "../util";
-import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, getSizBitsPerPixel } from "../Common/N64/Image";
-import { GfxCullMode, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
-import { loadVertexFromView } from '../Common/N64/RSP';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { nArray, assert, assertExists, hexzero } from "../util.js";
+import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, getSizBitsPerPixel } from "../Common/N64/Image.js";
+import { GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+import { loadVertexFromView } from '../Common/N64/RSP.js';
 
 // Interpreter for N64 F3DEX microcode.
 

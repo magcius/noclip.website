@@ -1,8 +1,8 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem, SourceLoadContext } from "./Main";
-import { createScene } from "./Scenes";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { SourceFileSystem, SourceLoadContext } from "./Main.js";
+import { createScene } from "./Scenes.js";
 
 class CounterStrikeGOSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {

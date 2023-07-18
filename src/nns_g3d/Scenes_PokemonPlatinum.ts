@@ -1,27 +1,27 @@
 
 // Pokemon Platinum
 
-import * as Viewer from '../viewer';
-import * as NARC from './narc';
+import * as Viewer from '../viewer.js';
+import * as NARC from './narc.js';
 
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
-import { assert, assertExists } from '../util';
+import { DataFetcher } from '../DataFetcher.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render.js';
+import { assert, assertExists } from '../util.js';
 import { mat4 } from 'gl-matrix';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { FakeTextureHolder } from '../TextureHolder';
-import { SceneContext } from '../SceneBase';
-import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D';
-import { CameraController } from '../Camera';
-import { AABB } from '../Geometry';
-import { NITRO_Program } from '../SuperMario64DS/render';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import { SceneContext } from '../SceneBase.js';
+import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D.js';
+import { CameraController } from '../Camera.js';
+import { AABB } from '../Geometry.js';
+import { NITRO_Program } from '../SuperMario64DS/render.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {

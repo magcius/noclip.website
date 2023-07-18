@@ -1,12 +1,12 @@
 
-import { assert, readString } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, readString } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, vec4 } from 'gl-matrix';
-import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture';
-import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
-import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture.js';
+import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform.js';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color.js';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;

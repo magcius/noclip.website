@@ -1,17 +1,24 @@
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM,
-         decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4,
-         decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16,
-         decodeTex_I4, decodeTex_I8,
-         TextureLUT, getTLUTSize } from "../Common/N64/Image";
-import { getImageFormatString } from "../BanjoKazooie/f3dex";
-import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { TextureHolder, LoadedTexture } from "../TextureHolder";
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
+import {
+    ImageFormat, ImageSize, TexCM,
+    TextureLUT,
+    decodeTex_CI4,
+    decodeTex_CI8,
+    decodeTex_I4, decodeTex_I8,
+    decodeTex_IA16,
+    decodeTex_IA4, decodeTex_IA8,
+    decodeTex_RGBA16, decodeTex_RGBA32,
+    getTLUTSize,
+    parseTLUT
+} from "../Common/N64/Image.js";
+import { LoadedTexture, TextureHolder } from "../TextureHolder.js";
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 
-import { GloverTexbank } from './parsers';
+import { GloverTexbank } from './parsers/index.js';
 
 export interface Image {
     name: string;

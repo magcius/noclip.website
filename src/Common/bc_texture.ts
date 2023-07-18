@@ -1,7 +1,7 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { convertToCanvasData } from "../gfx/helpers/TextureConversionHelpers";
-import { GfxFormat } from "../gfx/platform/GfxPlatform";
-import { assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { convertToCanvasData } from "../gfx/helpers/TextureConversionHelpers.js";
+import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
+import { assert } from "../util.js";
 
 interface DecodedSurfaceBase {
     width: number;

@@ -1,7 +1,7 @@
 import { mat4, vec3 } from "gl-matrix";
-import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers";
-import { assert } from "../util";
-import * as SD from "./Stagedef";
+import { invlerp, lerp, MathConstants, smoothstep } from "../MathHelpers.js";
+import { assert } from "../util.js";
+import * as SD from "./Stagedef.js";
 
 function searchKeyframes(timeSeconds: number, keyframes: SD.Keyframe[]): number {
     assert(keyframes.length > 0);

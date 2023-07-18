@@ -1,17 +1,17 @@
 import { vec3 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { AABB } from '../Geometry';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist';
-import * as GX from '../gx/gx_enum';
-import { nArray } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { AABB } from '../Geometry.js';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist.js';
+import * as GX from '../gx/gx_enum.js';
+import { nArray } from '../util.js';
 
-import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader';
-import { MaterialFactory, NormalFlags, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
-import { Model, ModelShapes } from './models';
-import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
-import { Skeleton } from './skeleton';
-import { TextureFetcher } from './textures';
-import { dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util';
+import { parseShader, ANCIENT_MAP_SHADER_FIELDS, SFA_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS } from './materialloader.js';
+import { MaterialFactory, NormalFlags, SFAMaterial, Shader, ShaderAttrFlags, ShaderFlags } from './materials.js';
+import { Model, ModelShapes } from './models.js';
+import { Shape, ShapeGeometry, ShapeMaterial } from './shapes.js';
+import { Skeleton } from './skeleton.js';
+import { TextureFetcher } from './textures.js';
+import { dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util.js';
 
 export enum ModelVersion {
     AncientMap,

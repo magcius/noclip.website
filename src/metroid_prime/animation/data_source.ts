@@ -1,11 +1,11 @@
-import { InputStream } from '../stream';
-import { ResourceSystem } from '../resource';
-import { CharAnimTime } from './char_anim_time';
-import { EVNT } from '../evnt';
+import { InputStream } from '../stream.js';
+import { ResourceSystem } from '../resource.js';
+import { CharAnimTime } from './char_anim_time.js';
+import { EVNT } from '../evnt.js';
 import { quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { compareEpsilon, saturate } from '../../MathHelpers';
-import { PerSegmentData } from './base_reader';
-import { nArray } from '../../util';
+import { compareEpsilon, saturate } from '../../MathHelpers.js';
+import { PerSegmentData } from './base_reader.js';
+import { nArray } from '../../util.js';
 
 export abstract class AnimSourceBase {
     evntData: EVNT | null = null;

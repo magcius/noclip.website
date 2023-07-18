@@ -1,30 +1,30 @@
-import * as PAK from './pak';
-import * as MLVL from './mlvl';
-import * as MREA from './mrea';
-import { MaterialSet } from './mrea';
-import { ResourceGame, ResourceSystem } from './resource';
-import { CMDLData, CMDLRenderer, ModelCache, MREARenderer, RetroPass } from './render';
+import * as PAK from './pak.js';
+import * as MLVL from './mlvl.js';
+import * as MREA from './mrea.js';
+import { MaterialSet } from './mrea.js';
+import { ResourceGame, ResourceSystem } from './resource.js';
+import { CMDLData, CMDLRenderer, ModelCache, MREARenderer, RetroPass } from './render.js';
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import { GroupLayerPanel } from './ui';
-import { assert, assertExists } from '../util';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import { GroupLayerPanel } from './ui.js';
+import { assert, assertExists } from '../util.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4 } from 'gl-matrix';
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, GXTextureHolder } from '../gx/gx_render';
-import { SceneContext } from '../SceneBase';
-import { CameraController } from '../Camera';
-import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from '../BitMap';
-import { CMDL } from './cmdl';
-import { colorNewCopy, OpaqueBlack } from '../Color';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { Vec3One } from '../MathHelpers';
-import { parseMP1Tweaks, parseMP2Tweaks } from './tweaks';
-import { GeneratorMaterialHelpers } from './particles/base_generator';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { TXTR } from './txtr';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, GXTextureHolder } from '../gx/gx_render.js';
+import { SceneContext } from '../SceneBase.js';
+import { CameraController } from '../Camera.js';
+import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSerialize } from '../BitMap.js';
+import { CMDL } from './cmdl.js';
+import { colorNewCopy, OpaqueBlack } from '../Color.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { Vec3One } from '../MathHelpers.js';
+import { parseMP1Tweaks, parseMP2Tweaks } from './tweaks.js';
+import { GeneratorMaterialHelpers } from './particles/base_generator.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { TXTR } from './txtr.js';
 
 function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
     for (let i = 0; i < layers.length; i++)

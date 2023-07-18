@@ -1,16 +1,16 @@
-import { Filesystem, UVFile } from "../Filesystem";
-import { assert, nArray } from "../../util";
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { ImageFormat, ImageSize, decodeTex_RGBA16, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, getImageFormatName, getImageSizeName, decodeTex_CI4, parseTLUT, TextureLUT } from "../../Common/N64/Image";
-import { UVTS } from "./UVTS";
-import * as F3DEX2 from "../../PokemonSnap/f3dex2";
-import * as F3DEX from '../../BanjoKazooie/f3dex';
-import * as RDP from '../../Common/N64/RDP';
+import { Filesystem, UVFile } from "../Filesystem.js";
+import { assert, nArray } from "../../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { ImageFormat, ImageSize, decodeTex_RGBA16, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, getImageFormatName, getImageSizeName, decodeTex_CI4, parseTLUT, TextureLUT } from "../../Common/N64/Image.js";
+import { UVTS } from "./UVTS.js";
+import * as F3DEX2 from "../../PokemonSnap/f3dex2.js";
+import * as F3DEX from '../../BanjoKazooie/f3dex.js';
+import * as RDP from '../../Common/N64/RDP.js';
 import { vec4, mat4 } from "gl-matrix";
-import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, makeTextureDescriptor2D, GfxFormat } from "../../gfx/platform/GfxPlatform";
-import { fillVec4v, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
-import { calcTextureMatrixFromRSPState } from "../../Common/N64/RSP";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, makeTextureDescriptor2D, GfxFormat } from "../../gfx/platform/GfxPlatform.js";
+import { fillVec4v, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { calcTextureMatrixFromRSPState } from "../../Common/N64/RSP.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 // TODO: figure out if any mode other than Loop is used
 enum TexScrollAnimMode {

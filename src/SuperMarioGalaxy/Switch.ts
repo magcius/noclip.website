@@ -1,13 +1,13 @@
 
-import { NameObj, MovementType } from "./NameObj";
-import { SceneObjHolder, SceneObj, getObjectName } from "./Main";
-import BitMap from "../BitMap";
-import { JMapInfoIter } from "./JMapInfo";
-import { assertExists, fallback } from "../util";
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { ViewerRenderInput } from "../viewer";
-import { connectToSceneMapObjMovement, connectToScene } from "./ActorUtil";
-import { AreaObj } from "./AreaObj";
+import { NameObj, MovementType } from "./NameObj.js";
+import { SceneObjHolder, SceneObj, getObjectName } from "./Main.js";
+import BitMap from "../BitMap.js";
+import { JMapInfoIter } from "./JMapInfo.js";
+import { assertExists, fallback } from "../util.js";
+import { LiveActor, ZoneAndLayer } from "./LiveActor.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { connectToSceneMapObjMovement, connectToScene } from "./ActorUtil.js";
+import { AreaObj } from "./AreaObj.js";
 
 //#region MapTool
 export function isExistStageSwitchA(infoIter: JMapInfoIter | null): boolean {

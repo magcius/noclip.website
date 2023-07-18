@@ -1,17 +1,17 @@
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { createModelInstance, BasicRenderer } from './scenes';
-import * as Yaz0 from '../Common/Compression/Yaz0';
+import { createModelInstance, BasicRenderer } from './scenes.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assertExists } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { assertExists } from '../util.js';
 import { mat4, } from 'gl-matrix';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { SceneContext } from '../SceneBase';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { SceneContext } from '../SceneBase.js';
 
 const id = "pik2";
 const name = "Pikmin 2";

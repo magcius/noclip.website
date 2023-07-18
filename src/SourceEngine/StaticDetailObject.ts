@@ -1,22 +1,22 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
 import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color";
-import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials";
-import { SourceRenderContext, BSPRenderer } from "./Main";
-import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
-import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
-import { Endianness } from "../endian";
-import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
-import BitMap from "../BitMap";
-import { BSPFile } from "./BSPFile";
-import { AABB } from "../Geometry";
-import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color.js";
+import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials.js";
+import { SourceRenderContext, BSPRenderer } from "./Main.js";
+import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers.js";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { Endianness } from "../endian.js";
+import { fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
+import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio.js";
+import BitMap from "../BitMap.js";
+import { BSPFile } from "./BSPFile.js";
+import { AABB } from "../Geometry.js";
+import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }

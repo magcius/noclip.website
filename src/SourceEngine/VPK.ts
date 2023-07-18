@@ -1,9 +1,9 @@
 
 // Valve Packfile. Only handles newest VPK version.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, leftPad, nullify } from "../util";
-import { DataFetcher, AbortedCallback } from "../DataFetcher";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, leftPad, nullify } from "../util.js";
+import { DataFetcher, AbortedCallback } from "../DataFetcher.js";
 
 interface VPKFileEntryChunk {
     packFileIdx: number;

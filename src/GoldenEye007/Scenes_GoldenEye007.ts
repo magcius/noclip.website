@@ -1,16 +1,16 @@
 
-import { SceneDesc, SceneContext } from "../SceneBase";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneGfx, SceneGroup } from "../viewer";
-import { EmptyScene } from "../Scenes_Test";
-import * as Deflate from "../Common/Compression/Deflate";
-import { assert, readString, hexzero, nArray } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { SceneDesc, SceneContext } from "../SceneBase.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneGfx, SceneGroup } from "../viewer.js";
+import { EmptyScene } from "../Scenes_Test.js";
+import * as Deflate from "../Common/Compression/Deflate.js";
+import { assert, readString, hexzero, nArray } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec3 } from "gl-matrix";
-import { CombineParams, decodeCombineParams } from "../Common/N64/RDP";
-import { loadVertexFromView } from "../Common/N64/RSP";
-import { TextFilt, TexCM } from "../Common/N64/Image";
-import { colorFromRGBA, colorNewCopy, White } from "../Color";
+import { CombineParams, decodeCombineParams } from "../Common/N64/RDP.js";
+import { loadVertexFromView } from "../Common/N64/RSP.js";
+import { TextFilt, TexCM } from "../Common/N64/Image.js";
+import { colorFromRGBA, colorNewCopy, White } from "../Color.js";
 
 const pathBase = `GoldenEye007`;
 

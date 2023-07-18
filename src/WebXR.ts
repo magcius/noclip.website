@@ -1,5 +1,5 @@
 
-import { GfxSwapChain } from "./gfx/platform/GfxPlatform";
+import { GfxSwapChain } from "./gfx/platform/GfxPlatform.js";
 
 // TODO WebXR: Known issues
     // Should have the option to not render to the main view if in WebXR. This can be a simple check box

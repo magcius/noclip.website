@@ -1,7 +1,7 @@
 
 import { readFileSync, writeFileSync } from "fs";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as Yay0 from "../Common/Compression/Yay0";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as Yay0 from "../Common/Compression/Yay0.js";
 import { StringDecoder } from 'string_decoder'
 
 function fetchDataSync(path: string): ArrayBufferSlice {

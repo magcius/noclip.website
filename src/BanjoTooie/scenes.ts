@@ -1,27 +1,27 @@
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as Geo from '../BanjoKazooie/geo';
-import * as BYML from '../byml';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as Geo from '../BanjoKazooie/geo.js';
+import * as BYML from '../byml.js';
 
-import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform';
-import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
-import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { CameraController } from '../Camera';
-import { hexzero, assertExists } from '../util';
-import { DataFetcher, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT } from '../MathHelpers';
+import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform.js';
+import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
+import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
+import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { CameraController } from '../Camera.js';
+import { hexzero, assertExists } from '../util.js';
+import { DataFetcher, AbortedCallback } from '../DataFetcher.js';
+import { MathConstants, computeModelMatrixSRT } from '../MathHelpers.js';
 import { vec3, mat4, vec4 } from 'gl-matrix';
-import { parseAnimationFile } from '../BanjoKazooie/scenes';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { parseAnimationFile } from '../BanjoKazooie/scenes.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 const pathBase = `BanjoTooie`;
 

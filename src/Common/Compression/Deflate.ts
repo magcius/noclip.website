@@ -1,5 +1,5 @@
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { rust } from '../../rustlib';
+import ArrayBufferSlice from '../../ArrayBufferSlice.js';
+import { rust } from '../../rustlib.js';
 
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const bufView = rust!.deflate_decompress(srcBuffer.createTypedArray(Uint8Array));

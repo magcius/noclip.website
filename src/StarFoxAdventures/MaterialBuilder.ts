@@ -1,12 +1,12 @@
 import { mat4 } from 'gl-matrix';
-import * as GX from '../gx/gx_enum';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams, ColorKind, GXMaterialHelperGfx } from '../gx/gx_render';
-import { TextureMapping } from '../TextureHolder';
+import * as GX from '../gx/gx_enum.js';
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { GXMaterial, SwapTable } from '../gx/gx_material.js';
+import { MaterialParams, ColorKind, GXMaterialHelperGfx } from '../gx/gx_render.js';
+import { TextureMapping } from '../TextureHolder.js';
 
-import { Color, colorCopy, TransparentBlack, White } from '../Color';
-import { nArray } from '../util';
+import { Color, colorCopy, TransparentBlack, White } from '../Color.js';
+import { nArray } from '../util.js';
 
 // Declare opaque types, as described in <https://evertpot.com/opaque-ts-types/>.
 // These types compile as plain numbers, with no additional runtime overhead.

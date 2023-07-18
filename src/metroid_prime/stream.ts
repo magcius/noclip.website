@@ -1,7 +1,7 @@
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, align } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { readString, assert, align } from '../util.js';
 import { quat, vec3 } from 'gl-matrix';
-import { Color } from '../Color';
+import { Color } from '../Color.js';
 
 export class InputStream {
     private view!: DataView;

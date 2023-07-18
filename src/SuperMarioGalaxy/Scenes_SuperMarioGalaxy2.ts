@@ -1,9 +1,9 @@
 
-import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache } from "./Main";
-import { JMapInfoIter, createCsvParser } from './JMapInfo';
-import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
-import { GameBits } from './NameObj';
+import * as Viewer from '../viewer.js';
+import { SMGSceneDescBase, ModelCache } from "./Main.js";
+import { JMapInfoIter, createCsvParser } from './JMapInfo.js';
+import { JKRArchive } from '../Common/JSYSTEM/JKRArchive.js';
+import { GameBits } from './NameObj.js';
 
 class SMG2SceneDesc extends SMGSceneDescBase {
     public override pathBase: string = `SuperMarioGalaxy2`;

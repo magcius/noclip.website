@@ -1,7 +1,7 @@
 
-import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat } from "../gfx/platform/GfxPlatform";
-import { XNA_Texture2D, XNA_SurfaceFormat } from "./XNB";
-import { assert } from "../util";
+import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat } from "../gfx/platform/GfxPlatform.js";
+import { XNA_Texture2D, XNA_SurfaceFormat } from "./XNB.js";
+import { assert } from "../util.js";
 
 export function makeTextureFromXNA_Texture2D(device: GfxDevice, texture2D: XNA_Texture2D): GfxTexture {
     assert(texture2D.format === XNA_SurfaceFormat.Color);

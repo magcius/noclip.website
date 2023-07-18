@@ -1,23 +1,23 @@
 
 // Klonoa
 
-import * as Viewer from '../viewer';
-import * as CX from '../Common/Compression/CX';
-import * as BRRES from './brres';
-import * as U8 from './u8';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import AnimationController from '../AnimationController';
-import { assert } from '../util';
-import { TextureOverride } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
-import { SceneContext } from '../SceneBase';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import * as Viewer from '../viewer.js';
+import * as CX from '../Common/Compression/CX.js';
+import * as BRRES from './brres.js';
+import * as U8 from './u8.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import AnimationController from '../AnimationController.js';
+import { assert } from '../util.js';
+import { TextureOverride } from '../TextureHolder.js';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material.js';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager.js';
+import { SceneContext } from '../SceneBase.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 
 const id = 'klonoa';
 const name = "Klonoa";

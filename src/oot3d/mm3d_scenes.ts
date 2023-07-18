@@ -1,23 +1,23 @@
 
-import * as CMAB from './cmab';
-import * as CSAB from './csab';
-import * as CMB from './cmb';
-import * as ZAR from './zar';
-import * as ZSI from './zsi';
+import * as CMAB from './cmab.js';
+import * as CSAB from './csab.js';
+import * as CMB from './cmb.js';
+import * as ZAR from './zar.js';
+import * as ZSI from './zsi.js';
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
-import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero } from '../util';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { OoT3DRenderer, ModelCache } from './oot3d_scenes';
-import { TransparentBlack } from '../Color';
+import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render.js';
+import { SceneGroup } from '../viewer.js';
+import { assert, assertExists, hexzero } from '../util.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { OoT3DRenderer, ModelCache } from './oot3d_scenes.js';
+import { TransparentBlack } from '../Color.js';
 import { mat4 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
-import { SceneContext } from '../SceneBase';
-import { MathConstants } from "../MathHelpers";
-import { maybeDecompress } from './LzS';
+import AnimationController from '../AnimationController.js';
+import { SceneContext } from '../SceneBase.js';
+import { MathConstants } from "../MathHelpers.js";
+import { maybeDecompress } from './LzS.js';
 
 const pathBase = `mm3d`;
 

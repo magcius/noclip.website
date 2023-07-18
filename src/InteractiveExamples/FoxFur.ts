@@ -1,28 +1,28 @@
 
-import { OrbitCameraController } from '../Camera';
+import { OrbitCameraController } from '../Camera.js';
 
-import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { DataFetcher } from "../DataFetcher";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
-import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { TextureMapping } from '../TextureHolder';
-import { nArray } from '../util';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { DeviceProgram } from '../Program';
-import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase.js";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { nArray } from '../util.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { DeviceProgram } from '../Program.js';
+import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4 } from 'gl-matrix';
-import { computeModelMatrixSRT, clamp } from '../MathHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { captureScene } from '../CaptureHelpers';
-import { downloadBuffer } from '../DownloadUtils';
-import { makeZipFile } from '../ZipFile';
-import { GridPlane } from './GridPlane';
-import { dfRange, dfShow } from '../DebugFloaters';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { computeModelMatrixSRT, clamp } from '../MathHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { captureScene } from '../CaptureHelpers.js';
+import { downloadBuffer } from '../DownloadUtils.js';
+import { makeZipFile } from '../ZipFile.js';
+import { GridPlane } from './GridPlane.js';
+import { dfRange, dfShow } from '../DebugFloaters.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const pathBase = `FoxFur`;
 

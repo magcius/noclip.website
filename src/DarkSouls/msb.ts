@@ -2,10 +2,10 @@
 // Dark Souls MSB (Map Studio Binary)
 // https://github.com/JKAnderson/SoulsFormats/blob/master/SoulsFormats/Formats/MTD.cs
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 import { vec3 } from "gl-matrix";
-import BitMap from "../BitMap";
+import BitMap from "../BitMap.js";
 
 export interface MSB {
     mapID: string;

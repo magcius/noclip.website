@@ -1,6 +1,6 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataFetcher } from "../DataFetcher";
-import { DataStream } from "./util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { DataStream } from "./util.js";
 import * as CRC32 from "crc-32";
 
 export const ResourceType = {

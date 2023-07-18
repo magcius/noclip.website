@@ -2,11 +2,11 @@
  * Handles loading assets from the `/data/` directory.
  */
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { NamedArrayBufferSlice } from "../DataFetcher";
-import { SceneContext } from "../SceneBase";
-import { assert, assertExists, decodeString, nullify } from "../util";
-import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { SceneContext } from "../SceneBase.js";
+import { assert, assertExists, decodeString, nullify } from "../util.js";
+import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile.js";
 
 export class DataManager {
     private path: string;

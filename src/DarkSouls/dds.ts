@@ -1,10 +1,10 @@
 
-import * as Viewer from '../viewer';
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
-import { TextureHolder, LoadedTexture } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture";
+import * as Viewer from '../viewer.js';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
+import { TextureHolder, LoadedTexture } from "../TextureHolder.js";
+import { GfxDevice, GfxFormat, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture.js";
 
 export interface Level {
     width: number;

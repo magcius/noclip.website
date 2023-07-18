@@ -1,16 +1,16 @@
 
-import { Filesystem, UVFile } from "../Filesystem";
-import { assert } from "../../util";
+import { Filesystem, UVFile } from "../Filesystem.js";
+import { assert } from "../../util.js";
 import { mat4 } from "gl-matrix";
-import { UVMD, UVMDRenderer } from "./UVMD";
-import { Material, parseMaterial } from "./Common";
-import { MaterialRenderer } from "../MaterialRenderer";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../../viewer";
-import { RendererStore } from "../Scenes";
-import * as RDP from '../../Common/N64/RDP';
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { UVMD, UVMDRenderer } from "./UVMD.js";
+import { Material, parseMaterial } from "./Common.js";
+import { MaterialRenderer } from "../MaterialRenderer.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { RendererStore } from "../Scenes.js";
+import * as RDP from '../../Common/N64/RDP.js';
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 export class UVCT {
     public uvmds: [UVMD, mat4][] = [];

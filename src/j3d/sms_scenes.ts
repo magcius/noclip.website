@@ -1,29 +1,29 @@
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, assertExists } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { readString, assert, assertExists } from '../util.js';
 
-import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import * as JPA from '../Common/JSYSTEM/JPA';
-import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
+import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import * as JPA from '../Common/JSYSTEM/JPA.js';
+import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { colorFromRGBA, colorNewCopy, OpaqueBlack } from '../Color';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext, Destroyable } from '../SceneBase';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
-import { Camera } from '../Camera';
-import { transformVec3Mat4w1 } from '../MathHelpers';
+import { BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { colorFromRGBA, colorNewCopy, OpaqueBlack } from '../Color.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { SceneContext, Destroyable } from '../SceneBase.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { Camera } from '../Camera.js';
+import { transformVec3Mat4w1 } from '../MathHelpers.js';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 

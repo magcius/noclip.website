@@ -1,4 +1,4 @@
-import { COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RadioButtons } from '../ui';
+import { COOL_BLUE_COLOR, Layer, LAYER_ICON, LayerPanel, Panel, RadioButtons } from '../ui.js';
 
 export interface GroupLayer extends Layer {
     layerGroup?: string;

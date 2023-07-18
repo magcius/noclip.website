@@ -1,14 +1,14 @@
 
 // Common utilities for the N64 Reality Display Processor (RDP).
 
-import { assert, hexzero } from "../../util";
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM, TextFilt } from "./Image";
-import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxMegaStateDescriptor, GfxBlendFactor, GfxBlendMode } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { assert, hexzero } from "../../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM, TextFilt } from "./Image.js";
+import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxMegaStateDescriptor, GfxBlendFactor, GfxBlendMode } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { mat4 } from "gl-matrix";
-import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers";
+import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
 
 export const enum RENDER_MODES {
     G_RM_AA_ZB_OPA_SURF = 0x442078,

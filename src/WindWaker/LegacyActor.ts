@@ -1,25 +1,25 @@
 
-import * as Viewer from '../viewer';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
+import * as Viewer from '../viewer.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 
-import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
+import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes.js";
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { assertExists, hexzero, leftPad } from '../util';
-import { ResType, ResEntry, ResAssetType } from './d_resorce';
-import AnimationController from '../AnimationController';
-import { AABB } from '../Geometry';
-import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers';
-import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
-import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
-import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework';
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
-import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { cBgS_GndChk } from './d_bg';
+import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { assertExists, hexzero, leftPad } from '../util.js';
+import { ResType, ResEntry, ResAssetType } from './d_resorce.js';
+import AnimationController from '../AnimationController.js';
+import { AABB } from '../Geometry.js';
+import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
+import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo.js';
+import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
+import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
+import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
+import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { cBgS_GndChk } from './d_bg.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();

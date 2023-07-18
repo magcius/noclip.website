@@ -1,8 +1,8 @@
 
-import CodeEditor from "./CodeEditor";
-import { assert, assertExists, nullify } from "./util";
-import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
-import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
+import CodeEditor from "./CodeEditor.js";
+import { assert, assertExists, nullify } from "./util.js";
+import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform.js";
+import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler.js";
 
 export class DeviceProgram {
     public name: string = '(unnamed)';

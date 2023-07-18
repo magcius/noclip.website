@@ -1,17 +1,17 @@
 
-import { GfxDevice, makeTextureDescriptor2D, GfxFormat } from '../gfx/platform/GfxPlatform';
-import * as Viewer from '../viewer';
-import { TPLTextureHolder, WorldRenderer } from './render';
-import * as TPL from './tpl';
-import * as World from './world';
-import { SceneContext } from '../SceneBase';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { CameraController } from '../Camera';
-import { linkREL } from './REL';
-import { evtmgr, evt_disasm_ctx, evt_handler_ttyd, rommap } from './evt';
-import * as AnimGroup from './AnimGroup';
-import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
-import { Green, Magenta } from '../Color';
+import { GfxDevice, makeTextureDescriptor2D, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import * as Viewer from '../viewer.js';
+import { TPLTextureHolder, WorldRenderer } from './render.js';
+import * as TPL from './tpl.js';
+import * as World from './world.js';
+import { SceneContext } from '../SceneBase.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { CameraController } from '../Camera.js';
+import { linkREL } from './REL.js';
+import { evtmgr, evt_disasm_ctx, evt_handler_ttyd, rommap } from './evt.js';
+import * as AnimGroup from './AnimGroup.js';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
+import { Green, Magenta } from '../Color.js';
 
 const pathBase = `PaperMarioTTYD`;
 

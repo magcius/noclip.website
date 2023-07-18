@@ -1,10 +1,10 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { assert, assertExists, hexzero0x, readString } from "../util";
-import { createCsvParser } from "./JMapInfo";
-import { SceneObjHolder } from "./Main";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
+import { assert, assertExists, hexzero0x, readString } from "../util.js";
+import { createCsvParser } from "./JMapInfo.js";
+import { SceneObjHolder } from "./Main.js";
 
 export const enum JUTMesgFlowNodeType { Message = 1, Branch = 2, Event = 3 }
 

@@ -1,12 +1,12 @@
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import * as BRRES from "../rres/brres";
-import * as U8 from "../rres/u8";
-import * as Yaz0 from "../Common/Compression/Yaz0";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { MDL0Model, RRESTextureHolder } from "../rres/render";
-import { assertExists } from "../util";
-import { DataFetcher } from "../DataFetcher";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import * as BRRES from "../rres/brres.js";
+import * as U8 from "../rres/u8.js";
+import * as Yaz0 from "../Common/Compression/Yaz0.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { MDL0Model, RRESTextureHolder } from "../rres/render.js";
+import { assertExists } from "../util.js";
+import { DataFetcher } from "../DataFetcher.js";
 
 export class ResourceSystem {
     private mounts: U8.U8Archive[] = [];

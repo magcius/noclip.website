@@ -1,6 +1,6 @@
-import { colorFromRGBA, colorNewCopy, White } from '../Color';
-import { Shader, ShaderLayer, ShaderFlags, ShaderAttrFlags } from './materials';
-import { dataSubarray } from './util';
+import { colorFromRGBA, colorNewCopy, White } from '../Color.js';
+import { Shader, ShaderLayer, ShaderFlags, ShaderAttrFlags } from './materials.js';
+import { dataSubarray } from './util.js';
 
 interface ShaderFields {
     isAncient?: boolean;

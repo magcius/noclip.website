@@ -1,8 +1,8 @@
-import { ParticleGlobals, NumberHolder } from './base_generator';
-import { InputStream } from '../stream';
-import { clamp, lerp, randomRange } from '../../MathHelpers';
-import { GetRealElement, RealElement, REConstant } from './real_element';
-import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes';
+import { ParticleGlobals, NumberHolder } from './base_generator.js';
+import { InputStream } from '../stream.js';
+import { clamp, lerp, randomRange } from '../../MathHelpers.js';
+import { GetRealElement, RealElement, REConstant } from './real_element.js';
+import { BaseKeyframeEmitter, BaseKeyframeFunction } from './base_keyframes.js';
 
 export interface IntElement {
     GetValue(frame: number, globals: ParticleGlobals, valOut: NumberHolder): boolean;

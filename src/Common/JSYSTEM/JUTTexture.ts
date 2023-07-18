@@ -1,13 +1,13 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import * as GX from '../../gx/gx_enum';
-import { assert } from "../../util";
-import { GfxSampler, GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { Texture } from "../../viewer";
-import { TextureMapping } from "../../TextureHolder";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy } from "../../gx/gx_render";
-import { calcMipChain, TextureInputGX } from "../../gx/gx_texture";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import * as GX from '../../gx/gx_enum.js';
+import { assert } from "../../util.js";
+import { GfxSampler, GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { Texture } from "../../viewer.js";
+import { TextureMapping } from "../../TextureHolder.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain, translateMaxAnisotropy } from "../../gx/gx_render.js";
+import { calcMipChain, TextureInputGX } from "../../gx/gx_texture.js";
 
 export interface BTI_Texture extends TextureInputGX {
     wrapS: GX.WrapMode;

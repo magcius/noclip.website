@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec2, vec3, vec4 } from "gl-matrix";
-import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color";
-import { hexzero0x } from "../util";
+import { Color, colorNewFromRGBA, TransparentBlack, White } from "../Color.js";
+import { hexzero0x } from "../util.js";
 
 const enum ROTATION_TYPE {
     INVALID = -1,

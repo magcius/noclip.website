@@ -1,13 +1,13 @@
 
-import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Main";
-import { JMapInfoIter, createCsvParser } from './JMapInfo';
-import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
-import { NameObj, MovementType, GameBits } from './NameObj';
-import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
+import * as Viewer from '../viewer.js';
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, SMGRenderer } from "./Main.js";
+import { JMapInfoIter, createCsvParser } from './JMapInfo.js';
+import { JKRArchive } from '../Common/JSYSTEM/JKRArchive.js';
+import { NameObj, MovementType, GameBits } from './NameObj.js';
+import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil.js';
 import { vec3, mat4 } from 'gl-matrix';
-import { TicoRail } from './Actors/NPC';
-import { SceneContext } from '../SceneBase';
+import { TicoRail } from './Actors/NPC.js';
+import { SceneContext } from '../SceneBase.js';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     public override pathBase: string = `SuperMarioGalaxy`;

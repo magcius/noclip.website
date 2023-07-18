@@ -1,13 +1,13 @@
 
-import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import * as BIN from './bin';
-import { LuigisMansionRenderer } from './render';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { assertExists } from '../util';
+import * as Viewer from '../viewer.js';
+import { DataFetcher } from '../DataFetcher.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import * as BIN from './bin.js';
+import { LuigisMansionRenderer } from './render.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { assertExists } from '../util.js';
 
 function fetchBin(path: string, dataFetcher: DataFetcher): Promise<BIN.BIN> {
     return dataFetcher.fetchData(`luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {

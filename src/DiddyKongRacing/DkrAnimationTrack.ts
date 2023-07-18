@@ -1,19 +1,19 @@
 import { mat4, quat, vec3 } from "gl-matrix";
-import { Camera } from "../Camera";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { clamp, MathConstants } from "../MathHelpers";
-import { SingleSelect } from "../ui";
-import { assert } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { DataManager } from "./DataManager";
-import { DkrControlGlobals } from "./DkrControlGlobals";
-import { DkrLevel } from "./DkrLevel";
-import { DkrObject } from './DkrObject';
-import { DkrObjectCache } from "./DkrObjectCache";
-import { DkrTextureCache } from "./DkrTextureCache";
-import { updateCameraViewMatrix } from "./DkrUtil";
+import { Camera } from "../Camera.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { clamp, MathConstants } from "../MathHelpers.js";
+import { SingleSelect } from "../ui.js";
+import { assert } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DataManager } from "./DataManager.js";
+import { DkrControlGlobals } from "./DkrControlGlobals.js";
+import { DkrLevel } from "./DkrLevel.js";
+import { DkrObject } from './DkrObject.js';
+import { DkrObjectCache } from "./DkrObjectCache.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
+import { updateCameraViewMatrix } from "./DkrUtil.js";
 
 // This is basically the maximum framerate that is supported.
 // More samples is always technically better, but it also means more RAM being used up.

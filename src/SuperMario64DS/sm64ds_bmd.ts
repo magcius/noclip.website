@@ -1,14 +1,14 @@
 
 import { mat2d, mat4 } from 'gl-matrix';
 
-import * as NITRO_GX from './nitro_gx';
-import * as NITRO_Tex from './nitro_tex';
+import * as NITRO_GX from './nitro_gx.js';
+import * as NITRO_Tex from './nitro_tex.js';
 
-import { readString, assert } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxCullMode } from '../gfx/platform/GfxPlatform';
-import { Endianness } from '../endian';
-import { computeModelMatrixSRT } from '../MathHelpers';
+import { readString, assert } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxCullMode } from '../gfx/platform/GfxPlatform.js';
+import { Endianness } from '../endian.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
 
 // Super Mario 64 DS .bmd format
 

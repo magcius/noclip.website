@@ -2,28 +2,28 @@
 // Parses NintendoWare BRRES (Binary Revolution RESource) files.
 // http://wiki.tockdom.com/wiki/BRRES
 
-import * as GX from '../gx/gx_enum';
+import * as GX from '../gx/gx_enum.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
-import * as GX_Material from '../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist';
-import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, assertExists, nArray } from "../util.js";
+import * as GX_Material from '../gx/gx_material.js';
+import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist.js';
+import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material.js';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { Endianness } from '../endian';
-import { AABB } from '../Geometry';
-import { TextureMapping } from '../TextureHolder';
-import AnimationController from '../AnimationController';
-import { cv, Graph } from '../DebugJunk';
-import { GXTextureHolder } from '../gx/gx_render';
-import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
-import { getPointHermite } from '../Spline';
-import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color';
-import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHelpers';
-import BitMap from '../BitMap';
-import { autoOptimizeMaterial } from '../gx/gx_render';
-import { Camera } from '../Camera';
+import { Endianness } from '../endian.js';
+import { AABB } from '../Geometry.js';
+import { TextureMapping } from '../TextureHolder.js';
+import AnimationController from '../AnimationController.js';
+import { cv, Graph } from '../DebugJunk.js';
+import { GXTextureHolder } from '../gx/gx_render.js';
+import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat.js';
+import { getPointHermite } from '../Spline.js';
+import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color.js';
+import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHelpers.js';
+import BitMap from '../BitMap.js';
+import { autoOptimizeMaterial } from '../gx/gx_render.js';
+import { Camera } from '../Camera.js';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {

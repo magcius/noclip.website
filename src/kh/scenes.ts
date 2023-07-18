@@ -1,10 +1,10 @@
-import * as BIN from './bin'
-import * as Viewer from '../viewer';
+import * as BIN from './bin.js';
+import * as Viewer from '../viewer.js';
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { FakeTextureHolder } from '../TextureHolder';
-import { KingdomHeartsRenderer, textureToCanvas } from './render';
-import { SceneContext } from '../SceneBase';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import { KingdomHeartsRenderer, textureToCanvas } from './render.js';
+import { SceneContext } from '../SceneBase.js';
 
 export class KingdomHeartsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {

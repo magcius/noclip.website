@@ -1,15 +1,15 @@
 import { mat4 } from "gl-matrix";
-import * as BRRES from "../rres/brres";
-import AnimationController from "../AnimationController";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { EggLightManager } from "../rres/Egg";
-import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render";
-import { SceneContext } from "../SceneBase";
-import * as Viewer from "../viewer";
-import { PMP, PMPObject } from "./PMP";
-import { ResourceSystem } from "./ResouceSystem";
-import { assertExists } from "../util";
+import * as BRRES from "../rres/brres.js";
+import AnimationController from "../AnimationController.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import { EggLightManager } from "../rres/Egg.js";
+import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render.js";
+import { SceneContext } from "../SceneBase.js";
+import * as Viewer from "../viewer.js";
+import { PMP, PMPObject } from "./PMP.js";
+import { ResourceSystem } from "./ResouceSystem.js";
+import { assertExists } from "../util.js";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();

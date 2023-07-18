@@ -5,13 +5,13 @@
 // This is basically replacement for DeviceProgram that has better caching behavior
 // and support for a wider variety of variants.
 
-import CodeEditor from "../CodeEditor";
-import { GfxDevice, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
-import { GfxProgram } from "../gfx/platform/GfxPlatformImpl";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { hashCodeNumberUpdate, HashMap } from "../HashMap";
-import { assertExists } from "../util";
+import CodeEditor from "../CodeEditor.js";
+import { GfxDevice, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform.js";
+import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { preprocessShader_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { hashCodeNumberUpdate, HashMap } from "../HashMap.js";
+import { assertExists } from "../util.js";
 
 class ShaderTextEditor {
     public onchanged: ((newText: string) => void) | null = null;

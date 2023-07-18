@@ -3,9 +3,9 @@
 // https://zeldamods.org/wiki/AAMP
 
 import { ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorNewFromRGBA } from "../Color";
-import { assert, nullify, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
+import { assert, nullify, readString } from "../util.js";
 import * as CRC32 from 'crc-32';
 
 // https://github.com/open-ead/sead/blob/master/include/hostio/seadHostIOCurve.h

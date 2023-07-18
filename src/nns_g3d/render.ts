@@ -1,23 +1,23 @@
 
 import { mat4, mat2d, vec3 } from "gl-matrix";
-import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import * as Viewer from '../viewer';
-import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
-import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
-import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager";
-import { TextureMapping } from "../TextureHolder";
-import { fillMatrix4x3, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import AnimationController from "../AnimationController";
-import { nArray, assertExists } from "../util";
-import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { AABB } from "../Geometry";
-import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import * as Viewer from '../viewer.js';
+import * as NITRO_GX from '../SuperMario64DS/nitro_gx.js';
+import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex.js";
+import { NITRO_Program, VertexData } from '../SuperMario64DS/render.js';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { fillMatrix4x3, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera.js";
+import AnimationController from "../AnimationController.js";
+import { nArray, assertExists } from "../util.js";
+import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { AABB } from "../Geometry.js";
+import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers.js";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(pixels), bmdTex.width, bmdTex.height);

@@ -1,8 +1,8 @@
 
-import { SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext, SourceLoadContext } from "./Main";
-import { SceneContext } from "../SceneBase";
-import { BSPFile } from "./BSPFile";
-import { assertExists } from "../util";
+import { SourceRenderer, SkyboxRenderer, BSPRenderer, SourceRenderContext, SourceLoadContext } from "./Main.js";
+import { SceneContext } from "../SceneBase.js";
+import { BSPFile } from "./BSPFile.js";
+import { assertExists } from "../util.js";
 
 export async function createScene(context: SceneContext, loadContext: SourceLoadContext, mapId: string, mapPath: string, loadMapFromVpk: boolean = false): Promise<SourceRenderer> {
     const filesystem = loadContext.filesystem;

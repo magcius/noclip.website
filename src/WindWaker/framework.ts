@@ -1,13 +1,13 @@
 
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assertExists, nArray, arrayRemove, assert } from "../util";
-import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
-import { AABB } from "../Geometry";
-import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera";
-import { transformVec3Mat4w1 } from "../MathHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assertExists, nArray, arrayRemove, assert } from "../util.js";
+import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
+import { AABB } from "../Geometry.js";
+import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera.js";
+import { transformVec3Mat4w1 } from "../MathHelpers.js";
 
 export const enum fpc__ProcessName {
     d_s_play            = 0x0007,

@@ -16,9 +16,9 @@
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-import { assert, readString } from '../../util';
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { rust } from '../../rustlib';
+import { assert, readString } from '../../util.js';
+import ArrayBufferSlice from '../../ArrayBufferSlice.js';
+import { rust } from '../../rustlib.js';
 
 // Simple software version for environments without WebAssembly.
 export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {

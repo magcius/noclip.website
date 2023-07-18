@@ -1,21 +1,21 @@
 
-import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import * as MapShape from './map_shape';
-import * as Tex from './tex';
-import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { OpaqueBlack, Color, colorNewFromRGBA } from '../Color';
-import * as BYML from '../byml';
-import { evtmgr, evt_exec, evt_handler, evt_user_func_ret, rommap } from './evt';
-import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { assert, mod } from '../util';
+import * as Viewer from '../viewer.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import * as MapShape from './map_shape.js';
+import * as Tex from './tex.js';
+import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { OpaqueBlack, Color, colorNewFromRGBA } from '../Color.js';
+import * as BYML from '../byml.js';
+import { evtmgr, evt_exec, evt_handler, evt_user_func_ret, rommap } from './evt.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { assert, mod } from '../util.js';
 import { mat4 } from 'gl-matrix';
-import { MathConstants, scaleMatrix } from '../MathHelpers';
+import { MathConstants, scaleMatrix } from '../MathHelpers.js';
 
 const pathBase = `pm64`;
 

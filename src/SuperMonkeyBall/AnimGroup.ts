@@ -1,19 +1,15 @@
 import { mat4, vec3 } from "gl-matrix";
-import {
-    MathConstants,
-    setMatrixTranslation, transformVec3Mat4w1
-} from "../MathHelpers";
-import { assertExists } from "../util";
-import { interpolateKeyframes, loopWrap } from "./Anim";
-import { Lighting } from "./Lighting";
-import { ModelInst, RenderParams, RenderSort } from "./Model";
-import { GmaSrc, ModelCache } from "./ModelCache";
-import { CommonModelID } from "./ModelInfo";
-import { RenderContext } from "./Render";
-import * as SD from "./Stagedef";
-import { StageId } from "./StageInfo";
-import { MkbTime, S16_TO_RADIANS } from "./Utils";
-import { StageData, WorldState } from "./World";
+import { MathConstants, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { assertExists } from "../util.js";
+import { interpolateKeyframes, loopWrap } from "./Anim.js";
+import { ModelInst, RenderParams, RenderSort } from "./Model.js";
+import { GmaSrc, ModelCache } from "./ModelCache.js";
+import { CommonModelID } from "./ModelInfo.js";
+import { RenderContext } from "./Render.js";
+import { StageId } from "./StageInfo.js";
+import * as SD from "./Stagedef.js";
+import { S16_TO_RADIANS } from "./Utils.js";
+import { StageData, WorldState } from "./World.js";
 
 const scratchRenderParams = new RenderParams();
 

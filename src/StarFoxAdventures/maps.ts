@@ -1,25 +1,25 @@
-import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
+import * as Viewer from '../viewer.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { nArray } from '../util';
-import { White } from '../Color';
+import { nArray } from '../util.js';
+import { White } from '../Color.js';
 
-import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
-import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
-import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
-import { MaterialFactory } from './materials';
-import { SFAAnimationController } from './animation';
-import { SFATextureFetcher } from './textures';
-import { ModelRenderContext, ModelInstance } from './models';
-import { World } from './world';
-import { AABB } from '../Geometry';
-import { LightType } from './WorldLights';
-import { computeViewMatrix } from '../Camera';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { SFARenderer, SceneRenderContext, SFARenderLists } from './render.js';
+import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks.js';
+import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes.js';
+import { MaterialFactory } from './materials.js';
+import { SFAAnimationController } from './animation.js';
+import { SFATextureFetcher } from './textures.js';
+import { ModelRenderContext, ModelInstance } from './models.js';
+import { World } from './world.js';
+import { AABB } from '../Geometry.js';
+import { LightType } from './WorldLights.js';
+import { computeViewMatrix } from '../Camera.js';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 
 export interface BlockInfo {
     mod: number;

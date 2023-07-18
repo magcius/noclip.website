@@ -1,12 +1,12 @@
-import { InputStream } from '../stream';
-import { ResourceSystem } from '../resource';
-import { BaseGenerator, Light } from './base_generator';
+import { InputStream } from '../stream.js';
+import { ResourceSystem } from '../resource.js';
+import { BaseGenerator, Light } from './base_generator.js';
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { AABB } from '../../Geometry';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
-import { Color, colorNewFromRGBA } from '../../Color';
-import { ELSC } from '../elsc';
-import * as GX_Material from '../../gx/gx_material';
+import { AABB } from '../../Geometry.js';
+import { GfxDevice } from '../../gfx/platform/GfxPlatform.js';
+import { Color, colorNewFromRGBA } from '../../Color.js';
+import { ELSC } from '../elsc.js';
+import * as GX_Material from '../../gx/gx_material.js';
 
 const scratchMat4 = mat4.create();
 const scratchVec3 = vec3.create();

@@ -2,14 +2,14 @@
 // At the moment this is just a hack to get the ground zippers to show up in the renderer.
 
 import { mat4, vec3, quat } from "gl-matrix";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { DkrDrawCall } from "./DkrDrawCall";
-import { DkrTexture } from "./DkrTexture";
-import { DkrTriangleBatch } from "./DkrTriangleBatch";
-import { createTriangleData, createVertexData } from "./DkrUtil";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DkrDrawCall } from "./DkrDrawCall.js";
+import { DkrTexture } from "./DkrTexture.js";
+import { DkrTriangleBatch } from "./DkrTriangleBatch.js";
+import { createTriangleData, createVertexData } from "./DkrUtil.js";
 
 export class DkrParticle {
     private drawCall: DkrDrawCall;

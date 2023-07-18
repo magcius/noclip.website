@@ -1,10 +1,10 @@
 
-import { GfxColor, GfxFormat } from "../platform/GfxPlatform";
-import { colorNewFromRGBA, OpaqueBlack } from "../../Color";
-import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph";
-import { pushFXAAPass } from "../passes/FXAA";
-import { GfxRenderHelper } from "../render/GfxRenderHelper";
+import { GfxColor, GfxFormat } from "../platform/GfxPlatform.js";
+import { colorNewFromRGBA, OpaqueBlack } from "../../Color.js";
+import { reverseDepthForClearValue } from "./ReversedDepthHelpers.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
+import { pushFXAAPass } from "../passes/FXAA.js";
+import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 
 export function makeAttachmentClearDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxrAttachmentClearDescriptor {
     return {

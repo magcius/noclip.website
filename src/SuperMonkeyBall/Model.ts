@@ -1,18 +1,18 @@
 import { mat4, vec3 } from "gl-matrix";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialHacks, LightingFudgeParams } from "../gx/gx_material";
-import { ViewerRenderInput } from "../viewer";
-import * as Gma from "./Gma";
-import { TextureCache } from "./ModelCache";
-import { TevLayerInst } from "./TevLayer";
-import { ShapeInst } from "./Shape";
-import { RenderContext } from "./Render";
-import { Color, colorNewFromRGBA } from "../Color";
-import { ModelInterface } from "./World";
-import { transformVec3Mat4w1 } from "../MathHelpers";
-import { Lighting } from "./Lighting";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialHacks, LightingFudgeParams } from "../gx/gx_material.js";
+import { ViewerRenderInput } from "../viewer.js";
+import * as Gma from "./Gma.js";
+import { TextureCache } from "./ModelCache.js";
+import { TevLayerInst } from "./TevLayer.js";
+import { ShapeInst } from "./Shape.js";
+import { RenderContext } from "./Render.js";
+import { Color, colorNewFromRGBA } from "../Color.js";
+import { ModelInterface } from "./World.js";
+import { transformVec3Mat4w1 } from "../MathHelpers.js";
+import { Lighting } from "./Lighting.js";
 
 export const enum RenderSort {
     Translucent, // Depth sort "translucent" shapes only

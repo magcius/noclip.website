@@ -1,7 +1,7 @@
-import { GfxBuffer, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform";
-import { DkrTexture } from "./DkrTexture";
-import { assert } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxBuffer, GfxDevice, GfxInputLayout } from "../gfx/platform/GfxPlatform.js";
+import { DkrTexture } from "./DkrTexture.js";
+import { assert } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export const SIZE_OF_VERTEX = 10;
 export const SIZE_OF_TRIANGLE_FACE = 16;

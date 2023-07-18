@@ -1,28 +1,28 @@
 
 // Mario Kart DS
 
-import * as Viewer from '../viewer';
-import * as CX from '../Common/Compression/CX';
-import * as NARC from './narc';
+import * as Viewer from '../viewer.js';
+import * as CX from '../Common/Compression/CX.js';
+import * as NARC from './narc.js';
 
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
-import { assert, readString, assertExists } from '../util';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { FakeTextureHolder } from '../TextureHolder';
+import { DataFetcher } from '../DataFetcher.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render.js';
+import { assert, readString, assertExists } from '../util.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
 import { mat4 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { SceneContext } from '../SceneBase';
-import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { NITRO_Program } from '../SuperMario64DS/render';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import AnimationController from '../AnimationController.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { SceneContext } from '../SceneBase.js';
+import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { NITRO_Program } from '../SuperMario64DS/render.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const pathBase = `mkds`;
 class ModelCache {

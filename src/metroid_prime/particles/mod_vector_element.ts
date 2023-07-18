@@ -1,10 +1,10 @@
 import { vec3 } from 'gl-matrix';
-import { defaultParticleGlobals, GetBool, ParticleGlobals } from './base_generator';
-import { GetVectorElement, VectorElement } from './vector_element';
-import { GetRealElement, RealElement } from './real_element';
-import { GetIntElement, IntElement } from './int_element';
-import { InputStream } from '../stream';
-import { AABB } from '../../Geometry';
+import { defaultParticleGlobals, GetBool, ParticleGlobals } from './base_generator.js';
+import { GetVectorElement, VectorElement } from './vector_element.js';
+import { GetRealElement, RealElement } from './real_element.js';
+import { GetIntElement, IntElement } from './int_element.js';
+import { InputStream } from '../stream.js';
+import { AABB } from '../../Geometry.js';
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();

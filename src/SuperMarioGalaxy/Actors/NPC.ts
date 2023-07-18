@@ -2,25 +2,25 @@
 // Misc NPC actors.
 
 import { quat, vec3, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
-import * as RARC from '../../Common/JSYSTEM/JKRArchive';
-import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
-import { assertExists, fallback, fallbackUndefined } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec, stopBck, isActionLoopedOrStopped, isActionEnd } from '../ActorUtil';
-import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
-import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
-import { getObjectName, SceneObjHolder } from '../Main';
-import { DrawBufferType } from '../NameObj';
-import { isConnectedWithRail } from '../RailRider';
-import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
-import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint, onCalcShadowDropPrivateGravity } from '../Shadow';
-import { initLightCtrl } from '../LightData';
-import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor, addHitSensorAtJoint, addHitSensorMtx } from '../HitSensor';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
-import { tryRegisterDemoCast } from '../Demo';
-import { createPartsModelMapObj, PartsModel } from './PartsModel';
-import { initFur } from '../Fur';
-import { createTalkCtrl, createTalkCtrlDirect, resetAndForwardNode, TalkMessageCtrl, tryTalkNearPlayer } from '../Talk';
+import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
+import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers.js';
+import { assertExists, fallback, fallbackUndefined } from '../../util.js';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg, connectToSceneMapObj, setBtkFrameAndStop, getJointMtxByName, calcFrontVec, stopBck, isActionLoopedOrStopped, isActionEnd } from '../ActorUtil.js';
+import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision.js';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo.js';
+import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor.js';
+import { getObjectName, SceneObjHolder } from '../Main.js';
+import { DrawBufferType } from '../NameObj.js';
+import { isConnectedWithRail } from '../RailRider.js';
+import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine.js';
+import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint, onCalcShadowDropPrivateGravity } from '../Shadow.js';
+import { initLightCtrl } from '../LightData.js';
+import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor, addHitSensorAtJoint, addHitSensorMtx } from '../HitSensor.js';
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
+import { tryRegisterDemoCast } from '../Demo.js';
+import { createPartsModelMapObj, PartsModel } from './PartsModel.js';
+import { initFur } from '../Fur.js';
+import { createTalkCtrl, createTalkCtrlDirect, resetAndForwardNode, TalkMessageCtrl, tryTalkNearPlayer } from '../Talk.js';
 
 // Scratchpad
 const scratchVec3 = vec3.create();

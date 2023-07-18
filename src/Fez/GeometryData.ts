@@ -1,9 +1,9 @@
 
-import { GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { Fez_ShaderInstancedIndexedPrimitives, Fez_VertexPositionNormalTextureInstance } from './XNB_Fez';
-import { AABB } from "../Geometry";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { Fez_ShaderInstancedIndexedPrimitives, Fez_VertexPositionNormalTextureInstance } from './XNB_Fez.js';
+import { AABB } from "../Geometry.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class GeometryData {
     private indexBuffer: GfxBuffer;

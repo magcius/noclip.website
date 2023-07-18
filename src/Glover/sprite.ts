@@ -1,28 +1,25 @@
-import * as Viewer from '../viewer';
-import * as Textures from './textures';
-import * as RDP from '../Common/N64/RDP';
-import * as RSP from '../Common/N64/RSP';
-import * as F3DEX from '../BanjoKazooie/f3dex';
-import * as Shadows from './shadows';
-import * as Render from './render';
+import * as F3DEX from '../BanjoKazooie/f3dex.js';
+import * as RDP from '../Common/N64/RDP.js';
+import * as Viewer from '../viewer.js';
+import * as Render from './render.js';
+import * as Shadows from './shadows.js';
+import * as Textures from './textures.js';
 
-import { assert, assertExists, align, nArray } from "../util";
-import { F3DEX_Program } from "../BanjoKazooie/render";
-import { mat4, vec3, vec4, quat } from "gl-matrix";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, getSizBitsPerPixel } from "../Common/N64/Image";
-import { DeviceProgram } from "../Program";
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { mat4, quat, vec3 } from "gl-matrix";
+import { F3DEX_Program } from "../BanjoKazooie/render.js";
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBlendFactor, GfxBlendMode, GfxDevice, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { assert } from "../util.js";
 
-import { Color } from "../Color";
+import { Color } from "../Color.js";
 
 import { GloverTexbank } from './parsers';
-import { Flipbook, FlipbookType } from './particles';
-import { SRC_FRAME_TO_MS } from './timing';
-import { subtractAngles, lerp } from './util';
+import { Flipbook, FlipbookType } from './particles.js';
+import { SRC_FRAME_TO_MS } from './timing.js';
+import { lerp, subtractAngles } from './util.js';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();

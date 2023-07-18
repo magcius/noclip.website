@@ -1,8 +1,8 @@
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { SFAMapSceneDesc, SwapcircleSceneDesc, AncientMapSceneDesc } from './maps';
-import { SFAWorldSceneDesc } from './world';
-import { SFAModelExhibitSceneDesc } from './modelexhibit';
+import { SFAMapSceneDesc, SwapcircleSceneDesc, AncientMapSceneDesc } from './maps.js';
+import { SFAWorldSceneDesc } from './world.js';
+import { SFAModelExhibitSceneDesc } from './modelexhibit.js';
 
 export interface GameInfo {
     pathBase: string;

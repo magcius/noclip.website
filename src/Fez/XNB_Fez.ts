@@ -1,8 +1,8 @@
 
-import { ContentReader, ContentTypeReader, XNA_Texture2D, ContentTypeReaderManager, XNA_PrimitiveType, XNA_SurfaceFormat } from "./XNB";
+import { ContentReader, ContentTypeReader, XNA_Texture2D, ContentTypeReaderManager, XNA_PrimitiveType, XNA_SurfaceFormat } from "./XNB.js";
 import { vec3, vec2, vec4, quat } from "gl-matrix";
-import { assertExists } from "../util";
-import { Color } from "../Color";
+import { assertExists } from "../util.js";
+import { Color } from "../Color.js";
 
 // Fez implementation of XNB.
 

@@ -1,23 +1,23 @@
 
 // New UI system
 
-import * as Viewer from './viewer';
-import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
-import { Color, colorToCSS } from './Color';
-import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SaveManager, GlobalSaveManager } from "./SaveManager";
-import { RenderStatistics } from './RenderStatistics';
-import { GlobalGrabManager } from './GrabManager';
-import { clamp, invlerp, lerp } from './MathHelpers';
-import { DebugFloaterHolder } from './DebugFloaters';
-import { DraggingMode } from './InputManager';
-import { CLAPBOARD_ICON, StudioPanel } from './Studio';
-import { SceneDesc, SceneGroup } from './SceneBase';
+import * as Viewer from './viewer.js';
+import { assertExists, assert } from './util.js';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera.js';
+import { Color, colorToCSS } from './Color.js';
+import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
+import { SaveManager, GlobalSaveManager } from "./SaveManager.js";
+import { RenderStatistics } from './RenderStatistics.js';
+import { GlobalGrabManager } from './GrabManager.js';
+import { clamp, invlerp, lerp } from './MathHelpers.js';
+import { DebugFloaterHolder } from './DebugFloaters.js';
+import { DraggingMode } from './InputManager.js';
+import { CLAPBOARD_ICON, StudioPanel } from './Studio.js';
+import { SceneDesc, SceneGroup } from './SceneBase.js';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
-import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';

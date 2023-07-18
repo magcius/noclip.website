@@ -1,7 +1,7 @@
-import { CINF } from '../cinf';
+import { CINF } from '../cinf.js';
 import { ReadonlyMat4, mat4, quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { AnimTreeNode } from './tree_nodes';
-import { getMatrixTranslation, setMatrixTranslation } from '../../MathHelpers';
+import { AnimTreeNode } from './tree_nodes.js';
+import { getMatrixTranslation, setMatrixTranslation } from '../../MathHelpers.js';
 
 const scratchVec3 = vec3.create();
 const scratchMat4 = mat4.create();

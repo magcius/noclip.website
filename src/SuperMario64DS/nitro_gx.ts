@@ -1,9 +1,9 @@
 
 // Read DS Geometry Engine commands.
 
-import { bgr5 as _bgr5 } from './nitro_tex';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { bgr5 as _bgr5 } from './nitro_tex.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
 
 // tslint:disable:variable-name
 

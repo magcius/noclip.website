@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 import { vec3 } from "gl-matrix";
-import { AABB } from "../Geometry";
+import { AABB } from "../Geometry.js";
 
 const utf16Decoder = new TextDecoder('utf-16le')!;
 

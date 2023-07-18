@@ -1,6 +1,6 @@
 import { vec3 } from "gl-matrix";
-import { assert } from "../../util";
-import { Filesystem, UVFile } from "../Filesystem";
+import { assert } from "../../util.js";
+import { Filesystem, UVFile } from "../Filesystem.js";
 
 class Pnt {
     up: vec3;

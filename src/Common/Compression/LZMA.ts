@@ -1,8 +1,8 @@
 // Based on js-lzma by Juan Mellado https://github.com/jcmellado/js-lzma/blob/master/src/lzma.js
 // Ported to TypeScript by Jasper.
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { rust } from '../../rustlib';
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { rust } from '../../rustlib.js';
 
 /*
 Copyright (c) 2011 Juan Mellado

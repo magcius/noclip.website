@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
 
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     return readString(buffer, offs, -1, true, 'sjis');

@@ -1,16 +1,16 @@
 
-import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { FezRenderer } from './FezRenderer';
-import { TrilesetData } from './TrileData';
-import { ArtObjectData } from './ArtObjectData';
-import { BackgroundPlaneData } from './BackgroundPlaneData';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SkyData, fetchSkyData } from './Sky';
-import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet, Fez_AnimatedTexture, Fez_Level } from './XNB_Fez';
-import { parse, XNA_Texture2D } from './XNB';
+import * as Viewer from '../viewer.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { FezRenderer } from './FezRenderer.js';
+import { TrilesetData } from './TrileData.js';
+import { ArtObjectData } from './ArtObjectData.js';
+import { BackgroundPlaneData } from './BackgroundPlaneData.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { SkyData, fetchSkyData } from './Sky.js';
+import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet, Fez_AnimatedTexture, Fez_Level } from './XNB_Fez.js';
+import { parse, XNA_Texture2D } from './XNB.js';
 
 const pathBase = 'Fez';
 

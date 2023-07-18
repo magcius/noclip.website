@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
-import { hexzero } from "../../util";
-import * as BYML from "../../byml";
+import { hexzero } from "../../util.js";
+import * as BYML from "../../byml.js";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

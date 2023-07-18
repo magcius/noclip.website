@@ -1,9 +1,9 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneGroup, SceneDesc, SceneContext } from "../SceneBase";
-import { SceneGfx } from "../viewer";
-import { NfsMap } from "./map";
-import { NfsRenderer } from "./render";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneGroup, SceneDesc, SceneContext } from "../SceneBase.js";
+import { SceneGfx } from "../viewer.js";
+import { NfsMap } from "./map.js";
+import { NfsRenderer } from "./render.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 
 class NfsSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, sceneContext: SceneContext): Promise<SceneGfx> {

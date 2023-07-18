@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum";
-import { BRTI } from "./bntx";
-import { GfxFormat } from "../gfx/platform/GfxPlatform";
-import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture";
-import { assert } from "../util";
-import { rust } from "../rustlib";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { ImageFormat, ChannelFormat, TypeFormat, getChannelFormat, getTypeFormat } from "./nngfx_enum.js";
+import { BRTI } from "./bntx.js";
+import { GfxFormat } from "../gfx/platform/GfxPlatform.js";
+import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../Common/bc_texture.js";
+import { assert } from "../util.js";
+import { rust } from "../rustlib.js";
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {

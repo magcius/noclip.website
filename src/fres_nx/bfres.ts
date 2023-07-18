@@ -1,10 +1,10 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align } from "../util";
-import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum";
-import { AABB } from "../Geometry";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, align } from "../util.js";
+import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum.js";
+import { AABB } from "../Geometry.js";
 import { vec2, vec4 } from "gl-matrix";
-import { Color } from "../Color";
+import { Color } from "../Color.js";
 
 export interface FSKL_Bone {
     name: string;

@@ -1,8 +1,8 @@
 
-import * as CMB from './cmb';
+import * as CMB from './cmb.js';
 
-import { assert, readString } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, readString } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
 
 const enum Version {

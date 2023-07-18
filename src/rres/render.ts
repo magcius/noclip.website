@@ -1,25 +1,25 @@
 
-import * as BRRES from './brres';
+import * as BRRES from './brres.js';
 
-import * as GX_Material from '../gx/gx_material';
+import * as GX_Material from '../gx/gx_material.js';
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, DrawParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeViewMatrix, computeViewMatrixSkybox, Camera, texProjCameraSceneTex, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import AnimationController from "../AnimationController";
-import { TextureMapping } from "../TextureHolder";
-import { IntersectionState, AABB } from "../Geometry";
-import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
-import { ViewerRenderInput } from "../viewer";
-import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderInstManager";
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { nArray, assertExists, assert } from '../util';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
-import { colorCopy, Color } from '../Color';
-import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { LoadedVertexDraw } from '../gx/gx_displaylist';
-import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, DrawParams, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render.js";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, texProjCameraSceneTex, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
+import AnimationController from "../AnimationController.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { IntersectionState, AABB } from "../Geometry.js";
+import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
+import { nArray, assertExists, assert } from '../util.js';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk.js';
+import { colorCopy, Color } from '../Color.js';
+import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { LoadedVertexDraw } from '../gx/gx_displaylist.js';
+import { arrayCopy } from '../gfx/platform/GfxPlatformUtil.js';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {

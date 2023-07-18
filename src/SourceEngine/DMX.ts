@@ -1,8 +1,8 @@
 
 import { mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { colorNewFromRGBA, colorNewFromRGBA8 } from "../Color";
-import { assert, assertExists, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
+import { assert, assertExists, readString } from "../util.js";
 
 export interface DMXAttribute {
     name: string;

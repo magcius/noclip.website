@@ -1,22 +1,22 @@
 import { mat4, vec3 } from 'gl-matrix';
-import * as UI from '../ui';
-import * as Viewer from "../viewer";
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { SceneContext } from '../SceneBase';
-import { White } from '../Color';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
+import * as UI from '../ui.js';
+import * as Viewer from "../viewer.js";
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { SceneContext } from '../SceneBase.js';
+import { White } from '../Color.js';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk.js';
 
-import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection, applyAnimationToModel } from './animation';
-import { SFARenderer, SceneRenderContext } from './render';
-import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
-import { MaterialFactory } from './materials';
-import { dataSubarray, readUint16 } from './util';
-import { TextureFetcher, SFATextureFetcher } from './textures';
-import { ModelVersion } from './modelloader';
-import { downloadBufferSlice } from '../DownloadUtils';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GameInfo, SFA_GAME_INFO } from './scenes.js';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection, applyAnimationToModel } from './animation.js';
+import { SFARenderer, SceneRenderContext } from './render.js';
+import { ModelFetcher, ModelInstance, ModelRenderContext } from './models.js';
+import { MaterialFactory } from './materials.js';
+import { dataSubarray, readUint16 } from './util.js';
+import { TextureFetcher, SFATextureFetcher } from './textures.js';
+import { ModelVersion } from './modelloader.js';
+import { downloadBufferSlice } from '../DownloadUtils.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.

@@ -1,13 +1,13 @@
 
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { assertExists, fallback } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { connectToScene, startAction } from "./ActorUtil";
-import { createCsvParser, createJMapIdInfoFromIter, JMapIdInfo, JMapInfoIter } from "./JMapInfo";
-import { LiveActor, LiveActorGroup, ZoneAndLayer } from "./LiveActor";
-import { SceneObj, SceneObjHolder } from "./Main";
-import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjGroup } from "./NameObj";
-import { createStageSwitchCtrl, getSwitchWatcherHolder, StageSwitchCtrl, SwitchFunctorEventListener } from "./Switch";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
+import { assertExists, fallback } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { connectToScene, startAction } from "./ActorUtil.js";
+import { createCsvParser, createJMapIdInfoFromIter, JMapIdInfo, JMapInfoIter } from "./JMapInfo.js";
+import { LiveActor, LiveActorGroup, ZoneAndLayer } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjGroup } from "./NameObj.js";
+import { createStageSwitchCtrl, getSwitchWatcherHolder, StageSwitchCtrl, SwitchFunctorEventListener } from "./Switch.js";
 
 function getDemoName(infoIter: JMapInfoIter): string {
     return infoIter.getValueString('DemoName')!;

@@ -1,12 +1,12 @@
-import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import * as Viewer from '../viewer.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 import { ReadonlyVec3, vec3, quat, mat4 } from "gl-matrix";
 
-import { GloverShadowRenderer } from './sprite';
-import * as Textures from './textures';
+import { GloverShadowRenderer } from './sprite.js';
+import * as Textures from './textures.js';
 
 
 export class ConstantShadowSize {

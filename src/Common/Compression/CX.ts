@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 
 // Nintendo's "CX" formats.
 

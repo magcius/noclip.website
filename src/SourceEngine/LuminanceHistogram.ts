@@ -1,22 +1,22 @@
 
 import { vec2, vec4 } from "gl-matrix";
-import { Color, colorLerp, colorNewCopy, colorToCSS, Cyan, Green, Red, White } from "../Color";
-import { drawScreenSpaceBox, drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxQueryPoolType, GfxShadingLanguage } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxComputePipeline, GfxProgram, GfxQueryPool, GfxReadback } from "../gfx/platform/GfxPlatformImpl";
-import { gfxDeviceGetImpl_WebGPU } from "../gfx/platform/GfxPlatformWebGPU";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { clamp, invlerp, lerp, saturate } from "../MathHelpers";
-import { DeviceProgram } from "../Program";
-import { TextureMapping } from "../TextureHolder";
-import { align, nArray } from "../util";
-import { SourceRenderContext } from "./Main";
-import { ToneMapParams } from "./Materials";
+import { Color, colorLerp, colorNewCopy, colorToCSS, Cyan, Green, Red, White } from "../Color.js";
+import { drawScreenSpaceBox, drawScreenSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxQueryPoolType, GfxShadingLanguage } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxComputePipeline, GfxProgram, GfxQueryPool, GfxReadback } from "../gfx/platform/GfxPlatformImpl.js";
+import { gfxDeviceGetImpl_WebGPU } from "../gfx/platform/GfxPlatformWebGPU.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { clamp, invlerp, lerp, saturate } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { align, nArray } from "../util.js";
+import { SourceRenderContext } from "./Main.js";
+import { ToneMapParams } from "./Materials.js";
 
 const scratchVec4 = vec4.create();
 

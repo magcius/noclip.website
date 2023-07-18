@@ -2,9 +2,9 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as BCSV from '../luigis_mansion/bcsv';
-import { guessDebugName } from '../SuperMarioGalaxy/JMapInfo';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as BCSV from '../luigis_mansion/bcsv.js';
+import { guessDebugName } from '../SuperMarioGalaxy/JMapInfo.js';
 import { assert } from 'console';
 
 function fetchDataSync(path: string): ArrayBufferSlice {

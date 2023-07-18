@@ -1,21 +1,21 @@
 import { mat4 } from "gl-matrix";
-import { Color, TransparentBlack } from "../Color";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import * as GX_Material from "../gx/gx_material";
-import * as Viewer from "../viewer";
-import { Background } from "./Background";
-import { BgObjectInst } from "./BgObject";
-import * as Gma from "./Gma";
-import { ModelInst, RenderParams } from "./Model";
-import { GmaSrc, ModelCache, TextureCache } from "./ModelCache";
-import * as Nl from "./NaomiLib";
-import { RenderContext } from "./Render";
-import * as SD from "./Stagedef";
-import { BgInfos, StageInfo } from "./StageInfo";
-import { MkbTime } from "./Utils";
-import { AnimGroup } from "./AnimGroup";
-import { Lighting } from "./Lighting";
+import { Color, TransparentBlack } from "../Color.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import * as GX_Material from "../gx/gx_material.js";
+import * as Viewer from "../viewer.js";
+import { Background } from "./Background.js";
+import { BgObjectInst } from "./BgObject.js";
+import * as Gma from "./Gma.js";
+import { ModelInst, RenderParams } from "./Model.js";
+import { GmaSrc, ModelCache, TextureCache } from "./ModelCache.js";
+import * as Nl from "./NaomiLib.js";
+import { RenderContext } from "./Render.js";
+import * as SD from "./Stagedef.js";
+import { BgInfos, StageInfo } from "./StageInfo.js";
+import { MkbTime } from "./Utils.js";
+import { AnimGroup } from "./AnimGroup.js";
+import { Lighting } from "./Lighting.js";
 
 const scratchRenderParams = new RenderParams();
 

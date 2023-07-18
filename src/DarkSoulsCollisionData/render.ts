@@ -1,19 +1,19 @@
 
 import { vec3 } from 'gl-matrix';
 
-import { DeviceProgram } from '../Program';
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
+import { DeviceProgram } from '../Program.js';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
 
-import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import * as IV from './iv.js';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;

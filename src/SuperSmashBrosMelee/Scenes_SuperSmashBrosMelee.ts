@@ -1,19 +1,19 @@
 
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./SYSDOLPHIN_Render";
-import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { SceneDesc, SceneContext } from "../SceneBase";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN";
-import { colorNewFromRGBA8 } from "../Color";
-import { assertExists, assert, nullify } from "../util";
-import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataFetcher } from "../DataFetcher";
-import { Melee_map_headData_Load } from "./Melee_map_head";
-import { CameraController } from "../Camera";
-import { makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./SYSDOLPHIN_Render.js";
+import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { SceneDesc, SceneContext } from "../SceneBase.js";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN.js";
+import { colorNewFromRGBA8 } from "../Color.js";
+import { assertExists, assert, nullify } from "../util.js";
+import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { Melee_map_headData_Load } from "./Melee_map_head.js";
+import { CameraController } from "../Camera.js";
+import { makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];

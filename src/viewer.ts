@@ -1,19 +1,19 @@
 
-import * as UI from './ui';
+import * as UI from './ui.js';
 
-import InputManager from './InputManager';
-import { SceneDesc, SceneGroup } from "./SceneBase";
-import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
-import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
-import { downloadFrontBufferToCanvas } from './Screenshot';
-import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
-import { WebXRContext } from './WebXR';
-import { MathConstants } from './MathHelpers';
-import { IS_DEVELOPMENT } from './BuildVersion';
-import { GlobalSaveManager } from './SaveManager';
+import InputManager from './InputManager.js';
+import { SceneDesc, SceneGroup } from "./SceneBase.js";
+import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera.js';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform.js';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2.js';
+import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU.js';
+import { downloadFrontBufferToCanvas } from './Screenshot.js';
+import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics.js';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers.js';
+import { WebXRContext } from './WebXR.js';
+import { MathConstants } from './MathHelpers.js';
+import { IS_DEVELOPMENT } from './BuildVersion.js';
+import { GlobalSaveManager } from './SaveManager.js';
 import { mat4 } from 'gl-matrix';
 
 export interface ViewerUpdateInfo {

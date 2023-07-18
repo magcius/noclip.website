@@ -1,22 +1,22 @@
-import * as RDP from "../Common/N64/RDP";
+import * as RDP from "../Common/N64/RDP.js";
 
 import { mat4, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TexCM } from "../Common/N64/Image";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers";
-import { DeviceProgram } from "../Program";
-import { align, assert, hexzero, nArray } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { getColor, getVec3 } from "./room";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { TextureMapping } from "../TextureHolder";
-import { computeViewMatrix } from "../Camera";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SnapPass } from "./render";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { TexCM } from "../Common/N64/Image.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { clamp, lerp, MathConstants, normToLength, normToLengthAndAdd, transformVec3Mat4w0, Vec3Zero, Vec3UnitX, calcBillboardMatrix, CalcBillboardFlags } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { align, assert, hexzero, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { getColor, getVec3 } from "./room.js";
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { computeViewMatrix } from "../Camera.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { SnapPass } from "./render.js";
 
 export interface EmitterData {
     isCommon: boolean;

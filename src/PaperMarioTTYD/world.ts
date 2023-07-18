@@ -2,23 +2,23 @@
 // INTELLIGENT SYSTEM's TTYD "d", stored in the "m" folder.
 // I can only imagine "m" is "map", and "d" is "data".
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
+import * as GX from '../gx/gx_enum.js';
+import * as GX_Material from '../gx/gx_material.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
-import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout, LoadedVertexDraw } from '../gx/gx_displaylist';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, assertExists } from "../util.js";
+import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout, LoadedVertexDraw } from '../gx/gx_displaylist.js';
 import { mat4 } from 'gl-matrix';
-import { AABB } from '../Geometry';
-import AnimationController from '../AnimationController';
-import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
-import { colorNewFromRGBA8, Color } from '../Color';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { getPointHermite } from '../Spline';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { getSystemEndianness, Endianness } from '../endian';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { translateCullMode } from '../gx/gx_render';
+import { AABB } from '../Geometry.js';
+import AnimationController from '../AnimationController.js';
+import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { colorNewFromRGBA8, Color } from '../Color.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { getPointHermite } from '../Spline.js';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
+import { getSystemEndianness, Endianness } from '../endian.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
+import { translateCullMode } from '../gx/gx_render.js';
 
 export interface TTYDWorld {
     information: Information;

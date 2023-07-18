@@ -1,20 +1,20 @@
 import { mat4, vec3 } from "gl-matrix";
-import { CameraController, computeViewMatrix } from "../Camera";
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager";
-import { DeviceProgram } from "../Program";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import * as UI from '../ui';
-import { NfsMap, PathVertex } from "./map";
-import { TextureMapping } from "../TextureHolder";
-import { NfsPostProcessing } from "./postprocess";
-import { NfsParticleProgram as NfsParticleProgram, NfsParticleEmitter, NfsParticleEmitterGroup } from "./particles";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
+import { CameraController, computeViewMatrix } from "../Camera.js";
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import * as UI from '../ui.js';
+import { NfsMap, PathVertex } from "./map.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { NfsPostProcessing } from "./postprocess.js";
+import { NfsParticleProgram as NfsParticleProgram, NfsParticleEmitter, NfsParticleEmitterGroup } from "./particles.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 
 export interface VertexInfo {
     inputLayout: GfxInputLayout;

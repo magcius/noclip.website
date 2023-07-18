@@ -1,7 +1,7 @@
-import { DataStream } from "../util";
-import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
-import { decodeTexture } from "../../gx/gx_texture";
-import { TexFormat, TexPalette } from "../../gx/gx_enum";
+import { DataStream } from "../util.js";
+import { GfxDevice, GfxFormat, GfxSampler, GfxTexture, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { decodeTexture } from "../../gx/gx_texture.js";
+import { TexFormat, TexPalette } from "../../gx/gx_enum.js";
 
 const FORMAT_C4 = 1;
 const FORMAT_C8 = 2;

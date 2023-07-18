@@ -1,12 +1,12 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects, BKLayer } from "./render";
-import { nArray, hexzero } from "../util";
-import { MathConstants, lerp, randomRange } from "../MathHelpers";
-import { FlipbookMode } from "./flipbook";
-import { LavaRock, SnowballChunk } from "./actors";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects, BKLayer } from "./render.js";
+import { nArray, hexzero } from "../util.js";
+import { MathConstants, lerp, randomRange } from "../MathHelpers.js";
+import { FlipbookMode } from "./flipbook.js";
+import { LavaRock, SnowballChunk } from "./actors.js";
 
 export const enum ParticleType {
     Sparkle,

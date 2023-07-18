@@ -1,21 +1,21 @@
-import * as Viewer from '../viewer';
-import * as RDP from '../Common/N64/RDP';
-import * as F3DEX2 from '../PokemonSnap/f3dex2';
+import * as Viewer from '../viewer.js';
+import * as RDP from '../Common/N64/RDP.js';
+import * as F3DEX2 from '../PokemonSnap/f3dex2.js';
 
-import { DeviceProgram } from "../Program";
-import { Vertex, DrawCall } from "../BanjoKazooie/f3dex";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { nArray, align, assertExists } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { DeviceProgram } from "../Program.js";
+import { Vertex, DrawCall } from "../BanjoKazooie/f3dex.js";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { nArray, align, assertExists } from '../util.js';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { VertexAnimationEffect, VertexEffectType, GeoNode, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1, randomRange } from '../MathHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
+import { VertexAnimationEffect, VertexEffectType, GeoNode, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo.js';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1, randomRange } from '../MathHelpers.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode, AdjustableAnimationController } from '../BanjoKazooie/render.js';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 
 function updateVertexEffectState(effect: VertexAnimationEffect, timeInSeconds: number, deltaSeconds: number) {
     switch (effect.type) {

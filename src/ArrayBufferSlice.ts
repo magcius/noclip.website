@@ -9,8 +9,8 @@
 // ArrayBufferSlice's are designed to be read-only, however, JavaScript has no way of enforcing this
 // currently...
 
-import { assert } from "./util";
-import { getSystemEndianness, Endianness } from "./endian";
+import { assert } from "./util.js";
+import { getSystemEndianness, Endianness } from "./endian.js";
 
 declare global {
     interface ArrayBuffer { [Symbol.species]?: "ArrayBuffer"; }

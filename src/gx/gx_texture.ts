@@ -1,11 +1,11 @@
 
 // GX texture decoding
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
-import * as GX from './gx_enum';
-import { align, assertExists } from '../util';
-import { rust } from '../rustlib';
+import * as GX from './gx_enum.js';
+import { align, assertExists } from '../util.js';
+import { rust } from '../rustlib.js';
 
 export interface TextureInputGX {
     name: string;

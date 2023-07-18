@@ -1,7 +1,7 @@
 
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform";
-import { assert } from "../platform/GfxPlatformUtil";
-import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform.js";
+import { assert } from "../platform/GfxPlatformUtil.js";
+import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary.js";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 

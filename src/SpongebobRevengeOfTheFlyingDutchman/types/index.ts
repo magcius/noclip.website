@@ -1,10 +1,10 @@
-import { DataStream, readTHeader } from "../util";
+import { DataStream, readTHeader } from "../util.js";
 
-export * from "./bitmap";
-export * from "./material";
-export * from "./mesh";
-export * from "./node";
-export * from "./surface";
+export * from "./bitmap.js";
+export * from "./material.js";
+export * from "./mesh.js";
+export * from "./node.js";
+export * from "./surface.js";
 
 export function readHFog(data: DataStream) {
     return {

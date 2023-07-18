@@ -1,10 +1,10 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SceneGfx } from "../viewer";
-import { BSPFile } from "./BSPFile";
-import { BSPRenderer, GoldSrcRenderer } from "./Render";
-import { parseWAD } from "./WAD";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { SceneGfx } from "../viewer.js";
+import { BSPFile } from "./BSPFile.js";
+import { BSPRenderer, GoldSrcRenderer } from "./Render.js";
+import { parseWAD } from "./WAD.js";
 
 const pathBase = `HalfLife`;
 

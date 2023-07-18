@@ -1,5 +1,5 @@
-import { InputStream } from './stream';
-import { ResourceGame, ResourceSystem } from './resource';
+import { InputStream } from './stream.js';
+import { ResourceGame, ResourceSystem } from './resource.js';
 
 export interface SkinWeight {
     boneId: number;

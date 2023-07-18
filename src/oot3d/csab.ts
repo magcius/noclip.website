@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Version, Bone } from "./cmb";
-import { assert, readString, align, assertExists, mod } from "../util";
-import AnimationController from "../AnimationController";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Version, Bone } from "./cmb.js";
+import { assert, readString, align, assertExists, mod } from "../util.js";
+import AnimationController from "../AnimationController.js";
 import { mat4 } from "gl-matrix";
-import { getPointHermite } from "../Spline";
-import { computeModelMatrixSRT, lerpAngle, lerp, MathConstants } from "../MathHelpers";
+import { getPointHermite } from "../Spline.js";
+import { computeModelMatrixSRT, lerpAngle, lerp, MathConstants } from "../MathHelpers.js";
 
 // CSAB (CTR Skeletal Animation Binary)
 

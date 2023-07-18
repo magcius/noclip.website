@@ -1,5 +1,5 @@
-import { ObjectInstance, ObjectUpdateContext } from "../objects";
-import { World } from "../world";
+import { ObjectInstance, ObjectUpdateContext } from "../objects.js";
+import { World } from "../world.js";
 
 // This class is placed in its own file to avoid "Cannot access SFAClass before initialization" errors.
 

@@ -1,10 +1,10 @@
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { getMatrixTranslation } from "../../MathHelpers";
-import { connectToScene, FixedPosition, getJointMtxByName, isHiddenModel } from "../ActorUtil";
-import { isDead, LiveActor } from "../LiveActor";
-import { SceneObjHolder } from "../Main";
-import { CalcAnimType, DrawBufferType, MovementType } from "../NameObj";
+import { getMatrixTranslation } from "../../MathHelpers.js";
+import { connectToScene, FixedPosition, getJointMtxByName, isHiddenModel } from "../ActorUtil.js";
+import { isDead, LiveActor } from "../LiveActor.js";
+import { SceneObjHolder } from "../Main.js";
+import { CalcAnimType, DrawBufferType, MovementType } from "../NameObj.js";
 
 export class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;

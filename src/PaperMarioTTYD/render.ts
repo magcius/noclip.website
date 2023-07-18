@@ -1,33 +1,33 @@
 
-import { GXTextureHolder, MaterialParams, DrawParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, DrawParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render.js';
 
-import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags, CollisionFlags } from './world';
+import * as TPL from './tpl.js';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags, CollisionFlags } from './world.js';
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 import { mat4, ReadonlyMat4 } from 'gl-matrix';
-import { assert, nArray, setBitFlagEnabled } from '../util';
-import AnimationController from '../AnimationController';
-import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
-import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { TextureMapping } from '../TextureHolder';
-import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
-import { AABB } from '../Geometry';
-import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
-import * as UI from '../ui';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GXMaterialHacks, GX_Program } from '../gx/gx_material';
-import * as GX from '../gx/gx_enum';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
-import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { AnimGroupInstance, AnimGroupDataCache, AnimGroupData } from './AnimGroup';
-import { evtmgr } from './evt';
-import { computeModelMatrixT, MathConstants, scaleMatrix, setMatrixTranslation, Vec3Zero } from '../MathHelpers';
+import { assert, nArray, setBitFlagEnabled } from '../util.js';
+import AnimationController from '../AnimationController.js';
+import { DeviceProgram } from '../Program.js';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform.js';
+import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
+import { computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera.js';
+import { AABB } from '../Geometry.js';
+import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color.js';
+import * as UI from '../ui.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GXMaterialHacks, GX_Program } from '../gx/gx_material.js';
+import * as GX from '../gx/gx_enum.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
+import { AnimGroupInstance, AnimGroupDataCache, AnimGroupData } from './AnimGroup.js';
+import { evtmgr } from './evt.js';
+import { computeModelMatrixT, MathConstants, scaleMatrix, setMatrixTranslation, Vec3Zero } from '../MathHelpers.js';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {

@@ -1,6 +1,6 @@
 
-import { assert } from "../../util";
-import { texturePadWidth } from "./RDP";
+import { assert } from "../../util.js";
+import { texturePadWidth } from "./RDP.js";
 
 export const enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,

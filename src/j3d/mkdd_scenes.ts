@@ -1,21 +1,21 @@
 
-import * as UI from '../ui';
-import * as Viewer from '../viewer';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, assertExists } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { readString, assert, assertExists } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { bindTTK1MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { BCK, BMD, BTK, BRK, BTP, BCA } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { SceneContext } from '../SceneBase';
-import { computeModelMatrixS } from '../MathHelpers';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
+import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { bindTTK1MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { BCK, BMD, BTK, BRK, BTP, BCA } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { SceneContext } from '../SceneBase.js';
+import { computeModelMatrixS } from '../MathHelpers.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";

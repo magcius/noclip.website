@@ -1,7 +1,7 @@
 
 // Things that should only be required by platform implementations.
 
-import { GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxTextureDimension } from "./GfxPlatform";
+import { GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxTextureDimension } from "./GfxPlatform.js";
 
 // Hack to get nominal typing.
 export enum _T { Buffer, Texture, RenderTarget, Sampler, Program, Bindings, InputLayout, RenderPipeline, ComputePipeline, Readback, QueryPool }

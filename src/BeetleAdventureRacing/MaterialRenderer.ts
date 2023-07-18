@@ -1,19 +1,19 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { DeviceProgram } from "../Program";
-import { ViewerRenderInput } from "../viewer";
-import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
-import { F3DEX_Program } from "../BanjoKazooie/render";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX.js";
+import { F3DEX_Program } from "../BanjoKazooie/render.js";
 
-import * as RDP from '../Common/N64/RDP';
-import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
-import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import * as RDP from '../Common/N64/RDP.js';
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes.js";
+import { Material, RenderOptionsFlags } from "./ParsedFiles/Common.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;

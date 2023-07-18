@@ -1,13 +1,13 @@
 import { mat4, vec3 } from "gl-matrix";
-import { ModelInst, RenderParams, RenderSort } from "./Model";
-import * as SD from "./Stagedef";
-import { loopWrap, interpolateKeyframes } from "./Anim";
-import { MathConstants } from "../MathHelpers";
-import { RenderContext } from "./Render";
-import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils";
-import { colorCopy } from "../Color";
-import { Lighting } from "./Lighting";
-import { WorldState } from "./World";
+import { ModelInst, RenderParams, RenderSort } from "./Model.js";
+import * as SD from "./Stagedef.js";
+import { loopWrap, interpolateKeyframes } from "./Anim.js";
+import { MathConstants } from "../MathHelpers.js";
+import { RenderContext } from "./Render.js";
+import { EPSILON, MkbTime, S16_TO_RADIANS } from "./Utils.js";
+import { colorCopy } from "../Color.js";
+import { Lighting } from "./Lighting.js";
+import { WorldState } from "./World.js";
 
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();

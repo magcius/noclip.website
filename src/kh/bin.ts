@@ -1,7 +1,7 @@
-import * as BinTex from './bin_tex'
+import * as BinTex from './bin_tex.js';
 
-import { AABB } from "../Geometry";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { AABB } from "../Geometry.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec2, vec3, vec4 } from "gl-matrix";
 
 export interface BIN {

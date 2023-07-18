@@ -1,15 +1,15 @@
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
-import { TextureFetcher, FakeTextureFetcher } from './textures';
-import { getSubdir, loadRes } from './resource';
-import { GameInfo } from './scenes';
-import { MaterialFactory } from './materials';
-import { Model } from './models';
-import { loadModel, ModelVersion } from './modelloader';
-import { SFAAnimationController } from './animation';
-import { DataFetcher } from '../DataFetcher';
-import { readUint32 } from './util';
+import { TextureFetcher, FakeTextureFetcher } from './textures.js';
+import { getSubdir, loadRes } from './resource.js';
+import { GameInfo } from './scenes.js';
+import { MaterialFactory } from './materials.js';
+import { Model } from './models.js';
+import { loadModel, ModelVersion } from './modelloader.js';
+import { SFAAnimationController } from './animation.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { readUint32 } from './util.js';
 
 export abstract class BlockFetcher {
     public abstract fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<Model | null>;

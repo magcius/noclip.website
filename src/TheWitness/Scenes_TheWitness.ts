@@ -1,11 +1,11 @@
 
-import { SceneGroup, SceneDesc, SceneGfx } from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext } from "../SceneBase";
-import * as ZipFile from '../ZipFile';
-import { Asset_Manager } from "./Assets";
-import { TheWitnessGlobals } from "./Globals";
-import { TheWitnessRenderer } from "./Render";
+import { SceneGroup, SceneDesc, SceneGfx } from "../viewer.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext } from "../SceneBase.js";
+import * as ZipFile from '../ZipFile.js';
+import { Asset_Manager } from "./Assets.js";
+import { TheWitnessGlobals } from "./Globals.js";
+import { TheWitnessRenderer } from "./Render.js";
 
 const pathBase = `TheWitness`;
 

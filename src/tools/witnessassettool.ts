@@ -1,10 +1,10 @@
 #!/usr/bin/env ts-node-script
 
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as LZ4 from "../Common/Compression/LZ4";
-import * as ZIP from "../ZipFile";
-import { hexzero0x } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as LZ4 from "../Common/Compression/LZ4.js";
+import * as ZIP from "../ZipFile.js";
+import { hexzero0x } from "../util.js";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

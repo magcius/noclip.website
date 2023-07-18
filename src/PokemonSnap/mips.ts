@@ -1,4 +1,4 @@
-import { nArray, assert } from '../util'
+import { nArray, assert } from '../util.js';
 
 export const enum Opcode {
     NOP     = 0x00,

@@ -1,6 +1,6 @@
  
-import { Color, colorNewFromRGBA } from "../Color";
-import { NamedArrayBufferSlice } from "../DataFetcher";
+import { Color, colorNewFromRGBA } from "../Color.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
 
 // Parser for the .iv file used by the Dark Souls Model Viewer
 // Presumably made by vlad001 from the Havok physics data shipped in the game.

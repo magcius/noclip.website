@@ -1,30 +1,30 @@
 
-import * as CMB from './cmb';
-import * as CMAB from './cmab';
-import * as CSAB from './csab';
-import * as ZSI from './zsi';
+import * as CMB from './cmb.js';
+import * as CMAB from './cmab.js';
+import * as CSAB from './csab.js';
+import * as ZSI from './zsi.js';
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { DeviceProgram } from '../Program';
-import AnimationController from '../AnimationController';
+import { DeviceProgram } from '../Program.js';
+import AnimationController from '../AnimationController.js';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
-import { getTextureFormatName } from './pica_texture';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { nArray, assert } from '../util';
-import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager';
-import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color.js';
+import { getTextureFormatName } from './pica_texture.js';
+import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
+import { nArray, assert } from '../util.js';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat.js';
+import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureLevel.pixels), textureLevel.width, textureLevel.height);

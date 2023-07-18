@@ -1,33 +1,33 @@
 
-import * as Viewer from '../viewer';
-import * as BYML from '../byml';
+import * as Viewer from '../viewer.js';
+import * as BYML from '../byml.js';
 
-import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
-import { translateBlendMode, RSP_Geometry, translateCullMode } from '../zelview/f3dzex';
-import { nArray, align, assert } from '../util';
-import { DeviceProgram } from '../Program';
+import { GfxDevice, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render.js';
+import { translateBlendMode, RSP_Geometry, translateCullMode } from '../zelview/f3dzex.js';
+import { nArray, align, assert } from '../util.js';
+import { DeviceProgram } from '../Program.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
-import { DrawCall, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera';
-import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
-import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { TextureMapping, FakeTextureHolder } from '../TextureHolder.js';
+import { DrawCall, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera.js';
+import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
+import { RSPSharedOutput, Vertex } from '../BanjoKazooie/f3dex.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as Deflate from '../Common/Compression/Deflate';
-import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as Deflate from '../Common/Compression/Deflate.js';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 const pathBase = `DonkeyKong64`;
 

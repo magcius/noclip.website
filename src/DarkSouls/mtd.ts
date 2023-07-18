@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, align, readString, decodeString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, align, readString, decodeString } from "../util.js";
 
 // Dark Souls MTD (Material Definition)
 // https://github.com/JKAnderson/SoulsFormats/blob/master/SoulsFormats/Formats/MTD.cs

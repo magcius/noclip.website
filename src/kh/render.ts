@@ -1,26 +1,26 @@
 
 // @ts-ignore
 import program_glsl from './program.glsl';
-import * as Bin from './bin';
-import * as BinTex from './bin_tex';
-import * as UI from '../ui';
-import * as Viewer from '../viewer';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { DeviceProgram } from "../Program";
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import * as Bin from './bin.js';
+import * as BinTex from './bin_tex.js';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { DeviceProgram } from "../Program.js";
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
-import { TextureHolder, TextureMapping } from '../TextureHolder';
-import { nArray, assertExists } from '../util';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { nArray, assertExists } from '../util.js';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());

@@ -1,16 +1,16 @@
 
-import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
-import { SceneObjHolder } from "./Main";
-import { ViewerRenderInput } from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { Camera } from "../Camera";
-import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { LiveActor } from "./LiveActor";
-import { JMapInfoIter } from "./JMapInfo";
+import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer.js";
+import { SceneObjHolder } from "./Main.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { Camera } from "../Camera.js";
+import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { LiveActor } from "./LiveActor.js";
+import { JMapInfoIter } from "./JMapInfo.js";
 import { mat4 } from "gl-matrix";
-import { assert, nArray, nullify } from "../util";
-import { ub_SceneParamsBufferSize } from "../gx/gx_render";
-import { GX_Program } from "../gx/gx_material";
+import { assert, nArray, nullify } from "../util.js";
+import { ub_SceneParamsBufferSize } from "../gx/gx_render.js";
+import { GX_Program } from "../gx/gx_material.js";
 
 export const enum GameBits {
     SMG1 = 0b01,

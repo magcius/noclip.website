@@ -1,34 +1,34 @@
 
 import { mat4, quat, vec3 } from 'gl-matrix';
 
-import { SceneGfx, ViewerRenderInput } from '../viewer';
+import { SceneGfx, ViewerRenderInput } from '../viewer.js';
 
-import * as GX_Material from '../gx/gx_material';
+import * as GX_Material from '../gx/gx_material.js';
 
-import { BMD, BTK, DRW1MatrixKind, JointTransformInfo } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { OrbitCameraController } from '../Camera';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext, SceneDesc } from '../SceneBase';
-import { assert } from '../util';
-import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { createModelInstance } from '../j3d/scenes';
-import { computeModelMatrixS } from '../MathHelpers';
-import { AABB } from '../Geometry';
-import * as GX from '../gx/gx_enum';
-import { colorNewCopy, White } from '../Color';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { dfUsePercent } from '../DebugFloaters';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { BMD, BTK, DRW1MatrixKind, JointTransformInfo } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render.js';
+import { GXRenderHelperGfx } from '../gx/gx_render.js';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { OrbitCameraController } from '../Camera.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { SceneContext, SceneDesc } from '../SceneBase.js';
+import { assert } from '../util.js';
+import { VertexAttributeInput } from '../gx/gx_displaylist.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { createModelInstance } from '../j3d/scenes.js';
+import { computeModelMatrixS } from '../MathHelpers.js';
+import { AABB } from '../Geometry.js';
+import * as GX from '../gx/gx_enum.js';
+import { colorNewCopy, White } from '../Color.js';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder.js';
+import { dfUsePercent } from '../DebugFloaters.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;

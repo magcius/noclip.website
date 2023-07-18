@@ -1,4 +1,4 @@
-import { DeviceProgram } from "../Program";
+import { DeviceProgram } from "../Program.js";
 
 export const MAX_NUM_OF_INSTANCES = 256;
 

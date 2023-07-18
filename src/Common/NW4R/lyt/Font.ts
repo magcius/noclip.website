@@ -1,18 +1,18 @@
 
-import { assert, assertExists, nArray, readString } from "../../../util";
-import * as GX from '../../../gx/gx_enum';
-import { calcMipChain, TextureInputGX } from '../../../gx/gx_texture';
-import { NamedArrayBufferSlice } from "../../../DataFetcher";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../../../gfx/platform/GfxPlatform";
-import { ColorKind, GXMaterialHelperGfx, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render";
-import { Texture } from "../../../viewer";
-import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
-import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
+import { assert, assertExists, nArray, readString } from "../../../util.js";
+import * as GX from '../../../gx/gx_enum.js';
+import { calcMipChain, TextureInputGX } from '../../../gx/gx_texture.js';
+import { NamedArrayBufferSlice } from "../../../DataFetcher.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../../../gfx/platform/GfxPlatform.js";
+import { ColorKind, GXMaterialHelperGfx, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render.js";
+import { Texture } from "../../../viewer.js";
+import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder.js";
+import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { Color, colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color.js";
 import { vec3, vec4 } from "gl-matrix";
-import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
-import { TextureMapping } from "../../../TextureHolder";
-import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
+import { TextureMapping } from "../../../TextureHolder.js";
+import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
 
 const enum RFNTGlyphType {
     Glyph, Texture,

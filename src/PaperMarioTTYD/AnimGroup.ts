@@ -1,23 +1,23 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, nArray, assert, assertExists, align } from "../util";
-import { GX_VtxDesc, GX_VtxAttrFmt, LoadedVertexLayout, compileVtxLoader, LoadedVertexData, VtxLoader, GX_Array, GX_VtxDescOutputMode } from "../gx/gx_displaylist";
-import * as GX from "../gx/gx_enum";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, nArray, assert, assertExists, align } from "../util.js";
+import { GX_VtxDesc, GX_VtxAttrFmt, LoadedVertexLayout, compileVtxLoader, LoadedVertexData, VtxLoader, GX_Array, GX_VtxDescOutputMode } from "../gx/gx_displaylist.js";
+import * as GX from "../gx/gx_enum.js";
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import * as TPL from "./tpl";
-import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
-import { ViewerRenderInput } from "../viewer";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { mapSetMaterialTev } from "./world";
-import { computeModelMatrixS, computeModelMatrixT, getMatrixTranslation, MathConstants } from "../MathHelpers";
-import BitMap from "../BitMap";
-import { Endianness } from "../endian";
-import { DataFetcher, AbortedCallback } from "../DataFetcher";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import * as TPL from "./tpl.js";
+import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { mapSetMaterialTev } from "./world.js";
+import { computeModelMatrixS, computeModelMatrixT, getMatrixTranslation, MathConstants } from "../MathHelpers.js";
+import BitMap from "../BitMap.js";
+import { Endianness } from "../endian.js";
+import { DataFetcher, AbortedCallback } from "../DataFetcher.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 
 export interface AnimGroup {
     anmFilename: string;

@@ -1,6 +1,6 @@
 
-import { SceneGroup } from '../viewer';
-import { ZelviewSceneDesc } from './scenes';
+import { SceneGroup } from '../viewer.js';
+import { ZelviewSceneDesc } from './scenes.js';
 
 const pathBase = `zelview_beta`;
 

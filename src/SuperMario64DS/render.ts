@@ -1,25 +1,25 @@
 
 import { mat2d, mat4, vec2 } from 'gl-matrix';
 
-import * as BMD from './sm64ds_bmd';
-import * as NITRO_GX from './nitro_gx';
+import * as BMD from './sm64ds_bmd.js';
+import * as NITRO_GX from './nitro_gx.js';
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { DeviceProgram } from '../Program';
-import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
-import { assert, nArray } from '../util';
-import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
-import AnimationController from '../AnimationController';
-import { CalcBillboardFlags, calcBillboardMatrix, computeMatrixWithoutScale } from '../MathHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { DeviceProgram } from '../Program.js';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex.js';
+import { assert, nArray } from '../util.js';
+import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca.js';
+import AnimationController from '../AnimationController.js';
+import { CalcBillboardFlags, calcBillboardMatrix, computeMatrixWithoutScale } from '../MathHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;

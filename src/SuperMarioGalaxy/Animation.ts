@@ -1,16 +1,16 @@
 
 import { mat4, vec3 } from "gl-matrix";
 
-import { assertExists, nullify, assert, nArray } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assertExists, nullify, assert, nArray } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
-import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTransformInfo, J3DLoadFlags } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcANK1JointAnimationTransform, calcJointMatrixFromTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTransformInfo, J3DLoadFlags } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcANK1JointAnimationTransform, calcJointMatrixFromTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
 
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { getEaseInOutValue } from "./ActorUtil";
-import { ResTable } from "./LiveActor";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo.js";
+import { getEaseInOutValue } from "./ActorUtil.js";
+import { ResTable } from "./LiveActor.js";
 
 export class BckCtrlData {
     public Name: string = '';

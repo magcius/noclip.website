@@ -1,12 +1,12 @@
 
-import * as BCSV from '../luigis_mansion/bcsv';
+import * as BCSV from '../luigis_mansion/bcsv.js';
 import { vec3 } from 'gl-matrix';
-import type { SceneObjHolder } from './Main';
-import type { ZoneAndLayer } from './LiveActor';
-import { MathConstants } from '../MathHelpers';
-import { assertExists, fallback, hexzero0x } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import type { UI } from '../ui';
+import type { SceneObjHolder } from './Main.js';
+import type { ZoneAndLayer } from './LiveActor.js';
+import { MathConstants } from '../MathHelpers.js';
+import { assertExists, fallback, hexzero0x } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import type { UI } from '../ui.js';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }

@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import type { NamedArrayBufferSlice } from "../DataFetcher";
-import { assert, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import type { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { assert, readString } from "../util.js";
 
 
 const TRB_HEADER_SIZE = 0x80;

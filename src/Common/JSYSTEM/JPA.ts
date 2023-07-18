@@ -13,31 +13,31 @@
 //  * Point shape types
 //  * ETX1 SubTexture
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import * as GX from "../../gx/gx_enum";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import * as GX from "../../gx/gx_enum.js";
 
-import { assert, readString, assertExists, nArray } from "../../util";
+import { assert, readString, assertExists, nArray } from "../../util.js";
 import { vec3, mat4, vec2, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { Endianness } from "../../endian";
-import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from "../../gfx/platform/GfxPlatform";
-import { getPointHermite } from "../../Spline";
-import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
-import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager";
-import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera";
-import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { TextureMapping } from "../../TextureHolder";
-import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
-import { BTIData, BTI, BTI_Texture } from "./JUTTexture";
-import { VertexAttributeInput } from "../../gx/gx_displaylist";
-import { dfRange, dfShow } from "../../DebugFloaters";
-import { Frustum } from "../../Geometry";
+import { Endianness } from "../../endian.js";
+import { GfxDevice, GfxInputLayout, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor } from "../../gfx/platform/GfxPlatform.js";
+import { getPointHermite } from "../../Spline.js";
+import { getVertexInputLocation, GX_Program } from "../../gx/gx_material.js";
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color.js";
+import { MaterialParams, ColorKind, DrawParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render.js";
+import { GXMaterialHelperGfx } from "../../gx/gx_render.js";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers.js";
+import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers.js";
+import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderInstManager.js";
+import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers.js";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../../Camera.js";
+import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
+import { TextureMapping } from "../../TextureHolder.js";
+import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
+import { BTIData, BTI, BTI_Texture } from "./JUTTexture.js";
+import { VertexAttributeInput } from "../../gx/gx_displaylist.js";
+import { dfRange, dfShow } from "../../DebugFloaters.js";
+import { Frustum } from "../../Geometry.js";
 
 const SORT_PARTICLES = false;
 

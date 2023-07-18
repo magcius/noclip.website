@@ -1,24 +1,26 @@
 
 import { mat4, vec3 } from 'gl-matrix';
-import { Camera, computeViewMatrix } from '../Camera';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
-    GfxVertexAttributeDescriptor, 
-    GfxVertexBufferDescriptor, 
-    GfxVertexBufferFrequency, 
-    GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers';
-import { TextureMapping } from '../TextureHolder';
-import { assert } from '../util';
-import { ViewerRenderInput } from '../viewer';
-import { DataManager } from './DataManager';
-import { DkrControlGlobals } from './DkrControlGlobals';
-import { DkrObject, MODEL_TYPE_2D_BILLBOARD } from './DkrObject';
-import { F3DDKR_Sprite_Program, MAX_NUM_OF_SPRITE_FRAMES, MAX_NUM_OF_SPRITE_INSTANCES } from './F3DDKR_Sprite_Program';
+import { Camera, computeViewMatrix } from '../Camera.js';
+import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import {
+    GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxTexFilterMode,
+    GfxVertexAttributeDescriptor,
+    GfxVertexBufferDescriptor,
+    GfxVertexBufferFrequency,
+    GfxWrapMode, makeTextureDescriptor2D
+} from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
+import { assert } from '../util.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { DataManager } from './DataManager.js';
+import { DkrControlGlobals } from './DkrControlGlobals.js';
+import { DkrObject, MODEL_TYPE_2D_BILLBOARD } from './DkrObject.js';
+import { F3DDKR_Sprite_Program, MAX_NUM_OF_SPRITE_FRAMES, MAX_NUM_OF_SPRITE_INSTANCES } from './F3DDKR_Sprite_Program.js';
 
 const viewMatrixScratch = mat4.create();
 const viewMatrixCalcScratch = mat4.create();

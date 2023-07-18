@@ -1,10 +1,10 @@
 
-import { GfxDevice } from "../platform/GfxPlatform";
-import { GfxRenderCache } from "./GfxRenderCache";
-import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
-import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager";
-import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph";
-import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpers";
+import { GfxDevice } from "../platform/GfxPlatform.js";
+import { GfxRenderCache } from "./GfxRenderCache.js";
+import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.js";
+import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager.js";
+import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph.js";
+import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpers.js";
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
@@ -53,8 +53,8 @@ class GfxRenderHelperBase {
 }
 
 // Debug Thumbnails
-import { SceneContext } from "../../SceneBase";
-import type { DebugTextDrawer } from "../helpers/DebugTextDrawer";
+import { SceneContext } from "../../SceneBase.js";
+import type { DebugTextDrawer } from "../helpers/DebugTextDrawer.js";
 
 class PromiseWithSavedValue<T> {
     public value: T | null = null;
@@ -87,7 +87,7 @@ export class GfxRenderHelper extends GfxRenderHelperBase {
     constructor(device: GfxDevice, context: SceneContext | null = null, renderCache: GfxRenderCache | null = null) {
         super(device, renderCache);
         this.debugTextDrawer = new PromiseWithSavedValue<DebugTextDrawer | null>(async () => {
-            const { makeDebugTextDrawer } = await import('../helpers/DebugTextDrawer');
+            const { makeDebugTextDrawer } = await import('../helpers/DebugTextDrawer.js');
             return context !== null ? makeDebugTextDrawer(context) : null;
         });
     }

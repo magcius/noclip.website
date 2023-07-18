@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, align, readString } from "../../util";
+import { assert, hexzero, align, readString } from "../../util.js";
 import * as Pako from 'pako';
-import * as BYML from "../../byml";
+import * as BYML from "../../byml.js";
 import { TextDecoder } from "util";
-import { Endianness } from "../../endian";
+import { Endianness } from "../../endian.js";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

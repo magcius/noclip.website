@@ -1,5 +1,5 @@
 
-import { assert } from "./util";
+import { assert } from "./util.js";
 
 const A85_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+=-_,:;~/?[]@!$&()*{}|^';
 

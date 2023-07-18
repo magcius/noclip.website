@@ -1,29 +1,29 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher } from '../DataFetcher';
-import * as Viewer from '../viewer';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as UI from '../ui';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { DataFetcher } from '../DataFetcher.js';
+import * as Viewer from '../viewer.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import * as UI from '../ui.js';
 
-import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
-import { TextureMapping } from '../TextureHolder';
-import { readString, leftPad, assertExists } from '../util';
-import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext } from '../SceneBase';
-import { computeModelMatrixS } from '../MathHelpers';
+import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { readString, leftPad, assertExists } from '../util.js';
+import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { SceneContext } from '../SceneBase.js';
+import { computeModelMatrixS } from '../MathHelpers.js';
 import { mat4 } from 'gl-matrix';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];

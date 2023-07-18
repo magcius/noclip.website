@@ -1,18 +1,18 @@
 
-import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 
-import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { assert, readString, assertExists } from "../util";
-import { J3DModelData, J3DModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Destroyable } from "../SceneBase";
-import { dGlobals } from "./zww_scenes";
-import { cPhs__Status } from "./framework";
-import { cBgD_t } from "./d_bg";
-import { NamedArrayBufferSlice } from "../DataFetcher";
+import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { assert, readString, assertExists } from "../util.js";
+import { J3DModelData, J3DModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Destroyable } from "../SceneBase.js";
+import { dGlobals } from "./zww_scenes.js";
+import { cPhs__Status } from "./framework.js";
+import { cBgD_t } from "./d_bg.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
 
 export interface DZSChunkHeader {
     type: string;

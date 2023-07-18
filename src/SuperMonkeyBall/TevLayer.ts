@@ -1,13 +1,13 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
-import { GfxSampler } from "../gfx/platform/GfxPlatformImpl";
-import { LoadedTexture, TextureMapping } from "../TextureHolder";
-import * as Gma from "./Gma";
-import * as GX from "../gx/gx_enum";
-import { TextureCache } from "./ModelCache";
-import { translateWrapModeGfx } from "../gx/gx_render";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
+import { LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import * as Gma from "./Gma.js";
+import * as GX from "../gx/gx_enum.js";
+import { TextureCache } from "./ModelCache.js";
+import { translateWrapModeGfx } from "../gx/gx_render.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class TevLayerInst {
     private loadedTex: LoadedTexture;

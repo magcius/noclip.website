@@ -1,28 +1,28 @@
 
-import { NameObj, MovementType, DrawType } from "./NameObj";
-import { OceanBowl } from "./Actors/OceanBowl";
-import { SceneObjHolder, SpecialTextureType, SceneObj } from "./Main";
-import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST, isValidSwitchA } from "./ActorUtil";
-import { ViewerRenderInput } from "../viewer";
-import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
+import { NameObj, MovementType, DrawType } from "./NameObj.js";
+import { OceanBowl } from "./Actors/OceanBowl.js";
+import { SceneObjHolder, SpecialTextureType, SceneObj } from "./Main.js";
+import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST, isValidSwitchA } from "./ActorUtil.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj.js";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } from "./Actors/MiscActor";
-import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
-import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
-import { createNormalBloom } from "./ImageEffect";
-import { fallback } from "../util";
-import { OceanSphere } from "./Actors/OceanSphere";
-import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
-import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { TDDraw } from "./DDraw";
-import * as GX from '../gx/gx_enum';
-import { MathConstants, saturate, Vec3NegY } from "../MathHelpers";
-import { GX_Program } from "../gx/gx_material";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
+import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } from "./Actors/MiscActor.js";
+import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo.js";
+import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor.js";
+import { createNormalBloom } from "./ImageEffect.js";
+import { fallback } from "../util.js";
+import { OceanSphere } from "./Actors/OceanSphere.js";
+import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color.js";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { TDDraw } from "./DDraw.js";
+import * as GX from '../gx/gx_enum.js';
+import { MathConstants, saturate, Vec3NegY } from "../MathHelpers.js";
+import { GX_Program } from "../gx/gx_material.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 
 //#region Water
 export class WaterArea extends AreaObj {

@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
-import { parseTexChunk, Texture } from "./cmb";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
+import { parseTexChunk, Texture } from "./cmb.js";
 
 export interface CTXB {
     textures: Texture[];

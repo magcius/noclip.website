@@ -1,6 +1,6 @@
-import { assert, assertExists } from "../util"
-import { InputStream} from "./stream"
-import { AABB } from '../Geometry';
+import { assert, assertExists } from "../util.js";
+import { InputStream } from "./stream.js";
+import { AABB } from '../Geometry.js';
 import { vec3 } from 'gl-matrix';
 
 export enum CollisionMaterial {

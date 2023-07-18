@@ -1,8 +1,8 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TileState, Texture} from "../Common/N64/RDP";
-import { RSPSharedOutput, Vertex } from "./f3dex";
-import { align, assert, hexzero } from "../util";
-import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8 } from "../Common/N64/Image";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { TileState, Texture} from "../Common/N64/RDP.js";
+import { RSPSharedOutput, Vertex } from "./f3dex.js";
+import { align, assert } from "../util.js";
+import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8 } from "../Common/N64/Image.js";
 
 const enum Flags {
     CI4 = 0x001,

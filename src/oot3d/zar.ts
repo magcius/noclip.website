@@ -1,9 +1,9 @@
 
 // Zelda ARchive / Grezzo ARchive
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
-import * as CMB from './cmb';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
+import * as CMB from './cmb.js';
 
 const enum Magic {
     ZAR1 = 'ZAR\x01', // OoT3D

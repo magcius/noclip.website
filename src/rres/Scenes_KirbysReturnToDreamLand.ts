@@ -1,15 +1,15 @@
 
 // Kirby's Return to Dream Land
 
-import * as Viewer from '../viewer';
-import * as BRRES from './brres';
-import * as CX from '../Common/Compression/CX';
+import * as Viewer from '../viewer.js';
+import * as BRRES from './brres.js';
+import * as CX from '../Common/Compression/CX.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BasicRRESRenderer } from './scenes';
-import { SceneContext } from '../SceneBase';
-import { CameraController } from '../Camera';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { BasicRRESRenderer } from './scenes.js';
+import { SceneContext } from '../SceneBase.js';
+import { CameraController } from '../Camera.js';
 
 class RTDLRenderer extends BasicRRESRenderer {
     public adjustCameraController(c: CameraController) {

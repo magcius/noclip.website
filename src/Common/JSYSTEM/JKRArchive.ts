@@ -1,11 +1,11 @@
 
 // Nintendo RARC file format.
 
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assert, readString } from '../../util';
-import * as Yay0 from '../Compression/Yay0';
-import * as Yaz0 from '../Compression/Yaz0';
-import { NamedArrayBufferSlice } from '../../DataFetcher';
+import ArrayBufferSlice from '../../ArrayBufferSlice.js';
+import { assert, readString } from '../../util.js';
+import * as Yay0 from '../Compression/Yay0.js';
+import * as Yaz0 from '../Compression/Yaz0.js';
+import { NamedArrayBufferSlice } from '../../DataFetcher.js';
 
 export const enum JKRFileAttr {
     Normal          = 0x01,

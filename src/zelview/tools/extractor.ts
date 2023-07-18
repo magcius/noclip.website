@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "fs";
-import * as BYML from "../../byml";
-import { assert, leftPad } from "../../util";
+import * as BYML from "../../byml.js";
+import { assert, leftPad } from "../../util.js";
 
 // Standalone tool designed for node to extract data.
 

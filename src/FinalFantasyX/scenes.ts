@@ -1,19 +1,19 @@
-import * as BIN from "./bin";
-import * as Viewer from '../viewer';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { SceneContext } from '../SceneBase';
-import { FakeTextureHolder } from '../TextureHolder';
-import { hexzero, nArray } from '../util';
-import { applyEffect, FFXProgram, findTextureIndex, LevelModelData, LevelPartInstance, TextureData } from "./render";
-import { CameraController } from "../Camera";
+import * as BIN from "./bin.js";
+import * as Viewer from '../viewer.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { SceneContext } from '../SceneBase.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import { hexzero, nArray } from '../util.js';
+import { applyEffect, FFXProgram, findTextureIndex, LevelModelData, LevelPartInstance, TextureData } from "./render.js";
+import { CameraController } from "../Camera.js";
 import { mat4 } from "gl-matrix";
-import AnimationController from "../AnimationController";
-import { NamedArrayBufferSlice } from "../DataFetcher";
-import { activateEffect, EventScript, LevelObjectHolder } from "./script";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import AnimationController from "../AnimationController.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { activateEffect, EventScript, LevelObjectHolder } from "./script.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 
 const pathBase = `ffx`;
 

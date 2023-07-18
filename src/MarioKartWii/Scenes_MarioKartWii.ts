@@ -1,28 +1,28 @@
 
 // Mario Kart Wii
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as BRRES from '../rres/brres';
-import * as U8 from '../rres/u8';
-import * as Yaz0 from '../Common/Compression/Yaz0';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as BRRES from '../rres/brres.js';
+import * as U8 from '../rres/u8.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
 
-import { assert, readString, hexzero, assertExists } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, readString, hexzero, assertExists } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4 } from 'gl-matrix';
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from '../rres/render';
-import AnimationController from '../AnimationController';
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, scaleMatrix } from '../MathHelpers';
-import { SceneContext, GraphObjBase } from '../SceneBase';
-import { EggLightManager, parseBLIGHT } from '../rres/Egg';
-import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { CameraController } from '../Camera';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect';
-import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from '../rres/render.js';
+import AnimationController from '../AnimationController.js';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render.js';
+import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
+import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, scaleMatrix } from '../MathHelpers.js';
+import { SceneContext, GraphObjBase } from '../SceneBase.js';
+import { EggLightManager, parseBLIGHT } from '../rres/Egg.js';
+import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { CameraController } from '../Camera.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect.js';
+import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
 
 interface ObjFlowObj {
     name: string;

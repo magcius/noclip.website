@@ -1,13 +1,13 @@
 
-import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
-import { DZS } from "./d_resorce";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assert, readString } from "../util";
-import { dKy_tevstr_c } from "./d_kankyo";
+import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from "../Color.js";
+import { DZS } from "./d_resorce.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { nArray, assert, readString } from "../util.js";
+import { dKy_tevstr_c } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
-import { Endianness } from "../endian";
-import { dGlobals } from "./zww_scenes";
-import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework";
+import { Endianness } from "../endian.js";
+import { dGlobals } from "./zww_scenes.js";
+import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
 
 export class dPath__Point {
     public arg0: number;

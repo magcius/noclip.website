@@ -1,8 +1,8 @@
-import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator';
-import { TXTR } from '../txtr';
-import { GetIntElement, IntElement } from './int_element';
-import { InputStream } from '../stream';
-import { ResourceSystem } from '../resource';
+import { defaultParticleGlobals, GetBool, NumberHolder, ParticleGlobals } from './base_generator.js';
+import { TXTR } from '../txtr.js';
+import { GetIntElement, IntElement } from './int_element.js';
+import { InputStream } from '../stream.js';
+import { ResourceSystem } from '../resource.js';
 
 export interface UVElementSet {
     xMin: number;

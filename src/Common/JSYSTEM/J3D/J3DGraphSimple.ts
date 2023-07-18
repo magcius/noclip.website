@@ -1,17 +1,17 @@
 
-import { J3DModelInstance, J3DModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance, ShapeInstanceState } from "./J3DGraphBase";
-import AnimationController from "../../../AnimationController";
-import { assert } from "../../../util";
-import { Camera } from "../../../Camera";
-import { TTK1, TRK1, TPT1, ANK1, ANF1, BCA, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader";
-import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../../../viewer";
+import { J3DModelInstance, J3DModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance, ShapeInstanceState } from "./J3DGraphBase.js";
+import AnimationController from "../../../AnimationController.js";
+import { assert } from "../../../util.js";
+import { Camera } from "../../../Camera.js";
+import { TTK1, TRK1, TPT1, ANK1, ANF1, BCA, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader.js";
+import { GfxDevice } from "../../../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../../../viewer.js";
 import { mat4, vec3 } from "gl-matrix";
-import { calcANF1JointAnimationTransform, calcANK1JointAnimationTransform, calcJointMatrixFromTransform, sampleAnimationData } from "./J3DGraphAnimator";
-import { ColorKind } from "../../../gx/gx_render";
-import { Color } from "../../../Color";
-import * as GX from "../../../gx/gx_enum";
+import { calcANF1JointAnimationTransform, calcANK1JointAnimationTransform, calcJointMatrixFromTransform, sampleAnimationData } from "./J3DGraphAnimator.js";
+import { ColorKind } from "../../../gx/gx_render.js";
+import { Color } from "../../../Color.js";
+import * as GX from "../../../gx/gx_enum.js";
 
 // "Simple" API for when systems are not well-integrated enough to have custom main loops.
 

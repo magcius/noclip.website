@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { hexzero, readString } from "../../util";
+import { hexzero, readString } from "../../util.js";
 import { assert } from "console";
 
 function decompressFile(data: ArrayBufferSlice, format: number, length: number): ArrayBufferSlice {

@@ -1,15 +1,15 @@
-import { RenderContext } from "./Render";
-import { BgObjectInst } from "./BgObject";
-import { ModelInst, RenderParams, RenderSort } from "./Model";
+import { RenderContext } from "./Render.js";
+import { BgObjectInst } from "./BgObject.js";
+import { ModelInst, RenderParams, RenderSort } from "./Model.js";
 import { mat4, vec3 } from "gl-matrix";
-import { Vec3Zero } from "../MathHelpers";
-import { getMat4RotY, MkbTime, MKB_FPS, S16_TO_RADIANS } from "./Utils";
-import { Lighting } from "./Lighting";
-import { BgNightModelID, BgStormModelID } from "./ModelInfo";
-import { GmaSrc, ModelCache } from "./ModelCache";
-import { Gma } from "./Gma";
-import { assertExists, nArray } from "../util";
-import { WorldState } from "./World";
+import { Vec3Zero } from "../MathHelpers.js";
+import { getMat4RotY, MkbTime, MKB_FPS, S16_TO_RADIANS } from "./Utils.js";
+import { Lighting } from "./Lighting.js";
+import { BgNightModelID, BgStormModelID } from "./ModelInfo.js";
+import { GmaSrc, ModelCache } from "./ModelCache.js";
+import { Gma } from "./Gma.js";
+import { assertExists, nArray } from "../util.js";
+import { WorldState } from "./World.js";
 
 export interface Background {
     update(state: WorldState): void;

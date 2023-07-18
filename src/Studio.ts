@@ -1,13 +1,13 @@
-import * as Viewer from './viewer';
-import { UI, Checkbox, setElementHighlighted, createDOMFromString, Slider, RadioButtons, HIGHLIGHT_COLOR } from './ui';
-import { FloatingPanel } from './DebugFloaters';
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk';
-import { Blue, Color, Green, Red, Magenta, Cyan } from './Color';
-import { StudioCameraController } from './Camera';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers';
+import * as Viewer from './viewer.js';
+import { UI, Checkbox, setElementHighlighted, createDOMFromString, Slider, RadioButtons, HIGHLIGHT_COLOR } from './ui.js';
+import { FloatingPanel } from './DebugFloaters.js';
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from './DebugJunk.js';
+import { Blue, Color, Green, Red, Magenta, Cyan } from './Color.js';
+import { StudioCameraController } from './Camera.js';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, lerp, invlerp, Vec3UnitY, Vec3Zero, MathConstants } from './MathHelpers.js';
 import { mat4, ReadonlyMat4, vec3, vec2 } from 'gl-matrix';
-import { GlobalSaveManager } from './SaveManager';
-import { getPointHermite } from './Spline';
+import { GlobalSaveManager } from './SaveManager.js';
+import { getPointHermite } from './Spline.js';
 
 export const CLAPBOARD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" height="20" fill="white"><path d="M61,22H14.51l3.41-.72h0l7.74-1.64,2-.43h0l6.85-1.46h0l1.17-.25,8.61-1.83h0l.78-.17,9-1.91h0l.4-.08L60,12.33a1,1,0,0,0,.77-1.19L59.3,4.3a1,1,0,0,0-1.19-.77l-19,4-1.56.33h0L28.91,9.74,27.79,10h0l-9.11,1.94-.67.14h0L3.34,15.17a1,1,0,0,0-.77,1.19L4,23.11V60a1,1,0,0,0,1,1H61a1,1,0,0,0,1-1V23A1,1,0,0,0,61,22ZM57,5.8l.65.6.89,4.19-1.45.31L52.6,6.75ZM47.27,7.88,51.8,12,47.36,13,42.82,8.83ZM37.48,10,42,14.11l-4.44.94L33,10.91ZM27.7,12l4.53,4.15-4.44.94L23.26,13Zm-9.78,2.08,4.53,4.15L18,19.21l-4.53-4.15ZM19.49,29H14.94l3.57-5h4.54Zm9-5h4.54l-3.57,5H24.94ZM39,45.88l-11,6A1,1,0,0,1,26.5,51V39A1,1,0,0,1,28,38.12l11,6a1,1,0,0,1,0,1.76ZM39.49,29H34.94l3.57-5h4.54Zm10,0H44.94l3.57-5h4.54ZM60,29H54.94l3.57-5H60Z"/></svg>`;
 const UNDO_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="16"><g transform="translate(0,-952.36218)"><path overflow="visible" style="" d="m 39.999997,975.36218 -31.9999995,25.00002 31.9999995,25 0,-14 c 1.7024,-0.08 31.3771,-0.033 52.000005,18 -8.252999,-25.4273 -34.173805,-35.48722 -52.000005,-40.00002 z" fill="#ffffff" stroke="none"/></g></svg>`;

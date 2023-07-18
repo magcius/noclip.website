@@ -1,21 +1,21 @@
-import * as UI from '../ui';
-import * as Viewer from '../viewer';
-import * as BYML from '../byml';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
+import * as BYML from '../byml.js';
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { SceneContext } from '../SceneBase';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { SnapPass, ModelRenderer, buildTransform } from './render';
-import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room';
-import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
-import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
-import { hexzero } from '../util';
-import { CameraController } from '../Camera';
-import { createActor, LevelGlobals, sceneActorInit } from './actor';
-import { ParticleManager } from './particles';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { SceneContext } from '../SceneBase.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { SnapPass, ModelRenderer, buildTransform } from './render.js';
+import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room.js';
+import { RenderData, textureToCanvas } from '../BanjoKazooie/render.js';
+import { TextureHolder, FakeTextureHolder } from '../TextureHolder.js';
+import { hexzero } from '../util.js';
+import { CameraController } from '../Camera.js';
+import { createActor, LevelGlobals, sceneActorInit } from './actor.js';
+import { ParticleManager } from './particles.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 const pathBase = `PokemonSnap`;
 

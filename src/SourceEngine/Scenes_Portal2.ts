@@ -1,21 +1,21 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { DataFetcher } from "../DataFetcher";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB } from "../Geometry";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { getMatrixTranslation, scaleMatrix, Vec3NegX } from "../MathHelpers";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { EmptyScene } from "../Scenes_Test";
-import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui";
-import { decodeString } from "../util";
-import { SceneGfx } from "../viewer";
-import { BSPEntity } from "./BSPFile";
-import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem";
-import { BSPRenderer, LooseMount, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main";
-import { BaseMaterial } from "./Materials";
-import { createScene } from "./Scenes";
+import { DataFetcher } from "../DataFetcher.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB } from "../Geometry.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { getMatrixTranslation, scaleMatrix, Vec3NegX } from "../MathHelpers.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { EmptyScene } from "../Scenes_Test.js";
+import { HIGHLIGHT_COLOR, ScrollSelectItem, ScrollSelectItemType, SEARCH_ICON, SingleSelect, TextEntry } from "../ui.js";
+import { decodeString } from "../util.js";
+import { SceneGfx } from "../viewer.js";
+import { BSPEntity } from "./BSPFile.js";
+import { BaseEntity, EntityFactoryRegistry, EntityOutput, EntitySystem, trigger_multiple } from "./EntitySystem.js";
+import { BSPRenderer, LooseMount, SourceFileSystem, SourceLoadContext, SourceRenderContext } from "./Main.js";
+import { BaseMaterial } from "./Materials.js";
+import { createScene } from "./Scenes.js";
 
 class trigger_portal_button extends trigger_multiple {
     public static override classname = `trigger_portal_button`;

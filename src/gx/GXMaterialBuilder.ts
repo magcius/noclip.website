@@ -1,7 +1,7 @@
 
-import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, SwapTable } from "./gx_material";
-import * as GX from "./gx_enum";
-import { autoOptimizeMaterial } from "./gx_render";
+import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, SwapTable } from "./gx_material.js";
+import * as GX from "./gx_enum.js";
+import { autoOptimizeMaterial } from "./gx_render.js";
 
 function copyColorChannelControl(colorChannel: ColorChannelControl): ColorChannelControl {
     return {

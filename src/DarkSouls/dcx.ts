@@ -1,8 +1,8 @@
 
-import * as Deflate from '../Common/Compression/Deflate';
+import * as Deflate from '../Common/Compression/Deflate.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from '../util';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from '../util.js';
 
 // I have no idea what the "real" format is but this seems to be the format of all .dcx files I can find...
 

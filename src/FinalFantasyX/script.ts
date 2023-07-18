@@ -1,10 +1,10 @@
 import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { CompType } from "../gx/gx_enum";
-import { angleDist, clamp, MathConstants, setMatrixTranslation } from "../MathHelpers";
-import { assertExists, hexzero, nArray } from "../util";
+import { CompType } from "../gx/gx_enum.js";
+import { angleDist, clamp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
+import { assertExists, hexzero, nArray } from "../util.js";
 
-import * as BIN from "./bin";
-import { LevelPartInstance } from "./render";
+import * as BIN from "./bin.js";
+import { LevelPartInstance } from "./render.js";
 
 const enum Opcode {
     NOP                = 0x00,

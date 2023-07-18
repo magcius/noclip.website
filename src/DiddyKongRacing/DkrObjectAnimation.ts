@@ -1,8 +1,8 @@
 import { vec3 } from "gl-matrix";
-import { assert } from "../util";
-import { DKR_FPS, FPS_SAMPLES_DELTA } from "./DkrAnimationTrack";
-import { DkrVertex } from "./DkrTriangleBatch";
-import { MAX_NUM_OF_OBJ_ANIM_VERTICES } from "./F3DDKR_Program";
+import { assert } from "../util.js";
+import { DKR_FPS, FPS_SAMPLES_DELTA } from "./DkrAnimationTrack.js";
+import { DkrVertex } from "./DkrTriangleBatch.js";
+import { MAX_NUM_OF_OBJ_ANIM_VERTICES } from "./F3DDKR_Program.js";
 
 // There are 16 interpolated frames per keyframe
 const SUBFRAME_COUNT = 16;

@@ -1,5 +1,5 @@
-import { assert } from "../../util";
-import { DataStream, readTHeader } from "../util";
+import { assert } from "../../util.js";
+import { DataStream, readTHeader } from "../util.js";
 
 function readStrip(data: DataStream) {
     return {

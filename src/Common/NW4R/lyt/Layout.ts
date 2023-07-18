@@ -1,27 +1,27 @@
 
-import ArrayBufferSlice from "../../../ArrayBufferSlice";
-import { Color, colorCopy, colorMultAlpha, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color";
-import { assert, assertExists, nArray, readString } from "../../../util";
-import * as GX from '../../../gx/gx_enum';
+import ArrayBufferSlice from "../../../ArrayBufferSlice.js";
+import { Color, colorCopy, colorMultAlpha, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color.js";
+import { assert, assertExists, nArray, readString } from "../../../util.js";
+import * as GX from '../../../gx/gx_enum.js';
 import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
-import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
-import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
-import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material";
-import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
-import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
-import { TextureMapping } from "../../../TextureHolder";
-import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams } from "../../../gx/gx_render";
-import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture";
-import { getPointHermite } from "../../../Spline";
-import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
-import { LoopMode } from "../../../rres/brres";
-import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
-import { TPL } from "../../../PaperMarioTTYD/tpl";
-import { CharWriter, ResFont, TagProcessor } from "./Font";
-import { fillMatrix4x3 } from "../../../gfx/helpers/UniformBufferHelpers";
-import { drawWorldSpacePoint } from "../../../DebugJunk";
+import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers.js";
+import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder.js";
+import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager.js";
+import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache.js";
+import { TextureMapping } from "../../../TextureHolder.js";
+import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams } from "../../../gx/gx_render.js";
+import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture.js";
+import { getPointHermite } from "../../../Spline.js";
+import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil.js";
+import { LoopMode } from "../../../rres/brres.js";
+import { TPLTextureHolder } from "../../../PaperMarioTTYD/render.js";
+import { TPL } from "../../../PaperMarioTTYD/tpl.js";
+import { CharWriter, ResFont, TagProcessor } from "./Font.js";
+import { fillMatrix4x3 } from "../../../gfx/helpers/UniformBufferHelpers.js";
+import { drawWorldSpacePoint } from "../../../DebugJunk.js";
 
 //#region BRLYT
 interface RLYTSampler extends TEX1_SamplerSub {

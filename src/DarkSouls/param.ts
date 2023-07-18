@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, assertExists, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, assertExists, readString } from "../util.js";
 
 export interface ParamDefField {
     displayName: string;

@@ -1,19 +1,19 @@
 
-import { GfxDevice, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgram, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { ModelCache } from "./Scenes_Fez";
-import { makeTextureFromXNA_Texture2D } from "./Texture";
-import { DeviceProgram } from "../Program";
-import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers";
-import { TextureMapping } from "../TextureHolder";
-import { nArray, assert } from "../util";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { invlerp, MathConstants } from "../MathHelpers";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { Fez_Sky } from "./XNB_Fez";
-import { XNA_Texture2D } from "./XNB";
+import { GfxDevice, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgram, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { ModelCache } from "./Scenes_Fez.js";
+import { makeTextureFromXNA_Texture2D } from "./Texture.js";
+import { DeviceProgram } from "../Program.js";
+import { reverseDepthForDepthOffset } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { nArray, assert } from "../util.js";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { invlerp, MathConstants } from "../MathHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { Fez_Sky } from "./XNB_Fez.js";
+import { XNA_Texture2D } from "./XNB.js";
 
 const backgroundBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numSamplers: 1, numUniformBuffers: 1 },

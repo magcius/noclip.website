@@ -1,6 +1,6 @@
-import { InputStream } from '../stream';
-import { GetRealElement, RealElement } from './real_element';
-import { ParticleGlobals } from './base_generator';
+import { InputStream } from '../stream.js';
+import { GetRealElement, RealElement } from './real_element.js';
+import { ParticleGlobals } from './base_generator.js';
 
 export abstract class BaseKeyframeEmitter<T, U> {
     percent: number;

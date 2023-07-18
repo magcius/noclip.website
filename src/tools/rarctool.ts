@@ -2,10 +2,10 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import { readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import { readString } from '../util.js';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);

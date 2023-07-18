@@ -1,12 +1,12 @@
 
-import { JMapInfoIter } from "./JMapInfo";
+import { JMapInfoIter } from "./JMapInfo.js";
 import { ReadonlyVec3, vec3 } from "gl-matrix";
-import { SceneObjHolder } from "./Main";
-import { assertExists, assert, fallback } from "../util";
-import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk";
-import { Camera } from "../Camera";
-import { Magenta, Yellow, Cyan } from "../Color";
+import { SceneObjHolder } from "./Main.js";
+import { assertExists, assert, fallback } from "../util.js";
+import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk.js";
+import { Camera } from "../Camera.js";
+import { Magenta, Yellow, Cyan } from "../Color.js";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
     dst[0] = fallback(infoIter.getValueNumber(`${prefix}_x`), 0);

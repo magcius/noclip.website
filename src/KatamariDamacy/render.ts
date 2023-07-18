@@ -1,21 +1,21 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin";
-import { DeviceProgram } from "../Program";
-import * as Viewer from "../viewer";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin.js";
+import { DeviceProgram } from "../Program.js";
+import * as Viewer from "../viewer.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { ReadonlyMat4, mat4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { TextureMapping } from "../TextureHolder";
-import { nArray, assert } from "../util";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderInstManager";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
-import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { AABB } from "../Geometry";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { fillMatrix4x3, fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { nArray, assert } from "../util.js";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { AABB } from "../Geometry.js";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;

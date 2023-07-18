@@ -3,28 +3,28 @@
 
 import { mat4, ReadonlyMat4 } from 'gl-matrix';
 
-import * as GX from './gx_enum';
-import * as GX_Material from './gx_material';
-import * as GX_Texture from './gx_texture';
-import * as Viewer from '../viewer';
+import * as GX from './gx_enum.js';
+import * as GX_Material from './gx_material.js';
+import * as GX_Texture from './gx_texture.js';
+import * as Viewer from '../viewer.js';
 
-import { assert, nArray, assertExists, setBitFlagEnabled } from '../util';
-import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
+import { assert, nArray, assertExists, setBitFlagEnabled } from '../util.js';
+import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder.js';
 
-import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
-import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers';
+import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color.js';
+import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers.js';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,

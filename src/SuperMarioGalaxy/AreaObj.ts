@@ -1,14 +1,14 @@
 
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
-import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
-import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
-import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
-import { AABB } from "../Geometry";
-import { NameObj } from "./NameObj";
-import { vecKillElement } from "./ActorUtil";
-import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForAreaObj } from "./Switch";
-import { drawWorldSpaceAABB, drawWorldSpaceCylinder, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo.js";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main.js";
+import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor.js";
+import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers.js";
+import { AABB } from "../Geometry.js";
+import { NameObj } from "./NameObj.js";
+import { vecKillElement } from "./ActorUtil.js";
+import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForAreaObj } from "./Switch.js";
+import { drawWorldSpaceAABB, drawWorldSpaceCylinder, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx

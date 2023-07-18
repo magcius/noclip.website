@@ -1,9 +1,9 @@
 import { mat4, vec3 } from "gl-matrix";
-import { Camera } from "../Camera";
-import { Color, colorFromHSL, White } from "../Color";
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { transformVec3Mat4w1 } from "../MathHelpers";
-import * as SD from "./Stagedef";
+import { Camera } from "../Camera.js";
+import { Color, colorFromHSL, White } from "../Color.js";
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { transformVec3Mat4w1 } from "../MathHelpers.js";
+import * as SD from "./Stagedef.js";
 
 const SHORT_TO_RAD = Math.PI / 0x8000;
 

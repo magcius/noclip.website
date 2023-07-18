@@ -1,11 +1,11 @@
-import * as MIPS from "./mips";
-import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room";
-import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One, normToLength } from "../MathHelpers";
+import * as MIPS from "./mips.js";
+import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room.js";
+import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One, normToLength } from "../MathHelpers.js";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { getPathPoint, getPathTangent } from "./animation";
-import { hexzero, assert, nArray, assertExists } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { LevelGlobals } from "./actor";
+import { getPathPoint, getPathTangent } from "./animation.js";
+import { hexzero, assert, nArray, assertExists } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { LevelGlobals } from "./actor.js";
 
 const enum MotionFuncs {
     PathPoint       = 0x01FCA4,

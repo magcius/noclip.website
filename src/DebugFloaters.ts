@@ -1,12 +1,12 @@
 
 // Debug Floater UI
 
-import { objIsColor } from "./Color";
-import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted, Checkbox } from "./ui";
-import { GlobalGrabManager } from "./GrabManager";
-import { arrayRemove, assert, nullify } from "./util";
-import { invlerp, lerp } from "./MathHelpers";
-import { IS_DEVELOPMENT } from "./BuildVersion";
+import { objIsColor } from "./Color.js";
+import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted, Checkbox } from "./ui.js";
+import { GlobalGrabManager } from "./GrabManager.js";
+import { arrayRemove, assert, nullify } from "./util.js";
+import { invlerp, lerp } from "./MathHelpers.js";
+import { IS_DEVELOPMENT } from "./BuildVersion.js";
 import "reflect-metadata";
 
 interface Range {

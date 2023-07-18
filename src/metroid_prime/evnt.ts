@@ -1,6 +1,6 @@
-import { InputStream } from './stream';
-import { ResourceSystem } from './resource';
-import { BoolPOINode, Int32POINode, ParticlePOINode, SoundPOINode } from './animation/base_reader';
+import { InputStream } from './stream.js';
+import { ResourceSystem } from './resource.js';
+import { BoolPOINode, Int32POINode, ParticlePOINode, SoundPOINode } from './animation/base_reader.js';
 
 export class EVNT {
     version: number;

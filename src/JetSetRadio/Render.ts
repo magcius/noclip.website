@@ -1,18 +1,18 @@
 
-import * as Ninja from "./Ninja";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { DeviceProgram } from "../Program";
-import * as Viewer from "../viewer";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import * as Ninja from "./Ninja.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { DeviceProgram } from "../Program.js";
+import * as Viewer from "../viewer.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
-import { fillMatrix4x3, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { TextureMapping } from "../TextureHolder";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { lerpAngle } from "../MathHelpers";
-import { PVRTextureHolder } from "./Scenes";
-import { assert, nArray } from "../util";
+import { fillMatrix4x3, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { lerpAngle } from "../MathHelpers.js";
+import { PVRTextureHolder } from "./Scenes.js";
+import { assert, nArray } from "../util.js";
 
 export class JSRProgram extends DeviceProgram {
     public static a_Position = 0;

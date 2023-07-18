@@ -1,15 +1,15 @@
 
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4, ReadonlyVec4 } from 'gl-matrix';
-import InputManager from './InputManager';
-import { Frustum, AABB } from './Geometry';
-import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers';
-import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
-import { WebXRContext } from './WebXR';
-import { assert } from './util';
-import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers';
-import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio';
-import { GlobalSaveManager } from './SaveManager';
+import InputManager from './InputManager.js';
+import { Frustum, AABB } from './Geometry.js';
+import { clampRange, projectionMatrixForFrustum, computeUnitSphericalCoordinates, projectionMatrixForCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, getMatrixAxisX, computeEulerAngleRotationFromSRTMatrix } from './MathHelpers.js';
+import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers.js';
+import { WebXRContext } from './WebXR.js';
+import { assert } from './util.js';
+import { projectionMatrixReverseDepth } from './gfx/helpers/ReversedDepthHelpers.js';
+import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform.js';
+import { CameraAnimationManager, InterpolationStep, StudioPanel } from './Studio.js';
+import { GlobalSaveManager } from './SaveManager.js';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 

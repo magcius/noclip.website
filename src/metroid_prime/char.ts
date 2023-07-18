@@ -1,8 +1,8 @@
 
-import { CMDL } from "./cmdl";
-import { InputStream } from "./stream";
-import { ResourceSystem } from "./resource";
-import { assert, assertExists } from "../util";
+import { CMDL } from "./cmdl.js";
+import { InputStream } from "./stream.js";
+import { ResourceSystem } from "./resource.js";
+import { assert, assertExists } from "../util.js";
 
 // CHAR (DKCR)
 

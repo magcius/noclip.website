@@ -1,22 +1,22 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import * as Viewer from '../viewer';
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataFetcher } from "../DataFetcher";
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import * as Viewer from '../viewer.js';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render.js";
 import { mat4 } from "gl-matrix";
 
-import * as BRRES from './brres';
-import * as GX from '../gx/gx_enum';
-import { assert, readString, hexzero, assertExists } from "../util";
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import AnimationController from "../AnimationController";
-import { GXMaterialHacks } from "../gx/gx_material";
-import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
-import { CameraController, Camera } from "../Camera";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { SceneContext } from "../SceneBase";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import * as BRRES from './brres.js';
+import * as GX from '../gx/gx_enum.js';
+import { assert, readString, hexzero, assertExists } from "../util.js";
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import AnimationController from "../AnimationController.js";
+import { GXMaterialHacks } from "../gx/gx_material.js";
+import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers.js";
+import { CameraController, Camera } from "../Camera.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { SceneContext } from "../SceneBase.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 
 function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     mat4.identity(out);

@@ -1,7 +1,7 @@
 
-import { nArray, assert } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { loadVertexFromView } from "../Common/N64/RSP";
+import { nArray, assert } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { loadVertexFromView } from "../Common/N64/RSP.js";
 
 export class Vertex {
     public x: number = 0;

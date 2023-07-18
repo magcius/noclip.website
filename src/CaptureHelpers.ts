@@ -1,8 +1,8 @@
 
-import { assertExists, leftPad } from "./util";
-import { Viewer, resizeCanvas } from "./viewer";
-import { ZipFileEntry } from "./ZipFile";
-import ArrayBufferSlice from "./ArrayBufferSlice";
+import { assertExists, leftPad } from "./util.js";
+import { Viewer, resizeCanvas } from "./viewer.js";
+import { ZipFileEntry } from "./ZipFile.js";
+import ArrayBufferSlice from "./ArrayBufferSlice.js";
 
 type Callback = (viewer: Viewer, t: number, f: number) => boolean;
 

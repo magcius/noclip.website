@@ -1,6 +1,6 @@
-import { InputStream } from './stream';
-import { ParseFunc, Resource, ResourceSystem } from './resource';
-import { CMDL } from './cmdl';
+import { InputStream } from './stream.js';
+import { ParseFunc, Resource, ResourceSystem } from './resource.js';
+import { CMDL } from './cmdl.js';
 
 export interface Tweaks {
     GetCineGun(): CMDL|null;

@@ -1,7 +1,7 @@
 
-import { DataStream } from './util';
+import { DataStream } from './util.js';
 import { vec3, mat4 } from 'gl-matrix';
-import { Color } from '../Color';
+import { Color } from '../Color.js';
 
 export interface LinkAsset {
     srcEvent: number;

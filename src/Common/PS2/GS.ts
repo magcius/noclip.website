@@ -1,7 +1,7 @@
 
 // Common utilities for the PS2's Geometry Synthesizer (GS).
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 
 export const enum GSRegister {
     PRIM      = 0x00,

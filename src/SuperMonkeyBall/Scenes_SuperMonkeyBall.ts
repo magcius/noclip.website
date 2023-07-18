@@ -1,17 +1,17 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { Destroyable, SceneContext } from "../SceneBase";
-import * as Viewer from "../viewer";
-import { parseStagedefLz } from "./Stagedef";
-import { Renderer } from "./Render";
-import { StageId, STAGE_INFO_MAP } from "./StageInfo";
-import * as Gma from "./Gma";
-import { parseAVTpl } from "./AVTpl";
-import { assertExists, leftPad } from "../util";
-import { GmaData, NlData, StageData } from "./World";
-import { decompressLZ } from "./AVLZ";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { NamedArrayBufferSlice } from "../DataFetcher";
-import * as Nl from "./NaomiLib";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { Destroyable, SceneContext } from "../SceneBase.js";
+import * as Viewer from "../viewer.js";
+import { parseStagedefLz } from "./Stagedef.js";
+import { Renderer } from "./Render.js";
+import { StageId, STAGE_INFO_MAP } from "./StageInfo.js";
+import * as Gma from "./Gma.js";
+import { parseAVTpl } from "./AVTpl.js";
+import { assertExists, leftPad } from "../util.js";
+import { GmaData, NlData, StageData } from "./World.js";
+import { decompressLZ } from "./AVLZ.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import * as Nl from "./NaomiLib.js";
 
 // TODO(jstpierre): Move display list loading to destroyable GmaData rather than
 // this stupid hack...

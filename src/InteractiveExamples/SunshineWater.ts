@@ -1,29 +1,29 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { SceneGfx, ViewerRenderInput } from '../viewer';
+import { SceneGfx, ViewerRenderInput } from '../viewer.js';
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
+import * as GX from '../gx/gx_enum.js';
+import * as GX_Material from '../gx/gx_material.js';
 
-import { BMD, BTK, MaterialEntry, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import { DrawParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import AnimationController from '../AnimationController';
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { computeViewMatrix, OrbitCameraController } from '../Camera';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase';
-import { assertExists } from '../util';
-import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { bindTTK1MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
+import { BMD, BTK, MaterialEntry, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import { DrawParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GXRenderHelperGfx } from '../gx/gx_render.js';
+import AnimationController from '../AnimationController.js';
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
+import { computeViewMatrix, OrbitCameraController } from '../Camera.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase.js';
+import { assertExists } from '../util.js';
+import { VertexAttributeInput } from '../gx/gx_displaylist.js';
+import { bindTTK1MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
 
 const scale = 200;
 const posMtx = mat4.create();

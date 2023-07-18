@@ -1,11 +1,11 @@
 
-import * as F3DEX from '../BanjoKazooie/f3dex';
-import * as RDP from '../Common/N64/RDP';
+import * as F3DEX from '../BanjoKazooie/f3dex.js';
+import * as RDP from '../Common/N64/RDP.js';
 
-import { nArray, assert, assertExists, hexzero } from "../util";
-import { ImageFormat } from "../Common/N64/Image";
+import { nArray, assert, assertExists, hexzero } from "../util.js";
+import { ImageFormat } from "../Common/N64/Image.js";
 import { vec4 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 // Interpreter for N64 F3DEX2 microcode.
 export const enum RSP_Geometry {

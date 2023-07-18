@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, assertExists } from "../util";
-import * as AGLParameter from "./AGLParameter";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, assertExists } from "../util.js";
+import * as AGLParameter from "./AGLParameter.js";
 
 export interface LightEnvObject {
     type: string;

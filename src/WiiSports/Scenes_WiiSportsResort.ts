@@ -1,17 +1,17 @@
-import * as Viewer from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import * as BRRES from "../rres/brres";
-import { assertExists } from "../util";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render";
-import AnimationController from "../AnimationController";
+import * as Viewer from "../viewer.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import * as BRRES from "../rres/brres.js";
+import { assertExists } from "../util.js";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render.js";
+import AnimationController from "../AnimationController.js";
 import { mat4, vec3 } from "gl-matrix";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { Magenta } from "../Color";
-import { SceneContext } from "../SceneBase";
-import { parseBLIGHT, EggLightManager } from "../rres/Egg";
-import { ResourceSystem } from "./ResouceSystem"
-import { PMP, PMPObject } from "./PMP"
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { Magenta } from "../Color.js";
+import { SceneContext } from "../SceneBase.js";
+import { parseBLIGHT, EggLightManager } from "../rres/Egg.js";
+import { ResourceSystem } from "./ResouceSystem.js";
+import { PMP, PMPObject } from "./PMP.js";
 
 const scratchVec3 = vec3.create();
 class WS2_Renderer extends BasicGXRendererHelper {

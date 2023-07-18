@@ -1,11 +1,11 @@
 import { vec3, vec4 } from "gl-matrix";
-import { TileState } from '../Common/N64/RDP';
-import { GfxTexture } from '../gfx/platform/GfxPlatform';
-import { clamp, lerp } from '../MathHelpers';
-import { getPointBspline, getPointBezier, getPointHermite, getDerivativeBezier, getDerivativeBspline, getDerivativeHermite } from '../Spline';
-import { TextureMapping } from '../TextureHolder';
-import { assert, assertExists, nArray } from '../util';
-import { AnimationTrack, ColorFlagStart, DataMap, EntryKind, MaterialData, MaterialFlags, Path, PathKind, GFXNode } from './room';
+import { TileState } from '../Common/N64/RDP.js';
+import { GfxTexture } from '../gfx/platform/GfxPlatform.js';
+import { clamp, lerp } from '../MathHelpers.js';
+import { getPointBspline, getPointBezier, getPointHermite, getDerivativeBezier, getDerivativeBspline, getDerivativeHermite } from '../Spline.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { assert, assertExists, nArray } from '../util.js';
+import { AnimationTrack, ColorFlagStart, DataMap, EntryKind, MaterialData, MaterialFlags, Path, PathKind, GFXNode } from './room.js';
 
 export const enum ModelField {
     Pitch,

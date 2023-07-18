@@ -1,18 +1,18 @@
 
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { SceneObjHolder, SceneObj } from "./Main";
-import { NameObj, MovementType } from "./NameObj";
-import { KCollisionServer, CheckCollideResult, KC_PrismData, KCHitSphereClassification } from "./KCollisionServer";
-import { HitSensor } from "./HitSensor";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor, ResourceHolder } from "./LiveActor";
-import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation, Vec3Zero } from "../MathHelpers";
-import { connectToScene, vecKillElement } from "./ActorUtil";
-import { JMapInfoIter } from "./JMapInfo";
-import { AABB } from "../Geometry";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { Yellow, colorNewCopy, Magenta } from "../Color";
+import { SceneObjHolder, SceneObj } from "./Main.js";
+import { NameObj, MovementType } from "./NameObj.js";
+import { KCollisionServer, CheckCollideResult, KC_PrismData, KCHitSphereClassification } from "./KCollisionServer.js";
+import { HitSensor } from "./HitSensor.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor, ResourceHolder } from "./LiveActor.js";
+import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util.js";
+import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation, Vec3Zero } from "../MathHelpers.js";
+import { connectToScene, vecKillElement } from "./ActorUtil.js";
+import { JMapInfoIter } from "./JMapInfo.js";
+import { AABB } from "../Geometry.js";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { Yellow, colorNewCopy, Magenta } from "../Color.js";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;

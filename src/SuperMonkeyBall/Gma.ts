@@ -9,12 +9,12 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
 import { mat4, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorNewFromRGBA8 } from "../Color";
-import * as GX from "../gx/gx_enum";
-import { TextureInputGX } from "../gx/gx_texture";
-import { assert, assertExists, hexzero, readString } from "../util";
-import { AVTpl } from "./AVTpl";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color, colorNewFromRGBA8 } from "../Color.js";
+import * as GX from "../gx/gx_enum.js";
+import { TextureInputGX } from "../gx/gx_texture.js";
+import { assert, assertExists, hexzero, readString } from "../util.js";
+import { AVTpl } from "./AVTpl.js";
 
 const SHAPE_BASE_SIZE = 0x60;
 

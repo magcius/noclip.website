@@ -1,19 +1,19 @@
 
 // Pokemon HeartGold SoulSilver
 
-import * as Viewer from '../viewer';
-import * as NARC from './narc';
+import * as Viewer from '../viewer.js';
+import * as NARC from './narc.js';
 
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer } from './render';
-import { assert, assertExists } from '../util';
+import { DataFetcher } from '../DataFetcher.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MDL0Renderer } from './render.js';
+import { assert, assertExists } from '../util.js';
 import { mat4 } from 'gl-matrix';
-import { SceneContext } from '../SceneBase';
-import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D';
-import { AABB } from '../Geometry';
-import { PlatinumMapRenderer, tryMDL0 } from './Scenes_PokemonPlatinum';
+import { SceneContext } from '../SceneBase.js';
+import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D.js';
+import { AABB } from '../Geometry.js';
+import { PlatinumMapRenderer, tryMDL0 } from './Scenes_PokemonPlatinum.js';
 
 const pathBase = `PokemonSoulSilver`;
 class ModelCache {

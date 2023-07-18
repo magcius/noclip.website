@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { mat4 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, lerpAngle } from "../MathHelpers";
-import AnimationController from "../AnimationController";
+import { computeModelMatrixSRT, lerp, lerpAngle } from "../MathHelpers.js";
+import AnimationController from "../AnimationController.js";
 
 export const enum LoopMode {
     ONCE = 0,

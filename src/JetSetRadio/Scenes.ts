@@ -1,26 +1,26 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { LoadedTexture, TextureHolder } from "../TextureHolder";
-import { assert, assertExists, hexzero0x, readString } from "../util";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
-import * as AFS from './AFS';
-import * as BYML from '../byml';
-import * as PVRT from "./PVRT";
-import * as Ninja from "./Ninja";
-import { NjsActionData, NjsActionInstance } from "./Render";
-import { CameraController } from "../Camera";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxFormat, makeTextureDescriptor2D, GfxTexture } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { LoadedTexture, TextureHolder } from "../TextureHolder.js";
+import { assert, assertExists, hexzero0x, readString } from "../util.js";
+import { SceneGfx, ViewerRenderInput } from "../viewer.js";
+import * as AFS from './AFS.js';
+import * as BYML from '../byml.js';
+import * as PVRT from "./PVRT.js";
+import * as Ninja from "./Ninja.js";
+import { NjsActionData, NjsActionInstance } from "./Render.js";
+import { CameraController } from "../Camera.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4 } from "gl-matrix";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { DataFetcher } from "../DataFetcher";
-import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers";
-import { Cyan, Magenta, Yellow , White} from "../Color";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
+import { Cyan, Magenta, Yellow , White} from "../Color.js";
 
 const pathBase = `JetSetRadio`;
 

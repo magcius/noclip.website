@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists } from "../util";
-import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM, getSizBitsPerPixel, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, decodeTex_I4, decodeTex_I8, TextureLUT, getTLUTSize } from "../Common/N64/Image";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assertExists } from "../util.js";
+import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM, getSizBitsPerPixel, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, decodeTex_I4, decodeTex_I8, TextureLUT, getTLUTSize } from "../Common/N64/Image.js";
 
 export interface Image {
     name: string;

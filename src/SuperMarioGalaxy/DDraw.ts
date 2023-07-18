@@ -2,17 +2,17 @@
 // Dynamic Draw
 // A helper for all those times that Galaxy just writes triangles raw.
 
-import * as GX from '../gx/gx_enum';
-import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { assert, assertExists, align } from '../util';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
-import { GfxDevice, GfxInputLayout, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { createInputLayout } from '../gx/gx_render';
-import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
-import { getSystemEndianness, Endianness } from '../endian';
+import * as GX from '../gx/gx_enum.js';
+import { GX_VtxDesc, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist.js';
+import { assert, assertExists, align } from '../util.js';
+import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxDevice, GfxInputLayout, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform.js';
+import { createInputLayout } from '../gx/gx_render.js';
+import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers.js';
+import { getSystemEndianness, Endianness } from '../endian.js';
 import { ReadonlyVec2, ReadonlyVec3 } from 'gl-matrix';
-import { Color, colorToRGBA8 } from '../Color';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { Color, colorToRGBA8 } from '../Color.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
     if (cmd === GX.Command.DRAW_QUADS)

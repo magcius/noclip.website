@@ -1,7 +1,7 @@
 
-import { lerp, saturate } from "../MathHelpers";
-import { SceneObjHolder } from "./Main";
-import { assert } from "../util";
+import { lerp, saturate } from "../MathHelpers.js";
+import { SceneObjHolder } from "./Main.js";
+import { assert } from "../util.js";
 
 interface SpineHost {
     spine: Spine | null;

@@ -1,9 +1,9 @@
 
 // Helpers to manage GPU buffer data...
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
-import { assert, align } from "../platform/GfxPlatformUtil";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform.js";
+import { assert, align } from "../platform/GfxPlatformUtil.js";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;

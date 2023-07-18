@@ -1,11 +1,11 @@
 
-import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { DataFetcher } from '../DataFetcher';
-import * as PPF from './ppf';
-import { PsychonautsRenderer, SceneRenderer } from './render';
-import { SceneContext } from '../SceneBase';
-import { assertExists } from '../util';
+import * as Viewer from '../viewer.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { DataFetcher } from '../DataFetcher.js';
+import * as PPF from './ppf.js';
+import { PsychonautsRenderer, SceneRenderer } from './render.js';
+import { SceneContext } from '../SceneBase.js';
+import { assertExists } from '../util.js';
 
 class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {

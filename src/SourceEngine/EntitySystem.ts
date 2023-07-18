@@ -1,26 +1,26 @@
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { IS_DEVELOPMENT } from '../BuildVersion';
-import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
-import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { AABB } from '../Geometry';
-import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
-import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers';
-import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
-import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers';
-import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil';
-import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util';
-import { BSPEntity } from './BSPFile';
-import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main';
-import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials';
-import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem';
-import { SpriteInstance } from './Sprite';
-import { computeMatrixForForwardDir } from './StaticDetailObject';
-import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio";
-import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT';
+import { IS_DEVELOPMENT } from '../BuildVersion.js';
+import { computeViewSpaceDepthFromWorldSpacePoint } from '../Camera.js';
+import { Color, colorCopy, colorLerp, colorNewCopy, Cyan, Green, Magenta, Red, White } from '../Color.js';
+import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { AABB } from '../Geometry.js';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
+import { projectionMatrixReverseDepth } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { GfxClipSpaceNearZ, GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform.js';
+import { GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
+import { clamp, computeModelMatrixR, computeModelMatrixSRT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, lerp, MathConstants, projectionMatrixForFrustum, randomRange, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../MathHelpers.js';
+import { getRandomFloat, getRandomVector } from '../SuperMarioGalaxy/ActorUtil.js';
+import { assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util.js';
+import { BSPEntity } from './BSPFile.js';
+import { BSPModelRenderer, SourceRenderContext, BSPRenderer, BSPSurfaceRenderer, SourceEngineView, SourceRenderer, SourceEngineViewType, SourceWorldViewRenderer, RenderObjectKind, ProjectedLightRenderer } from './Main.js';
+import { BaseMaterial, worldLightingCalcColorForPoint, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum } from './Materials.js';
+import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem.js';
+import { SpriteInstance } from './Sprite.js';
+import { computeMatrixForForwardDir } from './StaticDetailObject.js';
+import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio.js";
+import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT.js';
 
 type EntityMessageValue = string;
 

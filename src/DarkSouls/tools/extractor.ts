@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import * as BHD5 from "../bhd5";
-import * as MSB from "../msb";
-import * as BYML from "../../byml";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import * as BHD5 from "../bhd5.js";
+import * as MSB from "../msb.js";
+import * as BYML from "../../byml.js";
 import { readFileSync, openSync, readSync, closeSync, fstat, writeFileSync } from "fs";
 
 // Standalone tool designed for node to extract data.

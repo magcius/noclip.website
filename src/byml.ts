@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align } from "./util";
-import { Endianness } from "./endian";
+import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice.js";
+import { assert, readString, align } from "./util.js";
+import { Endianness } from "./endian.js";
 
 export const enum FileType {
     BYML,

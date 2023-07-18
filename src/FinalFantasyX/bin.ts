@@ -1,10 +1,10 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, assertExists, hexzero, readString } from "../util";
-import { AABB } from "../Geometry";
-import { GSRegister, GSMemoryMap, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, gsMemoryMapNew, gsMemoryMapUploadImage, GSPixelStorageFormat, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4HL_PSMCT32, gsMemoryMapReadImagePSMT4HH_PSMCT32, gsMemoryMapReadImagePSMT8H_PSMCT32, GSWrapMode, gsMemoryMapReadImagePSMCT16, GSCLUTPixelStorageFormat } from "../Common/PS2/GS";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, assertExists, hexzero, readString } from "../util.js";
+import { AABB } from "../Geometry.js";
+import { GSRegister, GSMemoryMap, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, gsMemoryMapNew, gsMemoryMapUploadImage, GSPixelStorageFormat, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4HL_PSMCT32, gsMemoryMapReadImagePSMT4HH_PSMCT32, gsMemoryMapReadImagePSMT8H_PSMCT32, GSWrapMode, gsMemoryMapReadImagePSMCT16, GSCLUTPixelStorageFormat } from "../Common/PS2/GS.js";
 import { mat4, vec3 } from "gl-matrix";
-import { Color, colorFromRGBA, colorNewFromRGBA } from "../Color";
-import { MathConstants } from "../MathHelpers";
+import { Color, colorFromRGBA, colorNewFromRGBA } from "../Color.js";
+import { MathConstants } from "../MathHelpers.js";
 
 const enum VifUnpackVN {
     S = 0x00,

@@ -1,29 +1,29 @@
 
-import * as Viewer from "../viewer";
+import * as Viewer from "../viewer.js";
 
-import * as BYML from "../byml";
-import * as MSB from "./msb";
-import * as DCX from "./dcx";
-import * as TPF from "./tpf";
-import * as BHD from "./bhd";
-import * as BND3 from "./bnd3";
-import * as FLVER from "./flver";
+import * as BYML from "../byml.js";
+import * as MSB from "./msb.js";
+import * as DCX from "./dcx.js";
+import * as TPF from "./tpf.js";
+import * as BHD from "./bhd.js";
+import * as BND3 from "./bnd3.js";
+import * as FLVER from "./flver.js";
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { DataFetcher } from "../DataFetcher";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DDSTextureHolder } from "./dds";
-import { assert, assertExists } from "../util";
-import { FLVERData, MSBRenderer } from "./render";
-import { Panel, LayerPanel } from "../ui";
-import { SceneContext } from "../SceneBase";
-import * as MTD from "./mtd";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { ParamFile, parseParamDef } from "./param";
-import { CameraController } from "../Camera";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { DataFetcher } from "../DataFetcher.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DDSTextureHolder } from "./dds.js";
+import { assert, assertExists } from "../util.js";
+import { FLVERData, MSBRenderer } from "./render.js";
+import { Panel, LayerPanel } from "../ui.js";
+import { SceneContext } from "../SceneBase.js";
+import * as MTD from "./mtd.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { ParamFile, parseParamDef } from "./param.js";
+import { CameraController } from "../Camera.js";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };

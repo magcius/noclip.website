@@ -1,18 +1,18 @@
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import * as CX from '../Common/Compression/CX';
-import * as U8 from '../rres/u8';
+import * as CX from '../Common/Compression/CX.js';
+import * as U8 from '../rres/u8.js';
 
-import * as TPL from './tpl';
-import * as World from './world';
-import { WorldRenderer, TPLTextureHolder } from './render';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { assertExists } from '../util';
-import { CameraController } from '../Camera';
-import { computeModelMatrixS } from '../MathHelpers';
-import * as AnimGroup from './AnimGroup';
+import * as TPL from './tpl.js';
+import * as World from './world.js';
+import { WorldRenderer, TPLTextureHolder } from './render.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { assertExists } from '../util.js';
+import { CameraController } from '../Camera.js';
+import { computeModelMatrixS } from '../MathHelpers.js';
+import * as AnimGroup from './AnimGroup.js';
 
 class SuperPaperMarioRenderer extends WorldRenderer {
     public adjustCameraController(c: CameraController) {

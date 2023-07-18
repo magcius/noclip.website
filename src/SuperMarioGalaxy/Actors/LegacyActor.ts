@@ -1,19 +1,19 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { assertExists, fallback, hexzero } from "../../util";
-import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor";
-import { SceneObjHolder, getObjectName } from "../Main";
-import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoRotateLocal, getJMapInfoTransLocal } from "../JMapInfo";
-import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil";
-import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor";
-import { isFirstStep } from "../Spine";
-import { computeModelMatrixSRT, scaleMatrix } from "../../MathHelpers";
-import { initMultiFur } from "../Fur";
-import { LightType } from "../DrawBuffer";
-import { emitEffect } from "../EffectSystem";
-import { createModelObjMapObj } from "./ModelObj";
-import { initLightCtrl } from "../LightData";
-import { initShadowFromCSV } from "../Shadow";
+import { assertExists, fallback, hexzero } from "../../util.js";
+import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor.js";
+import { SceneObjHolder, getObjectName } from "../Main.js";
+import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoRotateLocal, getJMapInfoTransLocal } from "../JMapInfo.js";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil.js";
+import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor.js";
+import { isFirstStep } from "../Spine.js";
+import { computeModelMatrixSRT, scaleMatrix } from "../../MathHelpers.js";
+import { initMultiFur } from "../Fur.js";
+import { LightType } from "../DrawBuffer.js";
+import { emitEffect } from "../EffectSystem.js";
+import { createModelObjMapObj } from "./ModelObj.js";
+import { initLightCtrl } from "../LightData.js";
+import { initShadowFromCSV } from "../Shadow.js";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.

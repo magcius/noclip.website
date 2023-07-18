@@ -1,31 +1,27 @@
 // Credits to chmcl for initial GMA/TPL support (https://github.com/ch-mcl/)
 
-import { mat4, vec3, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { mat4, vec3 } from "gl-matrix";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { transformVec3Mat4w1 } from "../MathHelpers.js";
+import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import {
-    compileVtxLoaderMultiVat,
-    getAttributeByteSize,
     GX_Array,
     GX_VtxAttrFmt,
     GX_VtxDesc,
     LoadedVertexData,
     VtxLoader,
-} from "../gx/gx_displaylist";
-import * as GX from "../gx/gx_enum";
-import { GXMaterialHacks } from "../gx/gx_material";
-import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { transformVec3Mat4w1 } from "../MathHelpers";
-import { fallbackUndefined } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import * as Gma from "./Gma";
-import { MaterialInst } from "./Material";
-import { RenderParams, RenderSort } from "./Model";
-import { RenderContext } from "./Render";
-import { TevLayerInst } from "./TevLayer";
+    compileVtxLoaderMultiVat
+} from "../gx/gx_displaylist.js";
+import * as GX from "../gx/gx_enum.js";
+import { GXMaterialHacks } from "../gx/gx_material.js";
+import { DrawParams, GXShapeHelperGfx, loadedDataCoalescerComboGfx } from "../gx/gx_render.js";
+import * as Gma from "./Gma.js";
+import { MaterialInst } from "./Material.js";
+import { RenderParams, RenderSort } from "./Model.js";
+import { RenderContext } from "./Render.js";
+import { TevLayerInst } from "./TevLayer.js";
 
 function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
     const vatFormat: GX_VtxAttrFmt[] = [];

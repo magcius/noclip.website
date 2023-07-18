@@ -1,31 +1,31 @@
 
-import * as CMB from './cmb';
-import * as CMAB from './cmab';
-import * as CSAB from './csab';
-import * as ZAR from './zar';
-import * as ZSI from './zsi';
-import * as LzS from './LzS';
+import * as CMB from './cmb.js';
+import * as CMAB from './cmab.js';
+import * as CSAB from './csab.js';
+import * as ZAR from './zar.js';
+import * as ZSI from './zsi.js';
+import * as LzS from './LzS.js';
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
-import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero } from '../util';
-import { DataFetcher } from '../DataFetcher';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render.js';
+import { SceneGroup } from '../viewer.js';
+import { assert, assertExists, hexzero } from '../util.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { mat4 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
-import { TransparentBlack, colorNewFromRGBA, White} from '../Color';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { MathConstants, scaleMatrix } from "../MathHelpers";
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import AnimationController from '../AnimationController.js';
+import { TransparentBlack, colorNewFromRGBA, White} from '../Color.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { MathConstants, scaleMatrix } from "../MathHelpers.js";
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 

@@ -1,15 +1,15 @@
 
-import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
-import { SceneContext } from '../../SceneBase';
-import { downloadBlob } from '../../DownloadUtils';
-import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat';
-import { assert } from '../../util';
-import * as Geometry from '../../Geometry';
+import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
+import { SceneContext } from '../../SceneBase.js';
+import { downloadBlob } from '../../DownloadUtils.js';
+import { AssetInfo, Mesh, AABB as UnityAABB, VertexFormat, StreamingInfo, ChannelInfo } from '../../../rust/pkg/index.js';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxFormat, GfxInputLayout, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../gfx/platform/GfxPlatform.js';
+import { FormatCompFlags, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
+import { assert } from '../../util.js';
+import * as Geometry from '../../Geometry.js';
 import { vec3 } from 'gl-matrix';
-import { rust } from '../../rustlib';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { rust } from '../../rustlib.js';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
 
 // this is a ballpark estimate, it's probably much lower
 const MAX_HEADER_LENGTH = 4096;

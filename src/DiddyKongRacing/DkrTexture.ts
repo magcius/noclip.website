@@ -1,11 +1,11 @@
 
-import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { translateCM } from '../Common/N64/RDP';
-import { TexCM } from '../Common/N64/Image';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { translateCM } from '../Common/N64/RDP.js';
+import { TexCM } from '../Common/N64/Image.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { vec2 } from 'gl-matrix';
-import { GfxRendererLayer, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
+import { GfxRendererLayer, GfxRenderInst } from '../gfx/render/GfxRenderInstManager.js';
 
 export const SIZE_OF_TEXTURE_INFO = 0x08;
 

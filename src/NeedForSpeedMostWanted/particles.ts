@@ -1,18 +1,18 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { IntersectionState } from "../Geometry";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
-import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers";
-import { DeviceProgram } from "../Program";
-import { assert } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { NfsMap } from "./map";
-import { NfsTexture } from "./region";
-import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { IntersectionState } from "../Geometry.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { assert } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { NfsMap } from "./map.js";
+import { NfsTexture } from "./region.js";
+import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class NfsParticleEmitterGroup {
 

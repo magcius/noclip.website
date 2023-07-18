@@ -1,11 +1,11 @@
 
 import { ReadonlyVec3, vec3 } from "gl-matrix";
-import { Color, colorCopy, colorNewCopy, White } from '../Color';
-import { SceneRenderContext } from "./render";
-import { ObjectInstance } from "./objects";
-import { AABB } from "../Geometry";
-import { spliceBisectRight } from "../util";
-import { clamp, transformVec3Mat4w1 } from "../MathHelpers";
+import { Color, colorCopy, colorNewCopy, White } from '../Color.js';
+import { SceneRenderContext } from "./render.js";
+import { ObjectInstance } from "./objects.js";
+import { AABB } from "../Geometry.js";
+import { spliceBisectRight } from "../util.js";
+import { clamp, transformVec3Mat4w1 } from "../MathHelpers.js";
 
 const scratchVec0 = vec3.create();
 const scratchVec1 = vec3.create();

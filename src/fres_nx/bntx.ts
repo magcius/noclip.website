@@ -1,9 +1,9 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
-import { isMarkerLittleEndian, readBinStr } from "./bfres";
-import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum";
-import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
+import { isMarkerLittleEndian, readBinStr } from "./bfres.js";
+import { ImageDimension, ImageFormat, ImageStorageDimension, TileMode, getChannelFormat } from "./nngfx_enum.js";
+import { getFormatBlockHeight, isChannelFormatSupported } from "./tegra_texture.js";
 
 export interface BNTX {
     textures: BRTI[];

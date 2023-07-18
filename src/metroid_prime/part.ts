@@ -1,7 +1,7 @@
-import { GenDescription } from './particles/element_generator';
-import { InputStream } from './stream';
-import { ResourceSystem } from './resource';
-import { assert } from '../util';
+import { GenDescription } from './particles/element_generator.js';
+import { InputStream } from './stream.js';
+import { ResourceSystem } from './resource.js';
+import { assert } from '../util.js';
 
 export interface PART {
     description: GenDescription;

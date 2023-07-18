@@ -1,23 +1,23 @@
 
-import { SceneDesc, SceneGfx } from "./viewer";
-import ArrayBufferSlice from "./ArrayBufferSlice";
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { readString, flatten } from "./util";
+import { SceneDesc, SceneGfx } from "./viewer.js";
+import ArrayBufferSlice from "./ArrayBufferSlice.js";
+import { GfxDevice } from "./gfx/platform/GfxPlatform.js";
+import { readString, flatten } from "./util.js";
 
-import * as Yaz0 from './Common/Compression/Yaz0';
-import * as CX from './Common/Compression/CX';
+import * as Yaz0 from './Common/Compression/Yaz0.js';
+import * as CX from './Common/Compression/CX.js';
 
-import * as Grezzo3DS from './oot3d/scenes';
-import * as NNS_G3D from './nns_g3d/scenes';
-import * as J3D from './j3d/scenes';
-import * as CTR_H3D from './Common/CTR_H3D/H3D';
-import * as RRES from './rres/scenes';
-import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
-import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
-import * as SourceFileDrops from './SourceEngine/Scenes_FileDrops';
-import * as SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall';
-import { SceneContext } from "./SceneBase";
-import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
+import * as Grezzo3DS from './oot3d/scenes.js';
+import * as NNS_G3D from './nns_g3d/scenes.js';
+import * as J3D from './j3d/scenes.js';
+import * as CTR_H3D from './Common/CTR_H3D/H3D.js';
+import * as RRES from './rres/scenes.js';
+import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD.js';
+import * as JPAExplorer from './InteractiveExamples/JPAExplorer.js';
+import * as SourceFileDrops from './SourceEngine/Scenes_FileDrops.js';
+import * as SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
+import { SceneContext } from "./SceneBase.js";
+import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher.js";
 
 function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedArrayBufferSlice> {
     const progressMeter = dataFetcher.progressMeter;

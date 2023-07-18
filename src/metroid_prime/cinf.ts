@@ -1,5 +1,5 @@
-import { InputStream } from './stream';
-import { ResourceGame, ResourceSystem } from './resource';
+import { InputStream } from './stream.js';
+import { ResourceGame, ResourceSystem } from './resource.js';
 import { quat, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 
 export class Bone {

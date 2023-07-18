@@ -1,10 +1,10 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import * as BYML from "../../byml";
-import * as Yaz0 from '../../Common/Compression/Yaz0';
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import * as BYML from "../../byml.js";
+import * as Yaz0 from '../../Common/Compression/Yaz0.js';
 import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync } from "fs";
-import { assertExists, hexzero, assert, readString } from "../../util";
-import { Endianness } from "../../endian";
+import { assertExists, hexzero, assert, readString } from "../../util.js";
+import { Endianness } from "../../endian.js";
 
 // Standalone tool designed for node to extract data.
 

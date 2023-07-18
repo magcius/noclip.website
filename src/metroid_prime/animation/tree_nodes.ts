@@ -1,11 +1,11 @@
-import { CharAnimTime } from './char_anim_time';
+import { CharAnimTime } from './char_anim_time.js';
 import {
     AdvancementDeltas, AdvancementResults, BoolPOINode, DoubleChildAdvancementResults,
     IAnimReader, Int32POINode, ParticlePOINode, PerSegmentData, POINode, SoundPOINode, SteadyStateAnimInfo
-} from './base_reader';
+} from './base_reader.js';
 import { quat, vec3 } from 'gl-matrix';
-import { AnimSysContext, IMetaAnim } from './meta_nodes';
-import { compareEpsilon } from '../../MathHelpers';
+import { AnimSysContext, IMetaAnim } from './meta_nodes.js';
+import { compareEpsilon } from '../../MathHelpers.js';
 
 function GetPOIList<T extends POINode>(time: CharAnimTime, listOut: T[], capacity: number, iterator: number, stream: T[], curTime: CharAnimTime): number {
     let ret = 0;

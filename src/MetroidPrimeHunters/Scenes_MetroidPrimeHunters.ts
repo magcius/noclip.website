@@ -1,23 +1,23 @@
 
 // Metroid Prime: Hunters
 
-import * as Viewer from '../viewer';
-import * as CX from '../Common/Compression/CX';
-import * as ARC from './mph_arc';
-import { parseMPH_Model, parseTEX0Texture } from './mph_binModel';
+import * as Viewer from '../viewer.js';
+import * as CX from '../Common/Compression/CX.js';
+import * as ARC from './mph_arc.js';
+import { parseMPH_Model, parseTEX0Texture } from './mph_binModel.js';
 
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MPHRenderer } from './render';
-import { assert, assertExists } from '../util';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { FakeTextureHolder } from '../TextureHolder';
-import { SceneContext } from '../SceneBase';
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { DataFetcher } from '../DataFetcher.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MPHRenderer } from './render.js';
+import { assert, assertExists } from '../util.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import { SceneContext } from '../SceneBase.js';
+import { CameraController } from '../Camera.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const pathBase = `MetroidPrimeHunters`;
 

@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, hexzero0x } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, hexzero, hexzero0x } from "../util.js";
 
 enum op {
     END = 0x01,

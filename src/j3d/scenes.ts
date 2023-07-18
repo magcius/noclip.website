@@ -1,23 +1,23 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { readString } from '../util.js';
 
-import * as UI from '../ui';
-import * as Viewer from '../viewer';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
-import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { readBTI_Texture } from '../Common/JSYSTEM/JUTTexture';
-import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GXMaterialHacks } from '../gx/gx_material';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import * as JPAExplorer from '../InteractiveExamples/JPAExplorer';
-import { SceneContext } from '../SceneBase';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import { readBTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
+import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import * as JPAExplorer from '../InteractiveExamples/JPAExplorer.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 export class BasicRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;

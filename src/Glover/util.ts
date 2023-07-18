@@ -1,4 +1,4 @@
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 import { vec3, mat4 } from 'gl-matrix';
 
 // Table and algorithm provided by:

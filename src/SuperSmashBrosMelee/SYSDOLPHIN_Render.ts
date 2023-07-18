@@ -1,23 +1,23 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc, HSD_PObj, HSD_PObjFlags } from "./SYSDOLPHIN";
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, DrawParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
-import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
-import { LoadedVertexData } from "../gx/gx_displaylist";
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput, Texture } from "../viewer";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc, HSD_PObj, HSD_PObjFlags } from "./SYSDOLPHIN.js";
+import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, DrawParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render.js";
+import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers.js";
+import { LoadedVertexData } from "../gx/gx_displaylist.js";
+import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput, Texture } from "../viewer.js";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import * as GX from "../gx/gx_enum";
-import { TextureMapping } from "../TextureHolder";
-import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
-import { assert, hexzero, assertExists } from "../util";
-import { Camera } from "../Camera";
-import { getPointHermite } from "../Spline";
-import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp";
-import { colorNewCopy, White, Color, colorCopy } from "../Color";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from "../gx/gx_enum.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { calcMipChain, TextureInputGX } from "../gx/gx_texture.js";
+import { assert, hexzero, assertExists } from "../util.js";
+import { Camera } from "../Camera.js";
+import { getPointHermite } from "../Spline.js";
+import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp.js";
+import { colorNewCopy, White, Color, colorCopy } from "../Color.js";
 
 class HSD_TObj_Data {
     public gfxSampler: GfxSampler;

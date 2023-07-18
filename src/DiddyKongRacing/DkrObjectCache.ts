@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataManager } from "./DataManager";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataManager } from "./DataManager.js";
 
 export class DkrObjectCache {
     private objectHeaders: any = {};

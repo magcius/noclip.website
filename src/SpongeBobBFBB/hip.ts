@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataStream } from './util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { DataStream } from './util.js';
 
 export interface Asset {
     id: number;

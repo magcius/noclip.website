@@ -1,13 +1,13 @@
 
 // Nintendo NITRO-System (DS) G3D
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
-import * as NITRO_TEX from "../SuperMario64DS/nitro_tex";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
+import * as NITRO_TEX from "../SuperMario64DS/nitro_tex.js";
 import { mat4, mat2d, vec2 } from "gl-matrix";
-import { GfxCullMode } from "../gfx/platform/GfxPlatform";
-import AnimationController from "../AnimationController";
-import { lerp } from "../MathHelpers";
+import { GfxCullMode } from "../gfx/platform/GfxPlatform.js";
+import AnimationController from "../AnimationController.js";
+import { lerp } from "../MathHelpers.js";
 
 //#region Misc Helpers
 export function fx16(n: number): number {

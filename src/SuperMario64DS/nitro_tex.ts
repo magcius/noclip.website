@@ -1,8 +1,8 @@
 
 // Read DS texture formats.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 
 export enum Format {
     Tex_None =       0x00,

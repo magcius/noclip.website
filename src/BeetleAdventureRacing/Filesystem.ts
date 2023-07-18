@@ -1,9 +1,9 @@
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { DataFetcher } from "../DataFetcher";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
-import * as MIO0 from "../Common/Compression/MIO0";
-import { pathBase } from "./Scenes";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { DataFetcher } from "../DataFetcher.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString } from "../util.js";
+import * as MIO0 from "../Common/Compression/MIO0.js";
+import { pathBase } from "./Scenes.js";
 
 export async function loadFilesystem(dataFetcher: DataFetcher, device: GfxDevice): Promise<Filesystem> {
     const fsbin = await dataFetcher.fetchData(`${pathBase}/filesystem.bin`);

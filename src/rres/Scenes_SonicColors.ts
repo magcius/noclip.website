@@ -1,20 +1,20 @@
 
-import * as Viewer from '../viewer';
-import * as U8 from './u8';
-import * as BRRES from './brres';
+import * as Viewer from '../viewer.js';
+import * as U8 from './u8.js';
+import * as BRRES from './brres.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec3 } from "gl-matrix";
-import { readString, assert, assertExists } from "../util";
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render';
-import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GXMaterialHacks } from '../gx/gx_material';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { SceneContext } from '../SceneBase';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { readString, assert, assertExists } from "../util.js";
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render.js';
+import AnimationController from '../AnimationController.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 interface MapEntry {
     index: number;

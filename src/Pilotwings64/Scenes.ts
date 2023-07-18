@@ -1,39 +1,39 @@
 
-import * as RDP from '../Common/N64/RDP';
+import * as RDP from '../Common/N64/RDP.js';
 
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor,
-} from "../gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
-import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero, nArray } from "../util";
-import { decompress } from "../Common/Compression/MIO0";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { DeviceProgram } from "../Program";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderInstManager";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
+} from "../gfx/platform/GfxPlatform.js";
+import { SceneGfx, ViewerRenderInput, Texture } from "../viewer.js";
+import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert, hexzero, nArray } from "../util.js";
+import { decompress } from "../Common/Compression/MIO0.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderInstManager.js";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers";
-import { CameraController } from "../Camera";
-import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
-import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex";
-import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
-import { TextureMapping } from "../TextureHolder";
-import { Endianness } from "../endian";
-import { DataFetcher } from "../DataFetcher";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { getCoeffHermite, getDerivativeCubic, getPointCubic, getPointHermite } from "../Spline";
-import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
-import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { F3DEX_Program } from "../BanjoKazooie/render";
-import { calcTextureScaleForShift } from '../Common/N64/RSP';
-import { colorNewFromRGBA } from '../Color';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
+import { CameraController } from "../Camera.js";
+import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers.js";
+import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex.js";
+import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { Endianness } from "../endian.js";
+import { DataFetcher } from "../DataFetcher.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { getCoeffHermite, getDerivativeCubic, getPointCubic, getPointHermite } from "../Spline.js";
+import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui.js";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { F3DEX_Program } from "../BanjoKazooie/render.js";
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { colorNewFromRGBA } from '../Color.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 
 interface Pilotwings64FSFileChunk {
     tag: string;

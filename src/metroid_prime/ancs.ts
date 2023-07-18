@@ -1,15 +1,15 @@
 // Implements Retro's ANCS format as seen in Metroid Prime 1.
 
-import { assert } from '../util';
+import { assert } from '../util.js';
 
-import { ResourceGame, ResourceSystem } from './resource';
-import { CMDL } from './cmdl';
-import { InputStream } from './stream';
+import { ResourceGame, ResourceSystem } from './resource.js';
+import { CMDL } from './cmdl.js';
+import { InputStream } from './stream.js';
 
-import { AdditiveAnimation, Animation, AnimationSet, CreateMetaAnim, CreateMetaTrans, HalfTransition, Transition, TransitionDatabase } from './animation/meta_nodes';
-import { CINF } from './cinf';
-import { AABB } from '../Geometry';
-import * as EVNT from './evnt';
+import { AdditiveAnimation, Animation, AnimationSet, CreateMetaAnim, CreateMetaTrans, HalfTransition, Transition, TransitionDatabase } from './animation/meta_nodes.js';
+import { CINF } from './cinf.js';
+import { AABB } from '../Geometry.js';
+import * as EVNT from './evnt.js';
 
 // minimal implementation of character set entry
 export interface MetroidCharacter {

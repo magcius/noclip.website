@@ -33,14 +33,14 @@
 // don't have the display list that sets these registers serialized and instead just use
 // standard formats.
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { align, assert, hexzero, assertExists, nArray, fallbackUndefined } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { align, assert, hexzero, assertExists, nArray, fallbackUndefined } from '../util.js';
 
-import * as GX from './gx_enum';
-import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat';
-import { HashMap, nullHashFunc } from '../HashMap';
-import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformUtil';
+import * as GX from './gx_enum.js';
+import { Endianness, getSystemEndianness } from '../endian.js';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat.js';
+import { HashMap, nullHashFunc } from '../HashMap.js';
+import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformUtil.js';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {

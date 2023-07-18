@@ -1,7 +1,7 @@
-import { ElectricDescription } from './particles/electric_generator';
-import { InputStream } from './stream';
-import { ResourceSystem } from './resource';
-import { assert } from '../util';
+import { ElectricDescription } from './particles/electric_generator.js';
+import { InputStream } from './stream.js';
+import { ResourceSystem } from './resource.js';
+import { assert } from '../util.js';
 
 export interface ELSC {
     description: ElectricDescription;

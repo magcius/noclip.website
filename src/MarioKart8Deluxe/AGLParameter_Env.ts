@@ -1,9 +1,9 @@
 
 import { ReadonlyVec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color } from "../Color";
-import { assert, assertExists } from "../util";
-import * as AGLParameter from "./AGLParameter";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Color } from "../Color.js";
+import { assert, assertExists } from "../util.js";
+import * as AGLParameter from "./AGLParameter.js";
 
 interface DirectionalLight {
     nameHash: number;

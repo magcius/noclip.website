@@ -1,29 +1,29 @@
 
-import * as UI from "../ui";
-import * as Viewer from "../viewer";
+import * as UI from "../ui.js";
+import * as Viewer from "../viewer.js";
 import * as rw from "librw";
 // @ts-ignore
 import program_glsl from './program.glsl';
-import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { DeviceProgram } from "../Program";
-import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
-import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { TextureMapping, TextureBase } from "../TextureHolder.js";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxProgram, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxTextureUsage, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
-import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { align, assert } from "../util";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
-import { ItemInstance, ObjectDefinition } from "./item";
-import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
-import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
-import { AABB } from "../Geometry";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { GraphObjBase } from "../SceneBase";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { align, assert } from "../util.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { ItemInstance, ObjectDefinition } from "./item.js";
+import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color.js";
+import { ColorSet, emptyColorSet, lerpColorSet } from "./time.js";
+import { AABB } from "../Geometry.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GraphObjBase } from "../SceneBase.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 const DRAW_DISTANCE_FACTOR = 2.5;

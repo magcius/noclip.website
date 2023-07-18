@@ -1,9 +1,9 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { decodeString } from "../util";
-import { LooseMount, SourceFileSystem, SourceLoadContext } from "./Main";
-import { createScene } from "./Scenes";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { decodeString } from "../util.js";
+import { LooseMount, SourceFileSystem, SourceLoadContext } from "./Main.js";
+import { createScene } from "./Scenes.js";
 
 class NeoTokyoSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {

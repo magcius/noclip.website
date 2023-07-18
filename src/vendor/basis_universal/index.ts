@@ -1,5 +1,5 @@
 // @ts-ignore
-import Module from "./basis_transcoder";
+import Module from "./basis_transcoder.js";
 
 export enum BasisFormat {
   cTFETC1,

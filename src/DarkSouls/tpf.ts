@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as DDS from "./dds";
-import { readString, assert } from "../util";
-import { downloadBufferSlice } from "../DownloadUtils";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as DDS from "./dds.js";
+import { readString, assert } from "../util.js";
+import { downloadBufferSlice } from "../DownloadUtils.js";
 
 export interface TPF {
     textures: DDS.DDS[];

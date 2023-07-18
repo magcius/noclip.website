@@ -1,15 +1,15 @@
 
-import * as Viewer from "./viewer";
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { SceneContext } from "./SceneBase";
+import * as Viewer from "./viewer.js";
+import { GfxDevice } from "./gfx/platform/GfxPlatform.js";
+import { SceneContext } from "./SceneBase.js";
 
-import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
-import * as H3D from "./Common/CTR_H3D/H3D";
-import { CtrTextureHolder } from "./oot3d/render";
-import * as NARC from "./nns_g3d/narc";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers";
-import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper";
-import { GfxrAttachmentSlot } from "./gfx/render/GfxRenderGraph";
+import { createBasicRRESRendererFromBRRES } from "./rres/scenes.js";
+import * as H3D from "./Common/CTR_H3D/H3D.js";
+import { CtrTextureHolder } from "./oot3d/render.js";
+import * as NARC from "./nns_g3d/narc.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers.js";
+import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper.js";
+import { GfxrAttachmentSlot } from "./gfx/render/GfxRenderGraph.js";
 
 const id = 'test';
 const name = "Test Scenes";

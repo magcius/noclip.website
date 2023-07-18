@@ -1,12 +1,12 @@
 
-import { GfxTexture, GfxDevice, GfxInputLayout, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeTextureFromXNA_Texture2D } from "./Texture";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { GfxTexture, GfxDevice, GfxInputLayout, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { makeTextureFromXNA_Texture2D } from "./Texture.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { vec2, mat4 } from "gl-matrix";
-import { assert } from "../util";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { XNA_Texture2D } from "./XNB";
-import { Fez_AnimatedTexture } from "./XNB_Fez";
+import { assert } from "../util.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { XNA_Texture2D } from "./XNB.js";
+import { Fez_AnimatedTexture } from "./XNB_Fez.js";
 
 interface Frame {
     time: number;

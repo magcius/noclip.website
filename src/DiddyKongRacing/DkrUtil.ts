@@ -1,9 +1,9 @@
 
 import { mat4, quat } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Camera } from "../Camera";
-import { DkrTexture } from "./DkrTexture";
-import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Camera } from "../Camera.js";
+import { DkrTexture } from "./DkrTexture.js";
+import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
 
 export const IDENTITY_MATRIX: mat4 = [
     1, 0, 0, 0,

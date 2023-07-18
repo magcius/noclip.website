@@ -1,11 +1,11 @@
 
 // Nintendo's "TPL" ("Texture PaLette") format.
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Texture from '../gx/gx_texture';
+import * as GX from '../gx/gx_enum.js';
+import * as GX_Texture from '../gx/gx_texture.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert } from "../util.js";
 
 export interface TPLTexture extends GX_Texture.TextureInputGX {
     wrapS: GX.WrapMode;

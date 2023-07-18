@@ -1,23 +1,23 @@
 
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { assert, assertExists, nArray, readString } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
-import { SceneGfx, Texture, ViewerRenderInput } from "../viewer";
-import { DeviceProgram } from "../Program";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { TextureMapping } from "../TextureHolder";
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D, GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxProgram, GfxCullMode, GfxFrontFaceMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { assert, assertExists, nArray, readString } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers.js";
+import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
+import { DeviceProgram } from "../Program.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { mat4 } from "gl-matrix";
-import { Camera, CameraController } from "../Camera";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { WAD, WADLumpType } from "./WAD";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { LightmapPackerPage } from "../SourceEngine/BSPFile";
+import { Camera, CameraController } from "../Camera.js";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { WAD, WADLumpType } from "./WAD.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
 
 function getMipTexName(buffer: ArrayBufferSlice): string {
     return readString(buffer, 0x00, 0x10, true);

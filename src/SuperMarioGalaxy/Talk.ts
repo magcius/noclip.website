@@ -1,17 +1,17 @@
 
 import { ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { getMatrixTranslation, invlerp, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers";
-import { assert, assertExists, fallback, leftPad } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { calcSqDistanceToPlayer, connectToScene, getAreaObj, getPlayerPos, vecKillElement } from "./ActorUtil";
-import { AreaFormType, AreaObj } from "./AreaObj";
-import { getJMapInfoArg0, JMapInfoIter,  } from "./JMapInfo";
-import { connectToSceneLayout, createAndAddPaneCtrl, getPaneAnimFrameMax, hideScreen, LayoutActor, setAnimFrameAndStopAdjustTextWidth, setTextBoxRecursive, showLayout, showScreen } from "./Layout";
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { SceneObj, SceneObjHolder } from "./Main";
-import { JUTMesgFlowNode, JUTMesgFlowNodeBranch, JUTMesgFlowNodeEvent, JUTMesgFlowNodeType, TalkMessageInfo } from "./MessageData";
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { getMatrixTranslation, invlerp, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers.js";
+import { assert, assertExists, fallback, leftPad } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { calcSqDistanceToPlayer, connectToScene, getAreaObj, getPlayerPos, vecKillElement } from "./ActorUtil.js";
+import { AreaFormType, AreaObj } from "./AreaObj.js";
+import { getJMapInfoArg0, JMapInfoIter,  } from "./JMapInfo.js";
+import { connectToSceneLayout, createAndAddPaneCtrl, getPaneAnimFrameMax, hideScreen, LayoutActor, setAnimFrameAndStopAdjustTextWidth, setTextBoxRecursive, showLayout, showScreen } from "./Layout.js";
+import { LiveActor, ZoneAndLayer } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { JUTMesgFlowNode, JUTMesgFlowNodeBranch, JUTMesgFlowNodeEvent, JUTMesgFlowNodeType, TalkMessageInfo } from "./MessageData.js";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
 
 function connectToSceneTalkLayout(sceneObjHolder: SceneObjHolder, actor: LayoutActor): void {
     connectToScene(sceneObjHolder, actor, MovementType.Layout, CalcAnimType.Layout, DrawBufferType.None, DrawType.TalkLayout);

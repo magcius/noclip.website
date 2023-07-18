@@ -1,16 +1,16 @@
-import * as Viewer from '../viewer';
-import { DeviceProgram } from '../Program';
-import { SceneContext } from '../SceneBase';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import * as Viewer from '../viewer.js';
+import { DeviceProgram } from '../Program.js';
+import { SceneContext } from '../SceneBase.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager';
-import { AABB } from '../Geometry';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager.js';
+import { AABB } from '../Geometry.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;

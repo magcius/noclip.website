@@ -1,11 +1,11 @@
 
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
 
-import { assert, assertExists } from "../util";
+import { assert, assertExists } from "../util.js";
 
 import { InputStream } from "./stream"
-import { ResourceSystem } from "./resource";
-import * as STRG from "./strg";
+import { ResourceSystem } from "./resource.js";
+import * as STRG from "./strg.js";
 
 export interface Area {
     areaName: string;

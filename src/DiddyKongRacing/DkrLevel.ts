@@ -1,24 +1,24 @@
 
 import { vec3 } from "gl-matrix";
-import { updateCameraViewMatrix } from "./DkrUtil";
-import { DkrLevelModel } from "./DkrLevelModel";
-import { colorNewFromRGBA, Color } from "../Color";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { ViewerRenderInput } from "../viewer";
-import { DataManager } from "./DataManager";
-import { DkrTextureCache } from "./DkrTextureCache";
-import { DkrObject } from "./DkrObject";
-import { DkrObjectCache } from "./DkrObjectCache";
-import { DkrLevelObjectMap } from "./DkrLevelObjectMap";
-import { DkrSprites, SPRITE_LAYER_SOLID, SPRITE_LAYER_TRANSPARENT } from "./DkrSprites";
-import { DkrControlGlobals } from "./DkrControlGlobals";
-import { DkrAnimationTracks } from "./DkrAnimationTrack";
-import { DkrDrawCall } from "./DkrDrawCall";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { Panel, Slider } from "../ui";
-import { F3DDKR_Program } from "./F3DDKR_Program";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { updateCameraViewMatrix } from "./DkrUtil.js";
+import { DkrLevelModel } from "./DkrLevelModel.js";
+import { colorNewFromRGBA, Color } from "../Color.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DataManager } from "./DataManager.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
+import { DkrObject } from "./DkrObject.js";
+import { DkrObjectCache } from "./DkrObjectCache.js";
+import { DkrLevelObjectMap } from "./DkrLevelObjectMap.js";
+import { DkrSprites, SPRITE_LAYER_SOLID, SPRITE_LAYER_TRANSPARENT } from "./DkrSprites.js";
+import { DkrControlGlobals } from "./DkrControlGlobals.js";
+import { DkrAnimationTracks } from "./DkrAnimationTrack.js";
+import { DkrDrawCall } from "./DkrDrawCall.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { Panel, Slider } from "../ui.js";
+import { F3DDKR_Program } from "./F3DDKR_Program.js";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 
 export let CURRENT_LEVEL_ID = -1;
 

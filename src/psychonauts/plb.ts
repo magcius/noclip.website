@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataStream } from "./DataStream";
-import { assert } from "../util";
-import { AABB } from "../Geometry";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DataStream } from "./DataStream.js";
+import { assert } from "../util.js";
+import { AABB } from "../Geometry.js";
 import { ReadonlyVec2, vec2, vec3, vec4 } from "gl-matrix";
-import { normalizeTextureName } from "./ppf";
-import { GfxTopology } from "../gfx/helpers/TopologyHelpers";
+import { normalizeTextureName } from "./ppf.js";
+import { GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
 
 export interface EScene {
     textureReferences: TextureReference[];

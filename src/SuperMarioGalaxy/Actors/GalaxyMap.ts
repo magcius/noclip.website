@@ -1,22 +1,22 @@
 
 import { mat4, vec2 } from "gl-matrix";
-import { TransparentBlack } from "../../Color";
-import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
-import { GfxClipSpaceNearZ, GfxFormat } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph";
-import { GX_Program } from "../../gx/gx_material";
-import { fillSceneParams, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
-import { projectionMatrixForCuboid, getMatrixTranslation } from "../../MathHelpers";
-import { assertExists } from "../../util";
-import { connectToScene } from "../ActorUtil";
-import { hideLayout, hidePaneRecursive, LayoutActor, setAnimFrameAndStopAdjustTextWidth, setTextBoxRecursive, showLayout, showPaneRecursive } from "../Layout";
-import { SceneObj, SceneObjHolder } from "../Main";
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "../NameObj";
-import { isFirstStep } from "../Spine";
-import { GalaxyNameSortTable } from "./MiscActor";
-import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers";
-import { getLayoutMessageDirect } from "../MessageData";
+import { TransparentBlack } from "../../Color.js";
+import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout.js";
+import { GfxClipSpaceNearZ, GfxFormat } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph.js";
+import { GX_Program } from "../../gx/gx_material.js";
+import { fillSceneParams, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render.js";
+import { projectionMatrixForCuboid, getMatrixTranslation } from "../../MathHelpers.js";
+import { assertExists } from "../../util.js";
+import { connectToScene } from "../ActorUtil.js";
+import { hideLayout, hidePaneRecursive, LayoutActor, setAnimFrameAndStopAdjustTextWidth, setTextBoxRecursive, showLayout, showPaneRecursive } from "../Layout.js";
+import { SceneObj, SceneObjHolder } from "../Main.js";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "../NameObj.js";
+import { isFirstStep } from "../Spine.js";
+import { GalaxyNameSortTable } from "./MiscActor.js";
+import { projectionMatrixConvertClipSpaceNearZ } from "../../gfx/helpers/ProjectionHelpers.js";
+import { getLayoutMessageDirect } from "../MessageData.js";
 
 export class GalaxyMapBackground extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder) {

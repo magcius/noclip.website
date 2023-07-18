@@ -1,20 +1,20 @@
 // Implements support for Retro Studios actor data
 
-import { ResourceGame, ResourceSystem } from './resource';
-import { readString, assert, assertExists } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { ResourceGame, ResourceSystem } from './resource.js';
+import { readString, assert, assertExists } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { CMDL } from './cmdl';
-import { ANCS } from './ancs';
-import { CHAR } from './char';
-import { InputStream } from './stream';
-import { colorFromRGBA, colorNewFromRGBA, Color } from '../Color';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { AreaVersion } from './mrea';
-import { AnimationData } from './render';
-import { AnimSysContext } from './animation/meta_nodes';
-import { PART } from './part';
-import { ELSC } from './elsc';
+import { CMDL } from './cmdl.js';
+import { ANCS } from './ancs.js';
+import { CHAR } from './char.js';
+import { InputStream } from './stream.js';
+import { colorFromRGBA, colorNewFromRGBA, Color } from '../Color.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { AreaVersion } from './mrea.js';
+import { AnimationData } from './render.js';
+import { AnimSysContext } from './animation/meta_nodes.js';
+import { PART } from './part.js';
+import { ELSC } from './elsc.js';
 
 export const enum MP1EntityType {
     Actor                   = 0x00,

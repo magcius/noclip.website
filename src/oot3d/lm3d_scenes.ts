@@ -1,21 +1,21 @@
 
 // Luigi's Mansion 3D
 
-import * as CMB from './cmb';
-import * as CMAB from './cmab';
-import * as ZAR from './zar';
-import * as BCSV from '../luigis_mansion/bcsv';
-import * as CTXB from './ctxb';
+import * as CMB from './cmb.js';
+import * as CMAB from './cmab.js';
+import * as ZAR from './zar.js';
+import * as BCSV from '../luigis_mansion/bcsv.js';
+import * as CTXB from './ctxb.js';
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../viewer.js';
 
-import { CmbInstance, CmbData } from './render';
-import { SceneGroup } from '../viewer';
-import { leftPad, assertExists } from '../util';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
-import { computeModelMatrixSRT } from '../MathHelpers';
-import { SceneContext } from '../SceneBase';
+import { CmbInstance, CmbData } from './render.js';
+import { SceneGroup } from '../viewer.js';
+import { leftPad, assertExists } from '../util.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GrezzoTextureHolder, MultiCmbScene } from './scenes.js';
+import { computeModelMatrixSRT } from '../MathHelpers.js';
+import { SceneContext } from '../SceneBase.js';
 
 function bcsvHashLM(str: string): number {
     let hash = 0;

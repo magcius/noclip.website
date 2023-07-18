@@ -1,5 +1,5 @@
 
-import { assert } from "../platform/GfxPlatformUtil";
+import { assert } from "../platform/GfxPlatformUtil.js";
 
 export const enum GfxTopology {
     Triangles, TriStrips, TriFans, Quads, QuadStrips,

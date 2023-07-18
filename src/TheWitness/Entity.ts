@@ -1,14 +1,14 @@
 
 import { mat4, quat, vec3 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
-import { Color, colorNewCopy, Magenta } from "../Color";
-import { drawWorldSpaceAABB, drawWorldSpaceCircle, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { scaleMatrix, Vec3UnitY } from "../MathHelpers";
-import { leftPad } from "../util";
-import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets";
-import { TheWitnessGlobals } from "./Globals";
-import { Mesh_Instance } from "./Render";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { Color, colorNewCopy, Magenta } from "../Color.js";
+import { drawWorldSpaceAABB, drawWorldSpaceCircle, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { scaleMatrix, Vec3UnitY } from "../MathHelpers.js";
+import { leftPad } from "../util.js";
+import { Asset_Type, Lightmap_Asset, Mesh_Asset } from "./Assets.js";
+import { TheWitnessGlobals } from "./Globals.js";
+import { Mesh_Instance } from "./Render.js";
 
 export class Entity_Manager {
     public flat_entity_list: Entity[] = [];

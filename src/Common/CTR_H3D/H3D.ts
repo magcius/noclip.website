@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { readString, assert } from "../../util";
-import { computeTextureByteSize, decodeTexture, TextureFormat } from "../../oot3d/pica_texture";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { readString, assert } from "../../util.js";
+import { computeTextureByteSize, decodeTexture, TextureFormat } from "../../oot3d/pica_texture.js";
 import { mat4 } from "gl-matrix";
 
 //#region PICA

@@ -1,28 +1,28 @@
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as NARC from '../nns_g3d/narc';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as NARC from '../nns_g3d/narc.js';
 
-import * as BYML from '../byml';
-import * as LZ77 from './lz77';
-import * as BMD from './sm64ds_bmd';
-import * as BCA from './sm64ds_bca';
+import * as BYML from '../byml.js';
+import * as LZ77 from './lz77.js';
+import * as BMD from './sm64ds_bmd.js';
+import * as BCA from './sm64ds_bca.js';
 
-import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { vec3, mat4, mat2d } from 'gl-matrix';
-import { assertExists, assert, leftPad } from '../util';
-import AnimationController from '../AnimationController';
-import { executeOnPass, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { SceneContext } from '../SceneBase';
-import { DataFetcher } from '../DataFetcher';
-import { MathConstants, clamp, scaleMatrix } from '../MathHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { assertExists, assert, leftPad } from '../util.js';
+import AnimationController from '../AnimationController.js';
+import { executeOnPass, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { SceneContext } from '../SceneBase.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { MathConstants, clamp, scaleMatrix } from '../MathHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
 enum ObjectId {

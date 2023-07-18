@@ -3,13 +3,13 @@
 // https://docs.google.com/spreadsheets/u/0/d/1xfK5hpj5oBP9rCwlT9PTkyNrq3sHPZIRbtzqTTPNP3Q/htmlview
 // https://github.com/PsiLupan/FRAY/
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 import { vec3, mat4 } from "gl-matrix";
-import * as GX from "../gx/gx_enum";
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
-import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
-import { calcTextureSize } from "../gx/gx_texture";
+import * as GX from "../gx/gx_enum.js";
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist.js";
+import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color.js";
+import { calcTextureSize } from "../gx/gx_texture.js";
 
 export interface HSD_ArchiveSymbol {
     name: string;

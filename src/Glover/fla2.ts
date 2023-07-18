@@ -1,5 +1,5 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert } from "../util.js";
 
 export var decompress = function (buffer: ArrayBufferSlice, srcOffs: number = 0) : ArrayBufferSlice {
     const view = buffer.createDataView();

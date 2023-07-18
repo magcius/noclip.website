@@ -1,22 +1,17 @@
-import { Camera, CameraController } from "../Camera";
+import { CameraController } from "../Camera.js";
 import {
     makeAttachmentClearDescriptor,
     makeBackbufferDescSimple,
     opaqueBlackFullClearRenderPassDescriptor,
     pushAntialiasingPostProcessPass,
-} from "../gfx/helpers/RenderGraphHelpers";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
-import { GXMaterialHacks } from "../gx/gx_material";
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../gx/gx_render";
-import * as Viewer from "../viewer";
-import { ModelCache } from "./ModelCache";
-import { FileDropWorld, StageData, StageWorld, World, WorldData } from "./World";
-import * as UI from "../ui";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { S16_TO_RADIANS, Sphere } from "./Utils";
-import { mat4, vec3 } from "gl-matrix";
-import { MathConstants } from "../MathHelpers";
+} from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
+import * as UI from "../ui.js";
+import * as Viewer from "../viewer.js";
+import { FileDropWorld, StageWorld, World, WorldData } from "./World.js";
 
 // TODO(complexplane): Put somewhere else
 export type RenderContext = {

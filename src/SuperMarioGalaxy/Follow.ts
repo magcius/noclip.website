@@ -1,12 +1,12 @@
 
 import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
-import { assert, assertExists } from "../util";
-import { connectToSceneMapObjMovement } from "./ActorUtil";
-import { JMapInfoIter, JMapLinkInfo } from "./JMapInfo";
-import { getJMapInfoRotate, getJMapInfoTrans, LiveActor } from "./LiveActor";
-import { SceneObj, SceneObjHolder } from "./Main";
-import { NameObj } from "./NameObj";
+import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers.js";
+import { assert, assertExists } from "../util.js";
+import { connectToSceneMapObjMovement } from "./ActorUtil.js";
+import { JMapInfoIter, JMapLinkInfo } from "./JMapInfo.js";
+import { getJMapInfoRotate, getJMapInfoTrans, LiveActor } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { NameObj } from "./NameObj.js";
 
 type BaseMatrixFollowValidator = unknown;
 

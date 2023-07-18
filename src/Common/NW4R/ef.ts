@@ -1,12 +1,12 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { arrayRemove, assert, assertExists, nArray, readString } from "../../util";
-import * as GX from '../../gx/gx_enum';
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { arrayRemove, assert, assertExists, nArray, readString } from "../../util.js";
+import * as GX from '../../gx/gx_enum.js';
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { Color, colorNewFromRGBA8 } from "../../Color";
-import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
-import { GXMaterial } from "../../gx/gx_material";
-import { computeModelMatrixR, isNearZeroVec3, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1 } from "../../MathHelpers";
+import { Color, colorNewFromRGBA8 } from "../../Color.js";
+import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder.js";
+import { GXMaterial } from "../../gx/gx_material.js";
+import { computeModelMatrixR, isNearZeroVec3, MathConstants, transformVec3Mat4w0, transformVec3Mat4w1 } from "../../MathHelpers.js";
 
 class EfRandom {
     constructor(public state: number = 0) {

@@ -1,13 +1,13 @@
 
 // Animation support.
 
-import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags, ANF1JointAnimationEntry } from './J3DLoader';
-import { assertExists } from '../../../util';
-import { Color } from '../../../Color';
-import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags, ANF1JointAnimationEntry } from './J3DLoader.js';
+import { assertExists } from '../../../util.js';
+import { Color } from '../../../Color.js';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase.js';
 import { mat4, quat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { quatFromEulerRadians, setMatrixTranslation } from '../../../MathHelpers';
-import { getPointHermite } from '../../../Spline';
+import { quatFromEulerRadians, setMatrixTranslation } from '../../../MathHelpers.js';
+import { getPointHermite } from '../../../Spline.js';
 
 function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
     const length = (k1.time - k0.time);

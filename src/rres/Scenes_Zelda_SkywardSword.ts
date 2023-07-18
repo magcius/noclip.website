@@ -1,28 +1,28 @@
 
 // Skyward Sword
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as CX from '../Common/Compression/CX';
-import * as BRRES from './brres';
-import * as U8 from './u8';
+import * as Viewer from '../viewer.js';
+import * as UI from '../ui.js';
+import * as CX from '../Common/Compression/CX.js';
+import * as BRRES from './brres.js';
+import * as U8 from './u8.js';
 
-import { assert, readString, assertExists, hexzero } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
+import { assert, readString, assertExists, hexzero } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render.js';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material.js';
 import { mat4, quat } from 'gl-matrix';
-import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { ColorKind } from '../gx/gx_render';
-import { SceneContext } from '../SceneBase';
-import { colorNewCopy, TransparentBlack, White } from '../Color';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers';
-import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers';
+import AnimationController from '../AnimationController.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { ColorKind } from '../gx/gx_render.js';
+import { SceneContext } from '../SceneBase.js';
+import { colorNewCopy, TransparentBlack, White } from '../Color.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,

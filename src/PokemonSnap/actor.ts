@@ -1,18 +1,18 @@
-import { ModelRenderer, buildTransform, EggDrawCall } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room";
-import { RenderData, AdjustableAnimationController } from "../BanjoKazooie/render";
+import { ModelRenderer, buildTransform, EggDrawCall } from "./render.js";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room.js";
+import { RenderData, AdjustableAnimationController } from "../BanjoKazooie/render.js";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { assertExists, assert, nArray } from "../util";
-import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion";
-import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp, randomRange } from "../MathHelpers";
-import { getPathPoint, getPathTangent } from "./animation";
-import { ObjectDef } from "./room";
-import { ParticleManager } from "./particles";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext } from "../SceneBase";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { assertExists, assert, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion.js";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp, randomRange } from "../MathHelpers.js";
+import { getPathPoint, getPathTangent } from "./animation.js";
+import { ObjectDef } from "./room.js";
+import { ParticleManager } from "./particles.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext } from "../SceneBase.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {

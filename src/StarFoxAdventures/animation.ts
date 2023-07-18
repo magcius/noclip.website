@@ -1,13 +1,13 @@
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { computeModelMatrixSRT, lerp, lerpAngle } from '../MathHelpers';
-import AnimationController from '../AnimationController';
-import { ViewerRenderInput } from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import { nArray } from '../util';
+import { computeModelMatrixSRT, lerp, lerpAngle } from '../MathHelpers.js';
+import AnimationController from '../AnimationController.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { nArray } from '../util.js';
 
-import { GameInfo } from './scenes';
-import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader, readUint32, readUint16 } from './util';
-import { ModelInstance } from './models';
+import { GameInfo } from './scenes.js';
+import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader, readUint32, readUint16 } from './util.js';
+import { ModelInstance } from './models.js';
 
 export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);

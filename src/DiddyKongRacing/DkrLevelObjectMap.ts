@@ -1,16 +1,16 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../viewer";
-import { DataManager } from "./DataManager";
-import { DkrControlGlobals } from "./DkrControlGlobals";
-import { DkrLevel } from "./DkrLevel";
-import { DkrObject, MODEL_TYPE_3D_MODEL } from "./DkrObject";
-import { DkrObjectCache } from "./DkrObjectCache";
-import { DkrSprites } from "./DkrSprites";
-import { DkrTextureCache } from "./DkrTextureCache";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { DataManager } from "./DataManager.js";
+import { DkrControlGlobals } from "./DkrControlGlobals.js";
+import { DkrLevel } from "./DkrLevel.js";
+import { DkrObject, MODEL_TYPE_3D_MODEL } from "./DkrObject.js";
+import { DkrObjectCache } from "./DkrObjectCache.js";
+import { DkrSprites } from "./DkrSprites.js";
+import { DkrTextureCache } from "./DkrTextureCache.js";
 
 export class DkrLevelObjectMap {
     private objects: Array<DkrObject>;

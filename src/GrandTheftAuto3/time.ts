@@ -1,5 +1,5 @@
-import { Color, colorNewFromRGBA, colorLerp, colorNewCopy, White, colorAdd } from '../Color';
-import { lerp } from '../MathHelpers';
+import { Color, colorNewFromRGBA, colorLerp, colorNewCopy, White, colorAdd } from '../Color.js';
+import { lerp } from '../MathHelpers.js';
 
 function colorNorm(r: number, g: number, b: number, a: number = 255.0): Color {
     return colorNewFromRGBA(r/255.0, g/255.0, b/255.0, a/255.0);

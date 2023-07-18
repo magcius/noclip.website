@@ -1,17 +1,17 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { DataFetcher } from '../DataFetcher';
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA, White, colorScale } from '../Color';
-import { nArray } from '../util';
+import { DataFetcher } from '../DataFetcher.js';
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA, White, colorScale } from '../Color.js';
+import { nArray } from '../util.js';
 
-import { SFATexture } from './textures';
-import { dataSubarray, readUint16 } from './util';
-import { ObjectInstance } from './objects';
-import { World } from './world';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { createDirectionalLight, Light } from './WorldLights';
-import { SceneUpdateContext } from './render';
-import { computeViewMatrix } from '../Camera';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SFATexture } from './textures.js';
+import { dataSubarray, readUint16 } from './util.js';
+import { ObjectInstance } from './objects.js';
+import { World } from './world.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { createDirectionalLight, Light } from './WorldLights.js';
+import { SceneUpdateContext } from './render.js';
+import { computeViewMatrix } from '../Camera.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 enum EnvfxType {
     Atmosphere = 5,

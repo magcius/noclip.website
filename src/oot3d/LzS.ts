@@ -1,7 +1,7 @@
 
-import * as LZSS from "../Common/Compression/LZSS";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import * as LZSS from "../Common/Compression/LZSS.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString } from "../util.js";
 
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = buffer.createDataView();

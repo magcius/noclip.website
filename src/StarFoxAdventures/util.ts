@@ -1,7 +1,7 @@
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, vec3, quat, ReadonlyVec3 } from 'gl-matrix';
-import { Camera } from '../Camera';
-import { computeModelMatrixSRT, getMatrixTranslation, transformVec3Mat4w0 } from '../MathHelpers';
+import { Camera } from '../Camera.js';
+import { computeModelMatrixSRT, getMatrixTranslation, transformVec3Mat4w0 } from '../MathHelpers.js';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);

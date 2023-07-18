@@ -1,25 +1,25 @@
 
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
-import * as Viewer from "../viewer";
-import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture";
-import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb";
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
-import { DeviceProgram } from "../Program";
-import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
-import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf.js";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform.js";
+import * as Viewer from "../viewer.js";
+import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture.js";
+import { EMeshFrag, EMesh, EScene, EDomain, MaterialFlags } from "./plb.js";
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { DeviceProgram } from "../Program.js";
+import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, ReadonlyMat4 } from "gl-matrix";
-import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { nArray, assertExists } from "../util";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { AABB } from '../Geometry';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { nArray, assertExists } from "../util.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { AABB } from '../Geometry.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
     switch (format) {

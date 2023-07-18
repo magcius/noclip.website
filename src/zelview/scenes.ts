@@ -1,16 +1,16 @@
 
-import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { OpaqueBlack } from '../Color';
-import { SceneContext } from '../SceneBase';
-import { readZELVIEW0, Headers, ZELVIEW0 } from './zelview0';
-import { RootMeshRenderer, MeshData, Mesh } from './render';
-import { RSPState, RSPOutput } from './f3dzex';
-import { CameraController } from '../Camera';
-import * as UI from '../ui';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import * as Viewer from '../viewer.js';
+import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { OpaqueBlack } from '../Color.js';
+import { SceneContext } from '../SceneBase.js';
+import { readZELVIEW0, Headers, ZELVIEW0 } from './zelview0.js';
+import { RootMeshRenderer, MeshData, Mesh } from './render.js';
+import { RSPState, RSPOutput } from './f3dzex.js';
+import { CameraController } from '../Camera.js';
+import * as UI from '../ui.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
 const pathBase = `zelview`;
 

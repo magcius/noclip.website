@@ -1,22 +1,22 @@
-import * as F3DEX2 from "./f3dex2";
-import * as RDP from "../Common/N64/RDP";
-import * as MIPS from "./mips";
+import * as F3DEX2 from "./f3dex2.js";
+import * as RDP from "../Common/N64/RDP.js";
+import * as MIPS from "./mips.js";
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RSPSharedOutput, StagingVertex } from "../BanjoKazooie/f3dex";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { RSPSharedOutput, StagingVertex } from "../BanjoKazooie/f3dex.js";
 import { vec3, vec4 } from "gl-matrix";
-import { assert, hexzero, assertExists, nArray } from "../util";
-import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
-import { Endianness } from "../endian";
-import { findNewTextures } from "./animation";
-import { MotionParser, Motion, Splash, Direction } from "./motion";
-import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
-import {parseParticles, ParticleSystem } from "./particles";
-import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
-import { RenderData } from "../BanjoKazooie/render";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { EggProgram } from "./render";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { assert, hexzero, assertExists, nArray } from "../util.js";
+import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image.js";
+import { Endianness } from "../endian.js";
+import { findNewTextures } from "./animation.js";
+import { MotionParser, Motion, Splash, Direction } from "./motion.js";
+import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers.js";
+import {parseParticles, ParticleSystem } from "./particles.js";
+import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { RenderData } from "../BanjoKazooie/render.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { EggProgram } from "./render.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export interface Level {
     sharedCache: RDP.TextureCache;

@@ -1,16 +1,16 @@
-import * as Deflate from '../Common/Compression/Deflate';
-import { hexzero } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { decompress as lzoDecompress } from '../Common/Compression/LZO';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { DataFetcher } from '../DataFetcher';
+import * as Deflate from '../Common/Compression/Deflate.js';
+import { hexzero } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { decompress as lzoDecompress } from '../Common/Compression/LZO.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { DataFetcher } from '../DataFetcher.js';
 
-import { GameInfo } from './scenes';
-import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
-import { ModelFetcher } from './models';
-import { ModelVersion } from './modelloader';
-import { TextureFetcher, SFATextureFetcher } from './textures';
-import { MaterialFactory } from './materials';
+import { GameInfo } from './scenes.js';
+import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation.js';
+import { ModelFetcher } from './models.js';
+import { ModelVersion } from './modelloader.js';
+import { TextureFetcher, SFATextureFetcher } from './textures.js';
+import { MaterialFactory } from './materials.js';
 
 class ZLBHeader {
     public static readonly SIZE = 16;

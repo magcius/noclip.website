@@ -1,27 +1,27 @@
 
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader.js';
 
-import * as GX_Material from '../../../gx/gx_material';
-import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
+import * as GX_Material from '../../../gx/gx_material.js';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render.js';
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render.js';
 
-import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
-import { TextureMapping } from '../../../TextureHolder';
-import { nArray, assert, assertExists } from '../../../util';
-import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform';
-import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
-import { Texture } from '../../../viewer';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
-import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color';
-import { texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers';
-import { calcMipChain } from '../../../gx/gx_texture';
-import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
-import { translateSampler } from '../JUTTexture';
-import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
-import { LoadedVertexDraw } from '../../../gx/gx_displaylist';
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
+import { TextureMapping } from '../../../TextureHolder.js';
+import { nArray, assert, assertExists } from '../../../util.js';
+import { AABB } from '../../../Geometry.js';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform.js';
+import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers.js';
+import { Texture } from '../../../viewer.js';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager.js';
+import { colorCopy, Color, colorClamp, colorClampLDR, White } from '../../../Color.js';
+import { texEnvMtx, computeModelMatrixS, calcBillboardMatrix, CalcBillboardFlags, computeMatrixWithoutTranslation } from '../../../MathHelpers.js';
+import { calcMipChain } from '../../../gx/gx_texture.js';
+import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache.js';
+import { translateSampler } from '../JUTTexture.js';
+import { calcJointMatrixFromTransform } from './J3DGraphAnimator.js';
+import { LoadedVertexDraw } from '../../../gx/gx_displaylist.js';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into the parent joint's space.

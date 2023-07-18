@@ -1,23 +1,23 @@
 
-import * as Viewer from '../viewer';
-import * as F3DZEX from './f3dzex';
-import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { assert, nArray, align } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import * as Viewer from '../viewer.js';
+import * as F3DZEX from './f3dzex.js';
+import { DeviceProgram } from "../Program.js";
+import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex.js";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { assert, nArray, align } from '../util.js';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { F3DEX_Program } from '../BanjoKazooie/render';
-import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
-import { calcTextureScaleForShift } from '../Common/N64/RSP';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { F3DEX_Program } from '../BanjoKazooie/render.js';
+import { Vec3UnitY, Vec3Zero } from '../MathHelpers.js';
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);

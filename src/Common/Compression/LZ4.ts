@@ -1,5 +1,5 @@
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { rust } from '../../rustlib';
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { rust } from '../../rustlib.js';
 
 // https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md
 

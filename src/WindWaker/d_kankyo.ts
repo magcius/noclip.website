@@ -1,21 +1,21 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR, colorCopy } from "../Color";
-import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR, colorCopy } from "../Color.js";
+import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material.js";
 import { vec3 } from "gl-matrix";
-import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage";
-import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers";
-import { nArray, assert, arrayRemove, assertExists } from "../util";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { Camera } from "../Camera";
-import { ColorKind, MaterialParams } from "../gx/gx_render";
-import { dGlobals } from "./zww_scenes";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether";
-import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
-import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
-import { ViewerRenderInput } from "../viewer";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { FogType } from "../gx/gx_enum";
+import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage.js";
+import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers.js";
+import { nArray, assert, arrayRemove, assertExists } from "../util.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { Camera } from "../Camera.js";
+import { ColorKind, MaterialParams } from "../gx/gx_render.js";
+import { dGlobals } from "./zww_scenes.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent.js";
+import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { FogType } from "../gx/gx_enum.js";
 
 export const enum LightType {
     Actor = 0,

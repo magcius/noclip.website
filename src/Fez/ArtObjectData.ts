@@ -1,9 +1,9 @@
 
-import { GfxTexture, GfxDevice, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
-import { makeTextureFromXNA_Texture2D } from "./Texture";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { Fez_ArtObject } from "./XNB_Fez";
-import { GeometryData } from "./GeometryData";
+import { GfxTexture, GfxDevice, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { makeTextureFromXNA_Texture2D } from "./Texture.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { Fez_ArtObject } from "./XNB_Fez.js";
+import { GeometryData } from "./GeometryData.js";
 
 export class ArtObjectData {
     public indexCount: number;

@@ -2,23 +2,23 @@
 // EGG PostEffects
 
 import { mat4, vec2, vec3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Camera } from "../Camera";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, colorScale, OpaqueBlack } from "../Color";
-import { copyMegaState, fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary";
-import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GXShaderLibrary } from "../gx/gx_material";
-import { DeviceProgram } from "../Program";
-import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect";
-import { TextureMapping } from "../TextureHolder";
-import { assert, assertExists, nArray, readString } from "../util";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Camera } from "../Camera.js";
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, colorScale, OpaqueBlack } from "../Color.js";
+import { copyMegaState, fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
+import { fillColor, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXShaderLibrary } from "../gx/gx_material.js";
+import { DeviceProgram } from "../Program.js";
+import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { assert, assertExists, nArray, readString } from "../util.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 
 //#region Bloom
 

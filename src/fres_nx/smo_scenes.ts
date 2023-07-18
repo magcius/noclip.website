@@ -1,18 +1,18 @@
 
-import * as Viewer from '../viewer';
-import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as BYML from '../byml';
-import { DataFetcher } from '../DataFetcher';
-import * as SARC from './sarc';
-import * as BFRES from './bfres';
-import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists } from '../util';
+import * as Viewer from '../viewer.js';
+import * as Yaz0 from '../Common/Compression/Yaz0.js';
+import * as BYML from '../byml.js';
+import { DataFetcher } from '../DataFetcher.js';
+import * as SARC from './sarc.js';
+import * as BFRES from './bfres.js';
+import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { assert, assertExists } from '../util.js';
 import { mat4 } from 'gl-matrix';
-import { SceneContext } from '../SceneBase';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SceneContext } from '../SceneBase.js';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 const pathBase = `smo`;
 

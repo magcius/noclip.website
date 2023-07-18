@@ -1,12 +1,12 @@
 import { vec3 } from "gl-matrix";
-import { Color, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../Color";
-import { ObjectInstance } from "../objects";
-import { SFATexture } from "../textures";
-import { angle16ToRads } from "../util";
-import { World } from "../world";
-import { createPointLight, Light, LightType } from "../WorldLights";
-import { commonSetup } from "./Common";
-import { SFAClass } from "./SFAClass";
+import { Color, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../Color.js";
+import { ObjectInstance } from "../objects.js";
+import { SFATexture } from "../textures.js";
+import { angle16ToRads } from "../util.js";
+import { World } from "../world.js";
+import { createPointLight, Light, LightType } from "../WorldLights.js";
+import { commonSetup } from "./Common.js";
+import { SFAClass } from "./SFAClass.js";
 
 const scratchVec0 = vec3.create();
 

@@ -3,10 +3,10 @@
 // https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 
 import * as CRC32 from 'crc-32';
-import ArrayBufferSlice from './ArrayBufferSlice';
-import { readString, assert } from './util';
-import * as Deflate from './Common/Compression/Deflate';
-import * as LZMA from './Common/Compression/LZMA';
+import ArrayBufferSlice from './ArrayBufferSlice.js';
+import { readString, assert } from './util.js';
+import * as Deflate from './Common/Compression/Deflate.js';
+import * as LZMA from './Common/Compression/LZMA.js';
 
 export const enum ZipCompressionMethod {
     None = 0,

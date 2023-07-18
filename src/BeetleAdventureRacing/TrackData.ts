@@ -1,18 +1,18 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { divideByW } from "../Camera";
-import { Color, colorFromHSL, colorNewFromRGBA, OpaqueBlack, Red, White } from "../Color";
-import { drawViewportSpacePoint, drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB } from "../Geometry";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { DeviceProgram } from "../Program";
-import { ViewerRenderInput } from "../viewer";
-import { Filesystem } from "./Filesystem";
-import { UVTT } from "./ParsedFiles/UVTT";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { divideByW } from "../Camera.js";
+import { Color, colorFromHSL, colorNewFromRGBA, OpaqueBlack, Red, White } from "../Color.js";
+import { drawViewportSpacePoint, drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB } from "../Geometry.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { Filesystem } from "./Filesystem.js";
+import { UVTT } from "./ParsedFiles/UVTT.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 
 // If the player resets when their progress is within this range, they will be reset as if their progress was at the end of the range

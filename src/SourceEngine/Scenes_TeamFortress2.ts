@@ -1,9 +1,9 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { SourceFileSystem, SourceLoadContext } from "./Main";
-import { createScene } from "./Scenes";
-import { createKitchenSinkSourceFilesytem } from "./Scenes_FileDrops";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { SourceFileSystem, SourceLoadContext } from "./Main.js";
+import { createScene } from "./Scenes.js";
+import { createKitchenSinkSourceFilesytem } from "./Scenes_FileDrops.js";
 
 const pathBase = `TeamFortress2`;
 

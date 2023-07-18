@@ -2,27 +2,27 @@
 // Utilities for various actor implementations.
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { Camera, texProjCameraSceneTex } from "../Camera";
-import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
-import { assert, assertExists } from "../util";
-import { getRes, XanimePlayer } from "./Animation";
-import { AreaObj, isInAreaObj } from "./AreaObj";
-import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, getGroundNormal, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
-import { GravityInfo, GravityTypeMask } from "./Gravity";
-import { HitSensor, sendMsgPush } from "./HitSensor";
-import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
-import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup, ResourceHolder } from "./LiveActor";
-import { SceneObj, SceneObjHolder } from "./Main";
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
-import { RailDirection } from "./RailRider";
-import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
-import { TextureMapping } from "../TextureHolder";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { Camera, texProjCameraSceneTex } from "../Camera.js";
+import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator.js";
+import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive.js";
+import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, randomRange, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers.js";
+import { assert, assertExists } from "../util.js";
+import { getRes, XanimePlayer } from "./Animation.js";
+import { AreaObj, isInAreaObj } from "./AreaObj.js";
+import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, getGroundNormal, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision.js";
+import { GravityInfo, GravityTypeMask } from "./Gravity.js";
+import { HitSensor, sendMsgPush } from "./HitSensor.js";
+import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo.js";
+import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup, ResourceHolder } from "./LiveActor.js";
+import { SceneObj, SceneObjHolder } from "./Main.js";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj.js";
+import { RailDirection } from "./RailRider.js";
+import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, StageSwitchCtrl, SwitchCallback, SwitchFunctorEventListener } from "./Switch.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();

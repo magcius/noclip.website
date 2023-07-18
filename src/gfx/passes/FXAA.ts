@@ -1,11 +1,11 @@
 
-import { DeviceProgram } from "../../Program";
-import { TextureMapping } from "../../TextureHolder";
-import { nArray } from "../../util";
-import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph";
-import { GfxRenderHelper } from "../render/GfxRenderHelper";
+import { DeviceProgram } from "../../Program.js";
+import { TextureMapping } from "../../TextureHolder.js";
+import { nArray } from "../../util.js";
+import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
+import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 
 class FXAAProgram extends DeviceProgram {
     public override vert = GfxShaderLibrary.fullscreenVS;

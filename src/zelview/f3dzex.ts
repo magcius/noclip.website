@@ -1,12 +1,12 @@
-import * as RDP from '../Common/N64/RDP';
+import * as RDP from '../Common/N64/RDP.js';
 
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image";
-import { nArray, assert } from "../util";
-import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { Rom } from "./zelview0";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image.js";
+import { nArray, assert } from "../util.js";
+import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { Rom } from "./zelview0.js";
 import { vec4, mat4 } from "gl-matrix";
-import { loadVertexFromView } from '../Common/N64/RSP';
+import { loadVertexFromView } from '../Common/N64/RSP.js';
 
 export class Vertex {
     public x: number = 0;

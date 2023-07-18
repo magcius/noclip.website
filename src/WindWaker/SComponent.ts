@@ -1,6 +1,6 @@
 
 import { ReadonlyVec3, vec3 } from "gl-matrix";
-import { clamp, MathConstants, normToLength } from "../MathHelpers";
+import { clamp, MathConstants, normToLength } from "../MathHelpers.js";
 
 function clampAbs(v: number, min: number, max: number): number {
     return Math.sign(v) * clamp(Math.abs(v), min, max);

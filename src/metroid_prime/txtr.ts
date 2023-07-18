@@ -1,11 +1,11 @@
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
 
-import { ResourceSystem } from './resource';
+import { ResourceSystem } from './resource.js';
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Texture from '../gx/gx_texture';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { InputStream } from './stream';
+import * as GX from '../gx/gx_enum.js';
+import * as GX_Texture from '../gx/gx_texture.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { InputStream } from './stream.js';
 
 const txtrFormatRemap = [
     GX.TexFormat.I4,     // 0x00

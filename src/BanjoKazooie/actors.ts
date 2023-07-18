@@ -1,12 +1,12 @@
-import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects, BKLayer } from './render';
+import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects, BKLayer } from './render.js';
 import { vec3, mat4, vec2 } from 'gl-matrix';
-import { nArray, assertExists } from '../util';
-import { MathConstants, lerp, angleDist, scaleMatrix, randomRange } from '../MathHelpers';
-import { getPointHermite } from '../Spline';
-import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter } from './particles';
-import { ViewerRenderInput } from '../viewer';
-import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { nArray, assertExists } from '../util.js';
+import { MathConstants, lerp, angleDist, scaleMatrix, randomRange } from '../MathHelpers.js';
+import { getPointHermite } from '../Spline.js';
+import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter } from './particles.js';
+import { ViewerRenderInput } from '../viewer.js';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(device: GfxDevice, geometryData: GeometryData, public index: number) {

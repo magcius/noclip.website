@@ -3,7 +3,7 @@
  * https://github.com/jackoalan/lzokay
  */
 
-import ArrayBufferSlice from '../../ArrayBufferSlice';
+import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 
 const enum Marker {
     M1 = 0x00,

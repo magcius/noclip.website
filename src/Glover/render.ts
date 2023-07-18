@@ -1,27 +1,27 @@
-import * as Viewer from '../viewer';
-import * as Textures from './textures';
-import * as RDP from '../Common/N64/RDP';
-import * as RSP from '../Common/N64/RSP';
-import * as F3DEX from '../BanjoKazooie/f3dex';
+import * as F3DEX from '../BanjoKazooie/f3dex.js';
+import * as RDP from '../Common/N64/RDP.js';
+import * as RSP from '../Common/N64/RSP.js';
+import * as Viewer from '../viewer.js';
+import * as Textures from './textures.js';
 
-import { assert, assertExists, align, nArray } from "../util";
-import { F3DEX_Program } from "../BanjoKazooie/render";
-import { mat4, vec3, vec4 } from "gl-matrix";
-import { fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxCompareMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { TextureMapping } from '../TextureHolder';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, getSizBitsPerPixel } from "../Common/N64/Image";
-import { DeviceProgram } from "../Program";
-import { computeViewMatrix } from '../Camera';
-import { calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import { mat4, vec3 } from "gl-matrix";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { F3DEX_Program } from "../BanjoKazooie/render.js";
+import { computeViewMatrix } from '../Camera.js';
+import { ImageFormat, ImageSize, getSizBitsPerPixel } from "../Common/N64/Image.js";
+import { CalcBillboardFlags, calcBillboardMatrix } from '../MathHelpers.js';
+import { DeviceProgram } from "../Program.js";
+import { TextureMapping } from '../TextureHolder.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { fillMatrix4x2, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { align, assert, assertExists, nArray } from "../util.js";
 
-import { Color, colorNewFromRGBA, colorNewCopy, White } from "../Color";
+import { Color, colorNewCopy, colorNewFromRGBA } from "../Color.js";
 
-import { GloverObjbank, GloverTexbank } from './parsers';
+import { GloverObjbank } from './parsers';
 
 export const enum GloverRendererLayer {
     OPAQUE,

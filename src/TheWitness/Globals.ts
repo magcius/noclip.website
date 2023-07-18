@@ -1,16 +1,16 @@
 
-import { Entity_Manager } from "./Entity";
-import { Asset_Manager, Asset_Type } from "./Assets";
-import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { Entity_Manager } from "./Entity.js";
+import { Asset_Manager, Asset_Type } from "./Assets.js";
+import { GfxClipSpaceNearZ, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { mat4, vec3 } from "gl-matrix";
-import { Frustum } from "../Geometry";
-import { getMatrixTranslation } from "../MathHelpers";
-import { Camera } from "../Camera";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { assert, decodeString } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Occlusion_Manager } from "./Occlusion";
-import { Render_Material_Cache as Device_Material_Cache } from "./Render";
+import { Frustum } from "../Geometry.js";
+import { getMatrixTranslation } from "../MathHelpers.js";
+import { Camera } from "../Camera.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { assert, decodeString } from "../util.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { Occlusion_Manager } from "./Occlusion.js";
+import { Render_Material_Cache as Device_Material_Cache } from "./Render.js";
 
 const noclipSpaceFromTheWitnessSpace = mat4.fromValues(
     1, 0,  0, 0,

@@ -1,24 +1,24 @@
-import * as MAP from './map';
-import * as UI from '../ui';
-import * as Viewer from '../viewer';
+import * as MAP from './map.js';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
 // @ts-ignore
 import program_glsl from './program.glsl';
-import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { DeviceProgram } from "../Program.js";
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-import { TextureHolder, TextureMapping } from '../TextureHolder';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { nArray, assertExists, assert } from '../util';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { TextureHolder, TextureMapping } from '../TextureHolder.js';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { nArray, assertExists, assert } from '../util.js';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
+import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());

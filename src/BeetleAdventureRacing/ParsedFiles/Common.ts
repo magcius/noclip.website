@@ -1,8 +1,8 @@
-import { assert } from "../../util";
+import { assert } from "../../util.js";
 import { mat4, vec3 } from "gl-matrix";
-import { UVTX } from "./UVTX";
-import { clamp } from "../../MathHelpers";
-import { Filesystem } from "../Filesystem";
+import { UVTX } from "./UVTX.js";
+import { clamp } from "../../MathHelpers.js";
+import { Filesystem } from "../Filesystem.js";
 
 // TODO: all of these names may be too specific
 export const enum RenderOptionsFlags

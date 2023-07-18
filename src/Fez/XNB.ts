@@ -1,9 +1,9 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
-import { LZXState, decompressLZX } from "../Common/Compression/LZX";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, assertExists, nArray } from "../util.js";
+import { LZXState, decompressLZX } from "../Common/Compression/LZX.js";
 import { vec3, vec2, mat4, vec4, quat } from "gl-matrix";
-import { Color, colorNewFromRGBA } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color.js";
 
 //#region ContentTypeReaderManager
 export type ContentTypeReader = (reader: ContentReader) => any;

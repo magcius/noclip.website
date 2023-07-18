@@ -1,14 +1,14 @@
-import { commonClass, commonSetup, decorClass, templeClass } from './Common';
-import { TriggerObj } from './Triggers';
-import { LGTPointLgt, LGTProjecte, Torch, Torch2 } from './Lights';
-import { ObjectInstance } from '../objects';
-import { angle16ToRads, readUint32 } from '../util';
-import { World } from '../world';
-import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil';
-import { MaterialRenderContext, StandardMaterial } from '../materials';
-import * as GX from '../../gx/gx_enum';
-import { SFAClass } from './SFAClass';
-import { SFAMaterialBuilder } from '../MaterialBuilder';
+import { commonClass, commonSetup, decorClass, templeClass } from './Common.js';
+import { TriggerObj } from './Triggers.js';
+import { LGTPointLgt, LGTProjecte, Torch, Torch2 } from './Lights.js';
+import { ObjectInstance } from '../objects.js';
+import { angle16ToRads, readUint32 } from '../util.js';
+import { World } from '../world.js';
+import { getRandomInt } from '../../SuperMarioGalaxy/ActorUtil.js';
+import { MaterialRenderContext, StandardMaterial } from '../materials.js';
+import * as GX from '../../gx/gx_enum.js';
+import { SFAClass } from './SFAClass.js';
+import { SFAMaterialBuilder } from '../MaterialBuilder.js';
 
 export const SFA_CLASSES: {[num: number]: typeof SFAClass} = {
     [77]: commonClass(0x3d, 0x3e),

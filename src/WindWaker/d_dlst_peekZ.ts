@@ -1,13 +1,13 @@
 
-import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform";
-import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
-import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { assert, assertExists } from "../util";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
+import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
+import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { assert, assertExists } from "../util.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 // TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {

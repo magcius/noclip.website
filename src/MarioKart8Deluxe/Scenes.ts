@@ -1,10 +1,10 @@
 
-import * as Yaz0 from "../Common/Compression/Yaz0";
-import * as BFRES from "../fres_nx/bfres";
-import * as SARC from "../fres_nx/sarc";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { TurboRenderer, BRTITextureHolder, FMDLData, FMDLRenderer, TurboRenderGlobals, TurboLightEnv, TurboCommonRes } from "./Render";
+import * as Yaz0 from "../Common/Compression/Yaz0.js";
+import * as BFRES from "../fres_nx/bfres.js";
+import * as SARC from "../fres_nx/sarc.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { TurboRenderer, BRTITextureHolder, FMDLData, FMDLRenderer, TurboRenderGlobals, TurboLightEnv, TurboCommonRes } from "./Render.js";
 
 const pathBase = `MarioKart8Deluxe`;
 

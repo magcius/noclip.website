@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as PLB from './plb';
-import { align, assert } from "../util";
-import { DataStream } from "./DataStream";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import * as PLB from './plb.js';
+import { align, assert } from "../util.js";
+import { DataStream } from "./DataStream.js";
 
 export function normalizeTextureName(textureName: string): string {
     textureName = textureName.toLowerCase().replace(/\\/g, '/');

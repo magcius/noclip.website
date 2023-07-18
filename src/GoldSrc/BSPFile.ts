@@ -1,11 +1,11 @@
 
 import { ReadonlyVec4, vec4 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { AABB } from "../Geometry";
-import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers";
-import { LightmapPackerPage } from "../SourceEngine/BSPFile";
-import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT";
-import { assert, decodeString, ensureInList, readString } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { AABB } from "../Geometry.js";
+import { convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
+import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
+import { pairs2obj, ValveKeyValueParser, VKFPair } from "../SourceEngine/VMT.js";
+import { assert, decodeString, ensureInList, readString } from "../util.js";
 
 const enum LumpType {
     ENTITIES = 0,

@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform";
+import { GfxDevice, GfxViewportOrigin } from "../platform/GfxPlatform.js";
 
 export function gfxDeviceNeedsFlipY(device: GfxDevice): boolean {
     const vendorInfo = device.queryVendorInfo();

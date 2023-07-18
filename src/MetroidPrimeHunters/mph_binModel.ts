@@ -1,10 +1,10 @@
 ﻿
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D.js";
 import { mat4, mat2d, vec3, vec2 } from "gl-matrix";
-import { Format } from "../SuperMario64DS/nitro_tex";
-import { readString } from "../util";
-import { colorNewFromRGBA } from "../Color";
+import { Format } from "../SuperMario64DS/nitro_tex.js";
+import { readString } from "../util.js";
+import { colorNewFromRGBA } from "../Color.js";
 
 export interface MPHbin {
     models: MDL0Model[];

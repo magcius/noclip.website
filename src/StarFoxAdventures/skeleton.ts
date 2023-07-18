@@ -1,7 +1,7 @@
 import { mat4, vec3 } from 'gl-matrix';
-import { nArray } from '../util';
+import { nArray } from '../util.js';
 
-import { mat4PostTranslate } from './util';
+import { mat4PostTranslate } from './util.js';
 
 interface Joint {
     parent?: number;

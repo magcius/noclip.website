@@ -1,9 +1,9 @@
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
 
-import { ResourceSystem } from './resource';
-import { assert, readString } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { InputStream } from './stream';
+import { ResourceSystem } from './resource.js';
+import { assert, readString } from '../util.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { InputStream } from './stream.js';
 
 export interface STRG {
     strings: string[];

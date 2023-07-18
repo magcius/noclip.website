@@ -1,49 +1,37 @@
 
-import * as Viewer from '../viewer';
-import * as UI from '../ui';
-import * as BYML from '../byml';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
-import * as F3DEX from '../BanjoKazooie/f3dex';
+import * as Shadows from './shadows.js';
+import { GloverTextureHolder } from './textures.js';
+import { CONVERT_FRAMERATE, SRC_FRAME_TO_MS } from './timing.js';
 
+import { ActorMeshNode, ElectricityRandStyle, ElectricityThicknessStyle, GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer } from './actor.js';
+import { GloverEnemy } from './enemy.js';
+import { GenericRenderable, SceneLighting } from './render.js';
+import { GloverBackdropRenderer, GloverFlipbookRenderer, GloverFootprintRenderer, GloverSpriteRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite.js';
 
-import * as Shadows from './shadows';
-import { GloverTextureHolder } from './textures';
-import { SRC_FRAMERATE, DST_FRAMERATE, SRC_FRAME_TO_MS, DST_FRAME_TO_MS, CONVERT_FRAMERATE } from './timing';
+import { mat4, quat, vec3 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { Color, colorNewFromRGBA } from '../Color.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { assert } from '../util.js';
 
+import { CameraController } from '../Camera.js';
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
-import { GenericRenderable, SceneLighting } from './render';
-import { GloverActorRenderer, GloverBlurRenderer, GloverElectricityRenderer, ElectricityThicknessStyle, ElectricityRandStyle, ActorMeshNode } from './actor';
-import { GloverBackdropRenderer, GloverSpriteRenderer, GloverFootprintRenderer, GloverFlipbookRenderer, GloverWeatherRenderer, WeatherParams, WeatherType } from './sprite';
-import { GloverEnemy } from './enemy';
+import { BulletPool } from './bullets.js';
+import { decompress } from './fla2.js';
+import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers/index.js';
+import { MeshSparkle, ParticlePool, collectibleFlipbooks, spawnExitParticle } from './particles.js';
+import { angularDistance, hashStr, pushAlongLookatVector, radianLerp, radianModulo, subtractAngles } from './util.js';
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { TextureHolder } from '../TextureHolder';
-import { mat4, vec3, vec4, quat } from 'gl-matrix';
-import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass, makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, assertExists } from '../util';
-import { DataFetcher } from '../DataFetcher';
-import { MathConstants, scaleMatrix, computeMatrixWithoutScale } from '../MathHelpers';
-import { Color, colorNewFromRGBA } from '../Color';
-
-import { Yellow, colorNewCopy, Magenta, White } from "../Color";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-
-import { CameraController } from '../Camera';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
-
-import { GloverLevel, GloverObjbank, GloverTexbank } from './parsers';
-import { decompress } from './fla2';
-import { hashStr, radianModulo, radianLerp, subtractAngles, angularDistance, axisRotationToQuaternion, pushAlongLookatVector } from './util';
-import { framesets, collectibleFlipbooks, Particle, ParticlePool, particleFlipbooks, particleParameters, spawnExitParticle, MeshSparkle } from './particles';
-import { BulletPool } from './bullets';
-
-
-import { KaitaiStream } from './parsers/kaitai-struct';
+import { KaitaiStream } from './parsers/kaitai-struct/index.js';
 
 const pathBase = `Glover`;
 

@@ -1,21 +1,21 @@
-import * as Viewer from '../viewer';
-import * as RDP from '../Common/N64/RDP';
-import * as F3DEX2 from './f3dex2';
+import * as Viewer from '../viewer.js';
+import * as RDP from '../Common/N64/RDP.js';
+import * as F3DEX2 from './f3dex2.js';
 
-import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { GFXNode, AnimationData, MaterialFlags } from './room';
-import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation';
+import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render.js';
+import { GFXNode, AnimationData, MaterialFlags } from './room.js';
+import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation.js';
 import { vec4, mat4, vec3 } from 'gl-matrix';
-import { DeviceProgram } from '../Program';
-import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
-import { nArray, assertExists } from '../util';
-import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
-import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
-import { LevelGlobals } from './actor';
-import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { DeviceProgram } from '../Program.js';
+import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
+import { nArray, assertExists } from '../util.js';
+import { TextureMapping } from '../TextureHolder.js';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
+import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
+import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers.js';
+import { LevelGlobals } from './actor.js';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 
 export const enum SnapPass {
     MAIN = 0x01,

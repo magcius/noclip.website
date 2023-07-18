@@ -1,10 +1,10 @@
-import * as MAP from './map';
-import * as Viewer from '../viewer';
+import * as MAP from './map.js';
+import * as Viewer from '../viewer.js';
 
-import { FakeTextureHolder } from '../TextureHolder';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
-import { textureToCanvas, textureAnimationToCanvas, KingdomHeartsIIRenderer } from './render';
+import { FakeTextureHolder } from '../TextureHolder.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { SceneContext } from '../SceneBase.js';
+import { textureToCanvas, textureAnimationToCanvas, KingdomHeartsIIRenderer } from './render.js';
 
 export class KingdomHeartsIISceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {

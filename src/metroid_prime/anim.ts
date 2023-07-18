@@ -1,7 +1,7 @@
-import { InputStream } from './stream';
-import { ResourceGame, ResourceSystem } from './resource';
-import { AnimSource, AnimSourceCompressed } from './animation/data_source';
-import { assert } from '../util';
+import { InputStream } from './stream.js';
+import { ResourceGame, ResourceSystem } from './resource.js';
+import { AnimSource, AnimSourceCompressed } from './animation/data_source.js';
+import { assert } from '../util.js';
 
 export interface ANIM {
     source: AnimSource | AnimSourceCompressed;

@@ -1,6 +1,6 @@
 import { vec2, vec3 } from "gl-matrix";
-import { nArray } from "../../util";
-import { DataStream, readTHeader } from "../util";
+import { nArray } from "../../util.js";
+import { DataStream, readTHeader } from "../util.js";
 
 function readSurfaceSingle(data: DataStream) {
     return {

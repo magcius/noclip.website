@@ -1,10 +1,10 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { AABB } from "../Geometry";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { AABB } from "../Geometry.js";
 import { mat4 } from "gl-matrix";
-import { assert, readString } from "../util";
-import { runDL_F3DEX2, RSPState, RSPOutput } from "./f3dex2";
-import { readMatrixRDP } from "../Common/N64/RDP";
+import { assert, readString } from "../util.js";
+import { runDL_F3DEX2, RSPState, RSPOutput } from "./f3dex2.js";
+import { readMatrixRDP } from "../Common/N64/RDP.js";
 
 // Implementation of the PM64 "shape" format.
 // Basically everything in here was reverse engineered by Clover.

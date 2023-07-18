@@ -1,19 +1,19 @@
 
 import { vec3 } from "gl-matrix";
-import { colorNewFromRGBA, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
-import { Camera } from "../Camera";
-import { Light } from "../gx/gx_material";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
-import { LightType } from "./DrawBuffer";
-import { SceneObjHolder } from "./Main";
-import { ColorKind, MaterialParams } from "../gx/gx_render";
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { assertExists, fallback } from "../util";
-import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj";
-import { NameObj } from "./NameObj";
-import { lerp } from "../MathHelpers";
-import { isHiddenModel } from "./ActorUtil";
+import { colorNewFromRGBA, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color.js";
+import { Camera } from "../Camera.js";
+import { Light } from "../gx/gx_material.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo.js";
+import { LightType } from "./DrawBuffer.js";
+import { SceneObjHolder } from "./Main.js";
+import { ColorKind, MaterialParams } from "../gx/gx_render.js";
+import { LiveActor, ZoneAndLayer } from "./LiveActor.js";
+import { assertExists, fallback } from "../util.js";
+import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj.js";
+import { NameObj } from "./NameObj.js";
+import { lerp } from "../MathHelpers.js";
+import { isHiddenModel } from "./ActorUtil.js";
 
 function getValueColor(dst: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = (fallback(infoIter.getValueNumber(`${prefix}R`), 0) & 0xFF) / 0xFF;

@@ -1,9 +1,9 @@
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
-import { BSPFileVariant } from "./BSPFile";
-import { LooseMount, SourceFileSystem, SourceLoadContext } from "./Main";
-import { createScene } from "./Scenes";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
+import { BSPFileVariant } from "./BSPFile.js";
+import { LooseMount, SourceFileSystem, SourceLoadContext } from "./Main.js";
+import { createScene } from "./Scenes.js";
 
 class Left4Dead2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {

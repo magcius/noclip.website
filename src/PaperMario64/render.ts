@@ -1,29 +1,29 @@
 
 //@ts-ignore
 import program_glsl from './program.glsl';
-import * as Viewer from '../viewer';
-import * as Tex from './tex';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import * as Viewer from '../viewer.js';
+import * as Tex from './tex.js';
+import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
-import { DeviceProgram } from "../Program";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { RSPOutput, Vertex } from "./f3dex2";
-import { assert, nArray, assertExists, setBitFlagEnabled } from "../util";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import { AABB } from "../Geometry";
-import { getImageFormatString } from "../BanjoKazooie/f3dex";
-import { TextFilt } from '../Common/N64/Image';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
-import { calcTextureScaleForShift } from '../Common/N64/RSP';
-import { translateCM } from '../Common/N64/RDP';
-import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { DeviceProgram } from "../Program.js";
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { RSPOutput, Vertex } from "./f3dex2.js";
+import { assert, nArray, assertExists, setBitFlagEnabled } from "../util.js";
+import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder.js";
+import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
+import { AABB } from "../Geometry.js";
+import { getImageFormatString } from "../BanjoKazooie/f3dex.js";
+import { TextFilt } from '../Common/N64/Image.js';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { calcTextureScaleForShift } from '../Common/N64/RSP.js';
+import { translateCM } from '../Common/N64/RDP.js';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;

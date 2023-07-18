@@ -1,17 +1,17 @@
 
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, JMapLinkInfo } from "./JMapInfo";
-import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
-import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead } from "./LiveActor";
-import { fallback, nArray, spliceBisectRight, assert } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0 } from "../MathHelpers";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
-import { NameObj } from "./NameObj";
-import { ViewerRenderInput } from "../viewer";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { Red, Green } from "../Color";
-import { RailRider } from "./RailRider";
-import { addBaseMatrixFollower, BaseMatrixFollower } from "./Follow";
+import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, JMapLinkInfo } from "./JMapInfo.js";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main.js";
+import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate, isDead } from "./LiveActor.js";
+import { fallback, nArray, spliceBisectRight, assert } from "../util.js";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp, transformVec3Mat4w0 } from "../MathHelpers.js";
+import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil.js";
+import { NameObj } from "./NameObj.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { Red, Green } from "../Color.js";
+import { RailRider } from "./RailRider.js";
+import { addBaseMatrixFollower, BaseMatrixFollower } from "./Follow.js";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();

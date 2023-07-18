@@ -1,5 +1,5 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
-import { clamp, transformVec3Mat4w0, Vec3UnitX } from "../MathHelpers";
+import { clamp, transformVec3Mat4w0, Vec3UnitX } from "../MathHelpers.js";
 
 export const S16_TO_RADIANS = Math.PI / 0x8000;
 export const EPSILON = 1.1920928955078125e-7;

@@ -1,15 +1,15 @@
 
-import AnimationController from "../AnimationController";
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import AnimationController from "../AnimationController.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { readString, assert } from "../util.js";
 import { mat4 } from "gl-matrix";
-import { Color, colorFromRGBA } from "../Color";
-import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb";
-import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from "./pica_texture";
-import { getPointHermite } from "../Spline";
-import { TextureMapping } from "../TextureHolder";
-import { CtrTextureHolder } from "./render";
-import { lerp } from "../MathHelpers";
+import { Color, colorFromRGBA } from "../Color.js";
+import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb.js";
+import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from "./pica_texture.js";
+import { getPointHermite } from "../Spline.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { CtrTextureHolder } from "./render.js";
+import { lerp } from "../MathHelpers.js";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?

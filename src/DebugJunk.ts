@@ -1,15 +1,15 @@
 // Misc utilities to help me debug various issues. Mostly garbage.
 
-import { AABB } from "./Geometry";
-import { Color, Magenta, colorToCSS, Red, Green, Blue, OpaqueBlack } from "./Color";
-import { divideByW, ScreenSpaceProjection } from "./Camera";
+import { AABB } from "./Geometry.js";
+import { Color, Magenta, colorToCSS, Red, Green, Blue, OpaqueBlack } from "./Color.js";
+import { divideByW, ScreenSpaceProjection } from "./Camera.js";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
-import { nArray, assert, assertExists, hexzero } from "./util";
-import { UI, Slider } from "./ui";
-import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX, lerp } from "./MathHelpers";
-import ArrayBufferSlice from "./ArrayBufferSlice";
-import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils";
-import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform";
+import { nArray, assert, assertExists, hexzero } from "./util.js";
+import { UI, Slider } from "./ui.js";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, MathConstants, transformVec3Mat4w0, Vec3UnitX, lerp } from "./MathHelpers.js";
+import ArrayBufferSlice from "./ArrayBufferSlice.js";
+import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils.js";
+import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {

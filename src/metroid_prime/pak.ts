@@ -1,9 +1,9 @@
 
 // Implements Retro's PAK format as seen in Metroid Prime 1.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align } from "../util";
-import { InputStream } from "./stream";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { assert, readString, align } from "../util.js";
+import { InputStream } from "./stream.js";
 
 export const enum CompressionMethod {
     NONE,

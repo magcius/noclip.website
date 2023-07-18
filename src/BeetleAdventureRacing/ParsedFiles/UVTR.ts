@@ -1,13 +1,13 @@
-import { Filesystem, UVFile } from "../Filesystem";
-import { assert } from "../../util";
+import { Filesystem, UVFile } from "../Filesystem.js";
+import { assert } from "../../util.js";
 import { mat4 } from "gl-matrix";
-import { UVCT, UVCTRenderer } from "./UVCT";
-import { parseMatrix } from "./Common";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
-import { ViewerRenderInput } from "../../viewer";
-import { RendererStore } from "../Scenes";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { UVCT, UVCTRenderer } from "./UVCT.js";
+import { parseMatrix } from "./Common.js";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../../viewer.js";
+import { RendererStore } from "../Scenes.js";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache.js";
 
 // UVTR aka "terra"
 export class UVTR {
