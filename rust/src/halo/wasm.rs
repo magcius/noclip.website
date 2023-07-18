@@ -515,7 +515,7 @@ impl HaloShaderTransparentWaterRipple {
 pub struct HaloShaderTransparentWater {
     inner: ShaderTransparentWater,
     path: String,
-    base_bitmap: Bitmap,
+    base_bitmap: Option<Bitmap>,
     reflection_bitmap: Option<Bitmap>,
     ripple_bitmap: Option<Bitmap>,
     ripples: Vec<HaloShaderTransparentWaterRipple>,
@@ -536,8 +536,9 @@ impl HaloShaderTransparentWater {
     #[wasm_bindgen(getter)] pub fn ripple_mipmap_detail_bias(&self) -> f32 { self.inner.ripple_mipmap_detail_bias }
     #[wasm_bindgen(getter)] pub fn path(&self) -> String { self.path.clone() }
 
-    pub fn get_base_bitmap(&self) -> HaloBitmap {
-        HaloBitmap::new(self.base_bitmap.clone())
+    pub fn get_base_bitmap(&self) -> Option<HaloBitmap> {
+        self.base_bitmap.as_ref()
+            .map(|map| HaloBitmap::new(map.clone()))
     }
 
     pub fn get_reflection_bitmap(&self) -> Option<HaloBitmap> {
@@ -714,7 +715,7 @@ impl HaloSceneManager {
                     }
                     JsValue::from(HaloShaderTransparentWater {
                         path: shader_hdr.path.clone(),
-                        base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap).unwrap(),
+                        base_bitmap: self.resolve_bitmap_dependency(&s.base_bitmap),
                         reflection_bitmap: self.resolve_bitmap_dependency(&s.reflection_bitmap),
                         ripple_bitmap: self.resolve_bitmap_dependency(&s.ripple_bitmap),
                         ripples,
