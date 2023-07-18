@@ -2,7 +2,7 @@
 const webpack = require('webpack');
 const { merge } = require('webpack-merge');
 const path = require('path');
-const common = require('./webpack.common.js');
+const common = require('./webpack.common.cjs');
 const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 
 module.exports = merge(common, {
