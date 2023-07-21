@@ -360,6 +360,9 @@ function translateTargets(colorAttachmentFormats: (GfxFormat | null)[], megaStat
         if (attachmentState === undefined)
             attachmentState = megaStateDescriptor.attachmentsState[0];
         return translateColorState(attachmentState, format);
+    }).filter((v) => {
+        // FIREFOX does not support holes in targets array.
+        return v !== null;
     });
 }
 
@@ -715,18 +718,10 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public beginDebugGroup(name: string): void {
-        // FIREFOX MISSING
-        if (this.gpuRenderPassEncoder!.pushDebugGroup === undefined)
-            return;
-
         this.gpuRenderPassEncoder!.pushDebugGroup(name);
     }
 
     public endDebugGroup(): void {
-        // FIREFOX MISSING
-        if (this.gpuRenderPassEncoder!.popDebugGroup === undefined)
-            return;
-
         this.gpuRenderPassEncoder!.popDebugGroup();
     }
 
@@ -798,18 +793,10 @@ class GfxComputePassP_WebGPU implements GfxComputePass {
     }
 
     public beginDebugGroup(name: string): void {
-        // FIREFOX MISSING
-        if (this.gpuComputePassEncoder!.pushDebugGroup === undefined)
-            return;
-
         this.gpuComputePassEncoder!.pushDebugGroup(name);
     }
 
     public endDebugGroup(): void {
-        // FIREFOX MISSING
-        if (this.gpuComputePassEncoder!.popDebugGroup === undefined)
-            return;
-
         this.gpuComputePassEncoder!.popDebugGroup();
     }
 
@@ -951,13 +938,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         });
         this.setResourceName(this._fallbackSamplerFiltering, 'Fallback Sampler Comparison');
 
-        // FIREFOX MISSING
-        if (this.device.features)
-            this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
+        this._featureTextureCompressionBC = this.device.features.has('texture-compression-bc');
 
         this.device.onuncapturederror = (event) => {
             console.error(event.error);
-            debugger;
+            // debugger;
         };
 
         this._swapChainFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -1296,10 +1281,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private async _createRenderPipeline(renderPipeline: GfxRenderPipelineP_WebGPU, async: boolean): Promise<void> {
-        // FIREFOX MISSING
-        if (this.device.createRenderPipelineAsync === undefined)
-            async = false;
-
         // If we're already in the process of creating a the pipeline async, no need to kick the process off again...
         if (async && renderPipeline.isCreatingAsync)
             return;
@@ -1374,10 +1355,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private async _createComputePipeline(computePipeline: GfxComputePipelineP_WebGPU, async: boolean): Promise<void> {
-        // FIREFOX MISSING
-        if (this.device.createRenderPipelineAsync === undefined)
-            async = false;
-
         // If we're already in the process of creating a the pipeline async, no need to kick the process off again...
         if (async && computePipeline.isCreatingAsync)
             return;
