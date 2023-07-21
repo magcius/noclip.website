@@ -195,8 +195,10 @@ export class ModelCache {
     private archivePromiseCache = new Map<string, Promise<ZAR.ZAR>>();
     private archiveCache = new Map<string, ZAR.ZAR>();
     private modelCache = new Map<string, CmbData>();
+    private renderCache: GfxRenderCache;
 
-    constructor(private dataFetcher: DataFetcher) {
+    constructor(device: GfxDevice, private dataFetcher: DataFetcher) {
+        this.renderCache = new GfxRenderCache(device);
     }
 
     public waitForLoad(): Promise<any> {
@@ -250,14 +252,14 @@ export class ModelCache {
         return p;
     }
 
-    public getModel(cache: GfxRenderCache, renderer: OoT3DRenderer, zar: ZAR.ZAR, modelPath: string): CmbData {
+    public getModel(renderer: OoT3DRenderer, zar: ZAR.ZAR, modelPath: string): CmbData {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
             const cmbData = assertExists(ZAR.findFileData(zar, modelPath));
             const cmb = CMB.parse(cmbData);
-            renderer.textureHolder.addTextures(cache.device, cmb.textures);
-            p = new CmbData(cache, cmb);
+            renderer.textureHolder.addTextures(this.renderCache.device, cmb.textures);
+            p = new CmbData(this.renderCache, cmb);
             this.modelCache.set(modelPath, p);
         }
 
@@ -267,6 +269,7 @@ export class ModelCache {
     public destroy(device: GfxDevice): void {
         for (const model of this.modelCache.values())
             model.destroy(device);
+        this.renderCache.destroy();
     }
 }
 
@@ -802,20 +805,21 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private async spawnActorForRoom(scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
-        const cache = renderer.getRenderCache();
+        const device = renderer.getRenderCache().device;
+
         renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`);
         }
 
         function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
-            const cmbData = renderer.modelCache.getModel(cache, renderer, zar, modelPath);
-            const cmbRenderer = new CmbInstance(cache, renderer.textureHolder, cmbData);
+            const cmbData = renderer.modelCache.getModel(renderer, zar, modelPath);
+            const cmbRenderer = new CmbInstance(renderer.getRenderCache(), renderer.textureHolder, cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
             cmbRenderer.setIsActor(true);
-            
+
             scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
@@ -827,7 +831,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         function parseCMAB(zar: ZAR.ZAR, filename: string) {
             const cmab = CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename)));
-            renderer.textureHolder.addTextures(cache.device, cmab.textures);
+            renderer.textureHolder.addTextures(device, cmab.textures);
             return cmab;
         }
 
@@ -1398,7 +1402,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const b = buildModel(zar, `model/mjin_flash_model.cmb`, 1);
             const cmab = parseCMAB(zar, `misc/mjin_flash_model.cmab`);
-            renderer.textureHolder.addTextures(cache.device, cmab.textures);
+            renderer.textureHolder.addTextures(device, cmab.textures);
             b.bindCMAB(cmab, animFrame(whichPalFrame));
         } else if (actor.actorId === ActorId.Bg_Ydan_Sp) {
             const zar = await fetchArchive(`zelda_ydan_objects.zar`);
@@ -2357,7 +2361,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const cache = renderer.getRenderCache();
 
         function buildModel(zar: ZAR.ZAR, modelPath: string): CmbInstance {
-            const cmbData = renderer.modelCache.getModel(cache, renderer, zar, modelPath);
+            const cmbData = renderer.modelCache.getModel(renderer, zar, modelPath);
             const cmbRenderer = new CmbInstance(cache, renderer.textureHolder, cmbData);
             cmbRenderer.isSkybox = true;
             cmbRenderer.animationController.fps = 20;
@@ -2388,7 +2392,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
 
         const dataHolder = await context.dataShare.ensureObject<DataHolder>(`${pathBase}/DataHolder`, async () => {
-            const modelCache = new ModelCache(dataFetcher);
+            const modelCache = new ModelCache(device, dataFetcher);
             const textureHolder = new CtrTextureHolder();
             return new DataHolder(modelCache, textureHolder);
         });

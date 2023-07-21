@@ -601,15 +601,15 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private async spawnActorForRoom(renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
-        const cache = renderer.getRenderCache();
+        const device = renderer.getRenderCache().device;
 
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
         }
 
         function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
-            const cmbData = renderer.modelCache.getModel(cache, renderer, gar, modelPath);
-            const cmbRenderer = new CmbInstance(cache, renderer.textureHolder, cmbData);
+            const cmbData = renderer.modelCache.getModel(renderer, gar, modelPath);
+            const cmbRenderer = new CmbInstance(renderer.getRenderCache(), renderer.textureHolder, cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
@@ -624,7 +624,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         function parseCMAB(gar: ZAR.ZAR, filename: string) {
             const cmab = CMAB.parse(CMB.Version.Majora, assertExists(ZAR.findFileData(gar, filename)));
-            renderer.textureHolder.addTextures(cache.device, cmab.textures);
+            renderer.textureHolder.addTextures(device, cmab.textures);
             return cmab;
         }
 
@@ -884,7 +884,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const textureHolder = new CtrTextureHolder();
         context.destroyablePool.push(textureHolder);
 
-        const modelCache = new ModelCache(dataFetcher);
+        const modelCache = new ModelCache(device, dataFetcher);
         context.destroyablePool.push(modelCache);
 
         const gar = ZAR.parse(maybeDecompress(zarBuffer));
