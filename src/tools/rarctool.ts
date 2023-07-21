@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node-script
+#!/usr/bin/env ts-node-esm
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 
@@ -6,6 +6,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import { readString } from '../util.js';
+import { loadRustLib } from '../rustlib.js';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -26,7 +27,9 @@ function extractDir(dir: RARC.RARCDir, parentPath: string): void {
         extractFile(dir.files[i], path);
 }
 
-function main(inFilename: string): void {
+async function main(inFilename: string) {
+    await loadRustLib();
+
     let data = fetchDataSync(inFilename);
     if (readString(data, 0x00, 0x04) === 'Yaz0')
         data = Yaz0.decompressSW(data);

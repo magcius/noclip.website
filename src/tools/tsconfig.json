@@ -14,7 +14,7 @@
         "types": [
             "node"
         ],
-        "module": "commonjs",
+        "module": "ESNext",
         "moduleResolution": "node",
         "outDir": "build/",
     },
