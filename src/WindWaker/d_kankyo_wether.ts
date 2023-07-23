@@ -755,8 +755,10 @@ export class dKankyo_vrkumo_Packet {
 
             ddraw.end();
 
-            const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            if (ddraw.hasIndicesToDraw()) {
+                const renderInst = ddraw.makeRenderInst(renderInstManager);
+                submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+            }
         }
 
         ddraw.endDraw(renderInstManager);
@@ -895,8 +897,10 @@ export class dKankyo_rain_Packet {
             ddraw.end();
         }
 
-        const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperRain, renderInst, viewerInput);
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            submitScratchRenderInst(renderInstManager, this.materialHelperRain, renderInst, viewerInput);
+        }
     }
 
     private drawSibuki(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1128,9 +1132,12 @@ export class dKankyo_wave_Packet {
         }
 
         ddraw.end();
+        ddraw.endDraw(renderInstManager);
 
-        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -1308,9 +1315,12 @@ export class dKankyo_star_Packet {
         }
 
         ddraw.end();
+        ddraw.endDraw(renderInstManager);
 
-        const renderInst = ddraw.endDrawAndMakeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
     }
 
     public destroy(device: GfxDevice): void {
