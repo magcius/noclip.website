@@ -773,26 +773,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private clampNumLevels(descriptor: GfxTextureDescriptor): number {
-        if (descriptor.dimension === GfxTextureDimension.n2DArray && descriptor.depth > 1) {
-            const typeFlags: FormatTypeFlags = getFormatTypeFlags(descriptor.pixelFormat);
-            if (typeFlags === FormatTypeFlags.BC1) {
-                // Chrome/ANGLE seems to have issues with compressed miplevels of size 1/2, so clamp before they arrive...
-                // https://bugs.chromium.org/p/angleproject/issues/detail?id=4056
-                let w = descriptor.width, h = descriptor.height;
-                for (let i = 0; i < descriptor.numLevels; i++) {
-                    if (w <= 2 || h <= 2)
-                        return i - 1;
-
-                    w = Math.max((w / 2) | 0, 1);
-                    h = Math.max((h / 2) | 0, 1);
-                }
-            }
-        }
-
-        return descriptor.numLevels;
-    }
-
     private _setActiveTexture(texture: GLenum): void {
         if (this._currentActiveTexture !== texture) {
             this.gl.activeTexture(texture);
@@ -889,7 +869,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const internalformat = this.translateTextureInternalFormat(descriptor.pixelFormat);
         this._setActiveTexture(gl.TEXTURE0);
         this._currentTextures[0] = null;
-        const numLevels = this.clampNumLevels(descriptor);
+        const numLevels = descriptor.numLevels;
         if (descriptor.dimension === GfxTextureDimension.n2D) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D;
             gl.bindTexture(gl_target, gl_texture);
@@ -1341,10 +1321,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const sliceElementSize = levelData.length / depth;
 
                 if (is3D && isCompressed) {
-                    // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
-                    for (let z = 0; z < depth; z++) {
-                        gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * sliceElementSize, sliceElementSize);
-                    }
+                    gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, 1, gl_format, levelData);
                 } else if (isCube) {
                     for (let z = 0; z < depth; z++) {
                         const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
