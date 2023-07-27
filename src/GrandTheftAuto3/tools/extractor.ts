@@ -13,8 +13,8 @@ interface Asset {
     name: string;
 }
 
-function loadDIR(buf: ArrayBuffer) {
-    let assets = [] as Asset[];
+function loadDIR(buf: ArrayBufferLike): Asset[] {
+    let assets: Asset[] = [];
     let view = new DataView(buf);
     for (let i = 0; i < buf.byteLength; i += 32) {
         let offset = view.getUint32(i + 0, true);
@@ -25,7 +25,7 @@ function loadDIR(buf: ArrayBuffer) {
     return assets;
 }
 
-function loadAsset(img: ArrayBuffer, asset: Asset) {
+function loadAsset(img: ArrayBufferLike, asset: Asset) {
     return img.slice(2048 * asset.offset, 2048 * (asset.offset + asset.size));
 }
 

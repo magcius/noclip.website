@@ -34,8 +34,8 @@ interface Asset {
     data?: Uint8Array;
 }
 
-function loadDIR(buf: ArrayBuffer) {
-    const assets = [];
+function loadDIR(buf: ArrayBufferLike): Asset[] {
+    const assets: Asset[] = [];
     const view = new DataView(buf);
     const start = 8;
     const dirLength = 32 * view.getUint32(4, true);
@@ -48,7 +48,7 @@ function loadDIR(buf: ArrayBuffer) {
     return assets;
 }
 
-function loadAsset(img: ArrayBuffer, asset: Asset) {
+function loadAsset(img: ArrayBufferLike, asset: Asset) {
     return new Uint8Array(img, 2048 * asset.offset, 2048 * asset.size);
 }
 
@@ -64,7 +64,7 @@ function writeIMGZ(path: string, assets: Asset[], size: number) {
         view.setUint32(j + 0, asset.offset, true);
         view.setUint16(j + 4, asset.size, true);
         bytes.set(StringToUTF8(asset.name), j + 8);
-        bytes.set(asset.data, 2048 * asset.offset);
+        bytes.set(asset.data!, 2048 * asset.offset);
         console.log(asset.name);
     }
 
@@ -138,7 +138,7 @@ async function main() {
     await fs.writeFile(`${pathBase}/textures/transparent.txt`, texturesTransparent.join(''));
 
     let offset = Math.ceil((8 + 32 * files.size) / 2048);
-    const assets = [];
+    const assets: Asset[] = [];
     for (const [name, data] of files) {
         const size = data.byteLength / 2048;
         const asset: Asset = { name, size, offset, data };

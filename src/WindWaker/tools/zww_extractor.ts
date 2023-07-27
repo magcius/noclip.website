@@ -58,7 +58,7 @@ function parseMapFile(filename: string): SymbolMap {
 
     const sectionNames: string[] = [];
 
-    let sectionName: string;
+    let sectionName: string | null = null;
     let i = 0;
 
     for (; i < lines.length; i++) {
@@ -77,7 +77,7 @@ function parseMapFile(filename: string): SymbolMap {
         if (line.startsWith('>>>'))
             continue;
 
-        if (sectionName === undefined)
+        if (sectionName === null)
             continue;
 
         const [addrStr, sizeStr, vaddrStr, unk2Str, symbolName, filename] = line.split(/\s+/);
@@ -126,7 +126,7 @@ interface SymbolData {
 }
 
 function basename(filename: string): string {
-    return filename.split('/').pop();
+    return filename.split('/').pop()!;
 }
 
 class DOL {
