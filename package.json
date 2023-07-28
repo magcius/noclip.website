@@ -41,6 +41,7 @@
     "start": "webpack serve --config webpack.dev.cjs",
     "build": "webpack --config webpack.prod.cjs",
     "build:zww": "cd src/WindWaker/tools && ts-node-esm zww_extractor.ts",
+    "build:ztp": "cd src/TwilightPrincess/tools && ts-node-esm ztp_extractor.ts",
     "build:dk64": "cd src/DonkeyKong64/tools && ts-node-esm extractor.ts",
     "build:KatamariDamacy": "cd src/KatamariDamacy/tools && ts-node-esm extractor.ts",
     "build:ffx": "cd src/FinalFantasyX/tools && ts-node-esm extractor.ts",
