@@ -5,7 +5,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice.js';
 import { Color, TransparentBlack, colorNewFromRGBA } from '../../Color.js';
 import { DataFetcher } from '../../DataFetcher.js';
 import * as Geometry from '../../Geometry.js';
-import { Destroyable } from '../../SceneBase.js';
+import { Destroyable, SceneContext } from '../../SceneBase.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillVec4, fillVec4v } from '../../gfx/helpers/UniformBufferHelpers.js';
@@ -785,4 +785,11 @@ export class UnityShaderData {
 
     public destroy(device: GfxDevice): void {
     }
+}
+
+export async function createUnityAssetSystem(context: SceneContext, basePath: string): Promise<UnityAssetSystem> {
+    const runtime = await context.dataShare.ensureObject(`UnityAssetSystem/${basePath}`, async () => {
+        return new UnityAssetSystem(context.device, context.dataFetcher, basePath);
+    });
+    return runtime;
 }

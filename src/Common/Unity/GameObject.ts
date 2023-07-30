@@ -10,7 +10,7 @@ import { GfxCullMode, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData } from "./AssetManager.js";
+import { AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData, createUnityAssetSystem } from "./AssetManager.js";
 import { rust } from "../../rustlib.js";
 
 interface WasmBindgenArray<T> {
@@ -94,11 +94,6 @@ export class MeshFilter extends UnityComponent {
     private async loadMeshData(runtime: UnityRuntime, wasmObj: wasm.MeshFilter) {
         this.meshData = await runtime.assetSystem.fetchResource(UnityAssetResourceType.Mesh, this.gameObject.location, wasmObj.mesh_ptr);
         wasmObj.free();
-    }
-
-    public override destroy(device: GfxDevice): void {
-        if (this.meshData !== null)
-            this.meshData.destroy(device);
     }
 }
 
@@ -291,11 +286,9 @@ export class UnityRuntime {
     public gameObjects: GameObject[] = [];
     public components = new Map<number, UnityComponent>();
     public rootGameObjects: GameObject[] = [];
-    public assetSystem: UnityAssetSystem;
     public materialFactory: UnityMaterialFactory;
 
-    constructor(public context: SceneContext, basePath: string) {
-        this.assetSystem = new UnityAssetSystem(context.device, context.dataFetcher, basePath);
+    constructor(public context: SceneContext, public assetSystem: UnityAssetSystem) {
     }
 
     public findGameObjectByPPtr(pptr: wasm.PPtr): GameObject | null {
@@ -397,8 +390,6 @@ export class UnityRuntime {
 }
 
 export async function createUnityRuntime(context: SceneContext, basePath: string): Promise<UnityRuntime> {
-    const runtime = await context.dataShare.ensureObject(`UnityRuntime/${basePath}`, async () => {
-        return new UnityRuntime(context, basePath);
-    });
-    return runtime;
+    const assetSystem = await createUnityAssetSystem(context, basePath);
+    return new UnityRuntime(context, assetSystem);
 }
