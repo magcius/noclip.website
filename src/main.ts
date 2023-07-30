@@ -89,6 +89,7 @@ import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
 import * as Scenes_AShortHike from './AShortHike/Scenes.js';
+import * as Scenes_NeonWhite from './NeonWhite/Scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -212,6 +213,7 @@ const sceneGroups = [
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
     Scenes_AShortHike.sceneGroup,
+    Scenes_NeonWhite.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
