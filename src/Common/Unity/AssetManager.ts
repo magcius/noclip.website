@@ -13,8 +13,7 @@ import { GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInpu
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache.js';
 import { assert, assertExists, fallbackUndefined } from '../../util.js';
-
-export type RustModule = typeof import('../../../rust/pkg/index');
+import { rust } from '../../rustlib.js';
 
 interface WasmBindgenArray<T> {
     length: number;
@@ -154,8 +153,8 @@ class AssetFile {
     constructor(private path: string) {
     }
 
-    private doneLoadingHeader(wasm: RustModule, buffer: Uint8Array): void {
-        this.assetInfo = wasm.AssetInfo.deserialize(buffer);
+    private doneLoadingHeader(buffer: Uint8Array): void {
+        this.assetInfo = rust.AssetInfo.deserialize(buffer);
         this.unityObject = loadWasmBindgenArray(this.assetInfo.get_objects());
         for (let i = 0; i < this.unityObject.length; i++)
             this.unityObjectByPathID.set(this.unityObject[i].path_id, this.unityObject[i]);
@@ -166,23 +165,23 @@ class AssetFile {
         return assertExists(this.waitForHeaderPromise);
     }
 
-    private async initFullInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
+    private async initFullInternal(dataFetcher: DataFetcher): Promise<void> {
         this.fullData = await dataFetcher.fetchData(this.path);
-        this.doneLoadingHeader(wasm, this.fullData.createTypedArray(Uint8Array));
+        this.doneLoadingHeader(this.fullData.createTypedArray(Uint8Array));
     }
 
-    public initFull(wasm: RustModule, dataFetcher: DataFetcher): void {
+    public initFull(dataFetcher: DataFetcher): void {
         assert(this.waitForHeaderPromise === undefined);
-        this.waitForHeaderPromise = this.initFullInternal(wasm, dataFetcher);
+        this.waitForHeaderPromise = this.initFullInternal(dataFetcher);
     }
 
-    private async initPartialInternal(wasm: RustModule, dataFetcher: DataFetcher): Promise<void> {
+    private async initPartialInternal(dataFetcher: DataFetcher): Promise<void> {
         let headerBytes = (await dataFetcher.fetchData(this.path, {
             rangeStart: 0,
             rangeSize: MAX_HEADER_LENGTH,
         })).createTypedArray(Uint8Array);
 
-        const assetHeader = wasm.AssetHeader.deserialize(headerBytes);
+        const assetHeader = rust.AssetHeader.deserialize(headerBytes);
         if (assetHeader.data_offset > headerBytes.byteLength) {
             // Oops, need to fetch extra bytes...
             const extraBytes = (await dataFetcher.fetchData(this.path, {
@@ -194,12 +193,12 @@ class AssetFile {
 
         assetHeader.free();
         this.fetcher = new FileDataFetcher();
-        this.doneLoadingHeader(wasm, headerBytes);
+        this.doneLoadingHeader(headerBytes);
     }
 
-    public initPartial(wasm: RustModule, dataFetcher: DataFetcher): void {
+    public initPartial(dataFetcher: DataFetcher): void {
         assert(this.waitForHeaderPromise === undefined);
-        this.waitForHeaderPromise = this.initPartialInternal(wasm, dataFetcher);
+        this.waitForHeaderPromise = this.initPartialInternal(dataFetcher);
     }
 
     public hasDataToFetch(): boolean {
@@ -248,7 +247,7 @@ class AssetFile {
     }
 
     private createMeshData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMeshData> => {
-        const mesh = assetSystem.wasm.Mesh.from_bytes(objData.data, objData.assetInfo);
+        const mesh = rust.Mesh.from_bytes(objData.data, objData.assetInfo);
         const streamingInfo: UnityStreamingInfo | undefined = mesh.get_streaming_info();
         if (streamingInfo !== undefined) {
             const vertexData = await assetSystem.fetchStreamingInfo(streamingInfo);
@@ -258,15 +257,15 @@ class AssetFile {
         if (mesh.is_compressed()) {
             return loadCompressedMesh(assetSystem.device, mesh);
         } else {
-            return loadMesh(assetSystem.wasm, assetSystem.device, mesh);
+            return loadMesh(assetSystem.device, mesh);
         }
     };
 
     private createTexture2DData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityTexture2DData | null> => {
-        if (objData.classID !== assetSystem.wasm.UnityClassID.Texture2D)
+        if (objData.classID !== rust.UnityClassID.Texture2D)
             return null;
 
-        const header = assetSystem.wasm.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityTexture2D.from_bytes(objData.data, objData.assetInfo);
         let data = header.image_data;
         if (data.length === 0) {
             const streaming_info = header.streaming_info;
@@ -274,18 +273,18 @@ class AssetFile {
             data = (await assetSystem.fetchStreamingInfo(streaming_info)).createTypedArray(Uint8Array);
             streaming_info.free();
         }
-        return new UnityTexture2DData(assetSystem.wasm, assetSystem.renderCache, header, data);
+        return new UnityTexture2DData(assetSystem.renderCache, header, data);
     };
 
     private createMaterialData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityMaterialData> => {
-        const header = assetSystem.wasm.UnityMaterial.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityMaterial.from_bytes(objData.data, objData.assetInfo);
         const materialData = new UnityMaterialData(objData.location, header);
         await materialData.load(assetSystem);
         return materialData;
     };
 
     private createShaderData = async (assetSystem: UnityAssetSystem, objData: AssetObjectData): Promise<UnityShaderData> => {
-        const header = assetSystem.wasm.UnityShader.from_bytes(objData.data, objData.assetInfo);
+        const header = rust.UnityShader.from_bytes(objData.data, objData.assetInfo);
         return new UnityShaderData(objData.location, header);
     };
 
@@ -334,7 +333,7 @@ export class UnityAssetSystem {
     private assetFiles = new Map<string, AssetFile>();
     public renderCache: GfxRenderCache;
 
-    constructor(public wasm: RustModule, public device: GfxDevice, private dataFetcher: DataFetcher, private basePath: string) {
+    constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private basePath: string) {
         this.renderCache = new GfxRenderCache(this.device);
     }
 
@@ -355,9 +354,9 @@ export class UnityAssetSystem {
             const path = `${this.basePath}/${filename}`;
             const assetFile = new AssetFile(path);
             if (partial)
-                assetFile.initPartial(this.wasm, this.dataFetcher);
+                assetFile.initPartial(this.dataFetcher);
             else
-                assetFile.initFull(this.wasm, this.dataFetcher);
+                assetFile.initFull(this.dataFetcher);
             this.assetFiles.set(filename, assetFile);
         }
 
@@ -473,32 +472,32 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
     return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.get_submeshes(), indexBufferFormat);
 }
 
-function vertexFormatToGfxFormatBase(wasm: RustModule, vertexFormat: VertexFormat): GfxFormat {
+function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
     switch (vertexFormat) {
-        case wasm!.VertexFormat.Float: return GfxFormat.F32_R;
-        case wasm!.VertexFormat.Float16: return GfxFormat.F16_R;
-        case wasm!.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
-        case wasm!.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
-        case wasm!.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
-        case wasm!.VertexFormat.SNorm16: return GfxFormat.S16_R_NORM;
-        case wasm!.VertexFormat.UInt8: return GfxFormat.U8_R;
-        case wasm!.VertexFormat.SInt8: return GfxFormat.S8_R;
-        case wasm!.VertexFormat.UInt16: return GfxFormat.U16_R;
-        case wasm!.VertexFormat.SInt16: return GfxFormat.S16_R;
-        case wasm!.VertexFormat.UInt32: return GfxFormat.U32_R;
-        case wasm!.VertexFormat.SInt32: return GfxFormat.S32_R;
+        case rust.VertexFormat.Float: return GfxFormat.F32_R;
+        case rust.VertexFormat.Float16: return GfxFormat.F16_R;
+        case rust.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
+        case rust.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
+        case rust.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
+        case rust.VertexFormat.SNorm16: return GfxFormat.S16_R_NORM;
+        case rust.VertexFormat.UInt8: return GfxFormat.U8_R;
+        case rust.VertexFormat.SInt8: return GfxFormat.S8_R;
+        case rust.VertexFormat.UInt16: return GfxFormat.U16_R;
+        case rust.VertexFormat.SInt16: return GfxFormat.S16_R;
+        case rust.VertexFormat.UInt32: return GfxFormat.U32_R;
+        case rust.VertexFormat.SInt32: return GfxFormat.S32_R;
         default:
             throw new Error(`didn't recognize format ${vertexFormat}`);
     }
 }
 
-function vertexFormatToGfxFormat(wasm: RustModule, vertexFormat: VertexFormat, dimension: number): GfxFormat {
-    const baseFormat = vertexFormatToGfxFormatBase(wasm, vertexFormat);
+function vertexFormatToGfxFormat(vertexFormat: VertexFormat, dimension: number): GfxFormat {
+    const baseFormat = vertexFormatToGfxFormatBase(vertexFormat);
     const compFlags = dimension as FormatCompFlags;
     return setFormatCompFlags(baseFormat, compFlags);
 }
 
-function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor | null {
+function channelInfoToVertexAttributeDescriptor(location: number, channelInfo: ChannelInfo): GfxVertexAttributeDescriptor | null {
     if (channelInfo === undefined)
         return null;
 
@@ -506,11 +505,11 @@ function channelInfoToVertexAttributeDescriptor(wasm: RustModule, location: numb
     if (dimension === 0)
         return null;
 
-    const gfxFormat = vertexFormatToGfxFormat(wasm, format, dimension);
+    const gfxFormat = vertexFormatToGfxFormat(format, dimension);
     return { location: location, bufferIndex: stream, bufferByteOffset: offset, format: gfxFormat };
 }
 
-function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMeshData {
+function loadMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     const layoutBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
     const stateBufferDescriptors: GfxVertexBufferDescriptor[] = [];
@@ -519,7 +518,7 @@ function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMeshDat
     const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, mesh.get_index_data().buffer);
 
     for (let i = 0; i < mesh.get_channel_count(); i++) {
-        const desc = channelInfoToVertexAttributeDescriptor(wasm, i, mesh.get_channel_info(i)!);
+        const desc = channelInfoToVertexAttributeDescriptor(i, mesh.get_channel_info(i)!);
         if (desc !== null)
             vertexAttributeDescriptors.push(desc);
     }
@@ -533,57 +532,57 @@ function loadMesh(wasm: RustModule, device: GfxDevice, mesh: Mesh): UnityMeshDat
         stateBufferDescriptors.push({ buffer: vertData, byteOffset: stream.offset });
     }
 
-    const indexBufferFormat = (mesh.index_format === wasm.IndexFormat.UInt32) ? GfxFormat.U32_R : GfxFormat.U16_R;
+    const indexBufferFormat = (mesh.index_format === rust.IndexFormat.UInt32) ? GfxFormat.U32_R : GfxFormat.U16_R;
     const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors: layoutBufferDescriptors, indexBufferFormat });
     const indexBuffer = { buffer: indexData, byteOffset: 0 };
     return new UnityMeshData(layout, stateBufferDescriptors, indexBuffer, mesh.local_aabb, mesh.get_submeshes(), indexBufferFormat);
 }
 
-function translateTextureFormat(wasm: RustModule, fmt: UnityTextureFormat, colorSpace: UnityColorSpace): GfxFormat {
-    if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.Linear)
+function translateTextureFormat(fmt: UnityTextureFormat, colorSpace: UnityColorSpace): GfxFormat {
+    if (fmt === rust.UnityTextureFormat.BC1 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.BC1;
-    else if (fmt === wasm.UnityTextureFormat.BC1 && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.BC1 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.BC1_SRGB;
-    else if (fmt === wasm.UnityTextureFormat.BC3 && colorSpace === wasm.UnityColorSpace.Linear)
+    else if (fmt === rust.UnityTextureFormat.BC3 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.BC3;
-    else if (fmt === wasm.UnityTextureFormat.BC3 && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.BC3 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.BC3_SRGB;
-    else if (fmt === wasm.UnityTextureFormat.RGB24 && colorSpace === wasm.UnityColorSpace.Linear)
+    else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.U8_RGB_NORM;
-    else if (fmt === wasm.UnityTextureFormat.RGB24 && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.U8_RGB_SRGB;
-    else if (fmt === wasm.UnityTextureFormat.RGBA32 && colorSpace === wasm.UnityColorSpace.Linear)
+    else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
-    else if (fmt === wasm.UnityTextureFormat.RGBA32 && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.U8_RGBA_SRGB;
-    else if (fmt === wasm.UnityTextureFormat.ARGB32 && colorSpace === wasm.UnityColorSpace.Linear)
+    else if (fmt === rust.UnityTextureFormat.ARGB32 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
-    else if (fmt === wasm.UnityTextureFormat.ARGB32 && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.ARGB32 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.U8_RGBA_SRGB;
-    else if (fmt === wasm.UnityTextureFormat.DXT1Crunched && colorSpace === wasm.UnityColorSpace.Linear)
+    else if (fmt === rust.UnityTextureFormat.DXT1Crunched && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.BC1;
-    else if (fmt === wasm.UnityTextureFormat.DXT1Crunched && colorSpace === wasm.UnityColorSpace.SRGB)
+    else if (fmt === rust.UnityTextureFormat.DXT1Crunched && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.BC1_SRGB;
     else
         throw "whoops";
 }
 
-function translateWrapMode(wasm: RustModule, v: number): GfxWrapMode {
-    if (v === wasm.UnityTextureWrapMode.Repeat)
+function translateWrapMode(v: number): GfxWrapMode {
+    if (v === rust.UnityTextureWrapMode.Repeat)
         return GfxWrapMode.Repeat;
-    else if (v === wasm.UnityTextureWrapMode.Clamp)
+    else if (v === rust.UnityTextureWrapMode.Clamp)
         return GfxWrapMode.Clamp;
-    else if (v === wasm.UnityTextureWrapMode.Mirror)
+    else if (v === rust.UnityTextureWrapMode.Mirror)
         return GfxWrapMode.Mirror;
-    else if (v === wasm.UnityTextureWrapMode.MirrorOnce)
+    else if (v === rust.UnityTextureWrapMode.MirrorOnce)
         return GfxWrapMode.Mirror; // TODO(jstpierre): what to do here?
     else
         throw "whoops";
 }
 
-function translateSampler(wasm: RustModule, header: UnityTextureSettings): GfxSamplerDescriptor {
-    const mipFilterMode = (header.filter_mode === wasm.UnityTextureFilterMode.Trilinear) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
-    const texFilterMode = (header.filter_mode >= wasm.UnityTextureFilterMode.Bilinear) ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point;
+function translateSampler(header: UnityTextureSettings): GfxSamplerDescriptor {
+    const mipFilterMode = (header.filter_mode === rust.UnityTextureFilterMode.Trilinear) ? GfxMipFilterMode.Linear : GfxMipFilterMode.Nearest;
+    const texFilterMode = (header.filter_mode >= rust.UnityTextureFilterMode.Bilinear) ? GfxTexFilterMode.Bilinear : GfxTexFilterMode.Point;
 
     // Mip bias needs to be handled in shader...
 
@@ -591,37 +590,37 @@ function translateSampler(wasm: RustModule, header: UnityTextureSettings): GfxSa
         magFilter: texFilterMode,
         minFilter: texFilterMode,
         mipFilter: mipFilterMode,
-        wrapS: translateWrapMode(wasm, header.wrap_u),
-        wrapT: translateWrapMode(wasm, header.wrap_v),
-        wrapQ: translateWrapMode(wasm, header.wrap_w),
-        maxAnisotropy: header.filter_mode === wasm.UnityTextureFilterMode.Trilinear ? header.aniso : 1,
+        wrapS: translateWrapMode(header.wrap_u),
+        wrapT: translateWrapMode(header.wrap_v),
+        wrapQ: translateWrapMode(header.wrap_w),
+        maxAnisotropy: header.filter_mode === rust.UnityTextureFilterMode.Trilinear ? header.aniso : 1,
     };
 }
 
-function calcLevelSize(wasm: RustModule, fmt: UnityTextureFormat, w: number, h: number): number {
-    if (fmt === wasm.UnityTextureFormat.BC1 || fmt === wasm.UnityTextureFormat.BC2 || fmt === wasm.UnityTextureFormat.BC3 || fmt === wasm.UnityTextureFormat.DXT1Crunched) {
+function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
+    if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.BC2 || fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.DXT1Crunched) {
         w = (w + 0x03) & ~0x03;
         h = (h + 0x03) & ~0x03;
         const numPixels = w * h;
-        if (fmt === wasm.UnityTextureFormat.BC1)
+        if (fmt === rust.UnityTextureFormat.BC1)
             return numPixels >>> 1;
         else
             return numPixels;
-    } else if (fmt === wasm.UnityTextureFormat.Alpha8) {
+    } else if (fmt === rust.UnityTextureFormat.Alpha8) {
         return w * h;
-    } else if (fmt === wasm.UnityTextureFormat.RGB24) {
+    } else if (fmt === rust.UnityTextureFormat.RGB24) {
         return w * h * 3;
-    } else if (fmt === wasm.UnityTextureFormat.RGBA32) {
+    } else if (fmt === rust.UnityTextureFormat.RGBA32) {
         return w * h * 4;
-    } else if (fmt === wasm.UnityTextureFormat.ARGB32) {
+    } else if (fmt === rust.UnityTextureFormat.ARGB32) {
         return w * h * 4;
     } else {
         throw "whoops";
     }
 }
 
-function imageFormatConvertData(wasm: RustModule, d: Uint8Array, fmt: UnityTextureFormat): Uint8Array {
-    if (fmt === wasm.UnityTextureFormat.ARGB32) {
+function imageFormatConvertData(d: Uint8Array, fmt: UnityTextureFormat): Uint8Array {
+    if (fmt === rust.UnityTextureFormat.ARGB32) {
         for (let i = 0; i < d.length; i += 4) {
             const a = d[i+0], r = d[i+1], g = d[i+2], b = d[i+3];
             d[i+0] = r; d[i+1] = g; d[i+2] = b; d[i+3] = a;
@@ -632,11 +631,11 @@ function imageFormatConvertData(wasm: RustModule, d: Uint8Array, fmt: UnityTextu
     }
 }
 
-function calcLevels(wasm: RustModule, buffer: Uint8Array, fmt: UnityTextureFormat, w: number, h: number, numLevels: number): ArrayBufferView[] {
+function calcLevels(buffer: Uint8Array, fmt: UnityTextureFormat, w: number, h: number, numLevels: number): ArrayBufferView[] {
     let offset = 0;
     const views: ArrayBufferView[] = [];
     for (let i = 0; i < numLevels; i++) {
-        const levelSize = calcLevelSize(wasm, fmt, w, h);
+        const levelSize = calcLevelSize(fmt, w, h);
         views.push(buffer.subarray(offset, offset + levelSize));
         offset += levelSize;
         w = Math.max(w >>> 1, 1);
@@ -649,18 +648,18 @@ export class UnityTexture2DData {
     public gfxTexture: GfxTexture;
     public gfxSampler: GfxSampler;
 
-    constructor(wasm: RustModule, cache: GfxRenderCache, private header: UnityTexture2D, data: Uint8Array) {
+    constructor(cache: GfxRenderCache, private header: UnityTexture2D, data: Uint8Array) {
         const device = cache.device;
-        const pixelFormat = translateTextureFormat(wasm, header.texture_format, header.color_space);
+        const pixelFormat = translateTextureFormat(header.texture_format, header.color_space);
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(pixelFormat, header.width, header.height, header.mipmap_count));
 
-        this.gfxSampler = cache.createSampler(translateSampler(wasm, header.texture_settings));
+        this.gfxSampler = cache.createSampler(translateSampler(header.texture_settings));
 
-        if (header.texture_format === wasm.UnityTextureFormat.DXT1Crunched)
+        if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched)
             return;
 
-        data = imageFormatConvertData(wasm, data, header.texture_format);
-        const levels = calcLevels(wasm, data, header.texture_format, header.width, header.height, header.mipmap_count);
+        data = imageFormatConvertData(data, header.texture_format);
+        const levels = calcLevels(data, header.texture_format, header.width, header.height, header.mipmap_count);
         device.uploadTextureData(this.gfxTexture, 0, levels);
     }
 
