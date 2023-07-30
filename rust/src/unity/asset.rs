@@ -1,6 +1,7 @@
+
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::version::UnityVersion;
-use crate::unity::reader::AssetReader;
+use crate::unity::reader::{ AssetReader, Deserialize, Result as ReaderResult };
 
 #[wasm_bindgen]
 #[derive(Debug)]
@@ -22,10 +23,38 @@ pub struct AssetInfo {
 }
 
 #[wasm_bindgen]
+pub struct UnityObjectArray {
+    pub length: usize,
+    data: Vec<UnityObject>,
+}
+
+#[wasm_bindgen]
+impl UnityObjectArray {
+    pub fn get(&self, i: usize) -> UnityObject {
+        self.data[i].clone()
+    }
+}
+
+#[wasm_bindgen]
 impl AssetInfo {
     pub fn deserialize(data: Vec<u8>) -> Result<AssetInfo, String> {
         AssetReader::new(data).read_asset_info()
             .map_err(|err| format!("{:?}", err))
+    }
+
+    pub fn get_external_path(&self, file_index: u32) -> Option<String> {
+        let idx = (file_index as usize) - 1;
+        if idx >= self.externals.len() {
+            return None;
+        }
+        Some(self.externals[idx].path_name.clone())
+    }
+
+    pub fn get_objects(&self) -> UnityObjectArray {
+        UnityObjectArray {
+            length: self.objects.len(),
+            data: self.objects.clone(),
+        }
     }
 }
 
@@ -39,15 +68,17 @@ pub struct External {
 #[derive(Debug)]
 pub struct ScriptType {
     pub local_serialized_file_index: i32,
-    pub local_identifier_in_file: i64,
+    pub local_identifier_in_file: i32,
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct UnityObject {
-    pub path_id: i64,
+    pub path_id: i32,
     pub byte_start: i64,
     pub byte_size: u32,
     pub type_id: i32,
+    #[wasm_bindgen(skip)]
     pub serialized_type: SerializedType,
     pub class_id: i32,
 }
@@ -118,4 +149,94 @@ pub struct AssetMetadata {
     pub target_platform: u32,
     pub enable_type_tree: bool,
     pub types: Vec<SerializedType>,
+}
+
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct UnityStreamingInfo {
+    pub size: u32,
+    pub offset: u32,
+    pub path: String,
+}
+
+impl Deserialize for UnityStreamingInfo {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> ReaderResult<Self> {
+        let unity2020 = UnityVersion { major: 2020, ..Default::default() };
+        let offset = if asset.metadata.unity_version > unity2020 {
+            reader.read_i64()? as u32
+        } else {
+            reader.read_u32()?
+        };
+        let size = reader.read_u32()?;
+        let path = reader.read_char_array()?;
+        Ok(UnityStreamingInfo {
+            size: size,
+            offset: offset,
+            path: path,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
+pub struct PPtr {
+    pub file_index: u32,
+    pub path_id: i32,
+}
+
+impl Deserialize for PPtr {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<Self> {
+        let file_index = reader.read_u32()?;
+        let path_id = reader.read_i64()? as i32;
+        Ok(PPtr { file_index, path_id })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Map<TKey, TVal> {
+    pub keys: Vec<TKey>,
+    pub vals: Vec<TVal>,
+}
+
+impl<TKey: Eq, TVal: Clone> Map<TKey, TVal> {
+    pub fn find_idx(&self, k: TKey) -> Option<usize> {
+        for i in 0..(self.keys.len()) {
+            if self.keys[i] == k {
+                return Some(i);
+            }
+        }
+
+        None
+    }
+
+    pub fn find(&self, k: TKey) -> Option<TVal> {
+        self.find_idx(k).map(|idx| self.vals[idx].clone())
+    }
+}
+
+impl<TKey: Deserialize, TVal: Deserialize> Deserialize for Map<TKey, TVal> {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> ReaderResult<Map<TKey, TVal>> {
+        let mut keys = Vec::new();
+        let mut vals = Vec::new();
+        let n = reader.read_u32()?;
+        for _ in 0..n {
+            let key = TKey::deserialize(reader, asset)?;
+            keys.push(key);
+            let val = TVal::deserialize(reader, asset)?;
+            vals.push(val);
+        }
+        Ok(Map{ keys, vals })
+    }
+}
+
+impl Deserialize for String {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<String> {
+        reader.read_char_array()
+    }
+}
+
+impl Deserialize for f32 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<f32> {
+        reader.read_f32()
+    }
 }

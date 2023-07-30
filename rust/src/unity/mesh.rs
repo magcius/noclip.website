@@ -92,6 +92,21 @@ impl Deserialize for ChannelInfo {
 }
 
 #[derive(Debug)]
+pub struct Mat4x4f {
+    xs: Vec<f32>,
+}
+
+impl Deserialize for Mat4x4f {
+    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+        let mut xs = Vec::new();
+        for _ in 0..16 {
+            xs.push(reader.read_f32()?);
+        }
+        Ok(Mat4x4f { xs })
+    }
+}
+
+#[derive(Debug)]
 pub struct PackedIntVector {
     num_items: u32,
     data: Vec<u8>,
@@ -196,37 +211,12 @@ impl Deserialize for CompressedMesh {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone)]
-pub struct StreamingInfo {
-    pub size: u32,
-    pub offset: u32,
-    path: String,
-}
-
-#[wasm_bindgen]
-impl StreamingInfo {
-    pub fn get_path(&self) -> String {
-        return self.path.clone();
-    }
-}
-
-impl Deserialize for StreamingInfo {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
-        Ok(StreamingInfo {
-            size: reader.read_u32()?,
-            offset: reader.read_u32()?,
-            path: reader.read_char_array()?,
-        })
-    }
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Clone)]
 pub struct VertexStreamInfo {
-    channel_mask: u32,
+    pub channel_mask: u32,
     pub offset: u32,
     pub stride: u32,
-    divider_op: u8,
-    frequency: u32,
+    pub divider_op: u8,
+    pub frequency: u32,
 }
 
 impl VertexStreamInfo {
@@ -261,7 +251,7 @@ impl VertexStreamInfo {
                 frequency: 0,
             });
             offset += (vertex_count * stride) as u32;
-            offset = (offset + 15) & 15;
+            offset = (offset + 0x0F) & !0x0F;
         }
         return result;
     }
@@ -309,6 +299,22 @@ impl Deserialize for Shape {
 
 #[wasm_bindgen]
 #[derive(Debug, Copy, Clone)]
+pub struct Vec2f {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Deserialize for Vec2f {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
+        Ok(Vec2f {
+            x: reader.read_f32()?,
+            y: reader.read_f32()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
 pub struct Vec3f {
     pub x: f32,
     pub y: f32,
@@ -316,11 +322,31 @@ pub struct Vec3f {
 }
 
 impl Deserialize for Vec3f {
-    fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
         Ok(Vec3f {
             x: reader.read_f32()?,
             y: reader.read_f32()?,
             z: reader.read_f32()?,
+        })
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Debug, Copy, Clone)]
+pub struct Vec4f {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Deserialize for Vec4f {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> Result<Self> {
+        Ok(Vec4f {
+            x: reader.read_f32()?,
+            y: reader.read_f32()?,
+            z: reader.read_f32()?,
+            w: reader.read_f32()?,
         })
     }
 }
@@ -341,15 +367,16 @@ impl Deserialize for AABB {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[wasm_bindgen]
 pub struct SubMesh {
-    first_byte: u32,
-    index_count: u32,
-    topology: u32,
-    base_vertex: u32,
+    pub first_byte: u32,
+    pub index_count: u32,
+    pub topology: u32,
+    pub base_vertex: u32,
     first_vertex: u32,
     vertex_count: u32,
-    local_aabb: AABB,
+    pub local_aabb: AABB,
 }
 
 impl Deserialize for SubMesh {
@@ -363,6 +390,19 @@ impl Deserialize for SubMesh {
             vertex_count: reader.read_u32()?,
             local_aabb: AABB::deserialize(reader, asset)?,
         })
+    }
+}
+
+#[wasm_bindgen]
+pub struct SubMeshArray {
+    pub length: usize,
+    submeshes: Vec<SubMesh>,
+}
+
+#[wasm_bindgen]
+impl SubMeshArray {
+    pub fn get(&self, i: usize) -> SubMesh {
+        self.submeshes[i].clone()
     }
 }
 
@@ -397,9 +437,9 @@ pub enum IndexFormat {
 }
 
 #[derive(Debug)]
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Mesh {
-    name: String,
+    pub name: String,
     submeshes: Vec<SubMesh>,
     mesh_compression: MeshCompression,
     is_readable: bool,
@@ -414,7 +454,7 @@ pub struct Mesh {
     hash_metrics: [f32; 2],
     baked_convex_collision_mesh: Vec<u8>,
     baked_triangle_collision_mesh: Vec<u8>,
-    streaming_info: StreamingInfo,
+    streaming_info: UnityStreamingInfo,
 }
 
 #[wasm_bindgen]
@@ -422,11 +462,8 @@ impl Mesh {
     pub fn from_bytes(data: Vec<u8>, asset: &AssetInfo) -> std::result::Result<Mesh, String> {
         let mut reader = AssetReader::new(data);
         reader.set_endianness(asset.header.endianness);
-        Mesh::deserialize(&mut reader, asset).map_err(|err| format!("{:?}", err))
-    }
-
-    pub fn get_name(&self) -> String {
-        self.name.clone()
+        let mesh = Mesh::deserialize(&mut reader, asset)?;
+        return Ok(mesh);
     }
 
     pub fn is_compressed(&self) -> bool {
@@ -458,7 +495,7 @@ impl Mesh {
         }
     }
 
-    pub fn get_streaming_info(&self) -> Option<StreamingInfo> {
+    pub fn get_streaming_info(&self) -> Option<UnityStreamingInfo> {
         if self.streaming_info.path.is_empty() {
             None
         } else {
@@ -482,6 +519,10 @@ impl Mesh {
         self.raw_index_buffer.clone()
     }
 
+    pub fn get_channel_count(&self) -> usize {
+        self.vertex_data.channels.len()
+    }
+
     pub fn get_channel_info(&self, i: usize) -> Option<ChannelInfo> {
         match self.vertex_data.channels.get(i) {
             Some(c) => Some(c.clone()),
@@ -489,10 +530,21 @@ impl Mesh {
         }
     }
 
+    pub fn get_vertex_stream_count(&self) -> usize {
+        self.vertex_data.streams.len()
+    }
+
     pub fn get_vertex_stream_info(&self, i: usize) -> Option<VertexStreamInfo> {
         match self.vertex_data.streams.get(i) {
             Some(s) => Some(s.clone()),
             None => None,
+        }
+    }
+
+    pub fn get_submeshes(&self) -> SubMeshArray {
+        SubMeshArray {
+            length: self.submeshes.len(),
+            submeshes: self.submeshes.clone(),
         }
     }
 }
@@ -508,11 +560,11 @@ impl Deserialize for Mesh {
 
         let submeshes = SubMesh::deserialize_array(reader, asset)?;
         let _shapes = Shape::deserialize(reader, asset)?;
-        let _bind_pose = NoOp::deserialize_array(reader, asset)?;
-        let _bone_name_hashes = NoOp::deserialize_array(reader, asset)?;
+        let _bind_pose = Mat4x4f::deserialize_array(reader, asset)?;
+        let _bone_name_hashes = reader.read_u32_array()?;
         let _root_bone_name_hash = reader.read_u32()?;
-        let _bones_aabb = NoOp::deserialize_array(reader, asset)?;
-        let _variable_bone_count_weights = NoOp::deserialize_array(reader, asset)?;
+        let _bones_aabb = AABB::deserialize_array(reader, asset)?;
+        let _variable_bone_count_weights = reader.read_u32_array()?;
         let mesh_compression = MeshCompression::deserialize(reader, asset)?;
         let is_readable = reader.read_bool()?;
         let keep_vertices = reader.read_bool()?;
@@ -531,9 +583,7 @@ impl Deserialize for Mesh {
         let baked_triangle_collision_mesh = reader.read_byte_array()?;
         reader.align()?;
         let hash_metrics = [reader.read_f32()?, reader.read_f32()?];
-        let streaming_info = StreamingInfo::deserialize(reader, asset)?;
-        //web_sys::console::log_1(&format!("{:?}", &vertex_data.channels).into());
-        //web_sys::console::log_1(&format!("{:?}", &vertex_data.streams).into());
+        let streaming_info = UnityStreamingInfo::deserialize(reader, asset)?;
 
         Ok(Mesh {
             name,

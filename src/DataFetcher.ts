@@ -43,8 +43,8 @@ class DataFetcherRequest {
         this.request = new Request(this.url);
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
-            const rangeStart = this.options.rangeStart;
-            const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
+            const rangeStart = BigInt(this.options.rangeStart);
+            const rangeEnd = rangeStart + BigInt(this.options.rangeSize - 1); // Range header is inclusive.
             this.request.headers.set('Range', `bytes=${rangeStart}-${rangeEnd}`);
 
             // Partial responses are unsupported with Cache, for some lovely reason.
@@ -222,7 +222,7 @@ interface DataFetcherOptions {
      * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
      * Must be specified in tandem with rangeSize.
      */
-    rangeStart?: number;
+    rangeStart?: number | bigint;
     /**
      * rangeSize: Length for the range header.
      * Must be specified together with rangeStart.
@@ -259,7 +259,7 @@ class DataFetcherMount {
 
         let blob: Blob = await fileHandle.getFile();
         if (options.rangeStart !== undefined && options.rangeSize !== undefined)
-            blob = blob.slice(options.rangeStart, options.rangeSize);
+            blob = blob.slice(Number(options.rangeStart), options.rangeSize);
 
         const arrayBuffer = await blob.arrayBuffer();
         const arrayBufferSlice = new ArrayBufferSlice(arrayBuffer) as NamedArrayBufferSlice;

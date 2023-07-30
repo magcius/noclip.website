@@ -34,6 +34,12 @@ impl From<std::io::Error> for AssetReaderError {
     }
 }
 
+impl From<AssetReaderError> for String {
+    fn from(err: AssetReaderError) -> Self {
+        format!("{:?}", err)
+    }
+}
+
 pub type Result<T> = std::result::Result<T, AssetReaderError>;
 
 pub trait Deserialize {
@@ -148,11 +154,27 @@ impl AssetReader {
         }
     }
 
+    pub fn read_u64(&mut self) -> Result<u64> {
+        match self.endianness {
+            Endianness::Big => Ok(self.data.read_u64::<BigEndian>()?),
+            Endianness::Little => Ok(self.data.read_u64::<LittleEndian>()?),
+        }
+    }
+
     pub fn read_f32(&mut self) -> Result<f32> {
         match self.endianness {
             Endianness::Big => Ok(self.data.read_f32::<BigEndian>()?),
             Endianness::Little => Ok(self.data.read_f32::<LittleEndian>()?),
         }
+    }
+
+    pub fn read_u32_array(&mut self) -> Result<Vec<u32>> {
+        let count = self.read_u32()? as usize;
+        let mut xs: Vec<u32> = Vec::with_capacity(count);
+        for _ in 0..count {
+            xs.push(self.read_u32()?);
+        }
+        Ok(xs)
     }
 
     pub fn read_char_array(&mut self) -> Result<String> {
@@ -284,7 +306,7 @@ impl AssetReader {
 
     fn read_object(&mut self, hdr: &AssetHeader, metadata: &AssetMetadata) -> Result<UnityObject> {
         self.align()?;
-        let path_id = self.read_i64()?;
+        let path_id = self.read_i64()? as i32;
         let mut byte_start = match hdr.version {
             22 => self.read_i64()?,
             _ => self.read_u32()? as i64,
@@ -313,7 +335,7 @@ impl AssetReader {
         for _ in 0..n_script_types {
             let local_serialized_file_index = self.read_i32()?;
             self.align()?;
-            let local_identifier_in_file = self.read_i64()?;
+            let local_identifier_in_file = self.read_i64()? as i32;
             result.push(ScriptType { local_identifier_in_file, local_serialized_file_index });
         }
         Ok(result)
@@ -449,5 +471,20 @@ mod tests {
         let data = std::fs::read("test_data/unity_assets/v22/sharedassets0.assets").unwrap();
         let mut reader = AssetReader::new(data);
         let _asset = reader.read_asset_info().unwrap();
+    }
+
+    #[test]
+    fn test_cactus() {
+        use crate::unity::mesh::Mesh;
+        let data = std::fs::read("../data/hike/level2").unwrap();
+        let mut reader = AssetReader::new(data);
+        let asset = reader.read_asset_info().unwrap();
+        dbg!(&asset.externals[1]);
+        let data = std::fs::read("../data/hike/sharedassets2.assets").unwrap();
+        let mut reader = AssetReader::new(data);
+        let asset = reader.read_asset_info().unwrap();
+        let m = asset.objects.iter().find(|obj| obj.path_id == 612).unwrap();
+        reader.seek_to_object(&m).unwrap();
+        let _x = Mesh::deserialize(&mut reader, &asset);
     }
 }

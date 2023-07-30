@@ -88,6 +88,7 @@ import * as Scenes_Halo1 from './Halo1/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
+import * as Scenes_AShortHike from './AShortHike/Scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -103,7 +104,6 @@ import { RenderStatistics } from './RenderStatistics.js';
 import { Color } from './Color.js';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers.js';
 
-import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
 import { SceneDesc, SceneGroup, SceneContext, Destroyable } from './SceneBase.js';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk.js';
 import { downloadBlob } from './DownloadUtils.js';
@@ -211,6 +211,7 @@ const sceneGroups = [
     Scenes_HalfLife.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
+    Scenes_AShortHike.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
