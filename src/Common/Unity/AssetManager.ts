@@ -543,9 +543,9 @@ function translateTextureFormat(fmt: UnityTextureFormat, colorSpace: UnityColorS
     else if (fmt === rust.UnityTextureFormat.BC3 && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.BC3_SRGB;
     else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityColorSpace.Linear)
-        return GfxFormat.U8_RGB_NORM;
+        return GfxFormat.U8_RGBA_NORM;
     else if (fmt === rust.UnityTextureFormat.RGB24 && colorSpace === rust.UnityColorSpace.SRGB)
-        return GfxFormat.U8_RGB_SRGB;
+        return GfxFormat.U8_RGBA_SRGB;
     else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityColorSpace.Linear)
         return GfxFormat.U8_RGBA_NORM;
     else if (fmt === rust.UnityTextureFormat.RGBA32 && colorSpace === rust.UnityColorSpace.SRGB)
@@ -558,6 +558,14 @@ function translateTextureFormat(fmt: UnityTextureFormat, colorSpace: UnityColorS
         return GfxFormat.BC1;
     else if (fmt === rust.UnityTextureFormat.DXT1Crunched && colorSpace === rust.UnityColorSpace.SRGB)
         return GfxFormat.BC1_SRGB;
+    else if (fmt === rust.UnityTextureFormat.DXT5Crunched && colorSpace === rust.UnityColorSpace.Linear)
+        return GfxFormat.BC3;
+    else if (fmt === rust.UnityTextureFormat.DXT5Crunched && colorSpace === rust.UnityColorSpace.SRGB)
+        return GfxFormat.BC3_SRGB;
+    else if (fmt === rust.UnityTextureFormat.BC7 && colorSpace === rust.UnityColorSpace.Linear)
+        return GfxFormat.BC7;
+    else if (fmt === rust.UnityTextureFormat.BC7 && colorSpace === rust.UnityColorSpace.SRGB)
+        return GfxFormat.BC7_SRGB;
     else
         throw "whoops";
 }
@@ -593,18 +601,27 @@ function translateSampler(header: UnityTextureSettings): GfxSamplerDescriptor {
 }
 
 function calcLevelSize(fmt: UnityTextureFormat, w: number, h: number): number {
-    if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.BC2 || fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.DXT1Crunched) {
-        w = (w + 0x03) & ~0x03;
-        h = (h + 0x03) & ~0x03;
-        const numPixels = w * h;
-        if (fmt === rust.UnityTextureFormat.BC1)
-            return numPixels >>> 1;
+    if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.BC2 || fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.BC6H || fmt === rust.UnityTextureFormat.BC7|| fmt === rust.UnityTextureFormat.DXT1Crunched || fmt === rust.UnityTextureFormat.DXT5Crunched) {
+        w = Math.max(w, 4);
+        h = Math.max(h, 4);
+        const depth = 1;
+        const count = ((w * h) / 16) * depth;
+        if (fmt === rust.UnityTextureFormat.BC1 || fmt === rust.UnityTextureFormat.DXT1Crunched)
+            return count * 8;
+        else if (fmt === rust.UnityTextureFormat.BC2)
+            return count * 16;
+        else if (fmt === rust.UnityTextureFormat.BC3 || fmt === rust.UnityTextureFormat.DXT5Crunched)
+            return count * 16;
+        else if (fmt === rust.UnityTextureFormat.BC6H)
+            return count * 16;
+        else if (fmt === rust.UnityTextureFormat.BC7)
+            return count * 16;
         else
-            return numPixels;
+            throw "whoops";
     } else if (fmt === rust.UnityTextureFormat.Alpha8) {
         return w * h;
     } else if (fmt === rust.UnityTextureFormat.RGB24) {
-        return w * h * 3;
+        return w * h * 4;
     } else if (fmt === rust.UnityTextureFormat.RGBA32) {
         return w * h * 4;
     } else if (fmt === rust.UnityTextureFormat.ARGB32) {
@@ -621,6 +638,15 @@ function imageFormatConvertData(d: Uint8Array, fmt: UnityTextureFormat): Uint8Ar
             d[i+0] = r; d[i+1] = g; d[i+2] = b; d[i+3] = a;
         }
         return d;
+    } else if (fmt === rust.UnityTextureFormat.RGB24) {
+        const o = new Uint8Array((d.length * 4) / 3);
+        for (let di = 0, oi = 0; di < d.length;) {
+            o[oi++] = d[di++];
+            o[oi++] = d[di++];
+            o[oi++] = d[di++];
+            o[oi++] = 0xFF;
+        }
+        return o;
     } else {
         return d;
     }
@@ -650,11 +676,18 @@ export class UnityTexture2DData {
 
         this.gfxSampler = cache.createSampler(translateSampler(header.texture_settings));
 
-        if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched)
+        // TODO(jstpierre): Support crunched formats
+        if (header.texture_format === rust.UnityTextureFormat.DXT1Crunched) {
+            console.warn(`DXT1Crunched ${this.header.name}`);
             return;
+        }
+        if (header.texture_format === rust.UnityTextureFormat.DXT5Crunched) {
+            console.warn(`DXT5Crunched ${this.header.name}`);
+            return;
+        }
 
-        data = imageFormatConvertData(data, header.texture_format);
-        const levels = calcLevels(data, header.texture_format, header.width, header.height, header.mipmap_count);
+        const oData = imageFormatConvertData(data, header.texture_format);
+        const levels = calcLevels(oData, header.texture_format, header.width, header.height, header.mipmap_count);
         device.uploadTextureData(this.gfxTexture, 0, levels);
     }
 
@@ -691,13 +724,15 @@ export class UnityMaterialData {
         return this.texEnvName.indexOf(name);
     }
 
-    public fillTextureMapping(dst: TextureMapping, name: string): void {
+    public fillTextureMapping(dst: TextureMapping, name: string): boolean {
         const idx = this.findTexEnv(name);
         if (idx >= 0 && this.texture[idx] !== null) {
             dst.gfxTexture = this.texture[idx]!.gfxTexture;
             dst.gfxSampler = this.texture[idx]!.gfxSampler;
+            return true;
         } else {
             dst.reset();
+            return false;
         }
     }
 

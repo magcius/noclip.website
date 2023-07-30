@@ -201,6 +201,7 @@ class TerrainMaterial extends UnityMaterialInstance {
 
 class AShortHikeMaterialFactory extends UnityMaterialFactory {
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
+        debugger;
         // TODO(jstpierre): Pull out serialized shader data
         if (materialData.texEnvName.includes('_Splat3'))
             return new TerrainMaterial(runtime, materialData);

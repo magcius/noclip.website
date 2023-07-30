@@ -6,7 +6,7 @@ import { DeviceProgram } from "../../Program.js";
 import { SceneContext } from "../../SceneBase.js";
 import { GfxShaderLibrary } from "../../gfx/helpers/GfxShaderLibrary.js";
 import { fillMatrix4x3 } from "../../gfx/helpers/UniformBufferHelpers.js";
-import { GfxCullMode, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
+import { GfxCullMode, GfxDevice, GfxFrontFaceMode } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util.js";
 import { ViewerRenderInput } from "../../viewer.js";
@@ -46,6 +46,13 @@ function quatFromQuaternion(dst: quat, src: wasm.Quaternion): void {
     quat.set(dst, src.x, src.y, src.z, src.w);
 }
 
+const noclipSpaceFromUnitySpace = mat4.fromValues(
+     -1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+);
+
 export class Transform extends UnityComponent {
     public localPosition = vec3.create();
     public localRotation = quat.create();
@@ -77,9 +84,21 @@ export class Transform extends UnityComponent {
 
         if (this.parent !== null)
             mat4.mul(this.modelMatrix, this.parent.modelMatrix, this.modelMatrix);
+        else
+            mat4.mul(this.modelMatrix, noclipSpaceFromUnitySpace, this.modelMatrix);
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].updateModelMatrix();
+    }
+
+    public isVisible(): boolean {
+        if (!this.gameObject.visible || !this.gameObject.isActive)
+            return false;
+
+        if (this.parent !== null)
+            return this.parent.isVisible();
+
+        return true;
     }
 }
 
@@ -177,7 +196,7 @@ export class MeshRenderer extends UnityComponent {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.visible || !this.gameObject.visible)
+        if (!this.visible || !this.gameObject.isVisible())
             return;
 
         const meshFilter = this.gameObject.getComponent(MeshFilter);
@@ -191,7 +210,7 @@ export class MeshRenderer extends UnityComponent {
         // TODO(jstpierre): AABB culling
 
         if (this.staticBatchSubmeshCount > 0) {
-            mat4.identity(this.modelMatrix);
+            mat4.copy(this.modelMatrix, noclipSpaceFromUnitySpace);
         } else {
             // TODO(jstpierre): Skinned meshes
             const transform = assertExists(this.gameObject.getComponent(Transform));
@@ -222,7 +241,7 @@ export class MeshRenderer extends UnityComponent {
             material.prepareToRender(renderInst);
             const firstIndex = submesh.first_byte / meshData.indexBufferStride;
             renderInst.drawIndexes(submesh.index_count, firstIndex);
-            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back });
+            renderInst.setMegaStateFlags({ cullMode: GfxCullMode.Back, frontFace: GfxFrontFaceMode.CW });
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -267,6 +286,10 @@ export class GameObject {
         for (let i = 0; i < this.components.length; i++)
             this.components[i].destroy(device);
         this.header.free();
+    }
+
+    public isVisible(): boolean {
+        return this.getComponent(Transform)!.isVisible();
     }
 }
 

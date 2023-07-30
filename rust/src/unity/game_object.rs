@@ -11,6 +11,7 @@ pub struct GameObject {
     pub components: Vec<PPtr>,
     pub layer: u32,
     pub name: String,
+    pub tag: u16,
     pub is_active: bool,
 }
 
@@ -26,6 +27,7 @@ impl Deserialize for GameObject {
             components,
             layer: reader.read_u32()?,
             name: reader.read_char_array()?,
+            tag: reader.read_u16()?,
             is_active: reader.read_bool()?,
         })
     }

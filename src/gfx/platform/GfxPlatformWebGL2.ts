@@ -421,6 +421,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
     private _EXT_clip_control: EXT_clip_control | null = null;
     private _EXT_texture_compression_rgtc: EXT_texture_compression_rgtc | null = null;
+    private _EXT_texture_compression_bptc: EXT_texture_compression_bptc | null = null;
     private _EXT_texture_filter_anisotropic: EXT_texture_filter_anisotropic | null = null;
     private _EXT_texture_norm16: EXT_texture_norm16 | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
@@ -506,6 +507,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._EXT_clip_control = gl.getExtension('EXT_clip_control');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
+        this._EXT_texture_compression_bptc = gl.getExtension('EXT_texture_compression_bptc');
         this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
         this._EXT_texture_norm16 = gl.getExtension('EXT_texture_norm16');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
@@ -717,6 +719,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return this._EXT_texture_compression_rgtc!.COMPRESSED_RED_GREEN_RGTC2_EXT;
         case GfxFormat.BC5_SNORM:
             return this._EXT_texture_compression_rgtc!.COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT;
+        case GfxFormat.BC6H_UNORM:
+            return this._EXT_texture_compression_bptc!.COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT;
+        case GfxFormat.BC6H_SNORM:
+            return this._EXT_texture_compression_bptc!.COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT;
+        case GfxFormat.BC7:
+            return this._EXT_texture_compression_bptc!.COMPRESSED_RGBA_BPTC_UNORM_EXT;
+        case GfxFormat.BC7_SRGB:
+            return this._EXT_texture_compression_bptc!.COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT;
         case GfxFormat.D32F_S8:
             return WebGL2RenderingContext.DEPTH32F_STENCIL8;
         case GfxFormat.D24_S8:
@@ -801,6 +811,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case FormatTypeFlags.BC4_SNORM:
         case FormatTypeFlags.BC5_UNORM:
         case FormatTypeFlags.BC5_SNORM:
+        case FormatTypeFlags.BC6H_UNORM:
+        case FormatTypeFlags.BC6H_SNORM:
+        case FormatTypeFlags.BC7:
             return true;
         default:
             return false;
@@ -1520,6 +1533,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.BC5_UNORM:
         case GfxFormat.BC5_SNORM:
             if (this._EXT_texture_compression_rgtc !== null)
+                return isBlockCompressSized(width, height, 4, 4);
+            return false;
+        case GfxFormat.BC6H_UNORM:
+        case GfxFormat.BC6H_SNORM:
+        case GfxFormat.BC7:
+        case GfxFormat.BC7_SRGB:
+            if (this._EXT_texture_compression_bptc !== null)
                 return isBlockCompressSized(width, height, 4, 4);
             return false;
         case GfxFormat.U16_R_NORM:

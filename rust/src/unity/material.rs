@@ -1,7 +1,7 @@
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::asset::*;
-use crate::unity::mesh::{ Vec2f };
+use crate::unity::mesh::Vec2f;
 use crate::unity::reader::*;
 
 #[wasm_bindgen(getter_with_clone)]

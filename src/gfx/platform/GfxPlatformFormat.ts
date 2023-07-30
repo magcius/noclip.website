@@ -21,6 +21,9 @@ export const enum FormatTypeFlags {
     BC4_SNORM,
     BC5_UNORM,
     BC5_SNORM,
+    BC6H_UNORM,
+    BC6H_SNORM,
+    BC7,
 
     // Special-case packed texture formats.
     U16_PACKED_5551 = 0x61,
@@ -103,16 +106,20 @@ export enum GfxFormat {
     U16_RGB_565     = makeFormat(FormatTypeFlags.U16_PACKED_565,  FormatCompFlags.RGB,  FormatFlags.Normalized),
 
     // Compressed
-    BC1             = makeFormat(FormatTypeFlags.BC1,       FormatCompFlags.RGBA, FormatFlags.Normalized),
-    BC1_SRGB        = makeFormat(FormatTypeFlags.BC1,       FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
-    BC2             = makeFormat(FormatTypeFlags.BC2,       FormatCompFlags.RGBA, FormatFlags.Normalized),
-    BC2_SRGB        = makeFormat(FormatTypeFlags.BC2,       FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
-    BC3             = makeFormat(FormatTypeFlags.BC3,       FormatCompFlags.RGBA, FormatFlags.Normalized),
-    BC3_SRGB        = makeFormat(FormatTypeFlags.BC3,       FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
-    BC4_UNORM       = makeFormat(FormatTypeFlags.BC4_UNORM, FormatCompFlags.R,    FormatFlags.Normalized),
-    BC4_SNORM       = makeFormat(FormatTypeFlags.BC4_SNORM, FormatCompFlags.R,    FormatFlags.Normalized),
-    BC5_UNORM       = makeFormat(FormatTypeFlags.BC5_UNORM, FormatCompFlags.RG,   FormatFlags.Normalized),
-    BC5_SNORM       = makeFormat(FormatTypeFlags.BC5_SNORM, FormatCompFlags.RG,   FormatFlags.Normalized),
+    BC1             = makeFormat(FormatTypeFlags.BC1,        FormatCompFlags.RGBA, FormatFlags.Normalized),
+    BC1_SRGB        = makeFormat(FormatTypeFlags.BC1,        FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
+    BC2             = makeFormat(FormatTypeFlags.BC2,        FormatCompFlags.RGBA, FormatFlags.Normalized),
+    BC2_SRGB        = makeFormat(FormatTypeFlags.BC2,        FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
+    BC3             = makeFormat(FormatTypeFlags.BC3,        FormatCompFlags.RGBA, FormatFlags.Normalized),
+    BC3_SRGB        = makeFormat(FormatTypeFlags.BC3,        FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
+    BC4_UNORM       = makeFormat(FormatTypeFlags.BC4_UNORM,  FormatCompFlags.R,    FormatFlags.Normalized),
+    BC4_SNORM       = makeFormat(FormatTypeFlags.BC4_SNORM,  FormatCompFlags.R,    FormatFlags.Normalized),
+    BC5_UNORM       = makeFormat(FormatTypeFlags.BC5_UNORM,  FormatCompFlags.RG,   FormatFlags.Normalized),
+    BC5_SNORM       = makeFormat(FormatTypeFlags.BC5_SNORM,  FormatCompFlags.RG,   FormatFlags.Normalized),
+    BC6H_UNORM      = makeFormat(FormatTypeFlags.BC6H_UNORM, FormatCompFlags.RGB,  FormatFlags.Normalized),
+    BC6H_SNORM      = makeFormat(FormatTypeFlags.BC6H_SNORM, FormatCompFlags.RGB,  FormatFlags.Normalized),
+    BC7             = makeFormat(FormatTypeFlags.BC7,        FormatCompFlags.RGBA, FormatFlags.Normalized),
+    BC7_SRGB        = makeFormat(FormatTypeFlags.BC7,        FormatCompFlags.RGBA, FormatFlags.Normalized | FormatFlags.sRGB),
 
     // Depth/Stencil
     D24             = makeFormat(FormatTypeFlags.D24,       FormatCompFlags.R,  FormatFlags.Depth),
