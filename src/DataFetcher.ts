@@ -219,7 +219,7 @@ interface DataFetcherOptions {
      * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
      * Must be specified in tandem with rangeSize.
      */
-    rangeStart?: number;
+    rangeStart?: number | bigint;
     /**
      * rangeSize: Length for the range header.
      * Must be specified together with rangeStart.
@@ -256,7 +256,7 @@ class DataFetcherMount {
 
         let blob: Blob = await fileHandle.getFile();
         if (options.rangeStart !== undefined && options.rangeSize !== undefined)
-            blob = blob.slice(options.rangeStart, options.rangeSize);
+            blob = blob.slice(Number(options.rangeStart), options.rangeSize);
 
         const arrayBuffer = await blob.arrayBuffer();
         const arrayBufferSlice = new ArrayBufferSlice(arrayBuffer) as NamedArrayBufferSlice;

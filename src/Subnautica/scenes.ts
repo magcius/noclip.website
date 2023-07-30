@@ -1,16 +1,18 @@
+
+import { mat4, vec3 } from 'gl-matrix';
+import { UnityChannel } from '../Common/Unity/AssetManager.js';
+import { MeshRenderer as UnityMeshRenderer, UnityRuntime, createUnityRuntime } from '../Common/Unity/GameObject.js';
+import { AABB } from '../Geometry.js';
+import { SceneContext } from '../SceneBase.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxDevice, GfxProgram } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import * as Viewer from '../viewer.js';
 import { DeviceProgram } from '../Program.js';
-import { SceneContext } from '../SceneBase.js';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { mat4, vec3 } from 'gl-matrix';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager.js';
-import { AABB } from '../Geometry.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 class ChunkProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -58,82 +60,34 @@ void mainPS() {
 // big blocky scaley
 const CHUNK_SCALE = 32;
 
-class MeshRenderer {
-    public normsBuf: GfxBuffer;
-    public vertsBuf: GfxBuffer;
-    public trisBuf: GfxBuffer;
-    public numVertices: number;
-
-    constructor(device: GfxDevice, public mesh: UnityMesh, public modelMatrix: mat4) {
-    }
-
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const bbox = new AABB();
-        bbox.transform(this.mesh.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(bbox)) {
-            return;
-        }
-
-        const template = renderInstManager.pushTemplate();
-
-        let offs = template.allocateUniformBuffer(ChunkProgram.ub_ShapeParams, 16);
-        const mapped = template.mapUniformBufferF32(ChunkProgram.ub_ShapeParams);
-        offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
-
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setVertexInput(this.mesh.inputLayout, this.mesh.vertexBufferDescriptors, this.mesh.indexBufferDescriptor);
-        renderInst.setDrawCount(this.mesh.numIndices);
-        renderInstManager.submitRenderInst(renderInst);
-        renderInstManager.popTemplate();
-    }
-
-    public destroy(device: GfxDevice) {
-        this.mesh.destroy(device);
-    }
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 0 }, // ub_SceneParams
+    { numUniformBuffers: 2, numSamplers: 0 },
 ];
 
-class SubnauticaRenderer implements Viewer.SceneGfx {
-    public scaleFactor = 20;
-    private meshRenderers: MeshRenderer[];
+class UnityRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     public program: GfxProgram;
 
-    constructor(public device: GfxDevice) {
-        this.meshRenderers = [];
-        this.renderHelper = new GfxRenderHelper(device);
-        this.program = this.renderHelper.renderCache.createProgram(new ChunkProgram());
-    }
-
-    public getCache(): GfxRenderCache {
-        return this.renderHelper.renderCache;
-    }
-
-    addMesh(mesh: UnityMesh, offset: vec3) {
-        let model = mat4.create();
-        let scaling = vec3.fromValues(this.scaleFactor, this.scaleFactor, this.scaleFactor);
-        mat4.fromScaling(model, scaling);
-        mat4.translate(model, model, offset);
-        this.meshRenderers.push(new MeshRenderer(this.device, mesh, model));
+    constructor(private runtime: UnityRuntime) {
+        this.renderHelper = new GfxRenderHelper(this.runtime.context.device, this.runtime.context);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.runtime.update();
+
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(this.program);
 
-        let offs = template.allocateUniformBuffer(ChunkProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(ChunkProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(0, 32);
+        const mapped = template.mapUniformBufferF32(0);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
+        const meshRenderers = this.runtime.getComponents(UnityMeshRenderer);
         this.renderHelper.renderInstManager.setCurrentList(this.renderInstListMain);
-        for (let i = 0; i < this.meshRenderers.length; i++)
-            this.meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < meshRenderers.length; i++)
+            meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplate();
         this.renderHelper.prepareToRender();
@@ -166,18 +120,9 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
-        this.meshRenderers.forEach((r) => r.destroy(device));
+        this.runtime.destroy(device);
         this.renderHelper.destroy();
     }
-}
-
-function parseOffset(chunkId: string): vec3 {
-    let bits = chunkId.split('-');
-    return vec3.fromValues(
-        parseInt(bits[1]) * CHUNK_SCALE,
-        parseInt(bits[2]) * CHUNK_SCALE,
-        parseInt(bits[3]) * CHUNK_SCALE,
-    );
 }
 
 class SubnauticaSceneDesc implements Viewer.SceneDesc {
@@ -185,22 +130,25 @@ class SubnauticaSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const renderer = new SubnauticaRenderer(device);
-        const chunks: MeshMetadata[] = await context.dataFetcher.fetchData('subnautica/chunks.json')
-            .then(data => {
-                let decoder = new TextDecoder();
-                return JSON.parse(decoder.decode(data.arrayBuffer as ArrayBuffer)).chunks;
-            });
-        let assets = new UnityAssetManager('subnautica/resources.assets', context, device, renderer.getCache());
+        /*let assets = new UnityAssetManager('hike/level2', context, device);
         await assets.loadAssetInfo();
+        let tree = await assets.getGameObjectTree();
+        for (let id in tree.nodes) {
+            let node = tree.nodes[id];
+            if (!node.meshSet) {
+                continue;
+            }
+            if (!node.gameObjectSet) {
+                console.error(`invalid node! ${node.name}`)
+                continue;
+            }
+            renderer.addMesh(tree.meshes[node.meshPathID!], node);
+        }*/
 
-        chunks.forEach(chunk => {
-            let offset = parseOffset(chunk.name);
-            assets.loadMesh(chunk).then(mesh => {
-                renderer.addMesh(mesh, offset);
-            });
-        });
+        const runtime = await createUnityRuntime(context, `AShortHike`);
+        await runtime.loadLevel(`level2`);
 
+        const renderer = new UnityRenderer(runtime);
         return renderer;
     }
 
