@@ -10,7 +10,8 @@ import { GfxCullMode, GfxDevice } from "../../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { AssetLocation, AssetObjectData, RustModule, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData } from "./AssetManager.js";
+import { AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData } from "./AssetManager.js";
+import { rust } from "../../rustlib.js";
 
 interface WasmBindgenArray<T> {
     length: number;
@@ -274,14 +275,6 @@ export class GameObject {
     }
 }
 
-let _wasm: RustModule | null = null;
-async function loadWasm(): Promise<RustModule> {
-    if (_wasm === null) {
-        _wasm = await import('../../../rust/pkg/index');
-    }
-    return _wasm;
-}
-
 interface WasmFromBytes<T> {
     from_bytes(data: Uint8Array, assetInfo: wasm.AssetInfo): any;
 }
@@ -301,8 +294,8 @@ export class UnityRuntime {
     public assetSystem: UnityAssetSystem;
     public materialFactory: UnityMaterialFactory;
 
-    constructor(private wasm: RustModule, public context: SceneContext, basePath: string) {
-        this.assetSystem = new UnityAssetSystem(this.wasm, context.device, context.dataFetcher, basePath);
+    constructor(public context: SceneContext, basePath: string) {
+        this.assetSystem = new UnityAssetSystem(context.device, context.dataFetcher, basePath);
     }
 
     public findGameObjectByPPtr(pptr: wasm.PPtr): GameObject | null {
@@ -328,15 +321,15 @@ export class UnityRuntime {
     }
 
     public loadComponent(gameObject: GameObject, obj: AssetObjectData): Promise<void> | null {
-        if (obj.classID === this.wasm.UnityClassID.Transform) {
-            return this.loadOneComponent(obj, gameObject, this.wasm.Transform, Transform);
-        } else if (obj.classID === this.wasm.UnityClassID.RectTransform) {
+        if (obj.classID === rust.UnityClassID.Transform) {
+            return this.loadOneComponent(obj, gameObject, rust.Transform, Transform);
+        } else if (obj.classID === rust.UnityClassID.RectTransform) {
             // HACK(jstpierre)
-            return this.loadOneComponent(obj, gameObject, this.wasm.Transform, Transform);
-        } else if (obj.classID === this.wasm.UnityClassID.MeshFilter) {
-            return this.loadOneComponent(obj, gameObject, this.wasm.MeshFilter, MeshFilter);
-        } else if (obj.classID === this.wasm.UnityClassID.MeshRenderer) {
-            return this.loadOneComponent(obj, gameObject, this.wasm.MeshRenderer, MeshRenderer);
+            return this.loadOneComponent(obj, gameObject, rust.Transform, Transform);
+        } else if (obj.classID === rust.UnityClassID.MeshFilter) {
+            return this.loadOneComponent(obj, gameObject, rust.MeshFilter, MeshFilter);
+        } else if (obj.classID === rust.UnityClassID.MeshRenderer) {
+            return this.loadOneComponent(obj, gameObject, rust.MeshRenderer, MeshRenderer);
         } else {
             return null;
         }
@@ -350,7 +343,7 @@ export class UnityRuntime {
         const loadGameObject = async (unityObject: UnityObject) => {
             const pathID = unityObject.path_id;
             const objData = await assetFile.fetchObject(pathID);
-            const wasmGameObject = this.wasm.GameObject.from_bytes(objData.data, assetFile.assetInfo);
+            const wasmGameObject = rust.GameObject.from_bytes(objData.data, assetFile.assetInfo);
             const gameObject = new GameObject(objData.location, wasmGameObject);
             gameObject.isActive = wasmGameObject.is_active;
             gameObject.layer = wasmGameObject.layer;
@@ -361,7 +354,7 @@ export class UnityRuntime {
         const promises = [];
         for (let i = 0; i < assetFile.unityObject.length; i++) {
             const unityObject = assetFile.unityObject[i];
-            if (unityObject.class_id !== this.wasm.UnityClassID.GameObject)
+            if (unityObject.class_id !== rust.UnityClassID.GameObject)
                 continue;
 
             promises.push(loadGameObject(unityObject));
@@ -404,9 +397,8 @@ export class UnityRuntime {
 }
 
 export async function createUnityRuntime(context: SceneContext, basePath: string): Promise<UnityRuntime> {
-    const wasm = await loadWasm();
     const runtime = await context.dataShare.ensureObject(`UnityRuntime/${basePath}`, async () => {
-        return new UnityRuntime(wasm, context, basePath);
+        return new UnityRuntime(context, basePath);
     });
     return runtime;
 }
