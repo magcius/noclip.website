@@ -408,7 +408,6 @@ export class UnityRuntime {
         this.components.clear();
         for (let i = 0; i < this.gameObjects.length; i++)
             this.gameObjects[i].destroy(device);
-        this.assetSystem.destroy(device);
     }
 }
 

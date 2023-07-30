@@ -739,7 +739,7 @@ export class UnityMaterialData {
         if (idx >= 0) {
             return fillVec4v(d, offs, this.textureST[idx]);
         } else {
-            return fillVec4(d, offs, 0);
+            return fillVec4(d, offs, 1, 1, 0, 0);
         }
     }
 
