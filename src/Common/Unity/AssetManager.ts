@@ -84,7 +84,7 @@ export class UnityAssetManager {
             rangeStart: 0,
             rangeSize: MAX_HEADER_LENGTH,
         });
-        let assetHeader = rust!.AssetHeader.deserialize(headerBytes);
+        let assetHeader = rust.AssetHeader.deserialize(headerBytes);
         if (assetHeader.data_offset > headerBytes.byteLength) {
             let extraBytes = await this.loadBytes({
                 rangeStart: headerBytes.byteLength,
@@ -92,13 +92,13 @@ export class UnityAssetManager {
             });
             headerBytes = concatBufs(headerBytes, extraBytes);
         }
-        this.assetInfo = rust!.AssetInfo.deserialize(headerBytes);
+        this.assetInfo = rust.AssetInfo.deserialize(headerBytes);
     }
 
     public async downloadMeshMetadata() {
         let assetData = await this.context.dataFetcher.fetchData(this.assetPath);
         let assetBytes = new Uint8Array(assetData.arrayBuffer);
-        let meshDataArray = rust!.get_mesh_metadata(this.assetInfo, assetBytes);
+        let meshDataArray = rust.get_mesh_metadata(this.assetInfo, assetBytes);
         let result: MeshMetadata[] = [];
         for (let i=0; i<meshDataArray.length; i++) {
             let data = meshDataArray.get(i);
@@ -117,7 +117,7 @@ export class UnityAssetManager {
             rangeStart: meshData.offset,
             rangeSize: meshData.size,
         });
-        let mesh = rust!.Mesh.from_bytes(meshBytes, this.assetInfo);
+        let mesh = rust.Mesh.from_bytes(meshBytes, this.assetInfo);
         let streamingInfo: StreamingInfo | undefined = mesh.get_streaming_info();
         if (streamingInfo !== undefined) {
             mesh.set_vertex_data(await this.loadStreamingData(streamingInfo));
@@ -163,18 +163,18 @@ function loadCompressedMesh(cache: GfxRenderCache, mesh: Mesh): UnityMesh {
 
 function vertexFormatToGfxFormatBase(vertexFormat: VertexFormat): GfxFormat {
     switch (vertexFormat) {
-        case rust!.VertexFormat.Float: return GfxFormat.F32_R;
-        case rust!.VertexFormat.Float16: return GfxFormat.F16_R;
-        case rust!.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
-        case rust!.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
-        case rust!.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
-        case rust!.VertexFormat.SNorm16: return GfxFormat.S16_RG_NORM;
-        case rust!.VertexFormat.UInt8: return GfxFormat.U8_R;
-        case rust!.VertexFormat.SInt8: return GfxFormat.S8_R;
-        case rust!.VertexFormat.UInt16: return GfxFormat.U16_R;
-        case rust!.VertexFormat.SInt16: return GfxFormat.S16_R;
-        case rust!.VertexFormat.UInt32: return GfxFormat.U32_R;
-        case rust!.VertexFormat.SInt32: return GfxFormat.S32_R;
+        case rust.VertexFormat.Float: return GfxFormat.F32_R;
+        case rust.VertexFormat.Float16: return GfxFormat.F16_R;
+        case rust.VertexFormat.UNorm8: return GfxFormat.U8_R_NORM;
+        case rust.VertexFormat.SNorm8: return GfxFormat.S8_R_NORM;
+        case rust.VertexFormat.UNorm16: return GfxFormat.U16_R_NORM;
+        case rust.VertexFormat.SNorm16: return GfxFormat.S16_RG_NORM;
+        case rust.VertexFormat.UInt8: return GfxFormat.U8_R;
+        case rust.VertexFormat.SInt8: return GfxFormat.S8_R;
+        case rust.VertexFormat.UInt16: return GfxFormat.U16_R;
+        case rust.VertexFormat.SInt16: return GfxFormat.S16_R;
+        case rust.VertexFormat.UInt32: return GfxFormat.U32_R;
+        case rust.VertexFormat.SInt32: return GfxFormat.S32_R;
         default:
             throw new Error(`didn't recognize format ${vertexFormat}`);
     }
@@ -206,7 +206,7 @@ function loadMesh(cache: GfxRenderCache, mesh: Mesh): UnityMesh {
     let indices = mesh.get_index_data();
     let indexBufferFormat: GfxFormat;
     let numIndices = 0;
-    if (mesh.index_format === rust!.IndexFormat.UInt32) {
+    if (mesh.index_format === rust.IndexFormat.UInt32) {
         indexBufferFormat = GfxFormat.U32_R;
         numIndices = indices.length / 4;
     } else {

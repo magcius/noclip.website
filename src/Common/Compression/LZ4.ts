@@ -51,7 +51,7 @@ export function decompressSW(buffer: ArrayBufferSlice, uncompressedSize: number)
 }
 
 export function decompress(srcBuffer: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
-    const bufView = rust!.lz4_decompress(srcBuffer.createTypedArray(Uint8Array), uncompressedSize);
+    const bufView = rust.lz4_decompress(srcBuffer.createTypedArray(Uint8Array), uncompressedSize);
     return ArrayBufferSlice.fromView(bufView);
 }
 

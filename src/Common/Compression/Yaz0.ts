@@ -66,6 +66,6 @@ export function decompressSW(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
 }
 
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-    const bufView = rust!.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
+    const bufView = rust.yaz0dec(srcBuffer.createTypedArray(Uint8Array));
     return ArrayBufferSlice.fromView(bufView);
 }

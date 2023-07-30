@@ -157,26 +157,26 @@ export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalett
 
 async function decodeRust(texture: TextureInputGX): Promise<DecodedTexture> {
     const fmt =
-        texture.format === GX.TexFormat.I4 ? rust!.PixelFormat.I4 :
-        texture.format === GX.TexFormat.I8 ? rust!.PixelFormat.I8 :
-        texture.format === GX.TexFormat.IA4 ? rust!.PixelFormat.IA4 :
-        texture.format === GX.TexFormat.IA8 ? rust!.PixelFormat.IA8 :
-        texture.format === GX.TexFormat.RGB565 ? rust!.PixelFormat.RGB565 :
-        texture.format === GX.TexFormat.RGB5A3 ? rust!.PixelFormat.RGB5A3 :
-        texture.format === GX.TexFormat.RGBA8 ? rust!.PixelFormat.RGBA8 :
-        texture.format === GX.TexFormat.CMPR ? rust!.PixelFormat.CMPR :
-        texture.format === GX.TexFormat.C4 ? rust!.PixelFormat.C4 :
-        texture.format === GX.TexFormat.C8 ? rust!.PixelFormat.C8 :
-        texture.format === GX.TexFormat.C14X2 ? rust!.PixelFormat.C14X2 :
+        texture.format === GX.TexFormat.I4 ? rust.PixelFormat.I4 :
+        texture.format === GX.TexFormat.I8 ? rust.PixelFormat.I8 :
+        texture.format === GX.TexFormat.IA4 ? rust.PixelFormat.IA4 :
+        texture.format === GX.TexFormat.IA8 ? rust.PixelFormat.IA8 :
+        texture.format === GX.TexFormat.RGB565 ? rust.PixelFormat.RGB565 :
+        texture.format === GX.TexFormat.RGB5A3 ? rust.PixelFormat.RGB5A3 :
+        texture.format === GX.TexFormat.RGBA8 ? rust.PixelFormat.RGBA8 :
+        texture.format === GX.TexFormat.CMPR ? rust.PixelFormat.CMPR :
+        texture.format === GX.TexFormat.C4 ? rust.PixelFormat.C4 :
+        texture.format === GX.TexFormat.C8 ? rust.PixelFormat.C8 :
+        texture.format === GX.TexFormat.C14X2 ? rust.PixelFormat.C14X2 :
         undefined;
     const palette_fmt =
-        texture.paletteFormat === GX.TexPalette.IA8 ? rust!.PaletteFormat.IA8 :
-        texture.paletteFormat === GX.TexPalette.RGB565 ? rust!.PaletteFormat.RGB565 :
-        texture.paletteFormat === GX.TexPalette.RGB5A3 ? rust!.PaletteFormat.RGB5A3 :
+        texture.paletteFormat === GX.TexPalette.IA8 ? rust.PaletteFormat.IA8 :
+        texture.paletteFormat === GX.TexPalette.RGB565 ? rust.PaletteFormat.RGB565 :
+        texture.paletteFormat === GX.TexPalette.RGB5A3 ? rust.PaletteFormat.RGB5A3 :
         undefined;
     const src = texture.data!.createTypedArray(Uint8Array, 0, calcTextureSize(texture.format, texture.width, texture.height));
     const palette_src = texture.paletteData ? texture.paletteData.createTypedArray(Uint8Array) : undefined;
-    const pixels = rust!.decode_texture(fmt!, palette_fmt, src, palette_src, texture.width, texture.height);
+    const pixels = rust.decode_texture(fmt!, palette_fmt, src, palette_src, texture.width, texture.height);
     return { pixels };
 }
 

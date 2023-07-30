@@ -1758,7 +1758,7 @@ export async function createSwapChainForWebGPU(canvas: HTMLCanvasElement | Offsc
     if (!context)
         return null;
 
-    return new GfxImplP_WebGPU(adapter, device, canvas, context, rust!.glsl_compile);
+    return new GfxImplP_WebGPU(adapter, device, canvas, context, rust.glsl_compile);
 }
 
 export function gfxDeviceGetImpl_WebGPU(gfxDevice: GfxDevice): GfxImplP_WebGPU {

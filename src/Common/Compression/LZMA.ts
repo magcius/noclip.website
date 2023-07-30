@@ -68,7 +68,7 @@ export function decodeLZMAProperties(buffer: ArrayBufferSlice): LZMAProperties {
 }
 
 export function decompress(srcBuffer: ArrayBufferSlice, properties: LZMAProperties, maxSize: number): ArrayBufferSlice {
-    const bufView = rust!.lzma_decompress(srcBuffer.createTypedArray(Uint8Array), properties.lc, properties.lp, properties.pb, properties.dictionarySize, BigInt(maxSize))
+    const bufView = rust.lzma_decompress(srcBuffer.createTypedArray(Uint8Array), properties.lc, properties.lp, properties.pb, properties.dictionarySize, BigInt(maxSize))
     return ArrayBufferSlice.fromView(bufView);
 }
 
