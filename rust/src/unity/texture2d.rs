@@ -2,6 +2,7 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use crate::unity::asset::*;
 use crate::unity::reader::*;
+use crate::unity::version::UnityVersion;
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug)]
@@ -34,11 +35,16 @@ impl Deserialize for UnityTexture2D {
         let name = reader.read_char_array()?;
         let forced_fallback_format = reader.read_u32()?;
         let downscale_fallback = reader.read_bool()?;
-        // TODO(jstpierre): IsAlphaChannelOptional (?)
+        let _is_alpha_chanel_optional = reader.read_bool()?;
         reader.align()?;
         let width = reader.read_u32()?;
         let height = reader.read_u32()?;
         let _complete_image_size = reader.read_u32()?;
+        let _mips_stripped = if asset.metadata.unity_version >= (UnityVersion { major: 2020, ..Default::default() }) {
+            reader.read_u32()?
+        } else {
+            0
+        };
         let texture_format = reader.read_u32()?;
         let mipmap_count = reader.read_u32()?;
         let _is_readable = reader.read_bool()?;
@@ -53,6 +59,12 @@ impl Deserialize for UnityTexture2D {
         let texture_settings = UnityTextureSettings::deserialize(reader, asset)?;
         let _usage_mode = reader.read_u32()?;
         let color_space = reader.read_u32()?;
+
+        let _platform_blob = if asset.metadata.unity_version >= (UnityVersion { major: 2020, ..Default::default() }) {
+            reader.read_byte_array()?
+        } else {
+            Vec::new()
+        };
 
         let image_data = reader.read_byte_array()?;
         reader.align()?;
@@ -109,7 +121,10 @@ pub enum UnityTextureFormat {
     BC1          = 0x0A,
     BC2          = 0x0B,
     BC3          = 0x0C,
+    BC6H         = 0x18,
+    BC7          = 0x19,
     DXT1Crunched = 0x1C,
+    DXT5Crunched = 0x1D,
 }
 
 #[wasm_bindgen]

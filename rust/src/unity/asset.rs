@@ -8,7 +8,7 @@ use crate::unity::reader::{ AssetReader, Deserialize, Result as ReaderResult };
 pub struct AssetInfo {
     #[wasm_bindgen(skip)]
     pub header: AssetHeader,
-    #[wasm_bindgen(skip)]
+    #[wasm_bindgen(getter_with_clone)]
     pub metadata: AssetMetadata,
     #[wasm_bindgen(skip)]
     pub objects: Vec<UnityObject>,
@@ -143,11 +143,13 @@ pub struct SerializedType {
     pub asm_name: String,
 }
 
-#[derive(Debug)]
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct AssetMetadata {
     pub unity_version: UnityVersion,
     pub target_platform: u32,
     pub enable_type_tree: bool,
+    #[wasm_bindgen(skip)]
     pub types: Vec<SerializedType>,
 }
 

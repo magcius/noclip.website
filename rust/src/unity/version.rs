@@ -1,5 +1,7 @@
 use std::convert::TryFrom;
+use wasm_bindgen::prelude::wasm_bindgen;
 
+#[wasm_bindgen]
 #[derive(Debug, PartialEq, PartialOrd, Default, Copy, Clone)]
 pub struct UnityVersion {
     pub major: usize,
@@ -59,6 +61,7 @@ impl TryFrom<&str> for UnityVersion {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub enum VersionType {
     Alpha,

@@ -552,9 +552,8 @@ impl Mesh {
 impl Deserialize for Mesh {
     fn deserialize(reader: &mut AssetReader, asset: &AssetInfo) -> Result<Self> {
         let name = reader.read_char_array()?;
-        let unity2019 = UnityVersion { major: 2019, ..Default::default() };
         // TODO support older versions
-        if asset.metadata.unity_version < unity2019 {
+        if asset.metadata.unity_version < (UnityVersion { major: 2019, ..Default::default() }) {
             return Err(AssetReaderError::UnsupportedUnityVersion(asset.metadata.unity_version));
         }
 
