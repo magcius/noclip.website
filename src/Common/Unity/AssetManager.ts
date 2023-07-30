@@ -9,7 +9,7 @@ import { downloadBlob } from '../../DownloadUtils.js';
 import * as Geometry from '../../Geometry.js';
 import { Destroyable, SceneContext } from '../../SceneBase.js';
 import { TextureMapping } from '../../TextureHolder.js';
-import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
+import { coalesceBuffer, makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillVec4, fillVec4v } from '../../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxSampler, GfxSamplerDescriptor, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, getFormatCompByteSize, setFormatCompFlags } from '../../gfx/platform/GfxPlatformFormat.js';
@@ -441,7 +441,7 @@ export class UnityMeshData {
     }
 
     public destroy(device: GfxDevice) {
-        this.vertexBuffers.forEach(buf => device.destroyBuffer(buf.buffer));
+        device.destroyBuffer(this.vertexBuffers[0].buffer);
         device.destroyBuffer(this.indexBuffer.buffer);
         device.destroyInputLayout(this.inputLayout);
     }
@@ -460,17 +460,10 @@ function loadCompressedMesh(device: GfxDevice, mesh: Mesh): UnityMeshData {
         { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
     ];
     const indexBufferFormat: GfxFormat = GfxFormat.U32_R;
-    let layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-    let vertsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertices.buffer);
-    let normsBuf = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, normals.buffer);
-    let trisBuf = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
-
-    const vertexBuffers = [
-        { buffer: vertsBuf, byteOffset: 0, },
-        { buffer: normsBuf, byteOffset: 0, },
-    ];
-    const indexBuffer = { buffer: trisBuf, byteOffset: 0 };
-
+    const layout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+    const indexData = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
+    const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, [new ArrayBufferSlice(vertices.buffer), new ArrayBufferSlice(normals.buffer)]);
+    const indexBuffer = { buffer: indexData, byteOffset: 0 };
     return new UnityMeshData(layout, vertexBuffers, indexBuffer, mesh.local_aabb, mesh.get_submeshes(), indexBufferFormat);
 }
 
