@@ -1320,9 +1320,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const levelData = levelDatas[levelDatasIdx++] as Uint8Array;
                 const sliceElementSize = levelData.length / depth;
 
-                if (is3D && isCompressed) {
-                    gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, 1, gl_format, levelData);
-                } else if (isCube) {
+                if (isCube) {
                     for (let z = 0; z < depth; z++) {
                         const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
                         if (isCompressed) {
