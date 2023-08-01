@@ -1289,7 +1289,7 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
             frame = lastFrame;
         return frame;
     } else if (anim.loopMode === LoopMode.REPEAT) {
-        while (frame > lastFrame)
+        while (lastFrame > 0 && frame > lastFrame)
             frame -= lastFrame;
         return frame;
     } else {
