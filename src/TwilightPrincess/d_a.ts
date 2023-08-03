@@ -152,6 +152,7 @@ class d_a_bg extends fopAc_ac_c {
 
     public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
+        const renderer = globals.renderer;
 
         const roomNo = this.parameters;
         const arcName = `R${leftPad(''+roomNo, 2)}_00`;
@@ -170,8 +171,40 @@ class d_a_bg extends fopAc_ac_c {
                 modelData = resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
             if (modelData === null)
                 continue;
-            this.bgModel[i] = new J3DModelInstance(modelData);
+            const modelInstance = new J3DModelInstance(modelData);
 
+            /* for (let i = 0; i < modelData.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
+                // Look for any unbound textures and set them.
+                const sampler = modelData.modelMaterialData.tex1Data!.tex1.samplers[i];
+                //console.log(`BG Sampler Name: ${sampler.name.toLowerCase()}`);
+
+                const resname = `${sampler.name.toLowerCase()}.bti`;
+                let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+                if (bti !== null) {
+                    renderer.extraTextures.addTex()
+                }
+            } */
+
+            for (let i = 0; i < modelData.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
+                // Look for any unbound textures and set them.
+                const sampler = modelData.modelMaterialData.tex1Data!.tex1.samplers[i];
+                const m = modelInstance.materialInstanceState.textureMappings[i];
+                if (m.gfxTexture === null) {
+                    console.log(`m.gfxTexture null`);
+                    const resname = `${sampler.name.toLowerCase()}.bti`;
+                    console.log(`need bti: ${resname}`);
+
+                    let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+                    if (bti !== null) {
+                        renderer.extraTextures.addTex(bti);
+                    }
+
+                    renderer.extraTextures.fillTextureMapping(m, sampler.name);
+                }
+            }
+
+            this.bgModel[i] = modelInstance;
+            
             const btk = globals.resCtrl.getStageResByName(ResType.Btk, arcName, btkName[i]);
             if (btk !== null)
                 this.bgBtkAnm[i] = new daBg_btkAnm_c(modelData, btk);
