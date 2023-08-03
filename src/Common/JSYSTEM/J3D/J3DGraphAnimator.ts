@@ -129,6 +129,9 @@ export class J3DFrameCtrl {
             }
         } else if (this.loopMode === LoopMode.REPEAT) {
             while (this.currentTimeInFrames >= this.endFrame) {
+                if (this.endFrame === 0) {
+                    break;
+                }
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
                 this.currentTimeInFrames -= (this.endFrame - this.repeatStartFrame);
             }
