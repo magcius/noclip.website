@@ -179,7 +179,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     const objName = assertExists(globals.dStage_searchName(actorName));
     const pcName = objName.pcName;
 
-    console.log(`spawnLegacyActor: ${actorName}`)
+    // console.log(`spawnLegacyActor: ${actorName}`)
 
     if (actorName === 'Obj_sui') fetchArchive(`Obj_sui`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/m_suisya.bmd`);
@@ -196,7 +196,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else {
         const dbgName = globals.objNameGetDbgName(objName);
-        console.warn(`Unknown obj: ${actorName} / ${dbgName} / Room ${actor.roomNo} Layer ${actor.layer}`);
+        // console.warn(`Unknown obj: ${actorName} / ${dbgName} / Room ${actor.roomNo} Layer ${actor.layer}`);
     }
 
     const p = Promise.all(promises);

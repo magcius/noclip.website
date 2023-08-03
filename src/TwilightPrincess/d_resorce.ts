@@ -135,7 +135,7 @@ export class dRes_info_c {
     }
 
     public lazyLoadResource<T extends ResType>(resType: T, resEntry: ResEntry<ResAssetType<T> | null>, device?: GfxDevice, cache?: GfxRenderCache): ResAssetType<T> {
-        console.log(`dRes_info_c::lazyLoadResource:: type, res NULL? = ${resType}, ${resEntry.res === null}`);
+        //console.log(`dRes_info_c::lazyLoadResource:: type, res NULL? = ${resType}, ${resEntry.res === null}`);
 
         if (resEntry.res === null) {
             const file = resEntry.file;
@@ -180,8 +180,8 @@ export class dRes_info_c {
     private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> | null {
         const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++) {
-            console.log(`dRes_info_c::getResEntryByName:: resList[${i}].file.name == ${resList[i].file.name}`);
-            console.log(`Match?: ${resList[i].file.name === resName}`)
+            //console.log(`dRes_info_c::getResEntryByName:: resList[${i}].file.name == ${resList[i].file.name}`);
+            //console.log(`Match?: ${resList[i].file.name === resName}`)
             if (resList[i].file.name === resName)
                 return resList[i];
         }
@@ -197,7 +197,7 @@ export class dRes_info_c {
     }
 
     public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> | null {
-        console.log(`dRes_info_c::getResByName:: Attempting to load: ${resName}`);
+        //console.log(`dRes_info_c::getResByName:: Attempting to load: ${resName}`);
 
         const entry = this.getResEntryByName(resType, resName);
         if (entry === null)
@@ -258,10 +258,10 @@ export class dRes_info_c {
             const subdir = root.subdirs[i];
             assert(subdir.subdirs.length === 0);
 
-            console.log(`loadResource:: subdir.files.length == ${subdir.files.length}`)
+            //console.log(`loadResource:: subdir.files.length == ${subdir.files.length}`)
             for (let j = 0; j < subdir.files.length; j++) {
                 const res = this.res.find((res) => res.file === subdir.files[j])!;
-                console.log(`loadResource:: const res is NULL? ${res === null}`)
+                //console.log(`loadResource:: const res is NULL? ${res === null}`)
                 this.autoLoadResource(device, cache, subdir.type, res);
             }
         }

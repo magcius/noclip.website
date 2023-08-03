@@ -7,7 +7,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import * as UI from '../ui.js';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
-import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
@@ -243,17 +243,46 @@ export class ZTPExtraTextures {
         this.extraTextures.push(new BTIData(device, cache, btiTexture));
     }
 
+    public addTex(texture: BTIData): void {
+        this.extraTextures.push(texture);
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.extraTextures.length; i++)
             this.extraTextures[i].destroy(device);
     }
 
+    public fillExtraTextures(modelInstance: J3DModelInstance): void {
+        for (let i = 0; i < modelInstance.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
+            // Look for any unbound textures and set them.
+            const sampler = modelInstance.modelMaterialData.tex1Data!.tex1.samplers[i];
+            const m = modelInstance.materialInstanceState.textureMappings[i];
+            if (m.gfxTexture === null)
+                console.log(`Sampler Name: ${sampler.name}`);
+                //this.fillTextureMapping(m, sampler.name);
+        }
+    }
+
     public fillTextureMapping = (m: TextureMapping, samplerName: string): boolean => {
         // Look through for extra textures.
-        const searchName = samplerName.toLowerCase().replace('.tga', '');
+        const searchName = `${samplerName.toLowerCase()}.bti`;
         const extraTexture = this.extraTextures.find((extraTex) => extraTex.btiTexture.name === searchName);
-        if (extraTexture !== undefined)
+
+        /* if (extraTexture !== undefined)
+            return extraTexture.fillTextureMapping(m); */
+        
+        if (extraTexture !== undefined) {
+            console.log(`extraTexture found`);
             return extraTexture.fillTextureMapping(m);
+        } else {
+            console.log(`!!no extraTexture found!!\nSearch Name: ${searchName}\narray len: ${this.extraTextures.length}`);
+        }
+
+        /* const resname = `${samplerName.toLowerCase()}.bti`;
+        const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+        if (bti !== null) {
+            return
+        } */
 
         return false;
     };
@@ -275,8 +304,8 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
         // Look for any unbound textures and set them.
         const sampler = bmdModel.modelMaterialData.tex1Data!.tex1.samplers[i];
         const m = modelInstance.materialInstanceState.textureMappings[i];
-        if (m.gfxTexture === null)
-            extraTextures.fillTextureMapping(m, sampler.name);
+        //if (m.gfxTexture === null)
+            //extraTextures.fillTextureMapping(m, sampler.name);
     }
 
     if (btkFile !== null) {
@@ -961,6 +990,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             return new ModelCache(context.device, context.dataFetcher);
         });
 
+        console.log(`begin create.......`);
+
         modelCache.onloadedcallback = null;
         modelCache.setCurrentStage(this.stageDir);
 
@@ -978,6 +1009,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
 
+        console.log(`after model cache setup......`);
+
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
 
@@ -987,16 +1020,45 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         d_a__RegisterConstructors(framework);
         LegacyActor__RegisterFallbackConstructor(framework);
 
+        console.log(`after constructor registering......`);
+
         const symbolMap = new SymbolMap(modelCache.getFileData(`extra.crg1_arc`));
         const globals = new dGlobals(context, modelCache, symbolMap, framework);
         globals.stageName = this.stageDir;
 
-        const dataFetcher = context.dataFetcher;
-        const stagePath = `${pathBase}/Stage/${this.stageDir}`;
+        console.log(`after globals setup......`);
 
         const renderer = new TwilightPrincessRenderer(device, globals);
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
+
+        console.log(`after renderer setup......`);
+
+        renderer.extraTextures = new ZTPExtraTextures();
+        /* const dataFetcher = context.dataFetcher;
+        const stagePath = `${pathBase}/Stage/${this.stageDir}`;
+        const arc = this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher);
+        arc.then((stageRarc_: RARC.JKRArchive | null) => {
+            console.log(`stageRarc fetch......`);
+            const stageRarc = assertExists(stageRarc_);
+            // Load stage shared textures.
+            const texcFolder = stageRarc.findDir(`texc`);
+            const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
+
+            //const renderer = new TwilightPrincessRenderer(device, extraTextures, stageRarc);
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+
+            for (let i = 0; i < extraTextureFiles.length; i++) {
+                console.log(`Starting Search for extra textures......`);
+                const file = extraTextureFiles[i];
+                const name = file.name.split('.')[0];
+                console.log(`Add Extra Texture: ${name}`);
+                const bti = BTI.parse(file.buffer, name).texture;
+                renderer.extraTextures.addBTI(device, cache, bti);
+            }
+        }); */
+
+        console.log(`after extra tex setup......`);
 
         modelCache.onloadedcallback = () => {
             fpcCt_Handler(globals.frameworkGlobals, globals);
@@ -1022,9 +1084,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
             globals.mStayNo = Math.abs(this.rooms[0]);
-
-        renderer.extraTextures = new ZTPExtraTextures();
-
+        
         dKankyo_create(globals);
 
         const vrbox = resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_sora.bmd`);
@@ -1043,6 +1103,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
             // noclip modification: We pass in roomNo so it's attached to the room.
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
+
+
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `R${leftPad(''+roomNo, 2)}_00`, `room.dzr`));
             dStage_dt_c_roomLoader(globals, globals.roomStatus[roomNo], dzr);
