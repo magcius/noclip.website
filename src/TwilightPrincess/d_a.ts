@@ -29,6 +29,8 @@ import { Endianness } from "../endian.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 
 // Framework'd actors
 
@@ -173,24 +175,11 @@ class d_a_bg extends fopAc_ac_c {
                 continue;
             const modelInstance = new J3DModelInstance(modelData);
 
-            /* for (let i = 0; i < modelData.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-                // Look for any unbound textures and set them.
-                const sampler = modelData.modelMaterialData.tex1Data!.tex1.samplers[i];
-                //console.log(`BG Sampler Name: ${sampler.name.toLowerCase()}`);
-
-                const resname = `${sampler.name.toLowerCase()}.bti`;
-                let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                if (bti !== null) {
-                    renderer.extraTextures.addTex()
-                }
-            } */
-
             for (let i = 0; i < modelData.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
                 // Look for any unbound textures and set them.
                 const sampler = modelData.modelMaterialData.tex1Data!.tex1.samplers[i];
                 const m = modelInstance.materialInstanceState.textureMappings[i];
                 if (m.gfxTexture === null) {
-                    console.log(`m.gfxTexture null`);
                     const resname = `${sampler.name.toLowerCase()}.bti`;
                     console.log(`need bti: ${resname}`);
 
@@ -201,6 +190,14 @@ class d_a_bg extends fopAc_ac_c {
 
                     renderer.extraTextures.fillTextureMapping(m, sampler.name);
                 }
+            }
+
+            const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
+            if (m2 !== null) {
+                m2.lateBinding = 'opaque-scene-texture';
+                m2.width = EFB_WIDTH;
+                m2.height = EFB_HEIGHT;
+                m2.flipY = gfxDeviceNeedsFlipY(renderer.renderCache.device);
             }
 
             this.bgModel[i] = modelInstance;
@@ -268,7 +265,13 @@ class d_a_bg extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
             setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, viewerInput.camera);
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput);
+
+            const m2 = this.bgModel[i]!.getTextureMappingReference('fbtex_dummy');
+            if (m2 !== null) {
+                mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput, globals.dlst.water);
+            } else {
+                mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput);
+            }
         }
 
         const roomNo = this.parameters;
