@@ -127,6 +127,10 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
+    public water: dDlst_list_Set = [
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+    ];
     // This really should be .sky[15], but we don't have multiple buffers in the render inst list...
     public main: dDlst_list_Set = [
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
@@ -563,8 +567,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
                 // this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
                 renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
+
                 // this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
+
+            renderInstManager.setCurrentRenderInstList(dlst.water[0]);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -579,88 +586,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.executeList(passRenderer, listSet[0]);
         this.executeList(passRenderer, listSet[1]);
     }
-
-    /* private setIndirectTextureOverride(device: GfxDevice): void {
-        for (let i = 0; i < this.modelInstances.length; i++) {
-            const m = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
-            if (m !== null) {
-                m.lateBinding = 'opaque-scene-texture';
-                m.width = EFB_WIDTH;
-                m.height = EFB_HEIGHT;
-                m.flipY = gfxDeviceNeedsFlipY(device);
-            }
-        }
-    } */
-
-    /* public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        this.setIndirectTextureOverride(device);
-
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
-
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Skybox');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, ZTPPass.SKYBOX);
-            });
-        });
-
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, ZTPPass.OPAQUE);
-            });
-        });
-
-        if (hasAnyVisible(renderInstManager, ZTPPass.INDIRECT)) {
-            builder.pushPass((pass) => {
-                pass.setDebugName('Indirect');
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-                const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
-                pass.attachResolveTexture(opaqueSceneTextureID);
-
-                pass.exec((passRenderer, scope) => {
-                    renderInstManager.setVisibleByFilterKeyExact(ZTPPass.INDIRECT);
-                    renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(passRenderer);
-                });
-            });
-        }
-
-        builder.pushPass((pass) => {
-            pass.setDebugName('Transparent');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, ZTPPass.TRANSPARENT);
-            });
-        });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
-        this.renderHelper.prepareToRender();
-        this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
-    } */
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const dlst = this.globals.dlst;
@@ -722,12 +647,23 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             pass.attachResolveTexture(opaqueSceneTextureID);
             pass.exec((passRenderer, scope) => {
                 this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
-                dlst.effect[EffectDrawGroup.Indirect].resolveLateSamplerBinding('OpaqueSceneTexture', this.opaqueSceneTextureMapping);
-                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
+                dlst.water[EffectDrawGroup.Indirect].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+                this.executeListSet(passRenderer, dlst.water);
             });
         });
+
+        /* builder.pushPass((pass) => {
+            pass.setDebugName('Transparent');
+            
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, passRenderer, ZTPPass.TRANSPARENT);
+            });
+        }); */
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
