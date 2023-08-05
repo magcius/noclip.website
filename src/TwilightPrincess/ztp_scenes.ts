@@ -28,7 +28,7 @@ import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
-import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
+import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy_setLight_nowroom_common, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
@@ -174,6 +174,9 @@ export class dGlobals {
 
     // "Current" room number.
     public mStayNo: number = 0;
+
+    // Whether in Twilight or not
+    public world_dark: boolean = false;
 
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
     public playerPosition = vec3.create();
@@ -470,7 +473,31 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(mirrorMaps.elem);
 
-        return [roomsPanel, scenarioPanel, renderHacksPanel];
+        // ENVIRONMENT DEBUG
+        const environmentPanel = new UI.Panel();
+        environmentPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        environmentPanel.setTitle(UI.RENDER_HACKS_ICON, 'Environment Debug');
+        const slider = new UI.Slider();
+        slider.setRange(0, 1, 0.01);
+        slider.setLabel("ColActColRatio: ");
+        slider.setValue(this.globals.g_env_light.ColActColRatio);
+        slider.onvalue = () => {
+            slider.setLabel("ColActColRatio: " + slider.getValue());
+            this.globals.g_env_light.ColActColRatio = slider.getValue();
+        }
+        environmentPanel.contents.appendChild(slider.elem);
+
+        const bg_ratio_slider = new UI.Slider();
+        bg_ratio_slider.setRange(0, 1, 0.01);
+        bg_ratio_slider.setLabel("ColBgColRatio: ");
+        bg_ratio_slider.setValue(this.globals.g_env_light.ColBgColRatio);
+        bg_ratio_slider.onvalue = () => {
+            bg_ratio_slider.setLabel("ColBgColRatio: " + bg_ratio_slider.getValue());
+            this.globals.g_env_light.ColBgColRatio = bg_ratio_slider.getValue();
+        }
+        environmentPanel.contents.appendChild(bg_ratio_slider.elem);
+
+        return [roomsPanel, scenarioPanel, renderHacksPanel, environmentPanel];
     }
 
     // For people to play around with.
@@ -833,10 +860,11 @@ export class ModelCache {
         return cPhs__Status.Loading;
     }
 
-    public async fetchStageData(arcName: string): Promise<void> {
-        console.log(`ModelCache::fetchStageData:: fetch(Stage/${this.currentStage}/${arcName})`);
+    public async fetchStageData(arcName: string): Promise<RARC.JKRArchive> {
+        // console.log(`ModelCache::fetchStageData:: fetch(Stage/${this.currentStage}/${arcName})`);
         const archive = await this.fetchArchive(`Stage/${this.currentStage}/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
+        return archive;
     }
 
     public destroy(device: GfxDevice): void {
@@ -946,6 +974,15 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
 
+        /* console.log(`Profile Array Length: ${f_pc_profiles.Profiles.length}`);
+        for (let i = 0; i < f_pc_profiles.Profiles.length; i++) {
+            if (f_pc_profiles.Profiles[i] === null) {
+                const view = f_pc_profiles.Profiles[i].createDataView();
+
+                console.log(`PROFILE: ${i}\nmProcName:\t${view!.getInt16(0x8)}`);
+            }
+        } */
+
         fpcPf__Register(framework, fpc__ProcessName.d_s_play, d_s_play);
         dKy__RegisterConstructors(framework);
         dKyw__RegisterConstructors(framework);
@@ -976,6 +1013,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         // Normally, all of this would be done in d_scn_play.
         fpcLy_SetCurrentLayer(globals.frameworkGlobals, globals.scnPlay.layer);
 
+        dKankyo_create(globals);
+
         const resCtrl = modelCache.resCtrl;
 
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `STG_00`, `stage.dzs`));
@@ -986,8 +1025,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
             globals.mStayNo = Math.abs(this.rooms[0]);
-        
-        dKankyo_create(globals);
 
         const vrbox = resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_sora.bmd`);
         if (vrbox !== null) {

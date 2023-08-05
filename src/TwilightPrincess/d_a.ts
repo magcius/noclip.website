@@ -6,7 +6,7 @@ import { dComIfG_resLoad, ResType } from "./d_resorce.js";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight__OnMaterialParams } from "./d_kankyo.js";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_setLight__OnMaterialParams, dKy_GxFog_set } from "./d_kankyo.js";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf, mDoExt_modelEntryDL } from "./m_do_ext.js";
 import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "./SComponent.js";
 import { dPath_GetRoomPath, dStage_Multi_c, dPath, dPath__Point } from "./d_stage.js";
@@ -26,7 +26,6 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
 import { Endianness } from "../endian.js";
-import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
@@ -145,7 +144,7 @@ class daBg_brkAnm_c {
 class d_a_bg extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_bg;
 
-    private numBg = 4;
+    private numBg = 6;
     private bgModel: (J3DModelInstance | null)[] = nArray(this.numBg, () => null);
     private bgBtkAnm: (daBg_btkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgBrkAnm: (daBg_brkAnm_c | null)[] = nArray(this.numBg, () => null);
@@ -161,10 +160,10 @@ class d_a_bg extends fopAc_ac_c {
 
         console.log(`d_a_bg::subload():: arcName = ${arcName}`);
 
-        const modelName  = ['model.bmd', 'model1.bmd', 'model2.bmd', 'model3.bmd'];
-        const modelName2 = ['model.bdl', 'model1.bdl', 'model2.bdl', 'model3.bdl'];
-        const btkName    = ['model.btk', 'model1.btk', 'model2.btk', 'model3.btk'];
-        const brkName    = ['model.brk', 'model1.brk', 'model2.brk', 'model3.brk'];
+        const modelName  = ['model.bmd', 'model1.bmd', 'model2.bmd', 'model3.bmd', 'model4.bmd', 'model5.bmd'];
+        const modelName2 = ['model.bdl', 'model1.bdl', 'model2.bdl', 'model3.bdl', 'model4.bdl', 'model5.bdl'];
+        const btkName    = ['model.btk', 'model1.btk', 'model2.btk', 'model3.btk', 'model4.btk', 'model5.btk'];
+        const brkName    = ['model.brk', 'model1.brk', 'model2.brk', 'model3.brk', 'model4.brk', 'model5.brk'];
 
         // createHeap
         for (let i = 0; i < this.numBg; i++) {
@@ -275,7 +274,7 @@ class d_a_bg extends fopAc_ac_c {
         }
 
         const roomNo = this.parameters;
-        settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
+        settingTevStruct(globals, LightType.UNK_16, null, globals.roomStatus[roomNo].tevStr);
     }
 
     public override delete(globals: dGlobals): void {
@@ -293,7 +292,6 @@ class d_a_vrbox extends fopAc_ac_c {
         const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_sora.bmd`));
         this.model = new J3DModelInstance(res);
 
-        // vrboxFlags?
         globals.scnPlay.vrboxLoaded = true;
         envLight.vrboxInvisible = false;
 
@@ -340,6 +338,8 @@ class d_a_vrbox extends fopAc_ac_c {
         calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
+        dKy_GxFog_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+
         dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.sky);
     }
@@ -354,6 +354,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     private kasumiMae: J3DModelInstance | null = null;
     private kasumiMaeC0 = colorNewCopy(TransparentBlack);
     private kasumiMaeK0 = colorNewCopy(TransparentBlack);
+    private sunColor = colorNewCopy(TransparentBlack);
     private scrollSpeed = 0.0005;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -390,7 +391,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             return;
 
         const windVec = dKyw_get_wind_vec(envLight);
-        const windPower = dKyw_get_wind_pow(envLight);
+        let windPower = dKyw_get_wind_pow(envLight);
 
         let windX = windVec[0];
         let windZ = windVec[2];
@@ -399,6 +400,10 @@ class d_a_vrbox2 extends fopAc_ac_c {
         vec3.copy(scratchVec3a, globals.cameraFwd);
         scratchVec3a[1] = 0;
         vec3.normalize(scratchVec3a, scratchVec3a);
+
+        if (globals.stageName === "R_SP30") {
+            windPower += 0.3;
+        }
 
         const windScrollSpeed = windPower * ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
         const scrollSpeed0 = deltaTimeInFrames * this.scrollSpeed * windScrollSpeed;
@@ -435,12 +440,10 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.kasumiMae.setColorOverride(ColorKind.K0, this.kasumiMaeK0);
         }
 
-        if (this.sun !== null) {
-            /* colorCopy(this.kasumiMaeC0, envLight.sunPacket.Col1, 0.0);
-            this.kasumiMaeK0.r = envLight.vrKumoCol.a;
-            this.sun.setColorOverride(ColorKind.C0, this.kasumiMaeC0);
-            this.sun.setColorOverride(ColorKind.K0, this.kasumiMaeK0); */
-        }
+        /* if (this.sun !== null) {
+            colorCopy(this.sunColor, envLight.sunPacket!.color, 0.0);
+            this.sun.setColorOverride(ColorKind.C0, this.sunColor);
+        } */
     }
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -481,7 +484,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
 
         mat4.copy(this.sun.modelMatrix, calc_mtx);
-        mDoExt_modelUpdateDL(globals, this.sun, renderInstManager, viewerInput, globals.dlst.sky);
+        //mDoExt_modelUpdateDL(globals, this.sun, renderInstManager, viewerInput, globals.dlst.sky);
     }
 }
 
@@ -626,6 +629,49 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
     }
 }
 
+
+class d_a_obj_suisya extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_suisya;
+    private model: J3DModelInstance;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+        const arcName = `Obj_sui`;
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        // CreateHeap
+        const resCtrl = globals.resCtrl;
+        const mdl_data = resCtrl.getObjectRes(ResType.Model, arcName, 3);
+        this.model = new J3DModelInstance(mdl_data);
+
+        // create
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-200, -500, -500, 200, 500, 500);
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.rot[0] += 25;
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(globals, renderInstManager, viewerInput);
+
+        settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+    }
+}
+
 type ModeFunc = (globals: dGlobals, deltaTimeInFrames: number) => void;
 interface ModeFuncExec<T extends number> {
     curMode: T;
@@ -674,4 +720,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_bg);
     R(d_a_vrbox);
     R(d_a_vrbox2);
+    R(d_a_obj_suisya);
 }

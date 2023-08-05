@@ -70,27 +70,27 @@ function colorFromRGB8(dst: Color, n: number): void {
 }
 
 export class stage_palet_info_class {
-    public actCol = new stage_palet_info_class__DifAmb(White);
-    public bgCol = nArray(4, () => new stage_palet_info_class__DifAmb(White));
-    public fogCol = colorNewCopy(White);
-    public virtIdx: number;
+    public actCol = colorNewCopy(White);
+    public unkCol = nArray(4, () => colorNewCopy(White));
+    public unkCol2 = nArray(6, () => colorNewCopy(White));
+    public unkCol3 = colorNewCopy(White);
     public fogStartZ: number;
     public fogEndZ: number;
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
-        colorFromRGB8(this.actCol.C0, view.getUint32(0x00));
-        colorFromRGB8(this.actCol.K0, view.getUint32(0x03));
-        colorFromRGB8(this.bgCol[0].C0, view.getUint32(0x06));
-        colorFromRGB8(this.bgCol[0].K0, view.getUint32(0x09));
-        colorFromRGB8(this.bgCol[1].C0, view.getUint32(0x0C));
-        colorFromRGB8(this.bgCol[1].K0, view.getUint32(0x0F));
-        colorFromRGB8(this.bgCol[2].C0, view.getUint32(0x12));
-        colorFromRGB8(this.bgCol[2].K0, view.getUint32(0x15));
-        colorFromRGB8(this.bgCol[3].C0, view.getUint32(0x18));
-        colorFromRGB8(this.bgCol[3].K0, view.getUint32(0x1B));
-        colorFromRGB8(this.fogCol, view.getUint32(0x1E));
-        this.virtIdx = view.getUint8(0x21);
+        colorFromRGB8(this.actCol, view.getUint32(0x00));
+        colorFromRGB8(this.unkCol[0], view.getUint32(0x03));
+        colorFromRGB8(this.unkCol[1], view.getUint32(0x06));
+        colorFromRGB8(this.unkCol[2], view.getUint32(0x09));
+        colorFromRGB8(this.unkCol[3], view.getUint32(0x0C));
+        colorFromRGB8(this.unkCol2[0], view.getUint32(0x0F));
+        colorFromRGB8(this.unkCol2[1], view.getUint32(0x12));
+        colorFromRGB8(this.unkCol2[2], view.getUint32(0x15));
+        colorFromRGB8(this.unkCol2[3], view.getUint32(0x18));
+        colorFromRGB8(this.unkCol2[4], view.getUint32(0x1B));
+        colorFromRGB8(this.unkCol2[5], view.getUint32(0x1E));
+        colorFromRGB8(this.unkCol3, view.getUint32(0x21));
         this.fogStartZ = view.getFloat32(0x24);
         this.fogEndZ = view.getFloat32(0x28);
         return 0x34;
@@ -137,15 +137,28 @@ export class stage_envr_info_class {
 export class stage_stag_info_class {
     public nearPlane: number;
     public farPlane: number;
+    public cameraType: number;
     public roomTypeAndSchBit: number;
+
+    public particleNo = new Array(16);
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
         this.nearPlane = view.getFloat32(0x00);
         this.farPlane = view.getFloat32(0x04);
+        this.cameraType = view.getUint8(0x8);
         this.roomTypeAndSchBit = view.getUint32(0x0C);
+
+        for (let i = 0; i < 16; i++) {
+            this.particleNo[i] = view.getUint8(0x2C + i);
+        }
+
         return 0x3C;
     }
+}
+
+export function dStage_stagInfo_GetSTType(stagInfo: stage_stag_info_class): number {
+    return (stagInfo.roomTypeAndSchBit >> 16) & 7;
 }
 
 export class dStage_Multi_c {
@@ -180,7 +193,7 @@ export class dStage_FileList_dt_c {
     }
 }
 
-export class stage_lightvec_info_class {
+export class stage_pure_lightvec_info_class {
     public pos = vec3.create();
     public radius: number = 0;
     public fluctuation: number = 0;
@@ -340,12 +353,15 @@ function dStage_tgscInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBuff
 }
 
 function layerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
-    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTA', 'ACTB'];
-    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOA', 'SCOB'];
+    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTa', 'ACTb'];
+    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOa', 'SCOb'];
+    const doorLayer = ['Doo0', 'Doo1', 'Doo2', 'Doo3', 'Doo4', 'Doo5', 'Doo6', 'Doo7', 'Doo8', 'Doo9', 'Dooa', 'Doob'];
+
     for (let i = 0; i < 12; i++) {
         dStage_dt_decode(globals, dt, dzs, {
             [actrLayer[i]]: dStage_actorInit,
             [scobLayer[i]]: dStage_tgscInfoInit,
+            [doorLayer[i]]: dStage_tgscInfoInit,
         }, i);
     }
 }
@@ -500,7 +516,7 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
         // EVNT
         'Env0': dStage_envrInfoInit,
         // FILI (??)
-        'DOOR': dStage_tgscInfoInit,
+        'Door': dStage_tgscInfoInit,
         // LGTV (??)
         // FLOR
         'TGDR': dStage_stageDrtgInfoInit,
@@ -513,7 +529,7 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
 //#region DZR
 export class dStage_roomDt_c extends dStage_dt {
     public fili: dStage_FileList_dt_c | null = null;
-    public lgtv: stage_lightvec_info_class | null = null;
+    public lgtv: stage_pure_lightvec_info_class[] = [];
 }
 
 export class dStage_roomStatus_c extends dStage_roomDt_c {
@@ -532,12 +548,12 @@ function dStage_filiInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: Arr
 
 function dStage_lgtvInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: ArrayBufferSlice, count: number): void {
     if (count !== 0) {
-        // TODO(jstpierre): TotG has a room with two light vectors? Is that even a thing?
-        // assert(count === 1);
-        dt.lgtv = new stage_lightvec_info_class();
-        dt.lgtv.parse(buffer);
+        const data = new stage_pure_lightvec_info_class();
+        data.parse(buffer);
+
+        dt.lgtv.push(data);
     } else {
-        dt.lgtv = null;
+        dt.lgtv.length = 0;
     }
 }
 
@@ -554,7 +570,7 @@ function dStage_roomDrtgInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer:
 export function dStage_dt_c_roomLoader(globals: dGlobals, dt: dStage_roomDt_c, dzs: DZS): void {
     dStage_dt_decode(globals, dt, dzs, {
         'FILI': dStage_filiInfoInit,
-        'LGTV': dStage_lgtvInfoInit,
+        'LGT0': dStage_lgtvInfoInit,
         'RPPN': dStage_rppnInfoInit,
         'RPAT': dStage_rpatInfoInit,
     });

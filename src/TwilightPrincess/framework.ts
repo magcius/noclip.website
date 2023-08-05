@@ -15,6 +15,7 @@ export const enum fpc__ProcessName {
     d_envse             = 0x0014,
     d_a_tbox            = 0x00FB,
     d_a_alink           = 0x00FD,
+    d_a_obj_suisya      = 0x011D,
     d_thunder           = 0x02D9,
     d_a_vrbox           = 0x02DA,
     d_a_vrbox2          = 0x02DB,
@@ -345,7 +346,13 @@ export class base_process_class {
 }
 
 function fpcPf_Get__ProfileBinary(globals: fGlobals, pcName: fpc__ProcessName): ArrayBufferSlice {
-    return assertExists(globals.f_pc_profiles.Profiles[pcName]);
+    if (globals.f_pc_profiles.Profiles[pcName] === null || globals.f_pc_profiles.Profiles[pcName] === undefined) {
+        console.log(`profile null: ${pcName}`);
+        return globals.f_pc_profiles.Profiles[200]; // temp just to not crash when loading...
+    } else {
+        return globals.f_pc_profiles.Profiles[pcName];
+    }
+    //return assertExists(globals.f_pc_profiles.Profiles[pcName]);
 }
 
 function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fpc_bs__Constructor | null {
