@@ -42,7 +42,7 @@ export class MaterialRenderer {
     // TODO: some models are being culled incorrectly, figure out what's up with that
     // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
     // (e.g. see SS in the desert, MoM by the ice wall you smash)
-    constructor(material: Material, cache: GfxRenderCache, rendererStore: RendererStore) {
+    constructor(material: Material, rendererStore: RendererStore) {
         this.material = material;
         this.isTextured = material.uvtx !== null;
         if(this.isTextured) {
@@ -64,7 +64,7 @@ export class MaterialRenderer {
         // Create GPU stuff
         this.indexCount = material.indexData.length;
 
-        const device = cache.device;
+        const cache = rendererStore.renderCache, device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, material.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, material.indexData.buffer);
 
@@ -306,6 +306,9 @@ export class MaterialRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {
         if (this.DEBUG_shouldSkip())
+            return;
+
+        if (this.indexCount === 0)
             return;
 
         const renderInst = renderInstManager.newRenderInst();

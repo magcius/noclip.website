@@ -72,9 +72,9 @@ export class UVEN {
 
 export class UVENRenderer {
     public uvmdRenderers: UVMDRenderer[] = [];
-    constructor(public uven: UVEN, cache: GfxRenderCache, rendererStore: RendererStore) {
+    constructor(public uven: UVEN, rendererStore: RendererStore) {
         for(let uvmd of uven.uvmds) {
-            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, cache, rendererStore))
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, rendererStore))
             this.uvmdRenderers.push(uvmdRenderer);
         }
     }

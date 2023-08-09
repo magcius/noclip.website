@@ -2,6 +2,7 @@ import { CameraController } from "../Camera.js";
 import { colorNewFromRGBA } from "../Color.js";
 import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import InputManager from "../InputManager.js";
@@ -23,6 +24,11 @@ export const DEBUGGING_TOOLS_STATE = {
 
 export class RendererStore implements Destroyable {
     public objToRendererMap: Map<any, any> = new Map();
+    public renderCache: GfxRenderCache;
+
+    constructor(device: GfxDevice) {
+        this.renderCache = new GfxRenderCache(device);
+    }
 
     public getOrCreateRenderer<TObj, TRenderer>(obj: TObj, createLambda: () => TRenderer): TRenderer {
         let cachedRenderer = this.objToRendererMap.get(obj);
@@ -65,11 +71,11 @@ class BARRenderer implements SceneGfx {
     constructor(device: GfxDevice, context: SceneContext, rendererStore: RendererStore, uvtr: UVTR, uven: UVEN | null, private sceneIndex: number | null, private filesystem: Filesystem) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, () => new UVTRRenderer(uvtr, this.renderHelper.renderCache, rendererStore))
+        this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, () => new UVTRRenderer(uvtr, rendererStore))
 
         this.uvenRenderer = null;
         if (uven !== null)
-            this.uvenRenderer = rendererStore.getOrCreateRenderer(uven, () => new UVENRenderer(uven, this.renderHelper.renderCache, rendererStore));
+            this.uvenRenderer = rendererStore.getOrCreateRenderer(uven, () => new UVENRenderer(uven, rendererStore));
 
         this.texScrollAnims = [];
         this.texSeqAnims = [];
@@ -354,7 +360,7 @@ class BARSceneDesc implements SceneDesc {
         }
 
         const rendererStore = await context.dataShare.ensureObject<RendererStore>(`${pathBase}/RendererStore`, async () => {
-            return await new RendererStore();
+            return await new RendererStore(device);
         });
 
         return new BARRenderer(device, context, rendererStore, uvtr, uven, this.sceneIndex, filesystem);

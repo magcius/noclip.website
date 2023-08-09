@@ -119,14 +119,14 @@ export class UVCT {
 export class UVCTRenderer {
     public materialRenderers: MaterialRenderer[] = [];
     public uvmdRenderers: Map<UVMD, UVMDRenderer> = new Map();
-    constructor(public uvct: UVCT, cache: GfxRenderCache, rendererStore: RendererStore) {
+    constructor(public uvct: UVCT, rendererStore: RendererStore) {
 
         for(let material of uvct.materials) {
-            let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, cache, rendererStore))
+            let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, rendererStore))
             this.materialRenderers.push(materialRenderer);
         }
         for(let [uvmd, placementMat] of uvct.uvmds) {
-            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, cache, rendererStore))
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, rendererStore))
             this.uvmdRenderers.set(uvmd, uvmdRenderer);
         }
     }
