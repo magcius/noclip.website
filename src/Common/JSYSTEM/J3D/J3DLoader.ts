@@ -638,6 +638,418 @@ function readColorS16(view: DataView, srcOffs: number): Color {
     return colorNewFromRGBA(r, g, b, a);
 }
 
+function readColorChannel(view: DataView, colorChanOffs: number, colorChanIndex: number): GX_Material.ColorChannelControl {
+    if (colorChanIndex !== 0xFFFF) {
+        const colorChanIdx = colorChanOffs + colorChanIndex * 0x08;
+        const lightingEnabled = !!view.getUint8(colorChanIdx + 0x00);
+        assert(view.getUint8(colorChanIdx + 0x00) < 2);
+        const matColorSource: GX.ColorSrc = view.getUint8(colorChanIdx + 0x01);
+        const litMask = view.getUint8(colorChanIdx + 0x02);
+        const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanIdx + 0x03);
+        const attnFn = view.getUint8(colorChanIdx + 0x04);
+        const attenuationFunction: GX.AttenuationFunction = (
+            attnFn === 0 ? GX.AttenuationFunction.SPEC :
+            attnFn === 1 ? GX.AttenuationFunction.SPOT :
+                           GX.AttenuationFunction.NONE
+        );
+        const ambColorSource: GX.ColorSrc = view.getUint8(colorChanIdx + 0x05);
+
+        return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+    } else {
+        const lightingEnabled = false;
+        const matColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+        const litMask = 0;
+        const diffuseFunction: GX.DiffuseFunction = GX.DiffuseFunction.CLAMP;
+        const attenuationFunction: GX.AttenuationFunction = GX.AttenuationFunction.NONE;
+        const ambColorSource: GX.ColorSrc = GX.ColorSrc.REG;
+        return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+    }
+}
+
+function readTexMatrix(view: DataView, tableOffs: number, texMtxIndex: number): TexMtx {
+    const texMtxOffs = tableOffs + texMtxIndex * 0x64;
+    const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
+    const info = view.getUint8(texMtxOffs + 0x01);
+
+    const matrixMode = info & 0x3F;
+
+    // Detect uses of unlikely map modes.
+    if (matrixMode === TexMtxMapMode.ProjmapBasic || matrixMode === TexMtxMapMode.ViewProjmapBasic ||
+        matrixMode === 0x04 || matrixMode === 0x05) {
+        console.log(`Unusual matrix map mode:`, matrixMode);
+        debugger;
+    }
+
+    assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
+    const centerS = view.getFloat32(texMtxOffs + 0x04);
+    const centerT = view.getFloat32(texMtxOffs + 0x08);
+    const centerQ = view.getFloat32(texMtxOffs + 0x0C);
+    const scaleS = view.getFloat32(texMtxOffs + 0x10);
+    const scaleT = view.getFloat32(texMtxOffs + 0x14);
+    const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
+    assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
+    const translationS = view.getFloat32(texMtxOffs + 0x1C);
+    const translationT = view.getFloat32(texMtxOffs + 0x20);
+
+    const p00 = view.getFloat32(texMtxOffs + 0x24);
+    const p01 = view.getFloat32(texMtxOffs + 0x28);
+    const p02 = view.getFloat32(texMtxOffs + 0x2C);
+    const p03 = view.getFloat32(texMtxOffs + 0x30);
+    const p10 = view.getFloat32(texMtxOffs + 0x34);
+    const p11 = view.getFloat32(texMtxOffs + 0x38);
+    const p12 = view.getFloat32(texMtxOffs + 0x3C);
+    const p13 = view.getFloat32(texMtxOffs + 0x40);
+    const p20 = view.getFloat32(texMtxOffs + 0x44);
+    const p21 = view.getFloat32(texMtxOffs + 0x48);
+    const p22 = view.getFloat32(texMtxOffs + 0x4C);
+    const p23 = view.getFloat32(texMtxOffs + 0x50);
+    const p30 = view.getFloat32(texMtxOffs + 0x54);
+    const p31 = view.getFloat32(texMtxOffs + 0x58);
+    const p32 = view.getFloat32(texMtxOffs + 0x5C);
+    const p33 = view.getFloat32(texMtxOffs + 0x60);
+
+    const effectMatrix = mat4.fromValues(
+        p00, p10, p20, p30,
+        p01, p11, p21, p31,
+        p02, p12, p22, p32,
+        p03, p13, p23, p33,
+    );
+
+    const matrix = mat4.create();
+
+    const isMaya = !!(info >>> 7);
+    if (isMaya) {
+        calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
+    } else {
+        calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
+    }
+
+    const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
+    return texMtx;
+}
+
+function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
+    const view = buffer.createDataView();
+    const materialCount = view.getUint16(0x08);
+
+    const remapTableOffs = view.getUint32(0x10);
+    const remapTable: number[] = [];
+    for (let i = 0; i < materialCount; i++)
+        remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
+
+    const nameTableOffs = view.getUint32(0x14);
+    const nameTable = readStringTable(buffer, nameTableOffs);
+
+    const cullModeOffs = view.getUint32(0x18);
+    const matColorOffs = view.getUint32(0x1C);
+    const colorChanNumOffs = view.getUint32(0x20);
+    const colorChanOffs = view.getUint32(0x24);
+    const texGenNumOffs = view.getUint32(0x28);
+    const texCoordOffs = view.getUint32(0x2C);
+    const postTexCoordOffs = view.getUint32(0x30);
+    const texMtxOffs = view.getUint32(0x34);
+    const postTexMtxOffs = view.getUint32(0x38);
+    const texNoOffs = view.getUint32(0x3C);
+    const tevOrderOffs = view.getUint32(0x40);
+    const tevColorOffs = view.getUint32(0x44);
+    const tevKColorOffs = view.getUint32(0x48);
+    const tevStageNumOffs = view.getUint32(0x4C);
+    const tevStageOffs = view.getUint32(0x50);
+    const tevSwapModeOffs = view.getUint32(0x54);
+    const tevSwapModeTableOffs = view.getUint32(0x58);
+    const fogOffs = view.getUint32(0x5C);
+    const alphaCompOffs = view.getUint32(0x60);
+    const blendOffs = view.getUint32(0x64);
+    const zModeOffs = view.getUint32(0x68);
+    const zCompLocOffs = view.getUint32(0x6C);
+    const ditherOffs = view.getUint32(0x70);
+    const nbtScaleOffs = view.getUint32(0x74);
+
+    const materialEntries: MaterialEntry[] = [];
+    const materialEntryTableOffs = view.getUint32(0x0C);
+    for (let i = 0; i < materialCount; i++) {
+        const index = i;
+        const name = nameTable[i];
+        const materialEntryIdx = materialEntryTableOffs + (0x0138 * remapTable[i]);
+
+        const materialMode = view.getUint8(materialEntryIdx + 0x00);
+
+        const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
+        const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
+        // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
+        // const tevStageNumIndex = view.getUint8(materialEntryIdx + 0x04);
+        // const zCompLocIndex = view.getUint8(materialEntryIdx + 0x05);
+        const zModeIndex = view.getUint8(materialEntryIdx + 0x06);
+        // const ditherIndex = view.getUint8(materialEntryIdx + 0x07);
+
+        const colorMatRegs: Color[] = [];
+        for (let j = 0; j < 2; j++) {
+            const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
+            if (matColorIndex !== 0xFFFF)
+                colorMatRegs.push(readColorU8(view, matColorOffs + matColorIndex * 0x04));
+            else
+                colorMatRegs.push(White);
+        }
+
+        const colorAmbRegs: Color[] = [White, White];
+
+        const lightChannelCount = view.getUint8(colorChanNumOffs + colorChanNumIndex);
+        const lightChannels: GX_Material.LightChannelControl[] = [];
+        for (let j = 0; j < lightChannelCount; j++) {
+            const colorChannel = readColorChannel(view, colorChanOffs, view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 0) * 0x02));
+            const alphaChannel = readColorChannel(view, colorChanOffs, view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 1) * 0x02));
+            lightChannels.push({ colorChannel, alphaChannel });
+        }
+
+        const texMatrices: (TexMtx | null)[] = [];
+        for (let j = 0; j < 10; j++) {
+            const texMtxIndex = view.getInt16(materialEntryIdx + 0x34 + j * 0x02);
+            if (texMtxOffs > 0 && texMtxIndex >= 0)
+                texMatrices[j] = readTexMatrix(view, texMtxOffs, texMtxIndex);
+            else
+                texMatrices[j] = null;
+        }
+        // Since texture matrices are assigned to TEV stages in order, we
+        // should never actually have more than 8 of these.
+        assert(texMatrices[8] === null);
+        assert(texMatrices[9] === null);
+
+        const texGens: GX_Material.TexGen[] = [];
+        for (let j = 0; j < 8; j++) {
+            const texCoordIndex = view.getInt16(materialEntryIdx + 0x14 + j * 0x02);
+            if (texCoordIndex < 0)
+                continue;
+            const texCoordIdx = texCoordOffs + texCoordIndex * 0x04;
+            const type: GX.TexGenType = view.getUint8(texCoordIdx + 0x00);
+            const source: GX.TexGenSrc = view.getUint8(texCoordIdx + 0x01);
+            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordIdx + 0x02);
+            assert(view.getUint8(texCoordIdx + 0x03) === 0xFF);
+            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
+            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
+            if (postTexCoordOffs > 0 && postTexGenIndex >= 0) {
+                postMatrix = view.getUint8(postTexCoordOffs + texCoordIndex * 0x04 + 0x02);
+                assert(view.getUint8(postTexCoordOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+            }
+
+            // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
+            // For this reason, we always assign a texture matrix.
+            //
+            // If we ever find a counter-example for this, I'll have to rethink the scheme, but I
+            // *believe* that texture matrices should always be paired with TexGens in order.
+            const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
+            assert(texGenMatrix === GX.TexGenMatrix.IDENTITY || texGenMatrix === matrix);
+
+            if (texGenMatrix === GX.TexGenMatrix.IDENTITY && texMatrices[j] !== null) {
+                // If this is an identity matrix, then clear out the matrix in that file.
+                mat4.identity(texMatrices[j]!.matrix);
+            }
+
+            const normalize = false;
+            const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
+            texGens[j] = texGen;
+        }
+
+        const textureIndexes = [];
+        for (let j = 0; j < 8; j++) {
+            const textureTableIndex = view.getUint16(materialEntryIdx + 0x70 + j * 0x02);
+            if (textureTableIndex !== 0xFFFF)
+                textureIndexes.push(view.getUint16(texNoOffs + textureTableIndex * 0x02));
+            else
+                textureIndexes.push(-1);
+        }
+
+        const colorConstants: Color[] = [];
+        for (let j = 0; j < 4; j++) {
+            const colorIndex = view.getUint16(materialEntryIdx + 0x80 + j * 0x02);
+            if (colorIndex !== 0xFFFF)
+                colorConstants.push(readColorU8(view, tevKColorOffs + colorIndex * 0x04));
+            else
+                colorConstants.push(White);
+        }
+
+        const colorRegisters: Color[] = [];
+        for (let j = 0; j < 4; j++) {
+            const colorIndex = view.getUint16(materialEntryIdx + 0xC8 + j * 0x02);
+            if (colorIndex !== 0xFFFF)
+                colorRegisters.push(readColorS16(view, tevColorOffs + colorIndex * 0x08));
+            else
+                colorRegisters.push(TransparentBlack);
+        }
+
+        const indTexStages: GX_Material.IndTexStage[] = [];
+        const indTexMatrices: Float32Array[] = [];
+
+        const tevStages: GX_Material.TevStage[] = [];
+        for (let j = 0; j < 16; j++) {
+            // TevStage
+            const tevStageIndex = view.getInt16(materialEntryIdx + 0xD0 + j * 0x02);
+            if (tevStageIndex < 0)
+                continue;
+
+            const tevStageIdx = tevStageOffs + tevStageIndex * 0x14;
+
+            // const unknown0 = view.getUint8(tevStageOffs + 0x00);
+            const colorInA: GX.CC = view.getUint8(tevStageIdx + 0x01);
+            const colorInB: GX.CC = view.getUint8(tevStageIdx + 0x02);
+            const colorInC: GX.CC = view.getUint8(tevStageIdx + 0x03);
+            const colorInD: GX.CC = view.getUint8(tevStageIdx + 0x04);
+            const colorOp: GX.TevOp = view.getUint8(tevStageIdx + 0x05);
+            const colorBias: GX.TevBias = view.getUint8(tevStageIdx + 0x06);
+            const colorScale: GX.TevScale = view.getUint8(tevStageIdx + 0x07);
+            const colorClamp: boolean = !!view.getUint8(tevStageIdx + 0x08);
+            const colorRegId: GX.Register = view.getUint8(tevStageIdx + 0x09);
+
+            const alphaInA: GX.CA = view.getUint8(tevStageIdx + 0x0A);
+            const alphaInB: GX.CA = view.getUint8(tevStageIdx + 0x0B);
+            const alphaInC: GX.CA = view.getUint8(tevStageIdx + 0x0C);
+            const alphaInD: GX.CA = view.getUint8(tevStageIdx + 0x0D);
+            const alphaOp: GX.TevOp = view.getUint8(tevStageIdx + 0x0E);
+            const alphaBias: GX.TevBias = view.getUint8(tevStageIdx + 0x0F);
+            const alphaScale: GX.TevScale = view.getUint8(tevStageIdx + 0x10);
+            const alphaClamp: boolean = !!view.getUint8(tevStageIdx + 0x11);
+            const alphaRegId: GX.Register = view.getUint8(tevStageIdx + 0x12);
+
+            // TevOrder
+            const tevOrderIndex = view.getUint16(materialEntryIdx + 0xA8 + j * 0x02);
+            const tevOrderIdx = tevOrderOffs + tevOrderIndex * 0x04;
+            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderIdx + 0x00);
+            const texMap: number = view.getUint8(tevOrderIdx + 0x01);
+            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(tevOrderIdx + 0x02));
+            assert(view.getUint8(tevOrderIdx + 0x03) === 0xFF);
+
+            // KonstSel
+            const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x88 + j);
+            const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0x98 + j);
+
+            // SetTevSwapMode
+            const tevSwapModeIndex = view.getUint16(materialEntryIdx + 0xF0 + j * 0x02);
+            let rasSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
+            let texSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
+            if (tevSwapModeIndex !== 0xFFFF) {
+                const tevSwapModeRasSel = view.getUint8(tevSwapModeOffs + tevSwapModeIndex * 0x04 + 0x00);
+                const tevSwapModeTexSel = view.getUint8(tevSwapModeOffs + tevSwapModeIndex * 0x04 + 0x01);
+                const tevSwapModeTableRasIndex = view.getUint16(materialEntryIdx + 0x110 + tevSwapModeRasSel * 0x02);
+                const tevSwapModeTableTexIndex = view.getUint16(materialEntryIdx + 0x110 + tevSwapModeTexSel * 0x02);
+                const rasSwapA = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x00);
+                const rasSwapB = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x01);
+                const rasSwapC = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x02);
+                const rasSwapD = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x03);
+                const texSwapA = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x00);
+                const texSwapB = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x01);
+                const texSwapC = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x02);
+                const texSwapD = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x03);
+
+                rasSwapTable = [rasSwapA, rasSwapB, rasSwapC, rasSwapD] as const;
+                texSwapTable = [texSwapA, texSwapB, texSwapC, texSwapD] as const;
+            }
+
+            const tevStage: GX_Material.TevStage = {
+                colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
+                alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
+                texCoordId, texMap, channelId,
+                konstColorSel, konstAlphaSel,
+                rasSwapTable,
+                texSwapTable,
+                indTexStage: GX.IndTexStageID.STAGE0,
+                indTexFormat: GX.IndTexFormat._8,
+                indTexBiasSel: GX.IndTexBiasSel.NONE,
+                indTexAlphaSel: GX.IndTexAlphaSel.OFF,
+                indTexMatrix: GX.IndTexMtxID.OFF,
+                indTexWrapS: GX.IndTexWrap.OFF,
+                indTexWrapT: GX.IndTexWrap.OFF,
+                indTexAddPrev: false,
+                indTexUseOrigLOD: false,
+            };
+            tevStages.push(tevStage);
+        }
+
+        // SetAlphaCompare
+        const alphaCompIndex = view.getUint16(materialEntryIdx + 0x132);
+        const alphaCompIdx = alphaCompOffs + alphaCompIndex * 0x08;
+        const compareA: GX.CompareType = view.getUint8(alphaCompIdx + 0x00);
+        const referenceA: number = view.getUint8(alphaCompIdx + 0x01) / 0xFF;
+        const op: GX.AlphaOp = view.getUint8(alphaCompIdx + 0x02);
+        const compareB: GX.CompareType = view.getUint8(alphaCompIdx + 0x03);
+        const referenceB: number = view.getUint8(alphaCompIdx + 0x04) / 0xFF;
+        const alphaTest: GX_Material.AlphaTest = { compareA, referenceA, op, compareB, referenceB };
+
+        // SetBlendMode
+        const blendModeIndex = view.getUint16(materialEntryIdx + 0x134);
+        const blendIdx = blendOffs + blendModeIndex * 0x04;
+        const blendMode: GX.BlendMode = view.getUint8(blendIdx + 0x00);
+        const blendSrcFactor: GX.BlendFactor = view.getUint8(blendIdx + 0x01);
+        const blendDstFactor: GX.BlendFactor = view.getUint8(blendIdx + 0x02);
+        const blendLogicOp: GX.LogicOp = view.getUint8(blendIdx + 0x03);
+
+        const cullMode: GX.CullMode = view.getUint32(cullModeOffs + cullModeIndex * 0x04);
+        const zModeIdx = zModeOffs + zModeIndex * 4;
+        const depthTest: boolean = !!view.getUint8(zModeIdx + 0x00);
+        const depthFunc: GX.CompareType = view.getUint8(zModeIdx + 0x01);
+        const depthWrite: boolean = !!view.getUint8(zModeIdx + 0x02);
+
+        const fogInfoIndex = view.getUint16(materialEntryIdx + 0x130);
+        let fogType = GX.FogType.NONE;
+        let fogAdjEnabled = false;
+        const fogBlock = new GX_Material.FogBlock();
+        if (fogInfoIndex !== 0xFFFF) {
+            const fogIdx = fogOffs + fogInfoIndex * 0x2C;
+            fogType = view.getUint8(fogIdx + 0x00);
+            fogAdjEnabled = !!view.getUint8(fogIdx + 0x01);
+            const fogAdjCenter = view.getUint16(fogIdx + 0x02);
+            const fogStartZ = view.getFloat32(fogIdx + 0x04);
+            const fogEndZ = view.getFloat32(fogIdx + 0x08);
+            const fogNearZ = view.getFloat32(fogIdx + 0x0C);
+            const fogFarZ = view.getFloat32(fogIdx + 0x10);
+            const fogColor = readColorU8(view, fogIdx + 0x14);
+            const fogAdjTable = buffer.createTypedArray(Uint16Array, fogIdx + 0x18, 10, Endianness.BIG_ENDIAN);
+
+            GX_Material.fogBlockSet(fogBlock, fogType, fogStartZ, fogEndZ, fogNearZ, fogFarZ);
+            colorCopy(fogBlock.Color, fogColor);
+            fogBlock.AdjTable.set(fogAdjTable);
+            fogBlock.AdjCenter = fogAdjCenter;
+        }
+
+        const translucent = materialMode === 0x04;
+        const colorUpdate = true, alphaUpdate = false;
+
+        const ropInfo: GX_Material.RopInfo = {
+            fogType, fogAdjEnabled,
+            blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
+            depthTest, depthFunc, depthWrite,
+            colorUpdate, alphaUpdate,
+        };
+
+        const gxMaterial: GX_Material.GXMaterial = {
+            name,
+            cullMode,
+            lightChannels,
+            texGens,
+            tevStages,
+            indTexStages,
+            alphaTest,
+            ropInfo,
+        };
+
+        autoOptimizeMaterial(gxMaterial);
+
+        materialEntries.push({
+            index, name,
+            materialMode, translucent,
+            textureIndexes,
+            texMatrices,
+            gxMaterial,
+            indTexMatrices,
+            colorMatRegs,
+            colorAmbRegs,
+            colorRegisters,
+            colorConstants,
+            fogBlock,
+        });
+    }
+
+    return { materialEntries };
+}
+
 function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const view = buffer.createDataView();
     const materialCount = view.getUint16(0x08);
@@ -650,27 +1062,31 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, nameTableOffs);
 
-    const indirectTableOffset = view.getUint32(0x18);
-    const cullModeTableOffs = view.getUint32(0x1C);
-    const materialColorTableOffs = view.getUint32(0x20);
-    const colorChanCountTableOffs = view.getUint32(0x24);
-    const colorChanTableOffs = view.getUint32(0x28);
-    const ambientColorTableOffs = view.getUint32(0x2C);
-    const texGenTableOffs = view.getUint32(0x38);
-    const postTexGenTableOffs = view.getUint32(0x3C);
-    const texMtxTableOffs = view.getUint32(0x40);
-    const postTexMtxTableOffs = view.getUint32(0x44);
-    const textureTableOffs = view.getUint32(0x48);
-    const tevOrderTableOffs = view.getUint32(0x4C);
-    const colorRegisterTableOffs = view.getUint32(0x50);
-    const colorConstantTableOffs = view.getUint32(0x54);
-    const tevStageTableOffs = view.getUint32(0x5C);
-    const tevSwapModeInfoOffs = view.getUint32(0x60);
-    const tevSwapModeTableInfoOffset = view.getUint32(0x64);
-    const fogInfoTableOffs = view.getUint32(0x68);
-    const alphaTestTableOffs = view.getUint32(0x6C);
-    const blendModeTableOffs = view.getUint32(0x70);
-    const zModeTableOffs = view.getUint32(0x74);
+    const indirectOffs = view.getUint32(0x18);
+    const cullModeOffs = view.getUint32(0x1C);
+    const matColorOffs = view.getUint32(0x20);
+    const colorChanNumOffs = view.getUint32(0x24);
+    const colorChanOffs = view.getUint32(0x28);
+    const ambColorOffs = view.getUint32(0x2C);
+    const texGenNumOffs = view.getUint32(0x34);
+    const texCoordOffs = view.getUint32(0x38);
+    const postTexCoordOffs = view.getUint32(0x3C);
+    const texMtxOffs = view.getUint32(0x40);
+    const postTexMtxOffs = view.getUint32(0x44);
+    const texNoOffs = view.getUint32(0x48);
+    const tevOrderOffs = view.getUint32(0x4C);
+    const tevColorOffs = view.getUint32(0x50);
+    const tevKColorOffs = view.getUint32(0x54);
+    const tevStageOffs = view.getUint32(0x5C);
+    const tevSwapModeOffs = view.getUint32(0x60);
+    const tevSwapModeTableOffs = view.getUint32(0x64);
+    const fogOffs = view.getUint32(0x68);
+    const alphaCompOffs = view.getUint32(0x6C);
+    const blendOffs = view.getUint32(0x70);
+    const zModeOffs = view.getUint32(0x74);
+    const zCompOffs = view.getUint32(0x78);
+    const ditherOffs = view.getUint32(0x7C);
+    const nbtScaleOffs = view.getUint32(0x80);
 
     const materialEntries: MaterialEntry[] = [];
     const materialEntryTableOffs = view.getUint32(0x0C);
@@ -693,13 +1109,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         // const tevStageNumIndex = view.getUint8(materialEntryIdx + 0x04);
         // const zCompLocIndex = view.getUint8(materialEntryIdx + 0x05);
         const zModeIndex = view.getUint8(materialEntryIdx + 0x06);
-        // const ditherIndex = view.getUint8(materialEntryIdx + 0x05);
+        // const ditherIndex = view.getUint8(materialEntryIdx + 0x07);
 
         const colorMatRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             if (matColorIndex !== 0xFFFF)
-                colorMatRegs.push(readColorU8(view, materialColorTableOffs + matColorIndex * 0x04));
+                colorMatRegs.push(readColorU8(view, matColorOffs + matColorIndex * 0x04));
             else
                 colorMatRegs.push(White);
         }
@@ -708,24 +1124,24 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         for (let j = 0; j < 2; j++) {
             const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
             if (ambColorIndex !== 0xFFFF)
-                colorAmbRegs.push(readColorU8(view, ambientColorTableOffs + ambColorIndex * 0x04));
+                colorAmbRegs.push(readColorU8(view, ambColorOffs + ambColorIndex * 0x04));
             else
                 colorAmbRegs.push(White);
         }
 
-        const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanNumIndex);
+        const lightChannelCount = view.getUint8(colorChanNumOffs + colorChanNumIndex);
         const lightChannels: GX_Material.LightChannelControl[] = [];
         for (let j = 0; j < lightChannelCount; j++) {
-            const colorChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 0) * 0x02));
-            const alphaChannel = readColorChannel(view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 1) * 0x02));
+            const colorChannel = readColorChannel(view, colorChanOffs, view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 0) * 0x02));
+            const alphaChannel = readColorChannel(view, colorChanOffs, view.getUint16(materialEntryIdx + 0x0C + (j * 2 + 1) * 0x02));
             lightChannels.push({ colorChannel, alphaChannel });
         }
 
         const texMatrices: (TexMtx | null)[] = [];
         for (let j = 0; j < 10; j++) {
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
-            if (texMtxTableOffs > 0 && texMtxIndex >= 0)
-                texMatrices[j] = readTexMatrix(texMtxTableOffs, texMtxIndex);
+            if (texMtxOffs > 0 && texMtxIndex >= 0)
+                texMatrices[j] = readTexMatrix(view, texMtxOffs, texMtxIndex);
             else
                 texMatrices[j] = null;
         }
@@ -734,32 +1150,20 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         assert(texMatrices[8] === null);
         assert(texMatrices[9] === null);
 
-        // These are never read in actual J3D.
-        /*
-        const postTexMatrices: (TexMtx | null)[] = [];
-        for (let j = 0; j < 20; j++) {
-            const postTexMtxIndex = view.getInt16(materialEntryIdx + 0x5C + j * 0x02);
-            if (postTexMtxTableOffs > 0 && postTexMtxIndex >= 0)
-                postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, postTexMtxIndex);
-            else
-                postTexMatrices[j] = null;
-        }
-        */
-
         const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < 8; j++) {
             const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
             if (texGenIndex < 0)
                 continue;
-            const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
-            const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
-            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
-            assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+            const type: GX.TexGenType = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x00);
+            const source: GX.TexGenSrc = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x01);
+            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x02);
+            assert(view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
             let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
             const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
-            if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
-                postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+            if (postTexCoordOffs > 0 && postTexGenIndex >= 0) {
+                postMatrix = view.getUint8(postTexCoordOffs + texGenIndex * 0x04 + 0x02);
+                assert(view.getUint8(postTexCoordOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
             }
 
             // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
@@ -784,7 +1188,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         for (let j = 0; j < 8; j++) {
             const textureTableIndex = view.getUint16(materialEntryIdx + 0x84 + j * 0x02);
             if (textureTableIndex !== 0xFFFF)
-                textureIndexes.push(view.getUint16(textureTableOffs + textureTableIndex * 0x02));
+                textureIndexes.push(view.getUint16(texNoOffs + textureTableIndex * 0x02));
             else
                 textureIndexes.push(-1);
         }
@@ -793,7 +1197,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
             if (colorIndex !== 0xFFFF)
-                colorConstants.push(readColorU8(view, colorConstantTableOffs + colorIndex * 0x04));
+                colorConstants.push(readColorU8(view, tevKColorOffs + colorIndex * 0x04));
             else
                 colorConstants.push(White);
         }
@@ -802,7 +1206,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
             if (colorIndex !== 0xFFFF)
-                colorRegisters.push(readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08));
+                colorRegisters.push(readColorS16(view, tevColorOffs + colorIndex * 0x08));
             else
                 colorRegisters.push(TransparentBlack);
         }
@@ -810,10 +1214,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const indTexStages: GX_Material.IndTexStage[] = [];
         const indTexMatrices: Float32Array[] = [];
 
-        const indirectEntryOffs = indirectTableOffset + i * 0x138;
+        const indirectEntryOffs = indirectOffs + i * 0x138;
         let hasIndirect = false;
 
-        if (indirectTableOffset !== nameTableOffs)
+        if (indirectOffs !== nameTableOffs)
             hasIndirect = (view.getUint8(indirectEntryOffs + 0x00) === 1);
 
         if (hasIndirect) {
@@ -854,36 +1258,36 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             if (tevStageIndex < 0)
                 continue;
 
-            const tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
+            const tevStageIdx = tevStageOffs + tevStageIndex * 0x14;
 
             // const unknown0 = view.getUint8(tevStageOffs + 0x00);
-            const colorInA: GX.CC = view.getUint8(tevStageOffs + 0x01);
-            const colorInB: GX.CC = view.getUint8(tevStageOffs + 0x02);
-            const colorInC: GX.CC = view.getUint8(tevStageOffs + 0x03);
-            const colorInD: GX.CC = view.getUint8(tevStageOffs + 0x04);
-            const colorOp: GX.TevOp = view.getUint8(tevStageOffs + 0x05);
-            const colorBias: GX.TevBias = view.getUint8(tevStageOffs + 0x06);
-            const colorScale: GX.TevScale = view.getUint8(tevStageOffs + 0x07);
-            const colorClamp: boolean = !!view.getUint8(tevStageOffs + 0x08);
-            const colorRegId: GX.Register = view.getUint8(tevStageOffs + 0x09);
+            const colorInA: GX.CC = view.getUint8(tevStageIdx + 0x01);
+            const colorInB: GX.CC = view.getUint8(tevStageIdx + 0x02);
+            const colorInC: GX.CC = view.getUint8(tevStageIdx + 0x03);
+            const colorInD: GX.CC = view.getUint8(tevStageIdx + 0x04);
+            const colorOp: GX.TevOp = view.getUint8(tevStageIdx + 0x05);
+            const colorBias: GX.TevBias = view.getUint8(tevStageIdx + 0x06);
+            const colorScale: GX.TevScale = view.getUint8(tevStageIdx + 0x07);
+            const colorClamp: boolean = !!view.getUint8(tevStageIdx + 0x08);
+            const colorRegId: GX.Register = view.getUint8(tevStageIdx + 0x09);
 
-            const alphaInA: GX.CA = view.getUint8(tevStageOffs + 0x0A);
-            const alphaInB: GX.CA = view.getUint8(tevStageOffs + 0x0B);
-            const alphaInC: GX.CA = view.getUint8(tevStageOffs + 0x0C);
-            const alphaInD: GX.CA = view.getUint8(tevStageOffs + 0x0D);
-            const alphaOp: GX.TevOp = view.getUint8(tevStageOffs + 0x0E);
-            const alphaBias: GX.TevBias = view.getUint8(tevStageOffs + 0x0F);
-            const alphaScale: GX.TevScale = view.getUint8(tevStageOffs + 0x10);
-            const alphaClamp: boolean = !!view.getUint8(tevStageOffs + 0x11);
-            const alphaRegId: GX.Register = view.getUint8(tevStageOffs + 0x12);
+            const alphaInA: GX.CA = view.getUint8(tevStageIdx + 0x0A);
+            const alphaInB: GX.CA = view.getUint8(tevStageIdx + 0x0B);
+            const alphaInC: GX.CA = view.getUint8(tevStageIdx + 0x0C);
+            const alphaInD: GX.CA = view.getUint8(tevStageIdx + 0x0D);
+            const alphaOp: GX.TevOp = view.getUint8(tevStageIdx + 0x0E);
+            const alphaBias: GX.TevBias = view.getUint8(tevStageIdx + 0x0F);
+            const alphaScale: GX.TevScale = view.getUint8(tevStageIdx + 0x10);
+            const alphaClamp: boolean = !!view.getUint8(tevStageIdx + 0x11);
+            const alphaRegId: GX.Register = view.getUint8(tevStageIdx + 0x12);
 
             // TevOrder
             const tevOrderIndex = view.getUint16(materialEntryIdx + 0xBC + j * 0x02);
-            const tevOrderOffs = tevOrderTableOffs + tevOrderIndex * 0x04;
-            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderOffs + 0x00);
-            const texMap: number = view.getUint8(tevOrderOffs + 0x01);
-            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(tevOrderOffs + 0x02));
-            assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
+            const tevOrderIdx = tevOrderOffs + tevOrderIndex * 0x04;
+            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderIdx + 0x00);
+            const texMap: number = view.getUint8(tevOrderIdx + 0x01);
+            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(tevOrderIdx + 0x02));
+            assert(view.getUint8(tevOrderIdx + 0x03) === 0xFF);
 
             // KonstSel
             const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
@@ -894,18 +1298,18 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             let rasSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
             let texSwapTable: readonly [number, number, number, number] = [0, 1, 2, 3] as const;
             if (tevSwapModeIndex !== 0xFFFF) {
-                const tevSwapModeRasSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x00);
-                const tevSwapModeTexSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x01);
+                const tevSwapModeRasSel = view.getUint8(tevSwapModeOffs + tevSwapModeIndex * 0x04 + 0x00);
+                const tevSwapModeTexSel = view.getUint8(tevSwapModeOffs + tevSwapModeIndex * 0x04 + 0x01);
                 const tevSwapModeTableRasIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeRasSel * 0x02);
                 const tevSwapModeTableTexIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeTexSel * 0x02);
-                const rasSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x00);
-                const rasSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x01);
-                const rasSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x02);
-                const rasSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x03);
-                const texSwapA = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x00);
-                const texSwapB = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x01);
-                const texSwapC = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x02);
-                const texSwapD = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x03);
+                const rasSwapA = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x00);
+                const rasSwapB = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x01);
+                const rasSwapC = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x02);
+                const rasSwapD = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableRasIndex * 0x04 + 0x03);
+                const texSwapA = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x00);
+                const texSwapB = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x01);
+                const texSwapC = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x02);
+                const texSwapD = view.getUint8(tevSwapModeTableOffs + tevSwapModeTableTexIndex * 0x04 + 0x03);
 
                 rasSwapTable = [rasSwapA, rasSwapB, rasSwapC, rasSwapD] as const;
                 texSwapTable = [texSwapA, texSwapB, texSwapC, texSwapD] as const;
@@ -957,35 +1361,35 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         }
 
         // SetAlphaCompare
-        const alphaTestIndex = view.getUint16(materialEntryIdx + 0x146);
-        const blendModeIndex = view.getUint16(materialEntryIdx + 0x148);
-        const alphaTestOffs = alphaTestTableOffs + alphaTestIndex * 0x08;
-        const compareA: GX.CompareType = view.getUint8(alphaTestOffs + 0x00);
-        const referenceA: number = view.getUint8(alphaTestOffs + 0x01) / 0xFF;
-        const op: GX.AlphaOp = view.getUint8(alphaTestOffs + 0x02);
-        const compareB: GX.CompareType = view.getUint8(alphaTestOffs + 0x03);
-        const referenceB: number = view.getUint8(alphaTestOffs + 0x04) / 0xFF;
+        const alphaCompIndex = view.getUint16(materialEntryIdx + 0x146);
+        const alphaCompIdx = alphaCompOffs + alphaCompIndex * 0x08;
+        const compareA: GX.CompareType = view.getUint8(alphaCompIdx + 0x00);
+        const referenceA: number = view.getUint8(alphaCompIdx + 0x01) / 0xFF;
+        const op: GX.AlphaOp = view.getUint8(alphaCompIdx + 0x02);
+        const compareB: GX.CompareType = view.getUint8(alphaCompIdx + 0x03);
+        const referenceB: number = view.getUint8(alphaCompIdx + 0x04) / 0xFF;
         const alphaTest: GX_Material.AlphaTest = { compareA, referenceA, op, compareB, referenceB };
 
         // SetBlendMode
-        const blendModeOffs = blendModeTableOffs + blendModeIndex * 0x04;
-        const blendMode: GX.BlendMode = view.getUint8(blendModeOffs + 0x00);
-        const blendSrcFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x01);
-        const blendDstFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x02);
-        const blendLogicOp: GX.LogicOp = view.getUint8(blendModeOffs + 0x03);
+        const blendModeIndex = view.getUint16(materialEntryIdx + 0x148);
+        const blendIdx = blendOffs + blendModeIndex * 0x04;
+        const blendMode: GX.BlendMode = view.getUint8(blendIdx + 0x00);
+        const blendSrcFactor: GX.BlendFactor = view.getUint8(blendIdx + 0x01);
+        const blendDstFactor: GX.BlendFactor = view.getUint8(blendIdx + 0x02);
+        const blendLogicOp: GX.LogicOp = view.getUint8(blendIdx + 0x03);
 
-        const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
-        const zModeOffs = zModeTableOffs + zModeIndex * 4;
-        const depthTest: boolean = !!view.getUint8(zModeOffs + 0x00);
-        const depthFunc: GX.CompareType = view.getUint8(zModeOffs + 0x01);
-        const depthWrite: boolean = !!view.getUint8(zModeOffs + 0x02);
+        const cullMode: GX.CullMode = view.getUint32(cullModeOffs + cullModeIndex * 0x04);
+        const zModeIdx = zModeOffs + zModeIndex * 4;
+        const depthTest: boolean = !!view.getUint8(zModeIdx + 0x00);
+        const depthFunc: GX.CompareType = view.getUint8(zModeIdx + 0x01);
+        const depthWrite: boolean = !!view.getUint8(zModeIdx + 0x02);
 
         const fogInfoIndex = view.getUint16(materialEntryIdx + 0x144);
         let fogType = GX.FogType.NONE;
         let fogAdjEnabled = false;
         const fogBlock = new GX_Material.FogBlock();
         if (fogInfoIndex !== 0xFFFF) {
-            const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;
+            const fogInfoOffs = fogOffs + fogInfoIndex * 0x2C;
             fogType = view.getUint8(fogInfoOffs + 0x00);
             fogAdjEnabled = !!view.getUint8(fogInfoOffs + 0x01);
             const fogAdjCenter = view.getUint16(fogInfoOffs + 0x02);
@@ -1038,96 +1442,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorConstants,
             fogBlock,
         });
-    }
-
-    function readColorChannel(colorChanIndex: number): GX_Material.ColorChannelControl {
-        if (colorChanIndex !== 0xFFFF) {
-            const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
-            const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-            assert(view.getUint8(colorChanOffs + 0x00) < 2);
-            const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
-            const litMask = view.getUint8(colorChanOffs + 0x02);
-            const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
-            const attnFn = view.getUint8(colorChanOffs + 0x04);
-            const attenuationFunction: GX.AttenuationFunction = (
-                attnFn === 0 ? GX.AttenuationFunction.SPEC :
-                attnFn === 1 ? GX.AttenuationFunction.SPOT :
-                               GX.AttenuationFunction.NONE
-            );
-            const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
-
-            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
-        } else {
-            const lightingEnabled = false;
-            const matColorSource: GX.ColorSrc = GX.ColorSrc.REG;
-            const litMask = 0;
-            const diffuseFunction: GX.DiffuseFunction = GX.DiffuseFunction.CLAMP;
-            const attenuationFunction: GX.AttenuationFunction = GX.AttenuationFunction.NONE;
-            const ambColorSource: GX.ColorSrc = GX.ColorSrc.REG;
-            return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
-        }
-    }
-
-    function readTexMatrix(tableOffs: number, texMtxIndex: number): TexMtx {
-        const texMtxOffs = tableOffs + texMtxIndex * 0x64;
-        const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
-        const info = view.getUint8(texMtxOffs + 0x01);
-
-        const matrixMode = info & 0x3F;
-
-        // Detect uses of unlikely map modes.
-        if (matrixMode === TexMtxMapMode.ProjmapBasic || matrixMode === TexMtxMapMode.ViewProjmapBasic ||
-            matrixMode === 0x04 || matrixMode === 0x05) {
-            console.log(`Unusual matrix map mode:`, matrixMode);
-            debugger;
-        }
-
-        assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
-        const centerS = view.getFloat32(texMtxOffs + 0x04);
-        const centerT = view.getFloat32(texMtxOffs + 0x08);
-        const centerQ = view.getFloat32(texMtxOffs + 0x0C);
-        const scaleS = view.getFloat32(texMtxOffs + 0x10);
-        const scaleT = view.getFloat32(texMtxOffs + 0x14);
-        const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-        assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
-        const translationS = view.getFloat32(texMtxOffs + 0x1C);
-        const translationT = view.getFloat32(texMtxOffs + 0x20);
-
-        const p00 = view.getFloat32(texMtxOffs + 0x24);
-        const p01 = view.getFloat32(texMtxOffs + 0x28);
-        const p02 = view.getFloat32(texMtxOffs + 0x2C);
-        const p03 = view.getFloat32(texMtxOffs + 0x30);
-        const p10 = view.getFloat32(texMtxOffs + 0x34);
-        const p11 = view.getFloat32(texMtxOffs + 0x38);
-        const p12 = view.getFloat32(texMtxOffs + 0x3C);
-        const p13 = view.getFloat32(texMtxOffs + 0x40);
-        const p20 = view.getFloat32(texMtxOffs + 0x44);
-        const p21 = view.getFloat32(texMtxOffs + 0x48);
-        const p22 = view.getFloat32(texMtxOffs + 0x4C);
-        const p23 = view.getFloat32(texMtxOffs + 0x50);
-        const p30 = view.getFloat32(texMtxOffs + 0x54);
-        const p31 = view.getFloat32(texMtxOffs + 0x58);
-        const p32 = view.getFloat32(texMtxOffs + 0x5C);
-        const p33 = view.getFloat32(texMtxOffs + 0x60);
-
-        const effectMatrix = mat4.fromValues(
-            p00, p10, p20, p30,
-            p01, p11, p21, p31,
-            p02, p12, p22, p32,
-            p03, p13, p23, p33,
-        );
-
-        const matrix = mat4.create();
-
-        const isMaya = !!(info >>> 7);
-        if (isMaya) {
-            calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
-        } else {
-            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT);
-        }
-
-        const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
-        return texMtx;
     }
 
     return { materialEntries };
@@ -1239,7 +1553,10 @@ export class BMD {
         this.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
         this.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
         this.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), this);
-        this.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+        if (j3d.magic === 'J3D2bmd2')
+            this.mat3 = readMAT2Chunk(j3d.nextChunk('MAT2'));
+        else
+            this.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
         const mdl3 = j3d.maybeNextChunk('MDL3');
         this.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
 
@@ -1295,7 +1612,7 @@ export class BMD {
 
     public static parse(buffer: ArrayBufferSlice): BMD {
         const j3d = new JSystemFileReaderHelper(buffer);
-        assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
+        assert(j3d.magic === 'J3D2bmd2' || j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
         return this.parseReader(j3d);
     }
 
