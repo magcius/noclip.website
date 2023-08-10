@@ -1651,11 +1651,11 @@ export class BMT {
 
 //#region Animation Core
 export const enum LoopMode {
-    ONCE = 0,
-    ONCE_AND_RESET = 1,
-    REPEAT = 2,
-    MIRRORED_ONCE = 3,
-    MIRRORED_REPEAT = 4,
+    Once = 0,
+    OnceAndReset = 1,
+    Repeat = 2,
+    MirroredOnce = 3,
+    MirroredRepeat = 4,
 }
 
 export interface AnimationKeyframe {

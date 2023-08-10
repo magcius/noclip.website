@@ -17,15 +17,15 @@ import * as GX from "../../../gx/gx_enum.js";
 
 function applyLoopMode(t: number, loopMode: LoopMode) {
     switch (loopMode) {
-    case LoopMode.ONCE:
+    case LoopMode.Once:
         return Math.min(t, 1);
-    case LoopMode.ONCE_AND_RESET:
+    case LoopMode.OnceAndReset:
         return Math.min(t, 1) % 1;
-    case LoopMode.REPEAT:
+    case LoopMode.Repeat:
         return t % 1;
-    case LoopMode.MIRRORED_ONCE:
+    case LoopMode.MirroredOnce:
         return 1 - Math.abs((Math.min(t, 2) - 1));
-    case LoopMode.MIRRORED_REPEAT:
+    case LoopMode.MirroredRepeat:
         return 1 - Math.abs((t % 2) - 1);
     }
 }

@@ -730,7 +730,7 @@ function isBckLoop(xanimePlayer: XanimePlayer, bckName: string | null): boolean 
         return false;
 
     const bckRes = assertExists(xanimePlayer.resTable.get(bckName));
-    return bckRes.loopMode === LoopMode.REPEAT || bckRes.loopMode === LoopMode.MIRRORED_REPEAT;
+    return bckRes.loopMode === LoopMode.Repeat || bckRes.loopMode === LoopMode.MirroredRepeat;
 }
 
 function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, deltaTimeFrames: number): boolean {

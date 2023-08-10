@@ -542,7 +542,7 @@ export function isActionEnd(actor: LiveActor): boolean {
 
 export function isActionLoopedOrStopped(actor: LiveActor): boolean {
     const bckCtrl = actor.modelManager!.getBckCtrl();
-    if (bckCtrl.loopMode === LoopMode.ONCE)
+    if (bckCtrl.loopMode === LoopMode.Once)
         return isBckStopped(actor);
     else
         return isBckLooped(actor);

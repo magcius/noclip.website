@@ -62,7 +62,7 @@ class LayoutAnmPlayer {
     public start(layoutManager: LayoutManager, animName: string): void {
         this.curAnim = assertExists(layoutManager.getAnimTransform(animName));
         this.frameCtrl.init(this.curAnim.duration);
-        this.frameCtrl.loopMode = this.curAnim.loopMode === NW4RLoopMode.ONCE ? J3DLoopMode.ONCE : J3DLoopMode.REPEAT;
+        this.frameCtrl.loopMode = this.curAnim.loopMode === NW4RLoopMode.ONCE ? J3DLoopMode.Once : J3DLoopMode.Repeat;
     }
 
     public movement(sceneObjHolder: SceneObjHolder): void {
