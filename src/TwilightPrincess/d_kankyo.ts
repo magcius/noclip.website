@@ -4,32 +4,23 @@ import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_m
 import { vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers.js";
-import { nArray, assert, arrayRemove, assertExists } from "../util.js";
+import { nArray, assert, arrayRemove, assertExists, readString } from "../util.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { Camera } from "../Camera.js";
 import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wind_set, dKyw_wether_delete } from "./d_kankyo_wether.js";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent.js";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { FogType } from "../gx/gx_enum.js";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext.js";
+import { dComIfG_resLoad, ResType } from "./d_resorce.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 
 export const enum LightType {
-    /* Actor = 0,
-    BG0 = 1,
-    BG1 = 2,
-    BG2 = 3,
-    BG3 = 4,
-    BG0_Full = 5,
-    BG1_Full = 6,
-    BG2_Full = 7,
-    BG3_Full = 8,
-    Player = 9,
-    ActorBaseOnly = 99, */
-
     UNK_0 = 0,
     UNK_1 = 1,
     UNK_2 = 2,
@@ -44,7 +35,7 @@ export const enum LightType {
     UNK_12 = 12,
     UNK_13 = 13,
     UNK_14 = 14,
-    UNK_16 = 16, // ?
+    UNK_16 = 16,
     UNK_20 = 20,
     BG0 = 32,
     BG1 = 33,
@@ -87,6 +78,9 @@ export class dScnKy_env_light_c {
     public bosslight1 = nArray(8, () => new BOSS_LIGHT());
     public bosslight2 = nArray(6, () => new BOSS_LIGHT());
 
+    public underwater_screen_ef: J3DModelInstance;
+    public underwater_screen_ef_btk = new mDoExt_btkAnm();
+
     // Wind
     public windTactAngleX: number = 0;
     public windTactAngleY: number = 0;
@@ -109,6 +103,9 @@ export class dScnKy_env_light_c {
     public starAmount = 0.0;
     public starCount = 0;
 
+    // Housi
+    public housiCount = 0;
+
     public eventNightStop: boolean = false;
     public forceTimePass: boolean = false;
 
@@ -117,6 +114,7 @@ export class dScnKy_env_light_c {
     public vrkumoPacket: dKankyo_vrkumo_Packet | null = null;
     public rainPacket: dKankyo_rain_Packet | null = null;
     public starPacket: dKankyo_star_Packet | null = null;
+    public housiPacket: dKankyo_housi_Packet | null = null;
 
     public sunPos2 = vec3.create();
     public plightNearPos = vec3.create();
@@ -127,6 +125,9 @@ export class dScnKy_env_light_c {
     // Color palette
     public vrSkyCol = colorNewCopy(White);
     public vrKumoCol = colorNewCopy(White);
+    public unk_vrboxCol1 = colorNewCopy(TransparentBlack); // mUnderCloudColor
+    public unk_vrboxCol2 = colorNewCopy(TransparentBlack); // mUnderCloudShadowColor
+    public unk_vrboxCol3 = colorNewCopy(TransparentBlack); // mCloudInnerHazeColor
     public vrKumoCenterCol = colorNewCopy(White);
     public vrKasumiMaeCol = colorNewCopy(White);
 
@@ -134,6 +135,7 @@ export class dScnKy_env_light_c {
 
     public actorAmbience = colorNewCopy(TransparentBlack);
     public bgAmbience = nArray(4, () => colorNewCopy(TransparentBlack));
+    public unk_1128 = nArray(6, () => colorNewCopy(TransparentBlack));
     public fogColor = colorNewCopy(White);
 
     public actorAddAmb = colorNewCopy(TransparentBlack);
@@ -154,16 +156,21 @@ export class dScnKy_env_light_c {
     public fogNear: number;
     public fogFar: number;
 
+    public unk_11c8: number = 1.0;
+    public unk_11cc: number = 1.0;
+    public unk_11d0: number = 1.0;
+
     public unk_11ec: number = 0;
     public unk_11f0: number = 0;
     public unk_11f4: number = 0;
 
     public ColAllColRatio: number = 1.0;
-    public ColActColRatio: number = 1.0;
-    public ColBgColRatio: number = 1.0;
+    public ColActColRatio: number = 0.0;  // should be 1.0, temp until lighting is fixed
+    public ColBgColRatio: number = 0.0;  // should be 1.0, temp until lighting is fixed
     public ColFogColRatio: number = 1.0;
     public ColVrSoraColRatio: number = 1.0;
     public ColVrKumoColRatio: number = 1.0;
+    public unk_1210: number = 1.0;
 
     public allColRatio: number = 1.0;
     public actColRatio: number = 1.0;
@@ -171,8 +178,6 @@ export class dScnKy_env_light_c {
     public fogColRatio: number = 1.0;
     public vrSoraColRatio: number = 1.0;
     public vrKumoColRatio: number = 1.0;
-
-    public unk_1210: number = 1.0;
     public unk_122c: number = 1.0;
 
     // Time
@@ -200,6 +205,8 @@ export class dScnKy_env_light_c {
     public colpatBlend: number = 1.0;
     public colpatBlendGather: number = -1.0;
 
+    public unk_12cc: number = 0;
+
     // These appear to be enums ranging from 0-2? I don't know.
     public colpatMode: number = 0;
     public colpatModeGather: number = 0;
@@ -215,6 +222,8 @@ export class dScnKy_env_light_c {
     public fogDensity: number;
 
     public pondSeason: number = 0;
+
+    public lightSize: number = 1;
 
     // The game records this in a separate struct with a bunch of extra data, but we don't need it lol.
     public lightStatus = nArray(2, () => new Light());
@@ -317,8 +326,6 @@ export class dKy_tevstr_c {
 
     public initType: number = 0x7B;
     public unk_384: number = 0;
-
-    static LightStatusData:LightStatus[] = new Array(8);
 }
 
 enum DiceWeatherMode {
@@ -337,32 +344,6 @@ const enum DiceWeatherState {
     Execute,
     Next,
 }
-
-/* class setLight_palno_ret {
-    public palePrevA: stage_palet_info_class;
-    public palePrevB: stage_palet_info_class;
-    public paleCurrA: stage_palet_info_class;
-    public paleCurrB: stage_palet_info_class;
-    public blendPaleAB: number = 0;
-} */
-
-/* class setLight_palno_ret {
-    public envrIdxPrev: number;    // param_0
-    public envrIdxCurr: number;    // param_1
-    public colpatPrev: number;     // param_2
-    public colpatCurr: number;     // param_3
-    public sp23: number;           // param_4
-    public sp21: number;           // param_5
-    public sp22: number;           // param_6
-    public sp20: number;           // param_7
-
-    public percent: number;        // param_8
-    public startTimeLight: number; // param_9
-    public endTimeLight: number;   // param_10
-
-    public colpatBlend: number;    // param_11
-    public initTimer: number;      // param_12
-}; */
 
 interface dScnKy__ScheduleEntry {
     timeBegin: number;
@@ -521,229 +502,6 @@ class setLight_palno_ret {
     public blendPaleAB: number = 0;
 }
 
-/* function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_pselenvr, globals: dGlobals, envLight: dScnKy_env_light_c): setLight_palno_ret {
-    if (dst.initTimer !== 0) {
-        dst.initTimer++;
-
-        if (dst.initTimer > 20) {
-            dst.initTimer = 0;
-        }
-
-        if (globals.g_env_light.colpatMode === 0 && globals.g_env_light.colpatModeGather === 0) {
-            dst.colpatBlend = globals.g_env_light.colpatBlend;
-
-            if (dst.colpatBlend >= 1.0) {
-                dst.envrIdxPrev = dst.envrIdxCurr;
-                dst.colpatPrev = dst.colpatCurr;
-            }
-        }
-    }
-
-    for (let i = 0; i < 11; i++) {
-        // Look up the correct time from the schedule.
-        const schejuleEntry = findTimeInSchejule(envLight.schejule, envLight.curTime);
-        dst.startTimeLight = schejuleEntry.palIdxA;
-        dst.endTimeLight = schejuleEntry.palIdxB;
-        //percent = get_parcent(schejuleEntry.timeEnd, schejuleEntry.timeBegin, globals.g_env_light.curTime);
-    
-        let coloIdx = 0;
-        switch (dst.colpatPrev) {
-        case 0:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[0];
-            break;
-        case 1:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[1];
-            break;
-        case 2:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[2];
-            break;
-        case 3:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[3];
-            break;
-        case 4:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[4];
-            break;
-        case 5:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[5];
-            break;
-        case 6:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[6];
-            break;
-        case 7:
-            coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[7];
-            break;
-        default:
-            if (dst.colpatPrev > 7 && dst.colpatPrev < 64) {
-                coloIdx = globals.g_env_light.envr[dst.envrIdxPrev].pselIdx[dst.colpatPrev];
-            }
-            break;
-        }
-
-        if (coloIdx > 250) {
-            coloIdx = 0;
-        }
-
-        switch (dst.startTimeLight) {
-        case 0:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[0];
-            break;
-        case 1:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[1];
-            break;
-        case 2:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[2];
-            break;
-        case 3:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[3];
-            break;
-        case 4:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[4];
-            break;
-        case 5:
-            dst.sp23 = globals.g_env_light.colo[coloIdx].palIdx[5];
-            break;
-        }
-
-        switch (dst.endTimeLight) {
-        case 0:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[0];
-            break;
-        case 1:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[1];
-            break;
-        case 2:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[2];
-            break;
-        case 3:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[3];
-            break;
-        case 4:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[4];
-            break;
-        case 5:
-            dst.sp21 = globals.g_env_light.colo[coloIdx].palIdx[5];
-            break;
-        }
-
-
-
-        let coloIdx2 = 0;
-        switch (dst.colpatCurr) {
-        case 0:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[0];
-            break;
-        case 1:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[1];
-            break;
-        case 2:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[2];
-            break;
-        case 3:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[3];
-            break;
-        case 4:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[4];
-            break;
-        case 5:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[5];
-            break;
-        case 6:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[6];
-            break;
-        case 7:
-            coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[7];
-            break;
-        default:
-            if (dst.colpatCurr > 7 && dst.colpatCurr < 64) {
-                coloIdx2 = globals.g_env_light.envr[dst.envrIdxCurr].pselIdx[dst.colpatCurr];
-            }
-            break;
-        }
-
-        if (coloIdx2 > 250) {
-            coloIdx2 = 0;
-        }
-
-        if (dst.envrIdxPrev !== dst.envrIdxCurr || dst.colpatPrev !== dst.colpatCurr) {
-            if (globals.g_env_light.colo[coloIdx2].changeRate < 0.033333335) {
-                globals.g_env_light.colo[coloIdx2].changeRate = 0.033333335;
-            }
-
-            if (globals.g_env_light.colpatMode === 0) {
-                if (globals.g_env_light.colo[coloIdx2].changeRate > 0.0) {
-                    dst.colpatBlend += 0.033333335 / globals.g_env_light.colo[coloIdx2].changeRate;
-                }
-
-                if (dst.colpatBlend >= 1.0) {
-                    dst.envrIdxPrev = dst.envrIdxCurr;
-                    dst.colpatPrev = dst.colpatCurr;
-                    dst.colpatBlend = 1.0;
-                }
-            }
-        }
-
-        switch (dst.startTimeLight) {
-        case 0:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[0];
-            break;
-        case 1:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[1];
-            break;
-        case 2:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[2];
-            break;
-        case 3:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[3];
-            break;
-        case 4:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[4];
-            break;
-        case 5:
-            dst.sp22 = globals.g_env_light.colo[coloIdx2].palIdx[5];
-            break;
-        }
-
-        switch (dst.endTimeLight) {
-        case 0:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[0];
-            break;
-        case 1:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[1];
-            break;
-        case 2:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[2];
-            break;
-        case 3:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[3];
-            break;
-        case 4:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[4];
-            break;
-        case 5:
-            dst.sp20 = globals.g_env_light.colo[coloIdx2].palIdx[5];
-            break;
-        }
-
-        if (dst.sp23 > 250) {
-            dst.sp23 = 0;
-        }
-
-        if (dst.sp22 > 250) {
-            dst.sp22 = 0;
-        }
-
-        if (dst.sp21 > 250) {
-            dst.sp21 = 0;
-        }
-
-        if (dst.sp20 > 250) {
-            dst.sp20 = 0;
-        }
-    }
-
-    return dst;
-} */
-
 function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_pselenvr, globals: dGlobals, envLight: dScnKy_env_light_c): setLight_palno_ret {
     // NOTE(jstpierre): This is not part of the original game, but it happens on some test maps.
     // I think the game will just read uninitialized data here.
@@ -759,7 +517,18 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
         pselenvr.envrIdxCurr = globals.mStayNo;
 
     const envrPrev = envLight.envr[pselenvr.envrIdxPrev], envrCurr = envLight.envr[pselenvr.envrIdxCurr];
-    const pselPrev = envLight.colo[envrPrev.pselIdx[pselenvr.colpatPrev]], pselCurr = envLight.colo[envrCurr.pselIdx[pselenvr.colpatCurr]];
+
+    let prevPselIdx = envrPrev.pselIdx[pselenvr.colpatPrev];
+    if (prevPselIdx > 250) {
+        prevPselIdx = 0;
+    }
+
+    let currPselIdx = envrCurr.pselIdx[pselenvr.colpatCurr];
+    if (currPselIdx > 250) {
+        currPselIdx = 0;
+    }
+
+    const pselPrev = envLight.colo[prevPselIdx], pselCurr = envLight.colo[currPselIdx];
 
     // Look up the correct time from the schedule.
     const schejuleEntry = findTimeInSchejule(envLight.schejule, envLight.curTime);
@@ -786,6 +555,10 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
         if (envLight.colpatMode === 0) {
             if (pselCurr.changeRate > 0) {
                 pselenvr.colpatBlend += changeRateNormal / pselCurr.changeRate;
+            }
+
+            if (globals.stageName === "F_SP121" && pselenvr.colpatPrev !== pselenvr.colpatCurr) {
+                pselenvr.colpatBlend += changeRateNormal / 15.0;
             }
 
             if (pselenvr.colpatBlend >= 1.0) {
@@ -838,29 +611,75 @@ function dKy_calc_color_set(envLight: dScnKy_env_light_c, dst: Color, c0A: Color
 const setLight_palno_ret_scratch = new setLight_palno_ret();
 
 function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
-    // const ret = setLight_palno_get(setLight_palno_ret_scratch, globals, envLight);
+    const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight);
 
-    const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight)
+    if (ret.palePrevA === null) {
+        envLight.actorAmbience.r = 1;
+        envLight.actorAmbience.g = 0;
+        envLight.actorAmbience.b = 0;
+    } else {
+        dKy_calc_color_set(envLight, envLight.actorAmbience, ret.palePrevA.actCol, ret.palePrevB.actCol, ret.paleCurrA.actCol, ret.paleCurrB.actCol, ret.blendPaleAB, envLight.colpatBlend, null, envLight.unk_1210 * envLight.ColActColRatio * envLight.ColActColRatio);
 
-    /* dKy_calc_color_set(envLight, envLight.actCol, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, envLight.colpatBlend, null, envLight.actColRatio * envLight.actColRatio);
+        for (let whichBG = 0; whichBG < 4; whichBG++) {
+            if (whichBG !== 3 || (globals.stageName !== "F_SP127" && globals.stageName !== "R_SP127")) {
+                dKy_calc_color_set(envLight, envLight.bgAmbience[whichBG], ret.palePrevA.unkCol[whichBG], ret.palePrevB.unkCol[whichBG], ret.paleCurrA.unkCol[whichBG], ret.paleCurrB.unkCol[whichBG], ret.blendPaleAB, envLight.colpatBlend, null, envLight.ColBgColRatio);
+            }
+        }
 
-    for (let whichBG = 0; whichBG < 4; whichBG++) {
-        dKy_calc_color_set(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.colpatBlend, null, envLight.bgColRatio);
-        dKy_calc_color_set(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.colpatBlend, null, envLight.bgColRatio);
+        envLight.bgAmbience[1].a = kankyo_color_ratio_set(envLight, ret.palePrevA.unk_31, ret.palePrevB.unk_31, ret.paleCurrA.unk_31, ret.paleCurrB.unk_31, ret.blendPaleAB, envLight.colpatBlend, 0, 1);
+        envLight.bgAmbience[2].a = kankyo_color_ratio_set(envLight, ret.palePrevA.unk_32, ret.palePrevB.unk_32, ret.paleCurrA.unk_32, ret.paleCurrB.unk_32, ret.blendPaleAB, envLight.colpatBlend, 0, 1);
+        envLight.bgAmbience[3].a = kankyo_color_ratio_set(envLight, ret.palePrevA.unk_33, ret.palePrevB.unk_33, ret.paleCurrA.unk_33, ret.paleCurrB.unk_33, ret.blendPaleAB, envLight.colpatBlend, 0, 1);
+
+        envLight.paletteTerrainLightEffect = kankyo_color_ratio_set(envLight, ret.palePrevA.unk_2d, ret.palePrevB.unk_2d, ret.paleCurrA.unk_2d, ret.paleCurrB.unk_2d, ret.blendPaleAB, envLight.colpatBlend, 0, 1) * (0.01 / 0xFF);
+        if (envLight.paletteTerrainLightEffect > (2.0 / 0xFF)) {
+            envLight.paletteTerrainLightEffect = (1.0 / 0xFF);
+        }
+
+        envLight.fogDensity = kankyo_color_ratio_set(envLight, ret.palePrevA.unk_2e, ret.palePrevB.unk_2e, ret.paleCurrA.unk_2e, ret.paleCurrB.unk_2e, ret.blendPaleAB, envLight.colpatBlend, 0, 1);
+
+        for (let i = 0; i < 6; i++) {
+            dKy_calc_color_set(envLight, envLight.unk_1128[i], ret.palePrevA.unkCol2[i], ret.palePrevB.unkCol2[i], ret.paleCurrA.unkCol2[i], ret.paleCurrB.unkCol2[i], ret.blendPaleAB, envLight.colpatBlend, null, envLight.ColBgColRatio);
+            envLight.dungeonLight[i].color = envLight.unk_1128[i];
+        }
+
+        dKy_calc_color_set(envLight, envLight.fogColor, ret.palePrevA.unkCol3, ret.palePrevB.unkCol3, ret.paleCurrA.unkCol3, ret.paleCurrB.unkCol3, ret.blendPaleAB, envLight.colpatBlend, envLight.fogAddCol, envLight.ColFogColRatio);
+        envLight.fogNear = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, envLight.colpatBlend, envLight.unk_11ec, envLight.unk_11f4);
+        envLight.fogFar = Math.max(envLight.fogNear, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.colpatBlend, envLight.unk_11ec, envLight.unk_11f4));
+
+        const virt0A = envLight.virt[ret.palePrevA.virtIdx] || envLight.virt[0];
+        const virt0B = envLight.virt[ret.palePrevB.virtIdx] || envLight.virt[0];
+        const virt1A = envLight.virt[ret.paleCurrA.virtIdx] || envLight.virt[0];
+        const virt1B = envLight.virt[ret.paleCurrB.virtIdx] || envLight.virt[0];
+        
+        envLight.vrSkyCol.r = kankyo_color_ratio_set(envLight, virt0A.unkCol_0.r, virt0B.unkCol_0.r, ret.blendPaleAB, virt1A.unkCol_0.r, virt1B.unkCol_0.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.ColVrSoraColRatio * envLight.unk_11c8);
+        envLight.vrSkyCol.g = kankyo_color_ratio_set(envLight, virt0A.unkCol_0.g, virt0B.unkCol_0.g, ret.blendPaleAB, virt1A.unkCol_0.g, virt1B.unkCol_0.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.ColVrSoraColRatio * envLight.unk_11cc);
+        envLight.vrSkyCol.b = kankyo_color_ratio_set(envLight, virt0A.unkCol_0.b, virt0B.unkCol_0.b, ret.blendPaleAB, virt1A.unkCol_0.b, virt1B.unkCol_0.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.ColVrSoraColRatio * envLight.unk_11d0);
+        envLight.vrSkyCol.a = 1;
+
+        envLight.vrKumoCol.r = kankyo_color_ratio_set(envLight, virt0A.unkCol_0.a, virt0B.unkCol_0.a, ret.blendPaleAB, virt1A.unkCol_0.a, virt1B.unkCol_0.a, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.ColVrKumoColRatio * envLight.unk_11c8);
+        envLight.vrKumoCol.g = kankyo_color_ratio_set(envLight, virt0A.unkCol_4.r, virt0B.unkCol_4.r, ret.blendPaleAB, virt1A.unkCol_4.r, virt1B.unkCol_4.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.ColVrKumoColRatio * envLight.unk_11cc);
+        envLight.vrKumoCol.b = kankyo_color_ratio_set(envLight, virt0A.unkCol_4.g, virt0B.unkCol_4.g, ret.blendPaleAB, virt1A.unkCol_4.g, virt1B.unkCol_4.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.ColVrKumoColRatio * envLight.unk_11d0);
+        envLight.vrKumoCol.a = kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.g, virt0B.kumoCenterCol.g, ret.blendPaleAB, virt1A.kumoCenterCol.g, virt1B.kumoCenterCol.g, envLight.colpatBlend, 0, 1);
+    
+        envLight.unk_vrboxCol1.r = kankyo_color_ratio_set(envLight, virt0A.unkCol_4.b, virt0B.unkCol_4.b, ret.blendPaleAB, virt1A.unkCol_4.b, virt1B.unkCol_4.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.ColVrKumoColRatio * envLight.unk_11c8);
+        envLight.unk_vrboxCol1.g = kankyo_color_ratio_set(envLight, virt0A.unkCol_4.a, virt0B.unkCol_4.a, ret.blendPaleAB, virt1A.unkCol_4.a, virt1B.unkCol_4.a, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.ColVrKumoColRatio * envLight.unk_11cc);
+        envLight.unk_vrboxCol1.b = kankyo_color_ratio_set(envLight, virt0A.kumoCol.r, virt0B.kumoCol.r, ret.blendPaleAB, virt1A.kumoCol.r, virt1B.kumoCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.ColVrKumoColRatio * envLight.unk_11d0);
+    
+        envLight.unk_vrboxCol2.r = kankyo_color_ratio_set(envLight, virt0A.kumoCol.g, virt0B.kumoCol.g, ret.blendPaleAB, virt1A.kumoCol.g, virt1B.kumoCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.ColVrKumoColRatio * envLight.unk_11c8);
+        envLight.unk_vrboxCol2.g = kankyo_color_ratio_set(envLight, virt0A.kumoCol.b, virt0B.kumoCol.b, ret.blendPaleAB, virt1A.kumoCol.b, virt1B.kumoCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.ColVrKumoColRatio * envLight.unk_11cc);
+        envLight.unk_vrboxCol2.b = kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.r, virt0B.kumoCenterCol.r, ret.blendPaleAB, virt1A.kumoCenterCol.r, virt1B.kumoCenterCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.ColVrKumoColRatio * envLight.unk_11d0);
+    
+        envLight.vrKasumiMaeCol.r = kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.b, virt0B.kumoCenterCol.b, ret.blendPaleAB, virt1A.kumoCenterCol.b, virt1B.kumoCenterCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.ColVrSoraColRatio * envLight.unk_11c8);
+        envLight.vrKasumiMaeCol.g = kankyo_color_ratio_set(envLight, virt0A.skyCol.r, virt0B.skyCol.r, ret.blendPaleAB, virt1A.skyCol.r, virt1B.skyCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.ColVrSoraColRatio * envLight.unk_11cc);
+        envLight.vrKasumiMaeCol.b = kankyo_color_ratio_set(envLight, virt0A.skyCol.g, virt0B.skyCol.g, ret.blendPaleAB, virt1A.skyCol.g, virt1B.skyCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.ColVrSoraColRatio * envLight.unk_11d0);
+        envLight.vrKasumiMaeCol.a = kankyo_color_ratio_set(envLight, virt0A.skyCol.b, virt0B.skyCol.b, ret.blendPaleAB, virt1A.skyCol.b, virt1B.skyCol.b, envLight.colpatBlend, 0, 1);
+    
+        envLight.unk_vrboxCol3.r = kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.r, virt0B.kasumiMaeCol.r, ret.blendPaleAB, virt1A.kasumiMaeCol.r, virt1B.kasumiMaeCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.ColVrSoraColRatio * envLight.unk_11c8);
+        envLight.unk_vrboxCol3.g = kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.g, virt0B.kasumiMaeCol.g, ret.blendPaleAB, virt1A.kasumiMaeCol.g, virt1B.kasumiMaeCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.ColVrSoraColRatio * envLight.unk_11cc);
+        envLight.unk_vrboxCol3.b = kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.b, virt0B.kasumiMaeCol.b, ret.blendPaleAB, virt1A.kasumiMaeCol.b, virt1B.kasumiMaeCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.ColVrSoraColRatio * envLight.unk_11d0);
+        envLight.unk_vrboxCol3.a = kankyo_color_ratio_set(envLight, virt0A.unk_14, virt0B.unk_14, ret.blendPaleAB, virt1A.unk_14, virt1B.unk_14, envLight.colpatBlend, 0, 1);
+    
     }
-    dKy_calc_color_set(envLight, envLight.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
-    envLight.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, envLight.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
-    envLight.fogEndZ = Math.max(envLight.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
-
-    const virt0A = envLight.virt[ret.palePrevA.virtIdx] || envLight.virt[0];
-    const virt0B = envLight.virt[ret.palePrevB.virtIdx] || envLight.virt[0];
-    const virt1A = envLight.virt[ret.paleCurrA.virtIdx] || envLight.virt[0];
-    const virt1B = envLight.virt[ret.paleCurrB.virtIdx] || envLight.virt[0];
-
-    dKy_calc_color_set(envLight, envLight.vrSkyCol, virt0A.skyCol, virt0B.skyCol, ret.blendPaleAB, virt1A.skyCol, virt1B.skyCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrSoraColRatio);
-    dKy_calc_color_set(envLight, envLight.vrKumoCol, virt0A.kumoCol, virt0B.kumoCol, ret.blendPaleAB, virt1A.kumoCol, virt1B.kumoCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    dKy_calc_color_set(envLight, envLight.vrKumoCenterCol, virt0A.kumoCenterCol, virt0B.kumoCenterCol, ret.blendPaleAB, virt1A.kumoCenterCol, virt1B.kumoCenterCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    dKy_calc_color_set(envLight, envLight.vrKasumiMaeCol, virt0A.kasumiMaeCol, virt0B.kasumiMaeCol, ret.blendPaleAB, virt1A.kasumiMaeCol, virt1B.kasumiMaeCol, envLight.colpatBlend, envLight.vrKasumiAdd, envLight.vrSoraColRatio); */
 }
 
 function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c): void {
@@ -873,18 +692,13 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight)
 
-    if (0/* ret.sp23 === -1 */) {
+    if (ret.palePrevA === null) {
         for (let i = 0; i < 4; i++) {
-            tevStr.colorC0.r = 1;  // 255
+            tevStr.colorC0.r = 255 * (1/255);
             tevStr.colorC0.g = 0;
             tevStr.colorC0.b = 0;
         }
     } else {
-        /* const paletteA = globals.g_env_light.pale[ret.sp23];
-        const paletteB = globals.g_env_light.pale[ret.sp21];
-        const paletteC = globals.g_env_light.pale[ret.sp22];
-        const paletteD = globals.g_env_light.pale[ret.sp20]; */
-
         if (tevStr.unk_37a == LightType.UNK_10 || tevStr.unk_37a == LightType.UNK_9 || tevStr.unk_378 != 0) {
             dKy_calc_color_set(envLight, tevStr.colorC0, ret.palePrevA.actCol, ret.palePrevB.actCol, ret.paleCurrA.actCol, ret.paleCurrB.actCol, ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, tevStr.unk_374 * envLight.ColActColRatio * envLight.ColActColRatio);
         } else {
@@ -953,17 +767,13 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, outColor: 
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight)
 
-    if (0/* ret.sp23 === -1 */) {
+    if (ret.palePrevA === null) {
         for (let i = 0; i < 4; i++) {
             outColor[i].r = 255 * (1/255);
             outColor[i].g = 0;
             outColor[i].b = 0;
         }
     } else {
-        /* const paletteA = globals.g_env_light.pale[ret.sp23];
-        const paletteB = globals.g_env_light.pale[ret.sp21];
-        const paletteC = globals.g_env_light.pale[ret.sp22];
-        const paletteD = globals.g_env_light.pale[ret.sp20]; */
 
         for (let i = 0; i < 4; i++) {
             dKy_calc_color_set(envLight, outColor[i], ret.palePrevA.unkCol[i], ret.palePrevB.unkCol[i], ret.paleCurrA.unkCol[i], ret.paleCurrB.unkCol[i], ret.blendPaleAB, tevStr.colpatBlend, envLight.bgAddAmb[0], envLight.ColBgColRatio);
@@ -1088,7 +898,7 @@ function settingTevStruct_colget_actor(globals: dGlobals, envLight: dScnKy_env_l
         envLight.actorAmbience.a = tevStr.colorC0.a;
     } else {
         let calcColor = nArray(4, () => colorNewCopy(TransparentBlack));
-        //setLight_bg(globals, envLight, calcColor, envLight.fogColor, tevStr);
+        setLight_bg(globals, envLight, calcColor, envLight.fogColor, tevStr);
 
         envLight.actorAmbience.r = calcColor[0].r;
         envLight.actorAmbience.g = calcColor[0].g;
@@ -1352,7 +1162,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
         }
 
         let spB0 = nArray(4, () => colorNewCopy(TransparentBlack));
-        setLight_bg(globals, globals.g_env_light, spB0, k0_color, tevStr); // needs to be fixed, causes tex issues
+        setLight_bg(globals, globals.g_env_light, spB0, k0_color, tevStr);
 
         globals.g_env_light.unk_10f0 = spB0[lightType & 3];
 
@@ -1387,30 +1197,6 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
     tevStr.colorK0 = sp30;
 }
 
-export class LightStatus {
-    public unk_0x0 = vec3.create();
-    public unk_0xc = vec3.create();
-    public unk_0x18 = colorNewCopy(White);
-    
-    public lightDirection = vec3.create();
-    public cutoff: number;
-    public refDist: number;
-    public refBrightness: number;
-
-    constructor() {
-        vec3.set(this.unk_0x0, -36384.5, 29096.7, 17422.2);
-        vec3.set(this.unk_0xc, 377.0, 5207.4, 1220.4);
-        this.unk_0x18.r = 255 * (1/255);
-        this.unk_0x18.g = 255 * (1/255);
-        this.unk_0x18.b = 255 * (1/255);
-        this.unk_0x18.a = 255 * (1/255);
-        vec3.set(this.lightDirection, 0, -1, -1);
-        this.cutoff = 90;
-        this.refDist = 500;
-        this.refBrightness = 1;
-    }
-}
-
 export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverride: number = -1): void {
     tevstr.roomNo = roomNo;
     tevstr.envrIdxCurr = tevstr.roomNo;
@@ -1429,9 +1215,6 @@ export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverri
 
     for (let i = 0; i < 6; i++) {
         tevstr.lights[i] = new Light();
-
-        /* vec3.copy(tevstr.lights[i].Position, dKy_tevstr_c.LightStatusData[i].unk_0x0);
-        tevstr.lights[i].Color = dKy_tevstr_c.LightStatusData[i].unk_0x18; */
 
         vec3.set(tevstr.lights[i].Position, -36384.5, 29096.7, 17422.2);
         tevstr.lights[i].Color.r = 255 * (1/255);
@@ -1511,7 +1294,7 @@ function setSunpos(globals: dGlobals, cameraPos: vec3): void {
     if (globals.stageName === "F_SP200")
         return;
 
-    /* let angle: number;
+    let angle: number;
     if (envLight.curTime < 15.0)
         angle = 345.0 + envLight.curTime;
     else
@@ -1524,7 +1307,7 @@ function setSunpos(globals: dGlobals, cameraPos: vec3): void {
     vec3.set(envLight.moonPos, -baseX, -baseY, -baseZ);
 
     vec3.add(envLight.sunPos, envLight.sunPos, cameraPos);
-    vec3.add(envLight.moonPos, envLight.moonPos, cameraPos); */
+    vec3.add(envLight.moonPos, envLight.moonPos, cameraPos);
 }
 
 function drawKankyo(globals: dGlobals): void {
@@ -1535,7 +1318,9 @@ function drawKankyo(globals: dGlobals): void {
     setLight(globals, envLight);
     dKy_setLight_nowroom(globals, globals.mStayNo);
 
-    console.log(`Kankyo time: ${envLight.curTime}`);
+    if (globals.stageName === "D_MN08") {
+        envLight.housiCount = 200;
+    }
 }
 
 export function dKy_checkEventNightStop(globals: dGlobals): boolean {
@@ -1620,7 +1405,7 @@ function dKy_getdaytime_hour(globals: dGlobals): number {
     return globals.g_env_light.curTime / 15.0;
 }
 
-function dKy_daynight_check(globals: dGlobals): boolean {
+export function dKy_daynight_check(globals: dGlobals): boolean {
     const hour = dKy_getdaytime_hour(globals);
     return hour < 6 || hour > 19;
 }
@@ -1760,6 +1545,68 @@ export function dKy_setLight(globals: dGlobals): void {
 
 }
 
+export class dKydata_lightsizeInfo_c {
+    public stageName: string;
+    public size: number;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+
+        this.stageName = readString(buffer, 0x0, 8);
+        this.size = view.getUint8(0x4);
+        return 0x8;
+    }
+}
+
+function dKyd_light_size_tbl_getp(globals: dGlobals): dKydata_lightsizeInfo_c[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_light_size_tbl`);
+    const info: dKydata_lightsizeInfo_c[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 36; i++) {
+        const entry = new dKydata_lightsizeInfo_c();
+        offs += entry.parse(buffer.slice(offs));
+        info.push(entry);
+    }
+
+    return info;
+}
+
+function dKyd_light_tw_size_tbl_getp(globals: dGlobals): dKydata_lightsizeInfo_c[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_light_size_tbl`);
+    const info: dKydata_lightsizeInfo_c[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 9; i++) {
+        const entry = new dKydata_lightsizeInfo_c();
+        offs += entry.parse(buffer.slice(offs));
+        info.push(entry);
+    }
+
+    return info;
+}
+
+function dKy_light_size_get(stageName: string, globals: dGlobals): void {
+    const lightTbl = dKyd_light_size_tbl_getp(globals);
+    const lightTwTbl = dKyd_light_tw_size_tbl_getp(globals);
+
+    if (!dKy_darkworld_check(globals)) {
+        for (let i = 0; i < 36; i++) {
+            if (stageName === lightTbl[i].stageName) {
+                globals.g_env_light.lightSize = lightTbl[i].size;
+                return;
+            }
+        }
+    } else {
+        for (let i = 0; i < 9; i++) {
+            if (stageName === lightTwTbl[i].stageName) {
+                globals.g_env_light.lightSize = lightTwTbl[i].size;
+                return;
+            }
+        }
+    }
+}
+
 function dKyd_dmpalet_getp(globals: dGlobals): stage_palet_info_class[] {
     const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_field_data`);
     const pale: stage_palet_info_class[] = [];
@@ -1817,20 +1664,6 @@ function dKyd_dmvrbox_getp(globals: dGlobals): stage_vrbox_info_class[] {
 }
 
 export function dKy_setLight_init(): void {
-    for (let i = 0; i < 6; i++) {
-        dKy_tevstr_c.LightStatusData[i] = new LightStatus();
-
-        vec3.set(dKy_tevstr_c.LightStatusData[i].unk_0x0, -36384.5, 29096.7, 17422.2);
-        vec3.set(dKy_tevstr_c.LightStatusData[i].unk_0xc, 377.0, 5207.4, 1220.4);
-        dKy_tevstr_c.LightStatusData[i].unk_0x18.r = 255 * (1/255);
-        dKy_tevstr_c.LightStatusData[i].unk_0x18.g = 255 * (1/255);
-        dKy_tevstr_c.LightStatusData[i].unk_0x18.b = 255 * (1/255);
-        dKy_tevstr_c.LightStatusData[i].unk_0x18.a = 255 * (1/255);
-        vec3.set(dKy_tevstr_c.LightStatusData[i].lightDirection, 0, -1, -1);
-        dKy_tevstr_c.LightStatusData[i].cutoff = 90;
-        dKy_tevstr_c.LightStatusData[i].refDist = 500;
-        dKy_tevstr_c.LightStatusData[i].refBrightness = 1;
-    }
 }
 
 export function dKy_Sound_init(envLight: dScnKy_env_light_c): void {
@@ -1854,6 +1687,68 @@ export function dungeonlight_init(envLight: dScnKy_env_light_c): void {
     }
 }
 
+export function undwater_init(globals: dGlobals, envLight: dScnKy_env_light_c): void {
+    const resCtrl = globals.resCtrl;
+
+    const screen_ef_mdl = resCtrl.getObjectRes(ResType.Model, `Always`, 0x1D);
+    if (screen_ef_mdl === null)
+        return;
+    const modelInstance = new J3DModelInstance(screen_ef_mdl);
+    envLight.underwater_screen_ef = modelInstance;
+
+    const screen_ef_btk = resCtrl.getObjectRes(ResType.Btk, `Always`, 0x3C);
+    if (screen_ef_btk === null)
+        return;
+    envLight.underwater_screen_ef_btk.init(screen_ef_mdl, screen_ef_btk, true, LoopMode.REPEAT);
+}
+
+export function dKy_undwater_filter_draw(globals: dGlobals, envLight: dScnKy_env_light_c, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    if (envLight.cameraInWater) {
+        if (envLight.underwater_screen_ef !== null) {
+            envLight.underwater_screen_ef.baseScale = [0.00524, 0.00524, 0.00524];
+            
+            if (envLight.underwater_screen_ef_btk !== null) {
+                envLight.underwater_screen_ef_btk.entry(envLight.underwater_screen_ef);
+                mDoExt_modelUpdateDL(globals, envLight.underwater_screen_ef, renderInstManager, viewerInput, globals.dlst.ui);
+            }
+        }
+    }
+}
+
+export function bgparts_activelight_init(envLight: dScnKy_env_light_c): void {
+    envLight.BGpartsActiveLight[0].index = 0;
+}
+
+export function darkmist_init(envLight: dScnKy_env_light_c): void {
+    envLight.darkmist.length = 0;
+}
+
+export function plight_init(envLight: dScnKy_env_light_c): void {
+    envLight.lightInfluence[0].power = 99999.9;
+    //envLight.plights.length = 0;
+    //envLight.eflights.length = 0;
+
+    envLight.playerPlightIdx = -1;
+    envLight.playerEflightIdx = -1;
+}
+
+export function plight_set(globals: dGlobals, envLight: dScnKy_env_light_c): void {
+    if (globals.dStage_dt.lght.length === 0)
+        return;
+
+    for (let i = 0; i < globals.dStage_dt.lght.length; i++) {
+        const lgt = globals.dStage_dt.lght[i];
+        if (i < 30) {
+            vec3.copy(envLight.lightInfluence[i].pos, lgt.pos);
+            colorCopy(envLight.lightInfluence[i].color, lgt.color);
+            envLight.lightInfluence[i].power = lgt.radius;
+            envLight.lightInfluence[i].fluctuation = lgt.fluctuation;
+
+            dKy_plight_set(envLight, envLight.lightInfluence[i]);
+        }
+    }
+}
+
 export function envcolor_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
@@ -1874,13 +1769,43 @@ export function envcolor_init(globals: dGlobals): void {
     dKy_fog_startendz_set(envLight, 0.0, 0.0, 0.0);
     dKy_vrbox_addcol_set(envLight, 0, 0, 0, 0.0);
 
+    //envLight.vrboxInvisible = true;
+    envLight.cameraInWater = false;
+    envLight.actorLightEffect = 100;
+    envLight.paletteTerrainLightEffect = 1.0;
+
+    dKy_light_size_get(globals.stageName, globals);
+
     const schejuleName = `l_time_attribute`;
     envLight.schejule = new dScnKy__Schedule(globals.findExtraSymbolData(`d_kankyo_data.o`, schejuleName));
 
     envLight.colpatWeather = 0;
 
+    if (globals.stageName === "F_SP127" || globals.stageName === "R_SP127") {
+        if (envLight.unk_12cc >= 7) {
+            envLight.colpatWeather = 2;
+        } else if (envLight.unk_12cc !== 0) {
+            envLight.colpatWeather = 1;
+        }
+    } else if (globals.stageName === "D_MN07A") {
+        if (envLight.unk_12cc === 1) {
+            envLight.colpatWeather = 1;
+        } else if (envLight.unk_12cc === 2) {
+            envLight.colpatWeather = 2;
+        }
+    } else {
+        envLight.unk_12cc = 0;
+    }
+
     envLight.colpatPrev = envLight.colpatWeather;
     envLight.colpatCurr = envLight.colpatWeather;
+
+    plight_init(envLight);
+    plight_set(globals, envLight);
+    darkmist_init(envLight);
+    bgparts_activelight_init(envLight);
+
+    undwater_init(globals, envLight);
 
     // For funsies, set the time/date to something fun :)
     const today = new Date();
@@ -2122,6 +2047,7 @@ export function dKy_darkworld_check(globals: dGlobals): boolean {
 class d_kankyo extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kankyo;
 
+    // dKy_Create
     public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
@@ -2139,9 +2065,17 @@ class d_kankyo extends kankyo_class {
     }
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        // temporary until some better setup for handling twilight layers is done
+        if (globals.stageName === "D_MN08" || globals.stageName === "D_MN08A" || globals.stageName === "D_MN08B" || globals.stageName === "D_MN08C" || globals.stageName === "D_MN08D") {
+            globals.world_dark = true;
+        } else {
+            globals.world_dark = false;
+        }
+
         exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
         // dKyw_wind_set(globals);
         drawKankyo(globals);
+        globals.g_env_light.underwater_screen_ef_btk.play(deltaTimeInFrames);
     }
 
     public override draw(globals: dGlobals): void {
@@ -2156,38 +2090,21 @@ class d_kyeff extends kankyo_class {
     public override subload(globals: dGlobals): cPhs__Status {
         const envLight = globals.g_env_light;
 
-        // dKyw_wether_init(globals);
-
-        // envLight.wetherCommonTextures = new dKankyo__CommonTextures(globals);
-
+        dKyw_wether_init(globals);
         return cPhs__Status.Next;
     }
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        /* if (globals.stageName === 'Name') {
-            // menu_vrbox_set();
-        } else {
-            dKyw_wether_move(globals, deltaTimeInFrames);
-        }
-        dKyw_wether_move_draw(globals, deltaTimeInFrames); */
+        dKyw_wether_move(globals, deltaTimeInFrames);
+        dKyw_wether_move_draw(globals, deltaTimeInFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        //dKyw_wether_draw(globals, renderInstManager, viewerInput);
+        dKyw_wether_draw(globals, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
-        const envLight = globals.g_env_light;
-        const device = globals.modelCache.device;
-
-        // envLight.wetherCommonTextures.destroy(device);
-
-        if (envLight.sunPacket !== null)
-            envLight.sunPacket.destroy(device);
-        if (envLight.rainPacket !== null)
-            envLight.rainPacket.destroy(device);
-        if (envLight.starPacket !== null)
-            envLight.starPacket.destroy(device);
+        dKyw_wether_delete(globals);
     }
 }
 
@@ -2195,24 +2112,20 @@ class d_kyeff2 extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kyeff2;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        // dKyw_wether_init2(globals);
+        dKyw_wether_init2(globals);
         return cPhs__Status.Next;
     }
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        //dKyw_wether_move_draw2(globals, deltaTimeInFrames);
+        dKyw_wether_move_draw2(globals, deltaTimeInFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        //dKyw_wether_draw2(globals, renderInstManager, viewerInput);
+        dKyw_wether_draw2(globals, renderInstManager, viewerInput);
     }
 
     public override delete(globals: dGlobals): void {
-        const envLight = globals.g_env_light;
-        const device = globals.modelCache.device;
-
-        if (envLight.vrkumoPacket !== null)
-            envLight.vrkumoPacket.destroy(device);
+        dKyw_wether_delete2(globals);
     }
 }
 
@@ -2220,7 +2133,6 @@ export function dKankyo_create(globals: dGlobals): void {
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kankyo, null);
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff, null);
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff2, null);
-    // fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_envse, null);
 }
 
 interface constructor extends fpc_bs__Constructor {

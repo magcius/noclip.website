@@ -135,8 +135,6 @@ export class dRes_info_c {
     }
 
     public lazyLoadResource<T extends ResType>(resType: T, resEntry: ResEntry<ResAssetType<T> | null>, device?: GfxDevice, cache?: GfxRenderCache): ResAssetType<T> {
-        //console.log(`dRes_info_c::lazyLoadResource:: type, res NULL? = ${resType}, ${resEntry.res === null}`);
-
         if (resEntry.res === null) {
             const file = resEntry.file;
             if (resType === ResType.Bpk) {
@@ -180,8 +178,6 @@ export class dRes_info_c {
     private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> | null {
         const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++) {
-            //console.log(`dRes_info_c::getResEntryByName:: resList[${i}].file.name == ${resList[i].file.name}`);
-            //console.log(`Match?: ${resList[i].file.name === resName}`)
             if (resList[i].file.name === resName)
                 return resList[i];
         }
@@ -197,8 +193,6 @@ export class dRes_info_c {
     }
 
     public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> | null {
-        //console.log(`dRes_info_c::getResByName:: Attempting to load: ${resName}`);
-
         const entry = this.getResEntryByName(resType, resName);
         if (entry === null)
             return null;
@@ -209,7 +203,7 @@ export class dRes_info_c {
         const file = resEntry.file;
         if (type === `BMD ` || type === `BMDM` || type === `BMDC` || type === `BMDS` || type === `BSMD` ||
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI` || type === `BMDE` ||
-            type === `BMDP` || type === `BMDR`) {
+            type === `BMDP` || type === `BMDR` || type === `BMDV` || type === `BMWR` || type === `BMDG`) {
             // J3D models.
 
             // Sometimes there are J3D2bmd2 files we can't parse, like Ff.arc / ff.bmd. Skip over these.
@@ -234,10 +228,12 @@ export class dRes_info_c {
         // This is a bit of a hack. dRes_info_c::loadResource doesn't normally preprocess texture data,
         // but we do it here up-front for convenience. These are normally stored in the `TEX ` subdir,
         // but not all the files in the `TEX ` subdir are BTI files (Always.arc stores raw .ci8 and stuff),
-        // and not all BTI files are in the `TEX ` subdir (System.arc has the toon textures located outside).
+        // and not all BTI files are in the `TEX ` subdir.
         // So we match on the filename.
 
-        if (file.name.endsWith('.bti')) {
+        // Hack to check zl2_polygon_ia8 since it's a .bti but lacking the proper extension
+
+        if (file.name.endsWith('.bti') || file.name === "zl2_polygon_ia8") {
             const res = new BTIData(device, cache, BTI.parse(file.buffer, file.name).texture);
             this.destroyables.push(res);
             resEntry.res = res;
@@ -245,10 +241,7 @@ export class dRes_info_c {
     }
 
     private loadResource(device: GfxDevice, cache: GfxRenderCache): void {
-        // console.log(`loadResource:: archive.files.length == ${this.archive.files.length}`)
-
         for (let i = 0; i < this.archive.files.length; i++) {
-            // console.log(`this.archive.files[${i}].name is ${this.archive.files[i].name}`);
             const res = { file: this.archive.files[i], res: null };
             this.res.push(res);
         }
@@ -256,12 +249,10 @@ export class dRes_info_c {
         const root = this.archive!.root;
         for (let i = 0; i < root.subdirs.length; i++) {
             const subdir = root.subdirs[i];
-            assert(subdir.subdirs.length === 0);
+            // assert(subdir.subdirs.length === 0);
 
-            //console.log(`loadResource:: subdir.files.length == ${subdir.files.length}`)
             for (let j = 0; j < subdir.files.length; j++) {
                 const res = this.res.find((res) => res.file === subdir.files[j])!;
-                //console.log(`loadResource:: const res is NULL? ${res === null}`)
                 this.autoLoadResource(device, cache, subdir.type, res);
             }
         }

@@ -1,5 +1,5 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop } from "./d_kankyo.js";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_darkworld_check } from "./d_kankyo.js";
 import { dGlobals } from "./ztp_scenes.js";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent.js";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
@@ -27,9 +27,102 @@ import { PeekZResult, PeekZManager } from "./d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { _T } from "../gfx/platform/GfxPlatformImpl.js";
+import { dKy_undwater_filter_draw, dKy_daynight_check } from "./d_kankyo.js"
+import { TevDefaultSwapTables } from "../gx/gx_material.js";
+
+export function dKyw_wether_init(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    if (globals.stageName === "F_SP113" && globals.mStayNo === 1) {
+        globals.particleCtrl.set(globals, 0, 0x878F, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8790, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8791, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8792, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8793, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8794, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8795, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8796, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8797, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8798, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x8799, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x879A, [0,0,0]);
+        globals.particleCtrl.set(globals, 0, 0x879B, [0,0,0]);
+    }
+}
+
+export function dKyw_wether_delete(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+    const device = globals.modelCache.device;
+
+    if (envLight.sunPacket !== null)
+        envLight.sunPacket.destroy(device);
+    if (envLight.rainPacket !== null)
+        envLight.rainPacket.destroy(device);
+    if (envLight.starPacket !== null)
+        envLight.starPacket.destroy(device);
+    if (envLight.housiPacket !== null)
+        envLight.housiPacket.destroy(device);
+}
+
+export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    // Normally this just pushes packets which draw at the right time. We can just draw now.
+
+    const envLight = globals.g_env_light;
+
+    if (globals.stageName !== 'Name') {
+        if (envLight.sunPacket !== null)
+            envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
+    }
+
+    if (envLight.starPacket !== null && !envLight.vrboxInvisible)
+        envLight.starPacket.draw(globals, renderInstManager, viewerInput);
+
+    if (envLight.housiPacket !== null)
+        envLight.housiPacket.draw(globals, renderInstManager, viewerInput);
+
+    /*if (globals.stageName !== 'Name') {
+        if (envLight.rainPacket !== null)
+            envLight.rainPacket.draw(globals, renderInstManager, viewerInput);
+    } */
+
+    dKy_undwater_filter_draw(globals, globals.g_env_light, renderInstManager, viewerInput);
+}
+
+export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    wether_move_thunder(globals);
+}
+
+export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
+    if (globals.stageName !== 'Name') {
+        wether_move_sun(globals);
+        wether_move_rain(globals, deltaTimeInFrames);
+        wether_move_snow(globals);
+    }
+
+    wether_move_star(globals, deltaTimeInFrames);
+
+    if (globals.stageName !== 'Name') {
+        wether_move_housi(globals, deltaTimeInFrames);
+        wether_move_moya(globals);
+    }
+}
+
+export function dKyw_wether_init2(globals: dGlobals): void {
+    
+}
+
+export function dKyw_wether_delete2(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+    const device = globals.modelCache.device;
+
+    if (envLight.vrkumoPacket !== null)
+        envLight.vrkumoPacket.destroy(device);
+}
+
+
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
-    return envLight.curTime > 97.5 && envLight.curTime < 292.5;
+    return envLight.curTime > 77.5 && envLight.curTime < 285.0;
 }
 
 export function dKyr_moon_arrival_check(envLight: dScnKy_env_light_c): boolean {
@@ -172,13 +265,9 @@ export class dKankyo__CommonTextures {
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
-
-        /* const snowData = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x56);
-        this.snowTexture = loadRawTexture(globals, snowData, 32, 32, GX.TexFormat.I8, GX.WrapMode.CLAMP, GX.WrapMode.CLAMP); */
     }
 
     public destroy(device: GfxDevice): void {
-        // this.snowTexture.destroy(device);
     }
 }
 
@@ -201,7 +290,7 @@ export class dKankyo_sun_Packet {
     private sunTexture: BTIData;
     private materialHelperSunMoon: GXMaterialHelperGfx;
     public sunPos = vec3.create();
-    private moonPos = vec3.create();
+    public moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
     public visibility: number = 0.0;
@@ -232,14 +321,14 @@ export class dKankyo_sun_Packet {
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
 
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon_A.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon_A_A00.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon_A_A01.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon_A_A02.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `F_moon_A_A03.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a00.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a01.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a02.bti`)!);
+        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a03.bti`)!);
 
-        this.lensBallTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
+        this.sunTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
         this.lensTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x5C);
         this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x57);
 
@@ -248,11 +337,27 @@ export class dKankyo_sun_Packet {
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C0);
+        mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.A0, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
@@ -303,6 +408,11 @@ export class dKankyo_sun_Packet {
     private drawSunMoon(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const envLight = globals.g_env_light;
 
+        if (globals.stageName === "F_SP200") {
+            this.sunAlpha = 0.0;
+            this.moonAlpha = 1.0;
+        }
+
         let drawSun = this.sunAlpha > 0.0;
         let drawMoon = this.moonAlpha > 0.0;
 
@@ -339,12 +449,22 @@ export class dKankyo_sun_Packet {
             const moonPitch = vecPitch(moonPos);
 
             for (let i = 1; i >= 0; i--) {
-                let moonSize = 700.0;
+                let moonSize = 8000.0;
+
+                if (globals.stageName === "F_SP127")
+                    moonSize = 11000.0;
+
+                if (globals.stageName === "F_SP200")
+                    moonSize = 10000.0;
+
+                if (globals.stageName === "F_SP103" && dKy_daynight_check(globals))
+                    moonSize = 1200.0;
+
                 if (i === 1)
-                    moonSize *= 1.7;
+                    moonSize *= 2.3;
 
                 computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
-                mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -8.0))));
+                mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -6.283185))));
 
                 if (i === 0) {
                     this.moonTextures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -431,7 +551,7 @@ export class dKankyo_sun_Packet {
         if (this.visibility <= 0.1)
             return;
 
-       const envLight = globals.g_env_light;
+        const envLight = globals.g_env_light;
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
@@ -550,11 +670,11 @@ export class dKankyo_sun_Packet {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        //this.ddraw.beginDraw(globals.modelCache.cache);
-        //this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLES, 2048);
-        //this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
-        //this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
-        //this.ddraw.endDraw(renderInstManager);
+        this.ddraw.beginDraw(globals.modelCache.cache);
+        this.ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLES, 2048);
+        this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
+        this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -629,7 +749,7 @@ export class dKankyo_vrkumo_Packet {
 
         // Clouds are projected onto a dome that hovers around the camera.
 
-        const domeRadius = globals.dStage_dt.stag.farPlane - 10000.0;
+        const domeRadius = /* globals.dStage_dt.stag.farPlane -  */10000.0;
         const ddraw = this.ddraw;
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
@@ -647,16 +767,27 @@ export class dKankyo_vrkumo_Packet {
             for (let i = 0; i < this.instances.length; i++) {
                 const kumo = this.instances[i];
 
-                if (kumo.alpha <= 0.000001)
+                if (kumo.alpha <= 0.0000000001)
                     continue;
 
-                const size = kumo.distFalloff * (1.0 - ((((textureIdx + i) & 0x0F) / 16.0) ** 3.0)) * (0.45 + (this.strength * 0.55));
+                let tmp = 0.6;
+                let fvar9 = 0.84;
+                if (dKy_darkworld_check(globals)) {
+                    tmp = 0.8;
+                    fvar9 = 0.8;
+                }
+
+                if (globals.stageName === "D_MN07A") {
+                    fvar9 = 0.65;
+                }
+
+                const size = kumo.distFalloff * (1.0 - ((((textureIdx + i) & 0x0F) / 16.0) ** 3.0)) * (tmp + (this.strength * (fvar9 - tmp)));
 
                 const bounceAnim = Math.sin(textureIdx + 0.0001 * this.bounceAnimTimer);
                 const sizeAnim = size + (0.06 * size) * bounceAnim * kumo.distFalloff;
                 const height = sizeAnim + sizeAnim * kumo.height;
-                const m0 = 0.15 * sizeAnim;
-                const m1 = 0.65 * sizeAnim;
+                const m0 = sizeAnim * ((i / 100) * 0.2 + 0.2);
+                const m1 = sizeAnim * ((i / 100) * 0.3 + 0.55);
 
                 let polarOffs = 0, azimuthalOffs = 0;
                 if (textureIdx !== 0) {
@@ -703,7 +834,7 @@ export class dKankyo_vrkumo_Packet {
 
                 let x = 0, y = 0, z = 0;
 
-                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.vrKumoCenterCol, kumo.distFalloff);
+                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.unk_vrboxCol1, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
 
                 // Project onto sphere.
@@ -743,6 +874,45 @@ export class dKankyo_vrkumo_Packet {
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
+                const stageName = globals.stageName;
+                if (stageName == "F_SP127" || stageName == "D_MN07" || stageName == "D_MN08" || stageName == "D_MN07A" || (stageName == "F_SP103" && globals.mStayNo === 0)) {
+                    x = Math.cos(polarY0) * Math.sin(azimuthal + azimuthalOffsY0);
+                    y = Math.sin(polarY0);
+                    z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
+                    vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                    vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                    ddraw.position3vec3(scratchVec3);
+                    ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                    ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+                    x = Math.cos(polarY0) * Math.sin(azimuthal - azimuthalOffsY0);
+                    y = Math.sin(polarY0);
+                    z = Math.cos(polarY0) * Math.cos(azimuthal - azimuthalOffsY0);
+                    vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                    vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                    ddraw.position3vec3(scratchVec3);
+                    ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                    ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+                    x = Math.cos(polarY1) * Math.sin(azimuthal - azimuthalOffsY1);
+                    y = Math.sin(polarY1);
+                    z = Math.cos(polarY1) * Math.cos(azimuthal - azimuthalOffsY1);
+                    vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                    vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                    ddraw.position3vec3(scratchVec3);
+                    ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                    ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+                    x = Math.cos(polarY1) * Math.sin(azimuthal + azimuthalOffsY1);
+                    y = Math.sin(polarY1);
+                    z = Math.cos(polarY1) * Math.cos(azimuthal + azimuthalOffsY1);
+                    vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                    vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                    ddraw.position3vec3(scratchVec3);
+                    ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                    ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+                }
+
 /*
                 const ctx = getDebugOverlayCanvas2D();
                 const c = textureIdx === 0 ? Magenta : textureIdx === 1 ? Green : Blue;
@@ -765,6 +935,116 @@ export class dKankyo_vrkumo_Packet {
         }
 
         ddraw.endDraw(renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+export class HOUSI_EFF {
+    public initialized = false;
+    public status: number;
+    public position = vec3.create();
+    public basePos = vec3.create();
+    public speed: number = 1.0;
+    public scale: number = 1.0;
+    public alpha: number = 1.0;
+};
+
+// the square twilight particle things
+export class dKankyo_housi_Packet {
+    private tex: BTIData;
+    public count: number = 0;
+    public instances: HOUSI_EFF[] = nArray(300, () => new HOUSI_EFF());
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+    public rot: number = 0.0;
+
+    constructor(globals: dGlobals) {
+        this.tex = assertExists(globals.resCtrl.getObjectRes(ResType.Bti, `Always`, 0x56));
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+
+        const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the color.
+        //mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C1, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_housi_Packet'));
+    }
+
+    public drawHousi(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const envLight = globals.g_env_light;
+        const ddraw = this.ddraw;
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        let c1 = colorNewFromRGBA8(0xE5FFC800 | (120.0 & 0xFF));
+        let c2 = colorNewFromRGBA8(0x43D2CAFF);
+
+        if (dKy_darkworld_check(globals) || globals.stageName === "D_MN08") {
+            c2 = colorNewFromRGBA8(0x000000FF);
+        }
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], c1);
+        colorCopy(materialParams.u_Color[ColorKind.C1], c2);
+
+        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        for (let i = 0; i < envLight.housiCount; i++) {
+            const housi = this.instances[i];
+            vec3.add(scratchVec3, housi.basePos, housi.position);
+
+            materialParams.u_Color[ColorKind.C0].a = housi.alpha;
+
+            // basePos
+            vec3.add(scratchVec3, housi.basePos, housi.position);
+            const dist = vec3.distance(scratchVec3, globals.cameraPosition);
+
+            ddraw.begin(GX.Command.DRAW_QUADS, 4 * 5 * this.count);
+
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+
+            ddraw.end();
+        }
+
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const envLight = globals.g_env_light;
+
+        if (envLight.housiCount === 0)
+            return;
+        
+        this.ddraw.beginDraw(globals.modelCache.cache);
+        this.drawHousi(globals, renderInstManager, viewerInput);
+        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1004,26 +1284,6 @@ class WIND_EFF {
     public animPos = vec3.create();
 }
 
-export class dKankyo__Windline {
-    // Modification for noclip: Increased the number of possible wind lines from 30 to 50.
-    public windEff: WIND_EFF[] = nArray(50, () => new WIND_EFF());
-    public count: number = 0;
-    public frameCounter: number = 0;
-    public hasCustomWindPower: boolean = false;
-}
-
-class WAVE_EFF {
-    public initialized = false;
-    public basePos = vec3.create();
-    public pos = vec3.create();
-    public animCounter = 0;
-    public alpha = 0.0;
-    public strengthEnv = 0.0;
-    public scale = 0.0;
-    public speed = 0.0;
-    public animCounterSpeed = 0.0;
-}
-
 class STAR_EFF {
     public animCounter: number = 0;
     public animWave: number = 0.0;
@@ -1034,29 +1294,26 @@ export class dKankyo_star_Packet {
     public rot: number = 0.0;
 
     private hokuto_pos = [
-        vec3.fromValues(13000, 10500, -16000),
-        vec3.fromValues(9400, 9800, -12646),
-        vec3.fromValues(10200, 11800, -13525),
-        vec3.fromValues(10300, 13450, -13525),
-        vec3.fromValues(15000, 18400, -16162),
-        vec3.fromValues(12500, 19800, -15000),
-        vec3.fromValues(9179, 17200, -14404),
-        vec3.fromValues(9500, 9800, -12646),
+        vec3.fromValues(15283, 31005, -17919),
+        vec3.fromValues(13525, 28369, -22265),
+        vec3.fromValues(8300, 31884, -20507),
+        vec3.fromValues(3906, 31005, -23144),
+        vec3.fromValues(-439, 30127, -17919),
         vec3.fromValues(-7421, 31005, 18798),
-        vec3.fromValues(-10937, 28000, 15000),
+        vec3.fromValues(-10937, 2800, 15000),
         vec3.fromValues(-10000, 24902, 18400),
         vec3.fromValues(-9400, 22500, 15900),
         vec3.fromValues(-9179, 21300, 14300),
         vec3.fromValues(-10300, 22000, 21000),
         vec3.fromValues(-16000, 25500, 20000),
-        vec3.fromValues(0, 30000, 19000),        
+        vec3.fromValues(0, 30000, 19000),
     ];
 
     private star_col: Color[] = [
-        colorNewFromRGBA8(0xDCE8FFFF),
-        colorNewFromRGBA8(0xFFC8C8FF),
-        colorNewFromRGBA8(0xFFFFC8FF),
-        colorNewFromRGBA8(0xC8C8FFFF),
+        colorNewFromRGBA8(0xFFBEC8A0),
+        colorNewFromRGBA8(0xC8FFBE78),
+        colorNewFromRGBA8(0xC8BEFF50),
+        colorNewFromRGBA8(0xFFFFFFC8),
     ];
 
     private ddraw = new TDDraw();
@@ -1104,7 +1361,7 @@ export class dKankyo_star_Packet {
         const fovYAdj = 0.0;
 
         // Compute star points.
-        const starSize = 0.9 - (fovYAdj * 0.6);
+        const starSize = (1.0 - fovYAdj) * 0.28;
         vec3.set(scratchVec3b, 0.0, starSize, 0.0);
         vec3.set(scratchVec3c, starSize, -0.5 * starSize, 0.0);
         vec3.set(scratchVec3d, -starSize, -0.5 * starSize, 0.0);
@@ -1124,12 +1381,12 @@ export class dKankyo_star_Packet {
             let scale: number;
             if (i < this.hokuto_pos.length) {
                 // Orion.
-                const baseScale = (i < 8 ? 190.0 : 290.0) + star.animWave;
+                const baseScale = (i < 5 ? 540.0 : 400.0) + star.animWave;
                 scale = baseScale - (fovYAdj * 0.5 * baseScale);
 
                 vec3.copy(scratchVec3a, this.hokuto_pos[i]);
             } else {
-                scale = star.animWave + (0.066 * (i & 0x0F));
+                scale = star.animWave + (0.03125 * (i & 0x0F) + 0.8);
                 if (scale > 1.0)
                     scale = (1.0 - (scale - 1.0));
 
@@ -1325,24 +1582,28 @@ function dKyr_sun_move(globals: dGlobals): void {
         pkt.distFalloff = 1.0 - distFalloff;
         staringAtSunAmount = sqr(distFalloff);
     } else {
-        pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.5, 0.1, 0.01);
+        if (globals.stageName === "F_SP200" ||globals.stageName === "D_MN09B") {
+            pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.1, 0.05, 0.001);
+        }
     }
 
     if (numCenterPointsVisible === 0) {
-        if (numPointsVisible >= 3)
-            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
+        if (numPointsVisible === 0)
+            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.5, 0.5, 0.001);
         else
-            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.5, 0.2, 0.001);
+            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.2, 0.3, 0.001);
     } else {
-        if (numPointsVisible >= 5)
-            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.5, 0.2, 0.01);
-        else if (numPointsVisible === 4)
-            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
+        if (numPointsVisible === 4)
+            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.5, 0.5, 0.01);
         else
-            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.1, 0.2, 0.001);
+            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.2, 0.3, 0.001);
     }
 
-    pkt.drawLenzInSky = numPointsVisible < 2;
+    if (pkt.visibility > 0.0) {
+        pkt.drawLenzInSky = false;
+    } else {
+        pkt.drawLenzInSky = true;
+    }
 
     if (pkt.sunPos[1] > 0.0) {
         const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
@@ -1404,10 +1665,6 @@ function wether_move_thunder(globals: dGlobals): void {
         dKyr_thunder_init(envLight);
         envLight.thunderActive = true;
     }
-}
-
-export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): void {
-    wether_move_thunder(globals);
 }
 
 function wether_move_sun(globals: dGlobals): void {
@@ -1527,26 +1784,26 @@ function wether_move_snow(globals: dGlobals): void {
 function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
-    const isName = globals.stageName === 'Name';
-    if (!isName && (envLight.vrboxInvisible || globals.stageName === 'M_DragB'))
+    const stageName = globals.stageName;
+    if (envLight.vrboxInvisible || stageName === 'D_MN09' || stageName === 'D_MN09A' || stageName === 'F_SP200')
         return;
+
+    if (dKy_darkworld_check(globals)) {
+        return;
+    }
 
     let starAmount = 1.0;
 
     const curTime = envLight.curTime;
-    if (isName) {
-        // TODO(jstpierre): Name
+    
+    if (curTime >= 330.0 && curTime < 45.0)
         starAmount = 1.0;
-    } else {
-        if (curTime >= 60.0 && curTime < 75.0)
-            starAmount = 1.0 - invlerp(60.0, 75.0, curTime);
-        else if (curTime >= 75.0 && curTime < 270.0)
-            starAmount = 0.0;
-        else if (curTime >= 270.0 && curTime < 315.0)
-            starAmount = invlerp(270.0, 315.0, curTime);
-        else
-            starAmount = 1.0;
-    }
+    else if (curTime >= 75.0 && curTime < 285.0)
+        starAmount = 0.0;
+    else if (curTime >= 285.0 && curTime < 330.0)
+        starAmount = invlerp(285.0, 330.0, curTime);
+    else
+        starAmount = invlerp(285.0, 330.0, curTime)
 
     if (envLight.colpatWeather !== 0)
         starAmount = 0.0;
@@ -1554,7 +1811,7 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
         starAmount = 0.0;
 
     envLight.starAmount = cLib_addCalc(envLight.starAmount, starAmount, 0.1, 0.01, 0.000001);
-    envLight.starCount = (envLight.starAmount * 1000.0) | 0;
+    envLight.starCount = (envLight.starAmount * 500.0) | 0;
 
     if (envLight.starCount === 0)
         return;
@@ -1573,39 +1830,56 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
     pkt.rot += deltaTimeInFrames;
 }
 
-function wether_move_poison(globals: dGlobals): void {
-}
+function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
 
-function wether_move_housi(globals: dGlobals): void {
+    const stageName = globals.stageName;
+    if (!dKy_darkworld_check(globals) || stageName !== "D_MN08") {
+        envLight.housiCount = 0;
+        return;
+    }
+
+    if (envLight.housiCount === 0)
+        return;
+
+    if (envLight.housiPacket === null)
+        envLight.housiPacket = new dKankyo_housi_Packet(globals);
+
+    const pkt = envLight.housiPacket;
+
+    if (envLight.housiCount > pkt.count)
+        pkt.count = envLight.housiCount;
+
+    if (pkt.count === 0)
+        return;
+
+    for (let i = 0; i < pkt.count; i++) {
+        const housi = pkt.instances[i];
+
+        // testing...
+        if (housi.initialized) {
+            housi.position[0] += deltaTimeInFrames * 20.0;
+            housi.position[1] += deltaTimeInFrames * 20.0;
+            housi.position[2] += deltaTimeInFrames * 20.0;
+        } else {
+            vec3.copy(housi.basePos, scratchVec3);
+            vec3.set(housi.position, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
+            housi.alpha = 1.0;
+            housi.initialized = true;
+        }
+
+        let alpha = 1.0;
+
+        housi.alpha = alpha;
+    }
+
+    if (envLight.housiCount < pkt.count)
+        pkt.count = envLight.housiCount;
+
+    pkt.rot += deltaTimeInFrames;
 }
 
 function wether_move_moya(globals: dGlobals): void {
-}
-
-function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRadius: number, outerRadius: number): void {
-    if (dist < outerRadius) {
-        if (dist < innerRadius || innerRadius > outerRadius) {
-            wave.strengthEnv = 0.0;
-        } else {
-            const speedFade = (dist - innerRadius) / (outerRadius - innerRadius);
-            if (speedFade < wave.strengthEnv)
-                wave.strengthEnv = speedFade;
-        }
-    }
-}
-
-export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
-    if (globals.stageName !== 'Name') {
-        wether_move_sun(globals);
-        wether_move_rain(globals, deltaTimeInFrames);
-        wether_move_snow(globals);
-    }
-    wether_move_star(globals, deltaTimeInFrames);
-    if (globals.stageName !== 'Name') {
-        wether_move_poison(globals);
-        wether_move_housi(globals);
-        wether_move_moya(globals);
-    }
 }
 
 function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -1616,20 +1890,14 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
     const pkt = envLight.vrkumoPacket!;
 
     let skyboxOffsY: number;
-    if (globals.stageName === "M_DragB") {
-        vec3.set(scratchVec3, -1.0, 0.0, 0.0);
-        skyboxOffsY = 300.0;
-    } else {
-        skyboxOffsY = 1000.0 + pkt.strength * -500.0;
-    }
+    skyboxOffsY = 1000.0 + pkt.strength * -500.0;
+    
 
     {
         const fili = globals.roomStatus[globals.mStayNo].fili;
         let skyboxY = 0.0;
         if (fili !== null)
             skyboxY = fili.skyboxY;
-        if (globals.stageName === 'Siren' && globals.mStayNo === 17)
-            skyboxY = -14101.0;
         // TODO(jstpierre): Re-enable this?
         // skyboxOffsY -= 0.09 * (globals.cameraPosition[1] - skyboxY);
     }
@@ -1644,12 +1912,40 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
                 kumo.position[0] *= -1;
                 kumo.position[2] *= -1;
             } else {
-                kumo.position[0] = cM_rndFX(14000.0);
-                kumo.position[2] = cM_rndFX(14000.0);
+                let rnd_0 = cM_rndF(65535.0);
+
+                let rnd_1 = cM_rndF(18000.0);
+                if (rnd_1 > 15000.0) {
+                    rnd_1 = cM_rndF(1000.0) + 14000;
+                }
+                
+                let x = Math.sin(rnd_0);
+                if (Math.abs(rnd_1 * x) != 0.0) {
+                    if (x <= 0.0) {
+                        x -= 5000;
+                    } else {
+                        x += 5000;
+                    }
+                }
+
+                let z = Math.cos(rnd_0);
+                if (Math.abs(rnd_1 * z) != 0.0) {
+                    if (z <= 0.0) {
+                        z -= 5000;
+                    } else {
+                        z += 5000;
+                    }
+                }
+
+                kumo.position[0] = x;
+                kumo.position[1] = 0;
+                kumo.position[2] = z;                
+
                 distFromCenterXZ = Math.hypot(kumo.position[0], kumo.position[2]);
             }
             kumo.alpha = 0.0;
         }
+
 
         const strengthVelocity = 4.0 + pkt.strength * 4.3;
         if (kumo.alpha > 0) {
@@ -1671,22 +1967,18 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
         let alphaTarget: number;
         let alphaMaxVel = 1.0;
-        if (globals.stageName === 'M_DragB') {
-            kumo.alpha = 1.0;
-            alphaTarget = 1.0;
-        } else {
-            if (i < pkt.count) {
-                alphaMaxVel = 0.1;
-                if (kumo.distFalloff >= 0.05 && kumo.distFalloff < 0.2)
-                    alphaTarget = (kumo.distFalloff - 0.05) / 0.15;
-                else if (kumo.distFalloff < 0.2)
-                    alphaTarget = 0.0;
-                else
-                    alphaTarget = 1.0 + pkt.strength * -0.55;
-            } else {
+        
+        if (i < pkt.count) {
+            alphaMaxVel = 0.1;
+            if (kumo.distFalloff >= 0.05 && kumo.distFalloff < 0.2)
+                alphaTarget = (kumo.distFalloff - 0.05) / 0.15;
+            else if (kumo.distFalloff < 0.2)
                 alphaTarget = 0.0;
-                alphaMaxVel = 0.005;
-            }
+            else
+                alphaTarget = 1.0 + pkt.strength * -0.55;
+        } else {
+            alphaTarget = 0.0;
+            alphaMaxVel = 0.005;
         }
 
         // When the clouds start getting too close to the center, fade them out so that you can't
@@ -1705,10 +1997,6 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
 
     if (envLight.vrkumoPacket === null) {
         envLight.vrkumoPacket = new dKankyo_vrkumo_Packet(globals);
-
-        // envcolor_init has this
-        if (dKy_checkEventNightStop(globals))
-            envLight.vrkumoPacket.strength = 1.0;
     }
 
     const pkt = envLight.vrkumoPacket;
@@ -1716,27 +2004,33 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     if (!pkt.enabled)
         return;
 
-    if (globals.stageName === 'Name') {
-        pkt.count = 70;
-    } else if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible) {
+    if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible) {
         pkt.count = 0;
     } else {
-        if (((envLight.colpatCurr === 1 || envLight.colpatCurr === 2) && envLight.colpatBlend > 0.0) || ((envLight.colpatPrev === 1 || envLight.colpatPrev === 2) && envLight.colpatBlend < 1.0)) {
+        pkt.count = 6;
+
+        if (globals.stageName === 'D_MN07' || globals.stageName === 'D_MN07A' || globals.stageName === 'D_MN07B' || globals.stageName === 'F_SP114' || globals.stageName === 'D_MN09B') {
+            cLib_addCalc(pkt.strength, 1.0, 0.1, 0.003, 0.0000007);
+        } else if (globals.stageName === 'F_SP104') {
+            if (envLight.colpatCurr < 4) {
+                pkt.strength = cLib_addCalc(pkt.strength, 0.0, 0.08, 0.002, 0.00000007);
+            } else {
+                pkt.strength = cLib_addCalc(pkt.strength, 1.0, 0.1, 0.003, 0.0000007);
+            }
+        } else if (((envLight.colpatCurr === 1 || envLight.colpatCurr === 2) && envLight.colpatBlend > 0.0) || ((envLight.colpatPrev === 1 || envLight.colpatPrev === 2) && envLight.colpatBlend < 1.0)) {
             pkt.strength = cLib_addCalc(pkt.strength, 1.0, 0.1, 0.003, 0.0000007);
         } else {
             pkt.strength = cLib_addCalc(pkt.strength, 0.0, 0.08, 0.002, 0.00000007);
         }
 
-        if (globals.stageName === 'sea' && globals.mStayNo === 9) {
-            vec3.set(scratchVec3, -180000.0, 750.0, -200000.0);
-            const sqrDist = vec3.squaredDistance(globals.cameraPosition, scratchVec3);
-            if (sqrDist < sqr(2500))
-                pkt.strength = 1.0;
-        }
+        pkt.count = 6 + (56 * pkt.strength);
+    }
 
-        pkt.count = 50 + (50 * pkt.strength);
-        if (globals.stageName === 'GTower')
-            pkt.count = 0;
+    if (dKy_darkworld_check(globals))
+        pkt.count = 30;
+
+    if (globals.stageName === 'F_SP200') {
+        pkt.count = 30;
     }
 
     vrkumo_move(globals, deltaTimeInFrames);
@@ -1746,31 +2040,14 @@ export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeInFrames: num
     wether_move_vrkumo(globals, deltaTimeInFrames);
 }
 
-export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-    // Normally this just pushes packets which draw at the right time. We can just draw now.
-
-    const envLight = globals.g_env_light;
-
-    if (globals.stageName !== 'Name') {
-        if (envLight.sunPacket !== null)
-            envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
-    }
-
-    if (envLight.starPacket !== null)
-        envLight.starPacket.draw(globals, renderInstManager, viewerInput);
-
-    if (globals.stageName !== 'Name') {
-        if (envLight.rainPacket !== null)
-            envLight.rainPacket.draw(globals, renderInstManager, viewerInput);
-    }
-}
-
 export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     const envLight = globals.g_env_light;
 
     if (envLight.vrkumoPacket !== null && envLight.vrkumoPacket.enabled)
         envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
 }
+
+
 
 export function dKyw_wind_set(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -1877,6 +2154,94 @@ export class d_thunder extends kankyo_class {
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);
         }
+    }
+}
+
+export class mDoGph_bloom_c {
+    public blendColor;
+    public monoColor = colorNewCopy(TransparentBlack);
+    public enable: boolean;
+    public mode: number;
+    public point: number;
+    public blurSize: number;
+    public blurRatio: number;
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    constructor() {
+        this.enable = false;
+        this.mode = 0;
+        this.point = 128;
+        this.blurSize = 64;
+        this.blurRatio = 128;
+        this.blendColor = colorNewCopy(White);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setZMode(false, GX.CompareType.ALWAYS, false);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C2, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A2);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevSwapMode(0, TevDefaultSwapTables[1], TevDefaultSwapTables[1]);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.monoColor);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('Bloom Mono'));
+    }
+
+    public drawFilterQuad(ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, p0: number, p1: number): void {
+        ddraw.begin(GX.Command.DRAW_QUADS);
+
+        ddraw.position3f32(0, 0, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+        ddraw.position3f32(p0, 0, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+        ddraw.position3f32(p0, p1, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+        ddraw.position3f32(0, p1, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+
+        ddraw.end();
+
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
+    }
+
+    public drawMono(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, viewerInput: ViewerRenderInput) {
+        if (this.enable || this.monoColor.a !== 0) {
+            const ddraw = this.ddraw;
+            this.drawFilterQuad(ddraw, renderInstManager, viewerInput, 4, 4);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
+            renderInstManager.submitRenderInst(renderInst);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        renderInstManager.setCurrentRenderInstList(globals.dlst.ui[1]);
+        
+        const ddraw = this.ddraw;
+        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4);
+        this.drawMono(renderInstManager, ddraw, viewerInput);
+        ddraw.endDraw(renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.monoColor.a = 0;
     }
 }
 

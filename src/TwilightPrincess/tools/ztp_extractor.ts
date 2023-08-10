@@ -196,11 +196,6 @@ class REL {
 
     public getSymbolData(entry: SymbolMapEntry): ArrayBufferSlice {
         const sectionIdx = this.map.sectionNames.indexOf(entry.sectionName);
-        /* if (!(sectionIdx >= 0)) {
-            console.log(`Error Rel Section: ${this.name} ${entry.sectionName} ${sectionIdx}`);
-        } */
-
-        console.log(`Rel Section: ${this.name} ${entry.sectionName} ${sectionIdx}`);
 
         assert(sectionIdx >= 0);
         const offs = this.offs[sectionIdx] + entry.addr;
@@ -253,10 +248,52 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, framework, `d_kankyo_data.o`, `l_light_size_tbl_tw`);
     extractSymbol(datas, framework, `d_kankyo_data.o`, `S_xfog_table_data`);
 
+    // main.dol : d_item_data.o
+    extractSymbol(datas, framework, `d_item_data.o`, `item_resource__10dItem_data`);
+    extractSymbol(datas, framework, `d_item_data.o`, `field_item_res__10dItem_data`);
+    extractSymbol(datas, framework, `d_item_data.o`, `item_info__10dItem_data`);
+    extractSymbol(datas, framework, `d_item_data.o`, `@stringBase0`);
+
     // main.dol : d_drawlist.o
     extractSymbol(datas, framework, `d_drawlist.o`, `l_matDL`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontZMat`);
     extractSymbol(datas, framework, `d_drawlist.o`, `l_frontNoZSubMat`);
+
+    // d_a_grass.rel : d_a_grass.o
+    const d_a_grass = findBinary(`d_a_grass.rel`);
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_color');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_matDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_pos');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_texCoord');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_vtxAttrFmtList');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_vtxDescList');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_M_kusa05_RGBATEX');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_M_Hijiki00TEX');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_normal');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_M_Kusa_9qDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_M_Kusa_9q_cDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_M_TenGusaDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_Tengusa_matDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_kusa9q_matDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_kusa9q_l4_matDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_Ohana00_64TEX');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerPos');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerNormal');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerColor');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerTexCoord');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_hana00DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_hana00_cDL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_matLight4DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_Ohana01_64128_0419TEX');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerPos2');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerNormal2');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerColor2');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_flowerTexCoord2');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_hana01DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_hana01_c_00DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_J_hana01_c_01DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_mat2DL');
+    extractSymbol(datas, d_a_grass, 'd_a_grass.o', 'l_mat2Light4DL');
 
     const crg1 = {
         SymbolData: datas,
@@ -286,7 +323,7 @@ async function loadBinaries(): Promise<Binary[]> {
 function extractProfiles(binaries: Binary[]) {
     const datas: ArrayBufferSlice[] = [];
 
-    function processProfile(data: ArrayBufferSlice, rel: boolean): void {
+    function processProfile(data: ArrayBufferSlice, rel: boolean, pcNameOverride: number): void {
         const view = data.createDataView();
 
         if (rel) {
@@ -295,15 +332,39 @@ function extractProfiles(binaries: Binary[]) {
             assert(layer === 0xFFFFFFFD);
         }
 
-        const pcName = view.getUint16(0x08);
+        let pcName = view.getUint16(0x08);
+        if (pcNameOverride !== -1) {
+            pcName = pcNameOverride;
+        }
+
         datas[pcName] = data;
     }
 
     for (const binary of binaries) {
         const m = binary.map;
-        for (let i = 0; i < m.entries.length; i++)
-            if (m.entries[i].symbolName.startsWith('g_profile_'))
-                processProfile(binary.getSymbolData(m.entries[i]), binary instanceof REL);
+        for (let i = 0; i < m.entries.length; i++) {
+            // for some reason a few profiles in tp re-use the same proc name ?
+            // so just use an override to the correct c_dylink order
+            if (m.entries[i].symbolName.startsWith('g_profile_')) {
+                const prof_name = m.entries[i].symbolName;
+                let name_override = -1;
+                if (prof_name === "g_profile_TAG_LV5SOUP") {
+                    name_override = 292;
+                } else if (prof_name === "g_profile_Obj_FireWood2") {
+                    name_override = 362;
+                } else if (prof_name === "g_profile_Obj_poFire") {
+                    name_override = 377;
+                } else if (prof_name === "g_profile_TAG_BTLITM") {
+                    name_override = 291;
+                } else if (prof_name === "g_profile_TAG_EVTMSG") {
+                    name_override = 746;
+                } else if (prof_name === "g_profile_TAG_SSDRINK") {
+                    name_override = 290;
+                }
+                
+                processProfile(binary.getSymbolData(m.entries[i]), binary instanceof REL, name_override);
+            }
+        }
     }
 
     const crg1 = {
