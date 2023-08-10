@@ -6,6 +6,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals, dDlst_list_Set } from "./ztp_scenes.js";
 import { mat4 } from "gl-matrix";
+import { assert } from "../util.js";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -92,14 +93,6 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
 
     if (drawListSet === null)
         drawListSet = globals.dlst.main;
-
-    // NOTE(jstpierre): This is custom to noclip, normally the toon textures are set in setToonTex during res loading.
-    // globals.renderer.extraTextures.fillExtraTextures(modelInstance);
-
-    /* if (globals.renderHacks.renderHacksChanged) {
-        modelInstance.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
-        modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
-    } */
 
     modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 

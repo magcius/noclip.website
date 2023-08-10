@@ -13,13 +13,21 @@ export const enum fpc__ProcessName {
     d_s_play            = 0x000B,
     d_kankyo            = 0x0013,
     d_envse             = 0x0014,
+    d_a_obj_lv3water    = 0x00D5,
     d_a_tbox            = 0x00FB,
+    d_a_tbox2           = 0x00FC,
     d_a_alink           = 0x00FD,
     d_a_obj_suisya      = 0x011D,
+    d_a_obj_firepillar2 = 0x015E,
+    d_a_obj_glowSphere  = 0x017B,
+    kytag10             = 0x02B4,
     d_thunder           = 0x02D9,
     d_a_vrbox           = 0x02DA,
     d_a_vrbox2          = 0x02DB,
     d_a_bg              = 0x02DC,
+    d_a_set_bg_obj      = 0x02DD,
+    d_a_bg_obj          = 0x02DE,
+    d_a_obj_carry       = 0x02FC,
     d_a_grass           = 0x0310,
     d_kyeff             = 0x0311,
     d_kyeff2            = 0x0312,
@@ -227,7 +235,6 @@ function fpcBs_MakeOfId(globals: fGlobals): number {
 export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, pcName: fpc__ProcessName, userData: G): number | null {
     const constructor = fpcPf_Get__Constructor(globals, pcName);
     if (constructor === null) {
-        console.log(`ctor === NULL`)
         return null;
     }
 
@@ -346,13 +353,7 @@ export class base_process_class {
 }
 
 function fpcPf_Get__ProfileBinary(globals: fGlobals, pcName: fpc__ProcessName): ArrayBufferSlice {
-    if (globals.f_pc_profiles.Profiles[pcName] === null || globals.f_pc_profiles.Profiles[pcName] === undefined) {
-        console.log(`profile null: ${pcName}`);
-        return globals.f_pc_profiles.Profiles[200]; // temp just to not crash when loading...
-    } else {
-        return globals.f_pc_profiles.Profiles[pcName];
-    }
-    //return assertExists(globals.f_pc_profiles.Profiles[pcName]);
+    return assertExists(globals.f_pc_profiles.Profiles[pcName]);
 }
 
 function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fpc_bs__Constructor | null {
@@ -640,6 +641,10 @@ export function fopAcIt_JudgeByID<T extends base_process_class>(globals: fGlobal
             return globals.lnQueue[i] as unknown as T;
     }
     return null;
+}
+
+export function fopAcM_GetParamBit(actor: fopAc_ac_c, shift: number, bit: number): number {
+    return (actor.parameters >> shift) & ((1 << bit) - 1);
 }
 //#endregion
 

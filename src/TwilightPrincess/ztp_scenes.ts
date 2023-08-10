@@ -6,6 +6,7 @@ import * as BYML from '../byml.js';
 import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import * as UI from '../ui.js';
 
+import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
 import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
@@ -29,7 +30,7 @@ import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy_setLight_nowroom_common, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
-import { dKyw__RegisterConstructors } from './d_kankyo_wether.js';
+import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
@@ -111,10 +112,70 @@ function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
     return actorTable;
 }
 
+export class dItem_itemResource {
+    public arcName: string;
+    public bmdID: number;
+    public btkID: number;
+    public bckID: number;
+    public brkID: number;
+    public btpID: number;
+    public tevFrm: number;
+    public btpFrm: number;
+    public textureID: number;
+    public texScale: number;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+
+        this.bmdID = view.getInt16(0x4);
+        this.btkID = view.getInt16(0x6);
+        this.bckID = view.getInt16(0x8);
+        this.brkID = view.getInt16(0xA);
+        this.btpID = view.getInt16(0xC);
+        this.tevFrm = view.getInt8(0xE);
+        this.btpFrm = view.getInt8(0xF);
+        this.textureID = view.getInt16(0x10);
+        this.texScale = view.getUint8(0x12);
+
+        return 0x18;
+    }
+}
+
+export function getItemResource(globals: dGlobals, symbolMap: SymbolMap): dItem_itemResource[] {
+    const stringsBuf = symbolMap.findSymbolData(`d_item_data.o`, `@stringBase0`);
+    const textDecoder = new TextDecoder('utf8') as TextDecoder;
+
+    const stringsBytes = stringsBuf.createTypedArray(Uint8Array);
+
+    const nametable: string[] = [];
+
+    for (let i = 0; i < 255; i++) {
+        const ptr = 0;
+        const strOffset = ptr - 0x8037ad68;
+        const endOffset = stringsBytes.indexOf(0, strOffset);
+        const arcname = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
+        nametable[i] = arcname;
+    }
+
+    const buffer = globals.findExtraSymbolData(`d_item_data.o`, `item_resource__10dItem_data`);
+    const res: dItem_itemResource[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 255; i++) {
+        const entry = new dItem_itemResource();
+        offs += entry.parse(buffer.slice(offs));
+        entry.arcName = nametable[i];
+        res.push(entry);
+    }
+
+    return res;
+}
+
 class RenderHacks {
     public vertexColorsEnabled = true;
     public texturesEnabled = true;
     public objectsVisible = true;
+    public tagsVisible = false;
     public mirroredMaps = false;
 
     public renderHacksChanged = false;
@@ -127,7 +188,7 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
-    public water: dDlst_list_Set = [
+    public indirect: dDlst_list_Set = [
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
@@ -170,6 +231,8 @@ export class dGlobals {
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
     public particleCtrl: dPa_control_c;
 
+    public bloom_c = new mDoGph_bloom_c(); 
+
     public scnPlay: d_s_play;
 
     // "Current" room number.
@@ -195,11 +258,15 @@ export class dGlobals {
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
 
+    public item_resource: dItem_itemResource[] = [];
+
     constructor(public context: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
 
         this.relNameTable = createRelNameTable(extraSymbolData);
         this.objectNameTable = createActorTable(extraSymbolData);
+
+        this.item_resource = getItemResource(this, extraSymbolData);
 
         for (let i = 0; i < this.roomStatus.length; i++) {
             this.roomStatus[i].roomNo = i;
@@ -237,9 +304,8 @@ export class dGlobals {
     }
 
     public destroy(device: GfxDevice): void {
-        // this.particleCtrl.destroy(device);
+        this.particleCtrl.destroy(device);
         this.dlst.destroy(device);
-        // this.quadStatic.destroy(device);
     }
 }
 
@@ -259,85 +325,17 @@ export class ZTPExtraTextures {
             this.extraTextures[i].destroy(device);
     }
 
-    public fillExtraTextures(modelInstance: J3DModelInstance): void {
-        for (let i = 0; i < modelInstance.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-            // Look for any unbound textures and set them.
-            const sampler = modelInstance.modelMaterialData.tex1Data!.tex1.samplers[i];
-            const m = modelInstance.materialInstanceState.textureMappings[i];
-            if (m.gfxTexture === null)
-                console.log(`Sampler Name: ${sampler.name}`);
-                //this.fillTextureMapping(m, sampler.name);
-        }
-    }
-
     public fillTextureMapping = (m: TextureMapping, samplerName: string): boolean => {
         // Look through for extra textures.
         const searchName = `${samplerName.toLowerCase()}.bti`;
         const extraTexture = this.extraTextures.find((extraTex) => extraTex.btiTexture.name === searchName);
-
-        /* if (extraTexture !== undefined)
-            return extraTexture.fillTextureMapping(m); */
         
         if (extraTexture !== undefined) {
-            console.log(`extraTexture found`);
             return extraTexture.fillTextureMapping(m);
-        } else {
-            console.log(`!!no extraTexture found!!\nSearch Name: ${searchName}\narray len: ${this.extraTextures.length}`);
         }
-
-        /* const resname = `${samplerName.toLowerCase()}.bti`;
-        const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-        if (bti !== null) {
-            return
-        } */
 
         return false;
     };
-}
-
-const materialHacks: GXMaterialHacks = {
-    lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
-};
-
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZTPExtraTextures, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
-    const bmd = BMD.parse(bmdFile.buffer);
-    const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new J3DModelData(device, cache, bmd);
-    const modelInstance = new J3DModelInstanceSimple(bmdModel, materialHacks);
-    if (bmt !== null)
-        modelInstance.setModelMaterialData(new J3DModelMaterialData(device, cache, bmt));
-
-    for (let i = 0; i < bmdModel.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-        // Look for any unbound textures and set them.
-        const sampler = bmdModel.modelMaterialData.tex1Data!.tex1.samplers[i];
-        const m = modelInstance.materialInstanceState.textureMappings[i];
-        //if (m.gfxTexture === null)
-            //extraTextures.fillTextureMapping(m, sampler.name);
-    }
-
-    if (btkFile !== null) {
-        const btk = BTK.parse(btkFile.buffer);
-        modelInstance.bindTTK1(btk);
-    }
-
-    if (brkFile !== null) {
-        const brk = BRK.parse(brkFile.buffer);
-        modelInstance.bindTRK1(brk);
-    }
-
-    if (bckFile !== null) {
-        const bck = BCK.parse(bckFile.buffer);
-        modelInstance.bindANK1(bck);
-    }
-
-    return modelInstance;
-}
-
-const enum ZTPPass {
-    SKYBOX = 1 << 0,
-    OPAQUE = 1 << 1,
-    INDIRECT = 1 << 2,
-    TRANSPARENT = 1 << 3,
 }
 
 function fpcIsObject(n: fpc__ProcessName): boolean {
@@ -378,7 +376,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     private opaqueSceneTextureMapping = new TextureMapping();
 
     public renderHelper: GXRenderHelperGfx;
-    // public modelInstances: J3DModelInstanceSimple[] = [];
 
     public rooms: TwilightPrincessRoom[] = [];
     public extraTextures: ZTPExtraTextures;
@@ -408,6 +405,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(36/60);
     }
 
+    // TODO: rework mirrored mode to work with new setup
     /* private setMirrored(mirror: boolean): void {
         const negScaleMatrix = mat4.create();
         computeModelMatrixS(negScaleMatrix, -1, 1, 1);
@@ -466,33 +464,41 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
-        const mirrorMaps = new UI.Checkbox('Mirror Maps (Wii Mode)', false);
+        const enableTags = new UI.Checkbox('Enable Tags', false);
+        enableTags.onchanged = () => {
+            this.globals.renderHacks.tagsVisible = enableTags.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableTags.elem);
+
+        // come back to this later
+        /* const mirrorMaps = new UI.Checkbox('Mirror Maps (Wii Mode)', false);
         mirrorMaps.onchanged = () => {
             this.globals.renderHacks.mirroredMaps = mirrorMaps.checked;
             this.globals.renderHacks.renderHacksChanged = true;
         };
-        renderHacksPanel.contents.appendChild(mirrorMaps.elem);
+        renderHacksPanel.contents.appendChild(mirrorMaps.elem); */
 
         // ENVIRONMENT DEBUG
         const environmentPanel = new UI.Panel();
+
         environmentPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         environmentPanel.setTitle(UI.RENDER_HACKS_ICON, 'Environment Debug');
         const slider = new UI.Slider();
         slider.setRange(0, 1, 0.01);
-        slider.setLabel("ColActColRatio: ");
+        slider.setLabel("Actor Color Ratio: " + this.globals.g_env_light.ColActColRatio);
         slider.setValue(this.globals.g_env_light.ColActColRatio);
         slider.onvalue = () => {
-            slider.setLabel("ColActColRatio: " + slider.getValue());
+            slider.setLabel("Actor Color Ratio: " + slider.getValue());
             this.globals.g_env_light.ColActColRatio = slider.getValue();
         }
         environmentPanel.contents.appendChild(slider.elem);
 
         const bg_ratio_slider = new UI.Slider();
         bg_ratio_slider.setRange(0, 1, 0.01);
-        bg_ratio_slider.setLabel("ColBgColRatio: ");
+        bg_ratio_slider.setLabel("BG Color Ratio: " + this.globals.g_env_light.ColBgColRatio);
         bg_ratio_slider.setValue(this.globals.g_env_light.ColBgColRatio);
         bg_ratio_slider.onvalue = () => {
-            bg_ratio_slider.setLabel("ColBgColRatio: " + bg_ratio_slider.getValue());
+            bg_ratio_slider.setLabel("BG Color Ratio: " + bg_ratio_slider.getValue());
             this.globals.g_env_light.ColBgColRatio = bg_ratio_slider.getValue();
         }
         environmentPanel.contents.appendChild(bg_ratio_slider.elem);
@@ -572,7 +578,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         dKy_setLight(this.globals);
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        // this.extraTextures.prepareToRender(device);
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
@@ -582,7 +587,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
         {
-            // this.globals.particleCtrl.calc(viewerInput);
+            this.globals.particleCtrl.calc(viewerInput);
 
             for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
                 let texPrjMtx: mat4 | null = null;
@@ -592,13 +597,12 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
                     texProjCameraSceneTex(texPrjMtx, viewerInput.camera, 1);
                 }
 
-                // this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
+                this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
                 renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
-
-                // this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
+                this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
 
-            renderInstManager.setCurrentRenderInstList(dlst.water[0]);
+            renderInstManager.setCurrentRenderInstList(dlst.indirect[0]);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -645,6 +649,21 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         builder.pushPass((pass) => {
+            pass.setDebugName('Indirect');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(opaqueSceneTextureID);
+            pass.exec((passRenderer, scope) => {
+                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
+                dlst.indirect[1].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+                this.executeListSet(passRenderer, dlst.indirect);
+            });
+        });
+
+        builder.pushPass((pass) => {
             pass.setDebugName('Main');
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -664,30 +683,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         dlst.peekZ.pushPasses(renderInstManager, builder, mainDepthTargetID);
         dlst.peekZ.peekData(device);
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Indirect');
-
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
-            pass.attachResolveTexture(opaqueSceneTextureID);
-            pass.exec((passRenderer, scope) => {
-                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
-                dlst.water[EffectDrawGroup.Indirect].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
-                this.executeListSet(passRenderer, dlst.water);
-            });
-        });
-
-        /* builder.pushPass((pass) => {
-            pass.setDebugName('Transparent');
-            
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, ZTPPass.TRANSPARENT);
-            });
-        }); */
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
@@ -700,41 +695,9 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy();
         this.extraTextures.destroy(device);
-        // this.modelInstances.forEach((instance) => instance.destroy(device));
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
     }
-}
-
-function getRoomListFromDZS(buffer: ArrayBufferSlice): number[] {
-    const view = buffer.createDataView();
-    const chunkCount = view.getUint32(0x00);
-
-    const chunkOffsets = new Map<string, { offs: number, count: number }>();
-    let chunkTableIdx = 0x04;
-    for (let i = 0; i < chunkCount; i++) {
-        const type = readString(buffer, chunkTableIdx + 0x00, 0x04);
-        const count = view.getUint32(chunkTableIdx + 0x04);
-        const offs = view.getUint32(chunkTableIdx + 0x08);
-        chunkOffsets.set(type, { offs, count });
-        chunkTableIdx += 0x0C;
-    }
-
-    const { offs: rtblOffs, count: rtblCount } = chunkOffsets.get('RTBL')!;
-    let roomList = new Set<number>();
-    for (let i = 0; i < rtblCount; i++) {
-        const rtblEntryOffs = view.getUint32(rtblOffs + i * 0x04);
-        const roomTableCount = view.getUint8(rtblEntryOffs + 0x00);
-        if (roomTableCount === 0)
-            continue;
-        const roomTableOffs = view.getUint32(rtblEntryOffs + 0x04);
-        roomList.add(view.getUint8(roomTableOffs + 0x00) & 0x3F);
-    }
-    return [... roomList.values()];
-}
-
-function bmdModelUsesTexture(model: J3DModelData, textureName: string): boolean {
-    return model.bmd.tex1.samplers.some((sampler) => sampler.name === textureName);
 }
 
 export class ModelCache {
@@ -861,7 +824,6 @@ export class ModelCache {
     }
 
     public async fetchStageData(arcName: string): Promise<RARC.JKRArchive> {
-        // console.log(`ModelCache::fetchStageData:: fetch(Stage/${this.currentStage}/${arcName})`);
         const archive = await this.fetchArchive(`Stage/${this.currentStage}/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
         return archive;
@@ -895,6 +857,11 @@ class d_s_play extends fopScn {
         const frameCount = viewerInput.time / 1000.0 * 30;
 
         fopDw_Draw(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
+
+        // TODO: fix bloom, errors atm
+        /* globals.bloom_c.enable = true;
+        globals.bloom_c.monoColor = colorNewCopy(White);
+        globals.bloom_c.draw(globals, renderInstManager, viewerInput); */
     }
 
     public override delete(globals: dGlobals): void {
@@ -911,44 +878,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         this.id = this.stageDir;
     }
 
-    /* private createRoomScenes(device: GfxDevice, renderer: TwilightPrincessRenderer, rarc: RARC.JKRArchive, rarcBasename: string): void {
-        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-        bmdFiles.forEach((bmdFile) => {
-            const basename = bmdFile.name.split('.')[0];
-            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
-            const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
-            const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
-            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
-
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const modelInstance = createModelInstance(device, cache, renderer.extraTextures, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-            modelInstance.name = `${rarcBasename}/${basename}`;
-
-            let passMask: ZTPPass;
-            if (basename === 'model') {
-                passMask = ZTPPass.OPAQUE;
-            } else if (basename === 'model1') {
-                // "Water". Doesn't always mean indirect, but often can be.
-                // (Snowpeak Ruins has a model1 which is not indirect)
-                const usesIndirectMaterial = bmdModelUsesTexture(modelInstance.modelData, 'fbtex_dummy');
-                passMask = usesIndirectMaterial ? ZTPPass.INDIRECT : ZTPPass.OPAQUE;
-            } else if (basename === 'model2') {
-                passMask = ZTPPass.TRANSPARENT;
-            } else if (basename === 'model3') {
-                // Window/doorways.
-                passMask = ZTPPass.TRANSPARENT;
-            } else if (basename === 'model4' || basename === 'model5') {
-                // Light beams? No clue, stick 'em in the transparent pass.
-                passMask = ZTPPass.TRANSPARENT;
-            } else {
-                throw "whoops";
-            }
-
-            modelInstance.passMask = passMask;
-            renderer.modelInstances.push(modelInstance);
-        });
-    } */
-
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
             return new ModelCache(context.device, context.dataFetcher);
@@ -963,6 +892,57 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchFileData(`extra.crg1_arc`, 8);
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
+        const particleArchives = [
+            `Particle/common.jpc`,
+            `Particle/Pscene001.jpc`,
+            `Particle/Pscene010.jpc`,
+            `Particle/Pscene011.jpc`,
+            `Particle/Pscene012.jpc`,
+            `Particle/Pscene013.jpc`,
+            `Particle/Pscene014.jpc`,
+            `Particle/Pscene015.jpc`,
+            `Particle/Pscene020.jpc`,
+            `Particle/Pscene021.jpc`,
+            `Particle/Pscene022.jpc`,
+            `Particle/Pscene032.jpc`,
+            `Particle/Pscene034.jpc`,
+            `Particle/Pscene037.jpc`,
+            `Particle/Pscene040.jpc`,
+            `Particle/Pscene041.jpc`,
+            `Particle/Pscene050.jpc`,
+            `Particle/Pscene052.jpc`,
+            `Particle/Pscene100.jpc`,
+            `Particle/Pscene101.jpc`,
+            `Particle/Pscene102.jpc`,
+            `Particle/Pscene110.jpc`,
+            `Particle/Pscene111.jpc`,
+            `Particle/Pscene112.jpc`,
+            `Particle/Pscene120.jpc`,
+            `Particle/Pscene121.jpc`,
+            `Particle/Pscene122.jpc`,
+            `Particle/Pscene130.jpc`,
+            `Particle/Pscene131.jpc`,
+            `Particle/Pscene140.jpc`,
+            `Particle/Pscene141.jpc`,
+            `Particle/Pscene150.jpc`,
+            `Particle/Pscene151.jpc`,
+            `Particle/Pscene160.jpc`,
+            `Particle/Pscene161.jpc`,
+            `Particle/Pscene170.jpc`,
+            `Particle/Pscene171.jpc`,
+            `Particle/Pscene180.jpc`,
+            `Particle/Pscene181.jpc`,
+            `Particle/Pscene200.jpc`,
+            `Particle/Pscene201.jpc`,
+            `Particle/Pscene202.jpc`,
+            `Particle/Pscene203.jpc`,
+            `Particle/Pscene204.jpc`,
+            `Particle/Pscene205.jpc`,
+        ];
+
+        for (let i = 0; i < particleArchives.length; i++)
+            modelCache.fetchFileData(particleArchives[i]);
+
         // XXX(jstpierre): This is really terrible code.
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
@@ -973,15 +953,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
-
-        /* console.log(`Profile Array Length: ${f_pc_profiles.Profiles.length}`);
-        for (let i = 0; i < f_pc_profiles.Profiles.length; i++) {
-            if (f_pc_profiles.Profiles[i] === null) {
-                const view = f_pc_profiles.Profiles[i].createDataView();
-
-                console.log(`PROFILE: ${i}\nmProcName:\t${view!.getInt16(0x8)}`);
-            }
-        } */
 
         fpcPf__Register(framework, fpc__ProcessName.d_s_play, d_s_play);
         dKy__RegisterConstructors(framework);
@@ -1012,6 +983,13 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         // Set the stage as the active layer.
         // Normally, all of this would be done in d_scn_play.
         fpcLy_SetCurrentLayer(globals.frameworkGlobals, globals.scnPlay.layer);
+
+        const jpac: JPA.JPAC[] = [];
+        for (let i = 0; i < particleArchives.length; i++) {
+            const jpacData = modelCache.getFileData(particleArchives[i]);
+            jpac.push(JPA.parse(jpacData));
+        }
+        globals.particleCtrl = new dPa_control_c(renderer.renderCache, jpac);
 
         dKankyo_create(globals);
 
@@ -1049,61 +1027,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         }
 
         return renderer;
-
-        /* return this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher).then((stageRarc_: RARC.JKRArchive | null) => {
-            const stageRarc = assertExists(stageRarc_);
-
-            // Load stage shared textures.
-            const texcFolder = stageRarc.findDir(`texc`);
-            const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
-
-            //const renderer = new TwilightPrincessRenderer(device, extraTextures, stageRarc);
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-
-            for (let i = 0; i < extraTextureFiles.length; i++) {
-                const file = extraTextureFiles[i];
-                const name = file.name.split('.')[0];
-                const bti = BTI.parse(file.buffer, name).texture;
-                renderer.extraTextures.addBTI(device, cache, bti);
-            }
-
-            [`vrbox_sora`, `vrbox_kasumim`].forEach((basename) => {
-                const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
-                if (!bmdFile)
-                    return;
-                const btkFile = stageRarc.findFile(`btk/${basename}.btk`);
-                const brkFile = stageRarc.findFile(`brk/${basename}.brk`);
-                const bckFile = stageRarc.findFile(`bck/${basename}.bck`);
-                const scene = createModelInstance(device, cache, renderer.extraTextures, bmdFile, btkFile, brkFile, bckFile, null);
-                scene.name = `stage/${basename}`;
-                scene.isSkybox = true;
-                renderer.modelInstances.push(scene);
-            });
-
-            // Pull out the dzs, get the scene definition.
-            const dzsBuffer = stageRarc.findFile(`dzs/stage.dzs`)!.buffer;
-
-            let roomNames: string[];
-
-            roomNames = this.rooms.map((i) => `R${leftPad(''+i, 2)}_00`);
-
-            return Promise.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, dataFetcher))).then((roomRarcs: (RARC.JKRArchive | null)[]) => {
-                roomRarcs.forEach((rarc: RARC.JKRArchive | null, i) => {
-                    if (rarc === null) return;
-                    this.createRoomScenes(device, renderer, rarc, roomNames[i]);
-                });
-
-                return renderer;
-            });
-        }); */
-    }
-
-    private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.JKRArchive | null> {
-        const buffer = await dataFetcher.fetchData(path, { allow404: true });
-        if (buffer.byteLength === 0)
-            return null;
-        const decompressed = await Yaz0.decompress(buffer);
-        return RARC.parse(decompressed);
     }
 }
 
@@ -1112,72 +1035,124 @@ const name = "The Legend of Zelda: Twilight Princess";
 
 // Special thanks to Jawchewa and SkrillerArt for helping me with naming the maps.
 const sceneDescs = [
-    "Overworld Maps",
-    new TwilightPrincessSceneDesc("Title Screen", "F_SP102", [0]),
+    "Hyrule Field",
     new TwilightPrincessSceneDesc("Hyrule Field", "F_SP121", [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]),
-    new TwilightPrincessSceneDesc("Outside Castle Town", "F_SP122", [8, 16, 17]),
-    new TwilightPrincessSceneDesc("King Bulblin 2", "F_SP123", [13]),
 
-    new TwilightPrincessSceneDesc("Ordon Ranch", "F_SP00", [0]),
-    new TwilightPrincessSceneDesc("Ordon Village", "F_SP103", [0, 1]),
+    "Ordon",
+    new TwilightPrincessSceneDesc("Ordon Village", "F_SP103"),
+    new TwilightPrincessSceneDesc("Outside Link's House", "F_SP103", [1]),
+    new TwilightPrincessSceneDesc("Ordon Ranch", "F_SP00"),
     new TwilightPrincessSceneDesc("Ordon Spring", "F_SP104", [1]),
-    new TwilightPrincessSceneDesc("Faron Woods", "F_SP108", [0, 1, 2, 3, 4, 5, 6, 8, 11, 14]),
-    new TwilightPrincessSceneDesc("Kakariko Village", "F_SP109", [0]),
+    new TwilightPrincessSceneDesc("Bo's House", "R_SP01", [0]),
+    new TwilightPrincessSceneDesc("Sera's Sundries", "R_SP01", [1]),
+    new TwilightPrincessSceneDesc("Jaggle's House", "R_SP01", [2]),
+    new TwilightPrincessSceneDesc("Link's House", "R_SP01", [4, 7]),
+    new TwilightPrincessSceneDesc("Rusl's House", "R_SP01", [5]),
+
+    "Faron",
+    new TwilightPrincessSceneDesc("South Faron Woods", "F_SP108", [0, 1, 2, 3, 4, 5, 8, 11, 14]),
+    new TwilightPrincessSceneDesc("North Faron Woods", "F_SP108", [6]),
+    new TwilightPrincessSceneDesc("Lost Woods", "F_SP117", [3]),
+    new TwilightPrincessSceneDesc("Sacred Grove", "F_SP117", [1]),
+    new TwilightPrincessSceneDesc("Temple of Time (Past)", "F_SP117", [2]),
+    new TwilightPrincessSceneDesc("Faron Woods Cave", "D_SB10"),
+    new TwilightPrincessSceneDesc("Coro's House", "R_SP108"),
+
+    "Eldin",
+    new TwilightPrincessSceneDesc("Kakariko Village", "F_SP109"),
     new TwilightPrincessSceneDesc("Death Mountain Trail", "F_SP110", [0, 1, 2, 3]),
-    new TwilightPrincessSceneDesc("Kakariko Graveyard", "F_SP111", [0]),
-    new TwilightPrincessSceneDesc("Zora's River", "F_SP112", [0]),
-    new TwilightPrincessSceneDesc("Zora's Domain", "F_SP113", [0, 1]),
-    new TwilightPrincessSceneDesc("Snowpeak Mountain", "F_SP114", [0, 1, 2]),
-    new TwilightPrincessSceneDesc("Lake Hylia", "F_SP115", [0, 1]),
+    new TwilightPrincessSceneDesc("Kakariko Graveyard", "F_SP111"),
+    new TwilightPrincessSceneDesc("Hidden Village", "F_SP128"),
+    new TwilightPrincessSceneDesc("Renado's Sanctuary", "R_SP109", [0]),
+    new TwilightPrincessSceneDesc("Sanctuary Basement", "R_SP209", [7]),
+    new TwilightPrincessSceneDesc("Barnes' Bombs", "R_SP109", [1]),
+    new TwilightPrincessSceneDesc("Elde Inn", "R_SP109", [2]),
+    new TwilightPrincessSceneDesc("Malo Mart", "R_SP109", [3]),
+    new TwilightPrincessSceneDesc("Lookout Tower", "R_SP109", [4]),
+    new TwilightPrincessSceneDesc("Bomb Warehouse", "R_SP109", [5]),
+    new TwilightPrincessSceneDesc("Abandoned House", "R_SP109", [6]),
+    new TwilightPrincessSceneDesc("Goron Elder's Hall", "R_SP110"),
+    
+    "Lanayru",
+    new TwilightPrincessSceneDesc("Outside Castle Town - West", "F_SP122", [8]),
+    new TwilightPrincessSceneDesc("Outside Castle Town - South", "F_SP122", [16]),
+    new TwilightPrincessSceneDesc("Outside Castle Town - East", "F_SP122", [17]),
     new TwilightPrincessSceneDesc("Castle Town", "F_SP116", [0, 1, 2, 3, 4]),
-    new TwilightPrincessSceneDesc("Sacred Grove", "F_SP117", [1, 2, 3]),
-    new TwilightPrincessSceneDesc("Gerudo Desert Bulblin Base", "F_SP118", [0, 1, 2, 3]),
-    new TwilightPrincessSceneDesc("Gerudo Desert", "F_SP124", [0]),
-    new TwilightPrincessSceneDesc("Arbiter's Grounds Mirror Chamber", "F_SP125", [4]),
+    new TwilightPrincessSceneDesc("Zora's River", "F_SP112", [1]),
+    new TwilightPrincessSceneDesc("Zora's Domain", "F_SP113", [0, 1]),
+    new TwilightPrincessSceneDesc("Lake Hylia", "F_SP115"),
+    new TwilightPrincessSceneDesc("Lanayru Spring", "F_SP115", [1]),
     new TwilightPrincessSceneDesc("Upper Zora's River", "F_SP126", [0]),
     new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", [0]),
-    new TwilightPrincessSceneDesc("Hidden Village", "F_SP128", [0]),
-    new TwilightPrincessSceneDesc("Wolf Howling Cutscene Map", "F_SP200", [0]),
+    new TwilightPrincessSceneDesc("Castle Town Sewers", "R_SP107", [0, 1, 2, 3]),
+    new TwilightPrincessSceneDesc("Telma's Bar / Secret Passage", "R_SP116", [5, 6]),
+    new TwilightPrincessSceneDesc("Hena's Cabin", "R_SP127", [0]),
+    new TwilightPrincessSceneDesc("Impaz's House", "R_SP128", [0]),
+    new TwilightPrincessSceneDesc("Malo Mart", "R_SP160", [0]),
+    new TwilightPrincessSceneDesc("Fanadi's Palace", "R_SP160", [1]),
+    new TwilightPrincessSceneDesc("Medical Clinic", "R_SP160", [2]),
+    new TwilightPrincessSceneDesc("Agitha's Castle", "R_SP160", [3]),
+    new TwilightPrincessSceneDesc("Goron Shop", "R_SP160", [4]),
+    new TwilightPrincessSceneDesc("Jovani's House", "R_SP160", [5]),
+    new TwilightPrincessSceneDesc("STAR Tent", "R_SP161", [7]),
 
-    "Dungeons",
+    "Gerudo Desert",
+    new TwilightPrincessSceneDesc("Bulblin Camp", "F_SP118", [0, 1, 3]),
+    new TwilightPrincessSceneDesc("Bulblin Camp Beta Room", "F_SP118", [2]),
+    new TwilightPrincessSceneDesc("Gerudo Desert", "F_SP124", [0]),
+    new TwilightPrincessSceneDesc("Mirror Chamber", "F_SP125", [4]),
+
+    "Snowpeak",
+    new TwilightPrincessSceneDesc("Snowpeak Mountain", "F_SP114", [0, 1, 2]),  
+
+    "Forest Temple",
     new TwilightPrincessSceneDesc("Forest Temple", "D_MN05", [0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 19, 22]),
-    new TwilightPrincessSceneDesc("Forest Temple Boss Arena", "D_MN05A", [50]),
-    new TwilightPrincessSceneDesc("Forest Temple Mini-Boss Arena", "D_MN05B", [51]),
+    new TwilightPrincessSceneDesc("Diababa Arena", "D_MN05A", [50]),
+    new TwilightPrincessSceneDesc("Ook Arena", "D_MN05B", [51]),
 
+    "Goron Mines",
     new TwilightPrincessSceneDesc("Goron Mines", "D_MN04", [1, 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 16, 17]),
-    new TwilightPrincessSceneDesc("Goron Mines Boss Arena", "D_MN04A", [50]),
-    new TwilightPrincessSceneDesc("Goron Mines Mini-Boss Arena", "D_MN04B", [51]),
+    new TwilightPrincessSceneDesc("Fyrus Arena", "D_MN04A", [50]),
+    new TwilightPrincessSceneDesc("Dangoro Arena", "D_MN04B", [51]),
 
+    "Lakebed Temple",
     new TwilightPrincessSceneDesc("Lakebed Temple", "D_MN01", [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
-    new TwilightPrincessSceneDesc("Lakebed Temple Boss Arena", "D_MN01A", [50]),
-    new TwilightPrincessSceneDesc("Lakebed Temple Mini-Boss Arena", "D_MN01B", [51]),
+    new TwilightPrincessSceneDesc("Morpheel Arena", "D_MN01A", [50]),
+    new TwilightPrincessSceneDesc("Deku Toad Arena", "D_MN01B", [51]),
 
+    "Arbiter's Grounds",
     new TwilightPrincessSceneDesc("Arbiter's Grounds", "D_MN10", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
-    new TwilightPrincessSceneDesc("Arbiter's Grounds Boss Arena", "D_MN10A", [50]),
-    new TwilightPrincessSceneDesc("Arbiter's Grounds Mini-Boss Arena", "D_MN10B", [51]),
+    new TwilightPrincessSceneDesc("Stallord Arena", "D_MN10A", [50]),
+    new TwilightPrincessSceneDesc("Death Sword Arena", "D_MN10B", [51]),
 
+    "Snowpeak Ruins",
     new TwilightPrincessSceneDesc("Snowpeak Ruins", "D_MN11", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13]),
-    new TwilightPrincessSceneDesc("Snowpeak Ruins Boss Arena", "D_MN11A", [50]),
-    new TwilightPrincessSceneDesc("Snowpeak Ruins Mini-Boss Arena", "D_MN11B", [49, 51]),
+    new TwilightPrincessSceneDesc("Blizzeta Arena", "D_MN11A", [50]),
+    new TwilightPrincessSceneDesc("Darkhammer Arena", "D_MN11B", [51]),
+    new TwilightPrincessSceneDesc("Darkhammer Beta Arena", "D_MN11B", [49]),
 
+    "Temple of Time",
     new TwilightPrincessSceneDesc("Temple of Time", "D_MN06", [0, 1, 2, 3, 4, 5, 6, 7, 8]),
-    new TwilightPrincessSceneDesc("Temple of Time Boss Arena", "D_MN06A", [50]),
-    new TwilightPrincessSceneDesc("Temple of Time Mini-Boss Arena", "D_MN06B", [51]),
+    new TwilightPrincessSceneDesc("Armogohma Arena", "D_MN06A", [50]),
+    new TwilightPrincessSceneDesc("Darknut Arena", "D_MN06B", [51]),
 
+    "City in the Sky",
     new TwilightPrincessSceneDesc("City in the Sky", "D_MN07", [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16]),
-    new TwilightPrincessSceneDesc("City in the Sky Boss Arena", "D_MN07A", [50]),
-    new TwilightPrincessSceneDesc("City in the Sky Mini-Boss Arena", "D_MN07B", [51]),
+    new TwilightPrincessSceneDesc("Argorok Arena", "D_MN07A", [50]),
+    new TwilightPrincessSceneDesc("Aeralfos Arena", "D_MN07B", [51]),
 
+    "Palace of Twilight",
     new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", [0, 1, 2, 4, 5, 7, 8, 9, 10, 11]),
-    new TwilightPrincessSceneDesc("Palace of Twilight Boss Arena 1", "D_MN08A", [10]),
-    new TwilightPrincessSceneDesc("Palace of Twilight Mini-Boss Arena 1", "D_MN08B", [51]),
-    new TwilightPrincessSceneDesc("Palace of Twilight Mini-Boss Arena 2", "D_MN08C", [52]),
-    new TwilightPrincessSceneDesc("Palace of Twilight Boss Rush Arena", "D_MN08D", [50, 53, 54, 55, 56, 57, 60]),
+    new TwilightPrincessSceneDesc("Palace of Twilight Throne Room", "D_MN08A", [10]),
+    new TwilightPrincessSceneDesc("Phantom Zant Arena 1", "D_MN08B", [51]),
+    new TwilightPrincessSceneDesc("Phantom Zant Arena 2", "D_MN08C", [52]),
+    new TwilightPrincessSceneDesc("Zant Arenas", "D_MN08D", [50, 53, 54, 55, 56, 57, 60]),
 
+    "Hyrule Castle",
     new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", [1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15]),
-    new TwilightPrincessSceneDesc("Hyrule Castle Boss Arena", "D_MN09A", [50, 51]),
-    new TwilightPrincessSceneDesc("Final Boss Arena (On Horseback)", "D_MN09B", [0]),
-    new TwilightPrincessSceneDesc("Final Boss Arena", "D_MN09C", [0]),
+    new TwilightPrincessSceneDesc("Hyrule Castle Throne Room", "D_MN09A", [50, 51]),
+    new TwilightPrincessSceneDesc("Horseback Ganondorf Arena", "D_MN09B", [0]),
+    new TwilightPrincessSceneDesc("Dark Lord Ganondorf Arena", "D_MN09C", [0]),
 
     "Mini-Dungeons and Grottos",
     new TwilightPrincessSceneDesc("Ice Cavern", "D_SB00", [0]),
@@ -1187,32 +1162,21 @@ const sceneDescs = [
      20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
      30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
      40, 41, 42, 43, 44, 45, 46, 47, 48, 49,]),
-    new TwilightPrincessSceneDesc("Kakariko Lantern Cavern", "D_SB02", [0]),
-    new TwilightPrincessSceneDesc("Lake Hylia Lantern Cavern", "D_SB03", [0]),
-    new TwilightPrincessSceneDesc("Goron Mines Lantern Cavern", "D_SB04", [10]),
-    new TwilightPrincessSceneDesc("Faron Woods Lantern Cavern", "D_SB10", [0]),
-    new TwilightPrincessSceneDesc("Faron Woods Cave 1", "D_SB05", [0]),
-    new TwilightPrincessSceneDesc("Faron Woods Cave 2", "D_SB06", [1]),
-    new TwilightPrincessSceneDesc("Snow Cave 1", "D_SB07", [2]),
-    new TwilightPrincessSceneDesc("Snow Cave 2", "D_SB08", [3]),
-    new TwilightPrincessSceneDesc("Water Cave", "D_SB09", [4]),
+    new TwilightPrincessSceneDesc("Kakariko Gorge Cavern", "D_SB02", [0]),
+    new TwilightPrincessSceneDesc("Lake Hylia Cavern", "D_SB03", [0]),
+    new TwilightPrincessSceneDesc("Goron Stockcave", "D_SB04", [10]),
+    new TwilightPrincessSceneDesc("Grotto 1", "D_SB05"),
+    new TwilightPrincessSceneDesc("Grotto 2", "D_SB06", [1]),
+    new TwilightPrincessSceneDesc("Grotto 3", "D_SB07", [2]),
+    new TwilightPrincessSceneDesc("Grotto 4", "D_SB08", [3]),
+    new TwilightPrincessSceneDesc("Grotto 5", "D_SB09", [4]),
 
-    "Ordon Village",
-    new TwilightPrincessSceneDesc("Mayor's House", "R_SP01", [0, 1, 2, 4, 5, 7]),
-
-    "Houses / Indoors",
-    new TwilightPrincessSceneDesc("Hyrule Castle Wolf Escape", "R_SP107", [0, 1, 2, 3]),
-    new TwilightPrincessSceneDesc("Caro's House", "R_SP108", [0]),
-    new TwilightPrincessSceneDesc("Kakariko Village Houses", "R_SP109", [0, 1, 2, 3, 4, 5, 6]),
-    new TwilightPrincessSceneDesc("Goron Mines Entrance", "R_SP110", [0]),
-    new TwilightPrincessSceneDesc("Telma's Bar + Castle Town Sewers", "R_SP116", [5, 6]),
-    new TwilightPrincessSceneDesc("Fishing Hole Interior", "R_SP127", [0]),
-    new TwilightPrincessSceneDesc("Impaz's House", "R_SP128", [0]),
-    new TwilightPrincessSceneDesc("Castle Town Houses", "R_SP160", [0, 1, 2, 3, 4, 5]),
-    new TwilightPrincessSceneDesc("Star Tent", "R_SP161", [7]),
-    new TwilightPrincessSceneDesc("Kakariko Sanctuary", "R_SP209", [7]),
-    new TwilightPrincessSceneDesc("Cutscene: Light Arrow Area", "R_SP300", [0]),
-    new TwilightPrincessSceneDesc("Cutscene: Hyrule Castle Throne Room", "R_SP301", [0]),    
+    "Misc",
+    new TwilightPrincessSceneDesc("Title Screen / King Bulblin 1", "F_SP102"),
+    new TwilightPrincessSceneDesc("King Bulblin 2", "F_SP123", [13]),
+    new TwilightPrincessSceneDesc("Wolf Howling Cutscene Map", "F_SP200"),
+    // new TwilightPrincessSceneDesc("Cutscene: Light Arrow Area", "R_SP300"),
+    new TwilightPrincessSceneDesc("Cutscene: Hyrule Castle Throne Room", "R_SP301"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

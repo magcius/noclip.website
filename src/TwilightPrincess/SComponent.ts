@@ -132,6 +132,25 @@ export function cLib_chasePosXZ(dst: vec3, target: ReadonlyVec3, maxVel: number)
     }
 }
 
+export function cLib_chaseF(dst: number, target: number, step: number): number {
+    if (step !== 0) {
+        if (dst > target) {
+            step = -step;
+        }
+
+        dst += step;
+
+        if (step * (dst - target) >= 0) {
+            dst = target;
+            return 1;
+        }
+    } else if (dst === target) {
+        return 1;
+    }
+
+    return 0;
+}
+
 export function cLib_distanceSqXZ(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
     const dx = p1[0] - p0[0], dz = p1[2] - p0[2];
     return dx*dx + dz*dz;
