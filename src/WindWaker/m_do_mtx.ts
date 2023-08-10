@@ -1,7 +1,7 @@
 import { vec3, mat4, quat, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers.js";
 
-const kUshortTo2PI = Math.PI / 0x7FFF;
+export const kUshortTo2PI = Math.PI / 0x7FFF;
 
 // The game uses unsigned shorts to index into cos/sin tables.
 // The max short value (2^16-1 = 65535) corresponds to 2PI
@@ -64,7 +64,7 @@ export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
     mat4.mul(dst, dst, scratch);
 }
 
-const scratchMat4a = mat4.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
+export const scratchMat4a = mat4.create();
+export const scratchVec3a = vec3.create();
+export const scratchVec3b = vec3.create();
+export const scratchVec3c = vec3.create();

@@ -1234,8 +1234,7 @@ export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec
 }
 
 export function JPASetRMtxTVecfromMtx(m: ReadonlyMat4, rot: mat4, trans: vec3): void {
-    let scale = vec3.create();
-    JPASetRMtxSTVecFromMtx(scale, rot, trans, m);
+    JPASetRMtxSTVecFromMtx(null, rot, trans, m);
 }
 
 function mirroredRepeat(t: number, duration: number): number {

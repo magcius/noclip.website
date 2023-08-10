@@ -19,8 +19,8 @@ import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals,
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
 import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { cBgS_GndChk } from './d_bg.js';
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, mDoMtx_ZXYrotM, calc_mtx, uShortTo2PI, mDoMtx_YrotS, MtxPosition, mDoMtx_YrotM } from "./m_do_mtx.js";
+import { cBgS_GndChk } from '../WindWaker/d_bg.js';
+import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, mDoMtx_ZXYrotM, calc_mtx, uShortTo2PI, mDoMtx_YrotS, MtxPosition, mDoMtx_YrotM } from "../WindWaker/m_do_mtx.js";
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
 
