@@ -345,6 +345,8 @@ class MeshRenderer {
         if (!viewerInput.camera.frustum.contains(bboxScratch) && !this.isSkybox) {
             return;
         }
+        if (this.geometryData.indexCount === 0)
+            return;
         
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.geometryData.inputLayout, this.geometryData.vertexBufferDescriptors, this.geometryData.indexBufferDescriptor);
