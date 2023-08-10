@@ -8,7 +8,7 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInst
 import { ViewerRenderInput } from "../viewer.js";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_setLight__OnMaterialParams, dKy_GxFog_set } from "./d_kankyo.js";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf, mDoExt_modelEntryDL } from "./m_do_ext.js";
-import { cLib_chaseF, cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "./SComponent.js";
+import { cLib_chaseF, cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "../WindWaker/SComponent.js";
 import { dPath_GetRoomPath, dStage_stagInfo_GetArg0, dStage_Multi_c, dPath, dPath__Point } from "./d_stage.js";
 import { nArray, assertExists, assert, hexzero0x, leftPad, readString } from "../util.js";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -16,7 +16,7 @@ import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFrom
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether.js";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render.js";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers.js";
-import { dBgW, cBgW_Flags } from "./d_bg.js";
+import { dBgW, cBgW_Flags } from "../WindWaker/d_bg.js";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
@@ -32,70 +32,9 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { calc_mtx, scratchMat4a, scratchVec3a, scratchVec3b, scratchVec3c, kUshortTo2PI, mDoMtx_XrotS, mDoMtx_XrotM, mDoMtx_YrotS, mDoMtx_YrotM, mDoMtx_ZrotS, mDoMtx_ZrotM, mDoMtx_ZXYrotM, mDoMtx_XYZrotM, MtxTrans, MtxPosition, quatM } from "../WindWaker/m_do_mtx.js"
 
 // Framework'd actors
-
-const kUshortTo2PI = Math.PI / 0x7FFF;
-
-export function mDoMtx_XrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, n * kUshortTo2PI, 0, 0);
-}
-
-export function mDoMtx_XrotM(dst: mat4, n: number): void {
-    mat4.rotateX(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_YrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, 0, n * kUshortTo2PI, 0);
-}
-
-export function mDoMtx_YrotM(dst: mat4, n: number): void {
-    mat4.rotateY(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, 0, 0, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZrotM(dst: mat4, n: number): void {
-    mat4.rotateZ(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZXYrotM(dst: mat4, v: vec3): void {
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-}
-
-export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-}
-
-export const calc_mtx = mat4.create();
-
-export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
-    if (concat) {
-        mat4.translate(m, m, pos);
-    } else {
-        mat4.fromTranslation(m, pos);
-    }
-}
-
-export function MtxPosition(dst: vec3, src: ReadonlyVec3 = dst, m: mat4 = calc_mtx): void {
-    transformVec3Mat4w1(dst, m, src);
-}
-
-export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
-    mat4.fromQuat(scratch, q);
-    mat4.mul(dst, dst, scratch);
-}
-
-const scratchMat4a = mat4.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
 
 export function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
     for (let i = 0; i < globals.dStage_dt.mult.length; i++)

@@ -11,7 +11,7 @@ import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wind_set, dKyw_wether_delete } from "./d_kankyo_wether.js";
-import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent.js";
+import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "../WindWaker/SComponent.js";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -299,7 +299,7 @@ const enum LightMode {
 export class dKy_tevstr_c {
     // Pos is in world-space.
     public lightObj = new Light();
-    public lights:Light[] = new Array(6);
+    public lights = nArray(6, () => new Light());
 
     public colorC0: Color = colorNewCopy(OpaqueBlack);
     public colorK0: Color = colorNewCopy(OpaqueBlack);
@@ -694,7 +694,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
 
     if (ret.palePrevA === null) {
         for (let i = 0; i < 4; i++) {
-            tevStr.colorC0.r = 255 * (1/255);
+            tevStr.colorC0.r = 1.0;
             tevStr.colorC0.g = 0;
             tevStr.colorC0.b = 0;
         }
@@ -769,7 +769,7 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, outColor: 
 
     if (ret.palePrevA === null) {
         for (let i = 0; i < 4; i++) {
-            outColor[i].r = 255 * (1/255);
+            outColor[i].r = 1.0;
             outColor[i].g = 0;
             outColor[i].b = 0;
         }
@@ -779,10 +779,10 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, outColor: 
             dKy_calc_color_set(envLight, outColor[i], ret.palePrevA.unkCol[i], ret.palePrevB.unkCol[i], ret.paleCurrA.unkCol[i], ret.paleCurrB.unkCol[i], ret.blendPaleAB, tevStr.colpatBlend, envLight.bgAddAmb[0], envLight.ColBgColRatio);
         }
 
-        outColor[3].a = 255 * (1/255);
-        outColor[2].a = 255 * (1/255);
-        outColor[1].a = 255 * (1/255);
-        outColor[0].a = 255 * (1/255);
+        outColor[3].a = 1.0;
+        outColor[2].a = 1.0;
+        outColor[1].a = 1.0;
+        outColor[0].a = 1.0;
 
         const sp50 = nArray(6, () => colorNewCopy(OpaqueBlack));
         for (let i = 0; i < 6; i++) {
@@ -815,7 +815,7 @@ function settingTevStruct_plightcol_plus(globals: dGlobals, pos: vec3, tevStr: d
     const envLight = globals.g_env_light;
     assertExists(pos);
 
-    tevStr.lightObj.Color.a = 255 * (1/255);
+    tevStr.lightObj.Color.a = 1.0;
 
     let plightIdx = dKy_light_influence_id(globals, pos, 0);
 
@@ -941,7 +941,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
     }
 
     tevStr.initType = 124;
-    envLight.actorAmbience.a = 255 * (1/255);
+    envLight.actorAmbience.a = 1.0;
 
     if (lightType === LightType.UNK_14) {
         tevStr.lightMode = LightMode.BG;
@@ -955,16 +955,16 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
             envLight.unk_10f0.r = 24 * (1/255);
             envLight.unk_10f0.g = 24 * (1/255);
             envLight.unk_10f0.b = 24 * (1/255);
-            envLight.unk_10f0.a = 255 * (1/255);
+            envLight.unk_10f0.a = 1.0;
         } else {
             envLight.unk_10f0.r = 55 * (1/255);
             envLight.unk_10f0.g = 55 * (1/255);
             envLight.unk_10f0.b = 77 * (1/255);
         }
 
-        k0_color.r = 255 * (1/255);
-        k0_color.g = 255 * (1/255);
-        k0_color.b = 255 * (1/255);
+        k0_color.r = 1.0;
+        k0_color.g = 1.0;
+        k0_color.b = 1.0;
 
         for (let i = 0; i < 6; i++) {
             if (i === 0) {
@@ -1038,11 +1038,11 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
             envLight.unk_10f0.b = 30 * (1/255);
         }
 
-        envLight.unk_10f0.a = 255 * (1/255);
+        envLight.unk_10f0.a = 1.0;
 
-        k0_color.r = 255 * (1/255);
-        k0_color.g = 255 * (1/255);
-        k0_color.b = 255 * (1/255);
+        k0_color.r = 1.0;
+        k0_color.g = 1.0;
+        k0_color.b = 1.0;
 
         for (let i = 0; i < 6; i++) {
             if (i === 0) {
@@ -1109,7 +1109,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
         envLight.unk_10f0.r = sp30.r;
         envLight.unk_10f0.g = sp30.g;
         envLight.unk_10f0.b = sp30.b;
-        envLight.unk_10f0.a = 255 * (1/255);
+        envLight.unk_10f0.a = 1.0;
 
         if (lightType !== LightType.UNK_11) {
             const initTimer = 0;
@@ -1180,7 +1180,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
         tevStr.lightObj.CosAtten = [0, 0, 0];
         tevStr.lightObj.DistAtten = [0, 0, 0];
 
-        globals.g_env_light.unk_10f0.a = 255 * (1/255);
+        globals.g_env_light.unk_10f0.a = 1.0;
         tevStr.colorC0 = globals.g_env_light.unk_10f0;
         tevStr.colorK0 = sp30;
 
@@ -1192,7 +1192,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
             colorFromRGBA(tevStr.lightObj.Color, 1, 0, 0, 1);
     }
 
-    globals.g_env_light.unk_10f0.a = 255 * (1/255);
+    globals.g_env_light.unk_10f0.a = 1.0;
     tevStr.colorC0 = globals.g_env_light.unk_10f0;
     tevStr.colorK0 = sp30;
 }
@@ -1209,20 +1209,14 @@ export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverri
     
     tevstr.lightObj.Color.g = 0;
     tevstr.lightObj.Color.b = 0;
-    tevstr.lightObj.Color.a = 255 * (1/255);
-    tevstr.lightObj.CosAtten = [1, 0, 0];
-    tevstr.lightObj.DistAtten = [1, 0, 0];
+    tevstr.lightObj.Color.a = 1.0;
 
-    for (let i = 0; i < 6; i++) {
-        tevstr.lights[i] = new Light();
-
+    for (let i = 0; i < tevstr.lights.length; i++) {
         vec3.set(tevstr.lights[i].Position, -36384.5, 29096.7, 17422.2);
-        tevstr.lights[i].Color.r = 255 * (1/255);
-        tevstr.lights[i].Color.g = 255 * (1/255);
-        tevstr.lights[i].Color.b = 255 * (1/255);
-        tevstr.lights[i].Color.a = 255 * (1/255);
-        tevstr.lights[i].CosAtten = [1, 0, 0];
-        tevstr.lights[i].DistAtten = [1, 0, 0];
+        tevstr.lights[i].Color.r = 1.0;
+        tevstr.lights[i].Color.g = 1.0;
+        tevstr.lights[i].Color.b = 1.0;
+        tevstr.lights[i].Color.a = 1.0;
     }
 }
 
@@ -1678,7 +1672,7 @@ export function dungeonlight_init(envLight: dScnKy_env_light_c): void {
         envLight.dungeonLight[i].color.r = 0;
         envLight.dungeonLight[i].color.g = 0;
         envLight.dungeonLight[i].color.b = 0;
-        envLight.dungeonLight[i].color.a = 255 * (1/255);
+        envLight.dungeonLight[i].color.a = 1.0;
 
         vec3.copy(envLight.dungeonLight[i].influence.pos, envLight.dungeonLight[i].pos);
         envLight.dungeonLight[i].influence.color = envLight.dungeonLight[i].color;
@@ -1818,9 +1812,6 @@ export function envcolor_init(globals: dGlobals): void {
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;
-
-    if ((today.getDay() === 5 && today.getDate() === 13) || (today.getMonth() === 9 && today.getDate() === 31))
-        envLight.eventNightStop = true;
 }
 
 function colorSetRatio(color: Color, ratio: number, r: number, g: number, b: number): void {
@@ -1834,7 +1825,7 @@ export function dKy_fog_startendz_set(envLight: dScnKy_env_light_c, param_0: num
         ratio = 0;
     }
 
-    if (ratio < 9.999999747378752e-05) {
+    if (ratio < 0.0001) {
         ratio = 0;
     }
 
@@ -1969,8 +1960,6 @@ export function dKy_bgparts_activelight_cut(envLight: dScnKy_env_light_c, index:
     envLight.BGpartsActiveLight[index].index = 0;
 }
 
-const lightMaskData: number[] = [1, 2, 4, 8, 16, 32, 64, 128];
-
 let lightMask: number = 0;
 export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, param_2: number): void {
     const envLight = globals.g_env_light;
@@ -1984,13 +1973,13 @@ export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, p
     if (lightvec_num > 0) {
         for (let i = 0; i < lightvec_num; i++) {
             if (globals.roomStatus[roomNo].lgtv[i] !== null) {
-                lightMask |= lightMaskData[i + 2];
+                lightMask |= (1 << i + 2);
             }
         }
     }
 
     if (dKy_SunMoon_Light_Check(globals) && lightvec_num === 0) {
-        lightMask |= lightMaskData[2] | lightMaskData[3];
+        lightMask |= (1 << 2) | (1 << 3);
     }
 
     if (envLight.BGpartsActiveLight[0].index !== 0) {
@@ -2024,8 +2013,6 @@ export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, p
             envLight.lightStatus[i].Color.b = 0;
         }
     }
-
-    //dKy_GlobalLight_set();
 }
 
 export function dKy_setLight_nowroom(globals: dGlobals, roomNo: number): void {

@@ -34,8 +34,8 @@ import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
-import { PeekZManager } from './d_dlst_peekZ.js';
-import { dBgS } from './d_bg.js';
+import { PeekZManager } from '../WindWaker/d_dlst_peekZ.js';
+import { dBgS } from '../WindWaker/d_bg.js';
 import { colorNewCopy, White, colorCopy, TransparentBlack } from '../Color.js';
 import { dPa_control_c } from './d_particle.js';
 
@@ -209,7 +209,7 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
-    public hat = new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards);
+
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
     public peekZ = new PeekZManager();
 

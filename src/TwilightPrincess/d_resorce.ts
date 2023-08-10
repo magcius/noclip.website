@@ -11,7 +11,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Destroyable } from "../SceneBase.js";
 import { dGlobals } from "./ztp_scenes.js";
 import { cPhs__Status } from "./framework.js";
-import { cBgD_t } from "./d_bg.js";
+import { cBgD_t } from "../WindWaker/d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 
 export interface DZSChunkHeader {

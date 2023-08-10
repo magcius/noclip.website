@@ -12,7 +12,7 @@ import { ResType } from "./d_resorce.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./d_a.js";
+import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./m_do_mtx.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { Camera, divideByW } from "../Camera.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";

@@ -30,70 +30,9 @@ import { Endianness } from "../endian.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
 import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { calc_mtx, scratchMat4a, scratchVec3a, scratchVec3b, scratchVec3c, kUshortTo2PI, mDoMtx_XrotS, mDoMtx_XrotM, mDoMtx_YrotS, mDoMtx_YrotM, mDoMtx_ZrotS, mDoMtx_ZrotM, mDoMtx_ZXYrotM, mDoMtx_XYZrotM, MtxTrans, MtxPosition, quatM } from "./m_do_mtx.js"
 
 // Framework'd actors
-
-const kUshortTo2PI = Math.PI / 0x7FFF;
-
-export function mDoMtx_XrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, n * kUshortTo2PI, 0, 0);
-}
-
-export function mDoMtx_XrotM(dst: mat4, n: number): void {
-    mat4.rotateX(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_YrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, 0, n * kUshortTo2PI, 0);
-}
-
-export function mDoMtx_YrotM(dst: mat4, n: number): void {
-    mat4.rotateY(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZrotS(dst: mat4, n: number): void {
-    computeModelMatrixR(dst, 0, 0, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZrotM(dst: mat4, n: number): void {
-    mat4.rotateZ(dst, dst, n * kUshortTo2PI);
-}
-
-export function mDoMtx_ZXYrotM(dst: mat4, v: vec3): void {
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-}
-
-export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
-    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
-    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
-}
-
-export const calc_mtx = mat4.create();
-
-export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
-    if (concat) {
-        mat4.translate(m, m, pos);
-    } else {
-        mat4.fromTranslation(m, pos);
-    }
-}
-
-export function MtxPosition(dst: vec3, src: ReadonlyVec3 = dst, m: mat4 = calc_mtx): void {
-    transformVec3Mat4w1(dst, m, src);
-}
-
-export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
-    mat4.fromQuat(scratch, q);
-    mat4.mul(dst, dst, scratch);
-}
-
-const scratchMat4a = mat4.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_grass;

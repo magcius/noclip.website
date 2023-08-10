@@ -1,7 +1,7 @@
 
 import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_darkworld_check } from "./d_kankyo.js";
 import { dGlobals } from "./ztp_scenes.js";
-import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent.js";
+import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "../WindWaker/SComponent.js";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, TransparentBlack } from "../Color.js";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";
@@ -12,7 +12,7 @@ import { ResType } from "./d_resorce.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx, uShortTo2PI } from "./m_do_mtx.js";
+import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx, uShortTo2PI } from "../WindWaker/m_do_mtx.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { Camera, divideByW } from "../Camera.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
@@ -23,7 +23,7 @@ import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../gfx/platform/Gf
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { nArray, assertExists, assert } from "../util.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
-import { PeekZResult, PeekZManager } from "./d_dlst_peekZ.js";
+import { PeekZResult, PeekZManager } from "../WindWaker/d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { _T } from "../gfx/platform/GfxPlatformImpl.js";
@@ -464,7 +464,7 @@ export class dKankyo_sun_Packet {
                     moonSize *= 2.3;
 
                 computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
-                mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -6.283185))));
+                mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -MathConstants.TAU))));
 
                 if (i === 0) {
                     this.moonTextures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -912,18 +912,6 @@ export class dKankyo_vrkumo_Packet {
                     ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                     ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
                 }
-
-/*
-                const ctx = getDebugOverlayCanvas2D();
-                const c = textureIdx === 0 ? Magenta : textureIdx === 1 ? Green : Blue;
-                colorCopy(materialParams.u_Color[ColorKind.C0], c, kumo.alpha);
-                vec3.set(scratchVec3e, x, y, z);
-                vec3.scale(scratchVec3e, scratchVec3e, 10000);
-                scratchVec3e[0] += -196400;
-                scratchVec3e[1] = scratchVec3e[1] * 0.5 + 3000;
-                scratchVec3e[2] += 295960;
-                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3e, materialParams.u_Color[ColorKind.C0], 50 * height);
-*/
             }
 
             ddraw.end();
@@ -2242,6 +2230,7 @@ export class mDoGph_bloom_c {
 
     public destroy(device: GfxDevice): void {
         this.monoColor.a = 0;
+        this.ddraw.destroy(device);
     }
 }
 
