@@ -773,7 +773,6 @@ function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
         const materialEntryIdx = materialEntryTableOffs + (0x0138 * remapTable[i]);
 
         const materialMode = view.getUint8(materialEntryIdx + 0x00);
-
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
         // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
@@ -825,10 +824,10 @@ function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
             const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordIdx + 0x02);
             assert(view.getUint8(texCoordIdx + 0x03) === 0xFF);
             let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
-            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
-            if (postTexCoordOffs > 0 && postTexGenIndex >= 0) {
+            const postTexCoordIdx = view.getInt16(materialEntryIdx + 0x24 + j * 0x02);
+            if (postTexCoordOffs > 0 && postTexCoordIdx >= 0) {
                 postMatrix = view.getUint8(postTexCoordOffs + texCoordIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexCoordOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+                assert(view.getUint8(postTexCoordOffs + postTexCoordIdx * 0x04 + 0x03) === 0xFF);
             }
 
             // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
@@ -888,7 +887,7 @@ function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
 
             const tevStageIdx = tevStageOffs + tevStageIndex * 0x14;
 
-            // const unknown0 = view.getUint8(tevStageOffs + 0x00);
+            // const tevMode = view.getUint8(tevStageOffs + 0x00);
             const colorInA: GX.CC = view.getUint8(tevStageIdx + 0x01);
             const colorInB: GX.CC = view.getUint8(tevStageIdx + 0x02);
             const colorInC: GX.CC = view.getUint8(tevStageIdx + 0x03);
@@ -1102,7 +1101,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         //   0x04: XLU (Translucent)
         // I haven't seen anything but OPA/XLU in the wild.
         assert(materialMode === 0x01 || materialMode === 0x04);
-
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
         // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
@@ -1152,18 +1150,19 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
         const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < 8; j++) {
-            const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
-            if (texGenIndex < 0)
+            const texCoordIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
+            if (texCoordIndex < 0)
                 continue;
-            const type: GX.TexGenType = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x00);
-            const source: GX.TexGenSrc = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x01);
-            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x02);
-            assert(view.getUint8(texCoordOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+            const texCoordIdx = texCoordOffs + texCoordIndex * 0x04;
+            const type: GX.TexGenType = view.getUint8(texCoordIdx + 0x00);
+            const source: GX.TexGenSrc = view.getUint8(texCoordIdx + 0x01);
+            const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordIdx + 0x02);
+            assert(view.getUint8(texCoordIdx + 0x03) === 0xFF);
             let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
-            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
-            if (postTexCoordOffs > 0 && postTexGenIndex >= 0) {
-                postMatrix = view.getUint8(postTexCoordOffs + texGenIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexCoordOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+            const postTexCoordIdx = view.getInt16(materialEntryIdx + 0x24 + j * 0x02);
+            if (postTexCoordOffs > 0 && postTexCoordIdx >= 0) {
+                postMatrix = view.getUint8(postTexCoordOffs + texCoordIndex * 0x04 + 0x02);
+                assert(view.getUint8(postTexCoordOffs + postTexCoordIdx * 0x04 + 0x03) === 0xFF);
             }
 
             // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
@@ -1260,7 +1259,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
             const tevStageIdx = tevStageOffs + tevStageIndex * 0x14;
 
-            // const unknown0 = view.getUint8(tevStageOffs + 0x00);
+            // const tevMode = view.getUint8(tevStageOffs + 0x00);
             const colorInA: GX.CC = view.getUint8(tevStageIdx + 0x01);
             const colorInB: GX.CC = view.getUint8(tevStageIdx + 0x02);
             const colorInC: GX.CC = view.getUint8(tevStageIdx + 0x03);
