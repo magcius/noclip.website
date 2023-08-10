@@ -1,21 +1,21 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR, colorCopy } from "../Color.js";
-import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material.js";
 import { vec3 } from "gl-matrix";
-import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage.js";
-import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers.js";
-import { nArray, assert, arrayRemove, assertExists } from "../util.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { Camera } from "../Camera.js";
-import { ColorKind, MaterialParams } from "../gx/gx_render.js";
-import { dGlobals } from "./zww_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether.js";
-import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent.js";
-import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
-import { ViewerRenderInput } from "../viewer.js";
+import { Camera } from "../Camera.js";
+import { Color, OpaqueBlack, TransparentBlack, White, colorAdd, colorClampLDR, colorCopy, colorFromRGBA, colorNewCopy, colorScaleAndAdd } from "../Color.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { MathConstants, clamp, invlerp, lerp } from "../MathHelpers.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { FogType } from "../gx/gx_enum.js";
+import { FogBlock, Light, fogBlockSet, lightSetFromWorldLight } from "../gx/gx_material.js";
+import { ColorKind, MaterialParams } from "../gx/gx_render.js";
+import { arrayRemove, assert, assertExists, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { cLib_addCalc, cLib_addCalc2, cM_rndF } from "./SComponent.js";
+import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { stage_envr_info_class, stage_palet_info_class, stage_palet_info_class__DifAmb, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
+import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { dGlobals } from "./zww_scenes.js";
 
 export const enum LightType {
     Actor = 0,
@@ -608,16 +608,13 @@ export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, c
 // This is effectively the global state that dKy_setLight sets up, but since we don't
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: Camera): void {
-    const light0 = modelInstance.getGXLightReference(0);
-    lightSetFromWorldLight(light0, envLight.lightStatus[0], camera);
-
-    const light1 = modelInstance.getGXLightReference(1);
-    lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
+    for (let i = 0; i < 2; i++)
+        lightSetFromWorldLight(modelInstance.getGXLightReference(i), envLight.lightStatus[i], camera);
 }
 
 export function dKy_setLight__OnMaterialParams(envLight: dScnKy_env_light_c, materialParams: MaterialParams, camera: Camera): void {
-    lightSetFromWorldLight(materialParams.u_Lights[0], envLight.lightStatus[0], camera);
-    lightSetFromWorldLight(materialParams.u_Lights[1], envLight.lightStatus[1], camera);
+    for (let i = 0; i < 2; i++)
+        lightSetFromWorldLight(materialParams.u_Lights[i], envLight.lightStatus[i], camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {

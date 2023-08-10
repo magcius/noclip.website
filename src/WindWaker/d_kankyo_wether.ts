@@ -739,18 +739,6 @@ export class dKankyo_vrkumo_Packet {
                 ddraw.position3vec3(scratchVec3);
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-
-/*
-                const ctx = getDebugOverlayCanvas2D();
-                const c = textureIdx === 0 ? Magenta : textureIdx === 1 ? Green : Blue;
-                colorCopy(materialParams.u_Color[ColorKind.C0], c, kumo.alpha);
-                vec3.set(scratchVec3e, x, y, z);
-                vec3.scale(scratchVec3e, scratchVec3e, 10000);
-                scratchVec3e[0] += -196400;
-                scratchVec3e[1] = scratchVec3e[1] * 0.5 + 3000;
-                scratchVec3e[2] += 295960;
-                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3e, materialParams.u_Color[ColorKind.C0], 50 * height);
-*/
             }
 
             ddraw.end();
