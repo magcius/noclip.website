@@ -356,7 +356,7 @@ class d_a_ep extends fopAc_ac_c {
     }
 }
 
-export function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
+function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
     for (let i = 0; i < globals.dStage_dt.mult.length; i++)
         if (globals.dStage_dt.mult[i].roomNo === roomNo)
             return globals.dStage_dt.mult[i];

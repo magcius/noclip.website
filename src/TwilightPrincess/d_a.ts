@@ -1,42 +1,36 @@
 
-import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, fopAcM_create, fopAcIt_JudgeByID } from "./framework.js";
-import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
-import { vec3, mat4, quat, ReadonlyVec3, vec2, vec4 } from "gl-matrix";
-import { dComIfG_resLoad, ResType } from "./d_resorce.js";
-import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_setLight__OnMaterialParams, dKy_GxFog_set } from "./d_kankyo.js";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf, mDoExt_modelEntryDL } from "./m_do_ext.js";
-import { cLib_chaseF, cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad, cM__Rad2Short, cLib_distanceXZ, cLib_distanceSqXZ, cLib_targetAngleX } from "../WindWaker/SComponent.js";
-import { dPath_GetRoomPath, dStage_stagInfo_GetArg0, dStage_Multi_c, dPath, dPath__Point } from "./d_stage.js";
-import { nArray, assertExists, assert, hexzero0x, leftPad, readString } from "../util.js";
-import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, White, Green } from "../Color.js";
-import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether.js";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from "../gx/gx_render.js";
-import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers.js";
-import { dBgW, cBgW_Flags } from "../WindWaker/d_bg.js";
-import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { mat4, vec3 } from "gl-matrix";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import * as GX from '../gx/gx_enum.js';
+import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { cLib_chaseF, cM_atan2s } from "../WindWaker/SComponent.js";
+import { dBgW } from "../WindWaker/d_bg.js";
+import { MtxTrans, calc_mtx, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, scratchVec3a } from "../WindWaker/m_do_mtx.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GlobalSaveManager } from "../SaveManager.js";
-import { TevDefaultSwapTables } from "../gx/gx_material.js";
-import { Endianness } from "../endian.js";
-import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
-import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from '../gx/gx_enum.js';
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { NamedArrayBufferSlice } from "../DataFetcher.js";
-import { calc_mtx, scratchMat4a, scratchVec3a, scratchVec3b, scratchVec3c, kUshortTo2PI, mDoMtx_XrotS, mDoMtx_XrotM, mDoMtx_YrotS, mDoMtx_YrotM, mDoMtx_ZrotS, mDoMtx_ZrotM, mDoMtx_ZXYrotM, mDoMtx_XYZrotM, MtxTrans, MtxPosition, quatM } from "../WindWaker/m_do_mtx.js"
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { assertExists, leftPad, nArray, readString } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { LightType, dKy_GxFog_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
+import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec } from "./d_kankyo_wether.js";
+import { ResType, dComIfG_resLoad } from "./d_resorce.js";
+import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
+import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
+import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
 
 // Framework'd actors
 
-export function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
+function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
     for (let i = 0; i < globals.dStage_dt.mult.length; i++)
         if (globals.dStage_dt.mult[i].roomNo === roomNo)
             return globals.dStage_dt.mult[i];

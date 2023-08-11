@@ -1,5 +1,5 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR, colorCopy } from "../Color.js";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorCopy } from "../Color.js";
 import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material.js";
 import { vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, dStage_stagInfo_GetSTType } from "./d_stage.js";
@@ -10,14 +10,14 @@ import { Camera } from "../Camera.js";
 import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wind_set, dKyw_wether_delete } from "./d_kankyo_wether.js";
-import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "../WindWaker/SComponent.js";
+import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete } from "./d_kankyo_wether.js";
+import { cLib_addCalc } from "../WindWaker/SComponent.js";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { FogType } from "../gx/gx_enum.js";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext.js";
-import { dComIfG_resLoad, ResType } from "./d_resorce.js";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm } from "./m_do_ext.js";
+import { ResType } from "./d_resorce.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 
 export const enum LightType {

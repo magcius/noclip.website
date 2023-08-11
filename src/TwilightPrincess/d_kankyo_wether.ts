@@ -1,7 +1,7 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_darkworld_check } from "./d_kankyo.js";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_darkworld_check } from "./d_kankyo.js";
 import { dGlobals } from "./ztp_scenes.js";
-import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "../WindWaker/SComponent.js";
+import { cM_rndF, cLib_addCalc, cM_rndFX } from "../WindWaker/SComponent.js";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, TransparentBlack } from "../Color.js";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";

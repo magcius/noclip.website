@@ -7,36 +7,31 @@ import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import * as UI from '../ui.js';
 
 import * as JPA from '../Common/JSYSTEM/JPA.js';
-import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
-import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
-import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture.js';
+import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { readString, leftPad, assertExists, assert, nArray, hexzero } from '../util.js';
-import { GfxDevice, GfxRenderPass, GfxFrontFaceMode, GfxFormat, GfxProgram } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxRenderPass, GfxFormat, GfxProgram } from '../gfx/platform/GfxPlatform.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { SceneContext } from '../SceneBase.js';
-import { range, getMatrixAxisZ, computeModelMatrixS } from '../MathHelpers.js';
+import { range, getMatrixAxisZ } from '../MathHelpers.js';
 import { mat4, vec3} from 'gl-matrix';
 import { Camera, texProjCameraSceneTex, CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
-import { GfxRenderInstManager, executeOnPass, hasAnyVisible, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager.js';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager.js';
 
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
-import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy_setLight_nowroom_common, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
+import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
 import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
 import { PeekZManager } from '../WindWaker/d_dlst_peekZ.js';
 import { dBgS } from '../WindWaker/d_bg.js';
-import { colorNewCopy, White, colorCopy, TransparentBlack } from '../Color.js';
+import { TransparentBlack } from '../Color.js';
 import { dPa_control_c } from './d_particle.js';
 
 import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler.js';
@@ -386,15 +381,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    public fullscreenBlitProgram: GfxProgram;
-
     constructor(device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderHelper.renderInstManager.disableSimpleMode();
         
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
-
-        this.fullscreenBlitProgram = this.renderCache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -649,21 +640,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         builder.pushPass((pass) => {
-            pass.setDebugName('Indirect');
-
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
-            pass.attachResolveTexture(opaqueSceneTextureID);
-            pass.exec((passRenderer, scope) => {
-                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
-                dlst.indirect[1].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
-                this.executeListSet(passRenderer, dlst.indirect);
-            });
-        });
-
-        builder.pushPass((pass) => {
             pass.setDebugName('Main');
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -683,9 +659,22 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         dlst.peekZ.pushPasses(renderInstManager, builder, mainDepthTargetID);
         dlst.peekZ.peekData(device);
 
+        builder.pushPass((pass) => {
+            pass.setDebugName('Indirect');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(opaqueSceneTextureID);
+            pass.exec((passRenderer, scope) => {
+                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
+                dlst.indirect[1].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+                this.executeListSet(passRenderer, dlst.indirect);
+            });
+        });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
