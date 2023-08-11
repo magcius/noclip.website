@@ -419,6 +419,15 @@ export class ModelManager {
             if (this.bckCtrl === null)
                 this.bckCtrl = new BckCtrl();
         }
+
+        // Bind the correct scene texture.
+        const indDummy = this.modelInstance.getTextureMappingReference('IndDummy');
+        if (indDummy !== null)
+            sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
+
+        const shadowProjDummy = this.modelInstance.getTextureMappingReference('ShadowProjDummy');
+        if (shadowProjDummy !== null)
+            sceneObjHolder.specialTextureBinder.registerTextureMapping(shadowProjDummy, SpecialTextureType.MarioShadowTexture);
     }
 
     public calcAnim(): void {
@@ -996,15 +1005,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.modelInstance.visible = visible;
         if (!visible)
             return;
-
-        // Bind the correct scene texture.
-        const indDummy = this.modelInstance.getTextureMappingReference('IndDummy');
-        if (indDummy !== null)
-            sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
-
-        const shadowProjDummy = this.modelInstance.getTextureMappingReference('ShadowProjDummy');
-        if (shadowProjDummy !== null)
-            sceneObjHolder.specialTextureBinder.registerTextureMapping(shadowProjDummy, SpecialTextureType.MarioShadowTexture);
 
         if (this.actorLightCtrl !== null) {
             this.actorLightCtrl.loadLight(this.modelInstance, camera);

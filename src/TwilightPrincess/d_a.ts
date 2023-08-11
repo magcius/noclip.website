@@ -23,9 +23,9 @@ import { ViewerRenderInput } from "../viewer.js";
 import { LightType, dKy_GxFog_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
-import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
+import { dPath, dPath_GetRoomPath, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
 import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
 
 // Framework'd actors
@@ -107,25 +107,8 @@ class d_a_bg extends fopAc_ac_c {
                 continue;
             const modelInstance = new J3DModelInstance(modelData);
 
-            for (let i = 0; i < modelData.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-                // Look for any unbound textures and set them.
-                const sampler = modelData.modelMaterialData.tex1Data!.tex1.samplers[i];
-                const m = modelInstance.materialInstanceState.textureMappings[i];
-                if (m.gfxTexture === null) {
-                    const resname = `${sampler.name.toLowerCase()}.bti`;
-                    const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                    if (bti !== null)
-                        bti.fillTextureMapping(m);
-                }
-            }
-
-            const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
-            if (m2 !== null) {
-                m2.lateBinding = 'opaque-scene-texture';
-                m2.width = EFB_WIDTH;
-                m2.height = EFB_HEIGHT;
-                m2.flipY = gfxDeviceNeedsFlipY(renderer.renderCache.device);
-            }
+            mDoExt_setIndirectTex(globals, modelInstance);
+            mDoExt_setupStageTexture(globals, modelInstance);
 
             this.bgModel[i] = modelInstance;
 
@@ -767,25 +750,8 @@ class d_a_bg_obj extends fopAc_ac_c {
                 if (mdl_data !== null && mdl_data !== undefined) {
                     const modelInstance = new J3DModelInstance(mdl_data);
 
-                    for (let i = 0; i < mdl_data.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-                        // Look for any unbound textures and set them.
-                        const sampler = mdl_data.modelMaterialData.tex1Data!.tex1.samplers[i];
-                        const m = modelInstance.materialInstanceState.textureMappings[i];
-                        if (m.gfxTexture === null) {
-                            const resname = `${sampler.name.toLowerCase()}.bti`;
-                            const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                            if (bti !== null)
-                                bti.fillTextureMapping(m);
-                        }
-                    }
-
-                    const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
-                    if (m2 !== null) {
-                        m2.lateBinding = 'opaque-scene-texture';
-                        m2.width = EFB_WIDTH;
-                        m2.height = EFB_HEIGHT;
-                        m2.flipY = gfxDeviceNeedsFlipY(renderer.renderCache.device);
-                    }
+                    mDoExt_setIndirectTex(globals, modelInstance);
+                    mDoExt_setupStageTexture(globals, modelInstance);
 
                     this.models0.push(modelInstance);
 
@@ -824,25 +790,8 @@ class d_a_bg_obj extends fopAc_ac_c {
                     if (mdl_data !== null && mdl_data !== undefined) {
                         const modelInstance = new J3DModelInstance(mdl_data);
 
-                        for (let i = 0; i < mdl_data.modelMaterialData.tex1Data!.tex1.samplers.length; i++) {
-                            // Look for any unbound textures and set them.
-                            const sampler = mdl_data.modelMaterialData.tex1Data!.tex1.samplers[i];
-                            const m = modelInstance.materialInstanceState.textureMappings[i];
-                            if (m.gfxTexture === null) {
-                                const resname = `${sampler.name.toLowerCase()}.bti`;
-                                const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                                if (bti !== null)
-                                    bti.fillTextureMapping(m);
-                            }
-                        }
-
-                        const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
-                        if (m2 !== null) {
-                            m2.lateBinding = 'opaque-scene-texture';
-                            m2.width = EFB_WIDTH;
-                            m2.height = EFB_HEIGHT;
-                            m2.flipY = gfxDeviceNeedsFlipY(renderer.renderCache.device);
-                        }
+                        mDoExt_setIndirectTex(globals, modelInstance);
+                        mDoExt_setupStageTexture(globals, modelInstance);
 
                         if (i === 0)
                             this.models0.push(modelInstance);
@@ -1549,6 +1498,7 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         if (bmdIdrIds[this.type] !== -1) {
             const mdl_data_idr = resCtrl.getObjectRes(ResType.Model, arcNames[this.type], bmdIdrIds[this.type]);
             this.modelIndirect = new J3DModelInstance(mdl_data_idr);
+            mDoExt_setIndirectTex(globals, this.modelIndirect);
 
             const anm1 = resCtrl.getObjectRes(ResType.Btk, arcNames[this.type], btkIdrIds[this.type]);
             this.btkIndirect.init(mdl_data_idr, anm1, true, LoopMode.Repeat);
@@ -1582,14 +1532,6 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         if (this.modelIndirect !== null && this.modelIndirect !== undefined) {
             setLightTevColorType(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
             this.btkIndirect.entry(this.modelIndirect);
-
-            const m2 = this.modelIndirect.getTextureMappingReference('fbtex_dummy');
-            if (m2 !== null) {
-                m2.lateBinding = 'opaque-scene-texture';
-                m2.width = EFB_WIDTH;
-                m2.height = EFB_HEIGHT;
-                m2.flipY = gfxDeviceNeedsFlipY(globals.renderer.renderCache.device);
-            }
 
             mDoExt_modelUpdateDL(globals, this.modelIndirect, renderInstManager, viewerInput, globals.dlst.indirect);
         }

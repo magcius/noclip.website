@@ -6,7 +6,36 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals, dDlst_list_Set } from "./ztp_scenes.js";
 import { mat4 } from "gl-matrix";
-import { assert } from "../util.js";
+import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
+import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
+import { ResType } from "./d_resorce.js";
+
+export function mDoExt_setIndirectTex(globals: dGlobals, modelInstance: J3DModelInstance): void {
+    let m;
+
+    m = modelInstance.getTextureMappingReference('fbtex_dummy');
+    if (m !== null) {
+        m.lateBinding = 'opaque-scene-texture';
+        m.width = EFB_WIDTH;
+        m.height = EFB_HEIGHT;
+        m.flipY = gfxDeviceNeedsFlipY(globals.modelCache.device);
+    }
+}
+
+export function mDoExt_setupStageTexture(globals: dGlobals, modelInstance: J3DModelInstance): void {
+    const samplers = modelInstance.tex1Data.tex1.samplers;
+    for (let i = 0; i < samplers.length; i++) {
+        // Look for any unbound textures and set them.
+        const sampler = samplers[i];
+        const m = modelInstance.materialInstanceState.textureMappings[i];
+        if (m.gfxTexture === null) {
+            const resname = `${sampler.name.toLowerCase()}.bti`;
+            const bti = globals.resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+            if (bti !== null)
+                bti.fillTextureMapping(m);
+        }
+    }
+}
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);

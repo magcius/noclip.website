@@ -38,7 +38,7 @@ function setTextureMappingIndirect(m: TextureMapping, flipY: boolean): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = flipY;
-    m.lateBinding = 'OpaqueSceneTexture';
+    m.lateBinding = 'opaque-scene-texture';
 }
 
 export class dPa_control_c {
