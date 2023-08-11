@@ -368,7 +368,7 @@ class daBg_btkAnm_c {
     private isSC_01: boolean = false;
 
     constructor(modelData: J3DModelData, anmData: TTK1) {
-        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+        this.anm.init(modelData, anmData, true, LoopMode.Repeat);
     }
 
     public entry(modelInstance: J3DModelInstance): void {
@@ -390,7 +390,7 @@ class daBg_brkAnm_c {
     public anm = new mDoExt_brkAnm();
 
     constructor(modelData: J3DModelData, anmData: TRK1) {
-        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+        this.anm.init(modelData, anmData, true, LoopMode.Repeat);
     }
 
     public entry(modelInstance: J3DModelInstance): void {
@@ -1009,8 +1009,8 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_obj_Ygush00.arcName, mdl_table[this.type]));
-        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, d_a_obj_Ygush00.arcName, btk_table[this.type]), true, LoopMode.REPEAT);
-        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, d_a_obj_Ygush00.arcName, bck_table[this.type]), true, LoopMode.REPEAT);
+        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, d_a_obj_Ygush00.arcName, btk_table[this.type]), true, LoopMode.Repeat);
+        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, d_a_obj_Ygush00.arcName, bck_table[this.type]), true, LoopMode.Repeat);
 
         this.cullMtx = this.model.modelMatrix;
         vec3.copy(this.model.baseScale, this.scale);
@@ -1182,7 +1182,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, d_a_obj_zouK.arcName, 0x08));
 
         const anm = resCtrl.getObjectRes(ResType.Bck, d_a_obj_zouK.arcName, 0x05);
-        this.bckAnm.init(this.model.modelData, anm, true, LoopMode.ONCE, 0.0, anm.duration);
+        this.bckAnm.init(this.model.modelData, anm, true, LoopMode.Once, 0.0, anm.duration);
         this.bckAnm.play(0.0);
 
         for (let i = 0; i < this.model.materialInstances.length; i++)
@@ -1236,10 +1236,10 @@ class d_a_swhit0 extends fopAc_ac_c {
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
 
         const bckAnm = resCtrl.getObjectRes(ResType.Bck, `Always`, 0x0D);
-        this.bckAnm.init(this.model.modelData, bckAnm, true, LoopMode.REPEAT, 1.0, 0);
+        this.bckAnm.init(this.model.modelData, bckAnm, true, LoopMode.Repeat, 1.0, 0);
 
         const btkAnm = resCtrl.getObjectRes(ResType.Btk, `Always`, 0x58);
-        this.btkAnm.init(this.model.modelData, btkAnm, true, LoopMode.REPEAT, 1.0, 0);
+        this.btkAnm.init(this.model.modelData, btkAnm, true, LoopMode.Repeat, 1.0, 0);
 
         this.rot[2] = 0.0;
         this.setDrawMtx();
@@ -2963,7 +2963,7 @@ class d_a_kamome extends fopAc_ac_c {
         // createHeap
         const modelData = globals.resCtrl.getObjectRes(ResType.Model, d_a_kamome.arcName, 0x17);
         const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, d_a_kamome.arcName, 0x12);
-        this.morf = new mDoExt_McaMorf(modelData, null, null, anmRes, LoopMode.REPEAT);
+        this.morf = new mDoExt_McaMorf(modelData, null, null, anmRes, LoopMode.Repeat);
 
         if (this.path_arg !== 0xFF) {
             // dPath_GetRoomPath
@@ -3001,7 +3001,7 @@ class d_a_kamome extends fopAc_ac_c {
         // todo
     }
 
-    private anm_init(globals: dGlobals, anmResIdx: number, morf: number, loopMode: LoopMode = LoopMode.REPEAT, speedInFrames: number = 1.0): void {
+    private anm_init(globals: dGlobals, anmResIdx: number, morf: number, loopMode: LoopMode = LoopMode.Repeat, speedInFrames: number = 1.0): void {
         const anmRes = globals.resCtrl.getObjectRes(ResType.Bck, d_a_kamome.arcName, anmResIdx);
         this.morf.setAnm(anmRes, loopMode, morf, speedInFrames);
     }
@@ -3043,7 +3043,7 @@ class d_a_kamome extends fopAc_ac_c {
         if (this.animState === 0) {
             if (this.timer0 <= 0 && animFrame >= 9) {
                 this.animState = 1;
-                this.anm_init(globals, 0x12, 12.0, LoopMode.REPEAT);
+                this.anm_init(globals, 0x12, 12.0, LoopMode.Repeat);
             }
         } else if (this.animState === 1) {
             const globalFrame = this.globalTimer | 0;
@@ -3056,12 +3056,12 @@ class d_a_kamome extends fopAc_ac_c {
             } else {
                 this.globalTimer = cM_rndF(10000.0);
                 this.animState = 2;
-                this.anm_init(globals, 0x10, 5.0, LoopMode.ONCE);
+                this.anm_init(globals, 0x10, 5.0, LoopMode.Once);
             }
         } else if (this.animState === 2) {
             if (this.morf.frameCtrl.hasStopped()) {
                 this.animState = 1;
-                this.anm_init(globals, 0x12, 5.0, LoopMode.REPEAT);
+                this.anm_init(globals, 0x12, 5.0, LoopMode.Repeat);
             }
         } else if (this.animState === 20) {
             if (this.morf.frameCtrl.hasStopped()) {
@@ -3266,7 +3266,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         if (this.type === 4) {
             const bckRes = resCtrl.getObjectRes(ResType.Bck, d_a_obj_ikada.arcName, 0x05);
-            this.bckAnm.init(modelData, bckRes, true, LoopMode.REPEAT);
+            this.bckAnm.init(modelData, bckRes, true, LoopMode.Repeat);
 
             this.model.jointMatrixCalcCallback = this.nodeControl_CB;
         }
@@ -4135,13 +4135,13 @@ class d_a_obj_flame extends fopAc_ac_c {
         const btk_res = resCtrl.getObjectRes(ResType.Btk, arcName, btk_res_idx);
 
         const anim_speed = 1.0; // [1.0, 1.0, 1.0, 1.0][this.type];
-        this.btkAnm.init(this.model.modelData, btk_res, true, LoopMode.REPEAT, anim_speed);
+        this.btkAnm.init(this.model.modelData, btk_res, true, LoopMode.Repeat, anim_speed);
 
         const brk_res_idx = [0x09, -1, -1, 0x09][this.type];
         if (brk_res_idx >= 0) {
             const brk_res = resCtrl.getObjectRes(ResType.Brk, arcName, brk_res_idx);
             this.brkAnm = new mDoExt_brkAnm();
-            this.brkAnm.init(this.model.modelData, brk_res, true, LoopMode.REPEAT, anim_speed);
+            this.brkAnm.init(this.model.modelData, brk_res, true, LoopMode.Repeat, anim_speed);
         }
 
         if (this.type === 1)

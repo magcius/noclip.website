@@ -74,7 +74,7 @@ export class J3DFrameCtrl {
     }
 
     public init(endFrame: number): void {
-        this.loopMode = LoopMode.REPEAT;
+        this.loopMode = LoopMode.Repeat;
         this.updateFlags = 0;
         this.startFrame = 0;
         this.endFrame = endFrame;
@@ -84,19 +84,25 @@ export class J3DFrameCtrl {
     }
 
     public applyLoopMode(timeInFrames: number): number {
-        if (this.loopMode === LoopMode.ONCE) {
+        if (this.loopMode === LoopMode.Once) {
             if (timeInFrames > this.endFrame)
                 return this.endFrame - 0.001;
-        } else if (this.loopMode === LoopMode.ONCE_AND_RESET) {
+        } else if (this.loopMode === LoopMode.OnceAndReset) {
             if (timeInFrames >= this.endFrame)
                 return this.startFrame;
-        } else if (this.loopMode === LoopMode.REPEAT) {
+        } else if (this.loopMode === LoopMode.Repeat) {
             if (timeInFrames >= this.endFrame)
                 return timeInFrames - (this.endFrame - this.repeatStartFrame);
-        } else if (this.loopMode === LoopMode.MIRRORED_ONCE || this.loopMode === LoopMode.MIRRORED_REPEAT) {
-            if (timeInFrames >= this.endFrame - 1.0)
+            if (timeInFrames < this.startFrame)
+                return timeInFrames + (this.repeatStartFrame - this.startFrame);
+        } else if (this.loopMode === LoopMode.MirroredOnce) {
+            if (timeInFrames >= this.endFrame)
                 return this.endFrame - (timeInFrames - this.endFrame);
-
+            if (timeInFrames < this.startFrame)
+                return this.startFrame - (timeInFrames - this.startFrame);
+        } else if (this.loopMode === LoopMode.MirroredRepeat) {
+            if (timeInFrames >= (this.endFrame - 1.0))
+                return (this.endFrame - 1.0) - (timeInFrames - (this.endFrame - 1.0));
             if (timeInFrames < this.startFrame)
                 return this.startFrame - (timeInFrames - this.startFrame);
         }
@@ -115,27 +121,37 @@ export class J3DFrameCtrl {
         this.updateFlags = 0;
         this.currentTimeInFrames += (this.speedInFrames * deltaTimeFrames);
 
-        if (this.loopMode === LoopMode.ONCE) {
+        if (this.loopMode === LoopMode.Once) {
             if (this.currentTimeInFrames >= this.endFrame) {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasStopped;
                 this.speedInFrames = 0.0;
                 this.currentTimeInFrames = this.endFrame - 0.001;
             }
-        } else if (this.loopMode === LoopMode.ONCE_AND_RESET) {
+        } else if (this.loopMode === LoopMode.OnceAndReset) {
             if (this.currentTimeInFrames >= this.endFrame) {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasStopped;
                 this.speedInFrames = 0.0;
                 this.currentTimeInFrames = this.startFrame;
             }
-        } else if (this.loopMode === LoopMode.REPEAT) {
+        } else if (this.loopMode === LoopMode.Repeat) {
+            while (this.currentTimeInFrames < this.startFrame) {
+                this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
+                const diff = (this.repeatStartFrame - this.startFrame);
+                if (diff <= 0.0)
+                    return;
+                this.currentTimeInFrames += diff;
+            }
             while (this.currentTimeInFrames >= this.endFrame) {
                 if (this.endFrame === 0) {
                     break;
                 }
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
-                this.currentTimeInFrames -= (this.endFrame - this.repeatStartFrame);
+                const diff = (this.endFrame - this.repeatStartFrame);
+                if (diff <= 0.0)
+                    return;
+                this.currentTimeInFrames -= diff;
             }
-        } else if (this.loopMode === LoopMode.MIRRORED_ONCE) {
+        } else if (this.loopMode === LoopMode.MirroredOnce) {
             if (this.currentTimeInFrames >= this.endFrame) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
@@ -146,10 +162,10 @@ export class J3DFrameCtrl {
                 this.currentTimeInFrames = this.startFrame - (this.currentTimeInFrames - this.startFrame);
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasStopped;
             }
-        } else if (this.loopMode === LoopMode.MIRRORED_REPEAT) {
-            if (this.currentTimeInFrames >= this.endFrame - 1.0) {
+        } else if (this.loopMode === LoopMode.MirroredRepeat) {
+            if (this.currentTimeInFrames >= (this.endFrame - 1.0)) {
                 this.speedInFrames *= -1;
-                this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
+                this.currentTimeInFrames = (this.endFrame - 1.0) - (this.currentTimeInFrames - (this.endFrame - 1.0));
             }
 
             if (this.currentTimeInFrames < this.startFrame) {
@@ -163,7 +179,7 @@ export class J3DFrameCtrl {
     public checkPass(frame: number, deltaTimeFrames: number, currentTimeInFrames = this.currentTimeInFrames, speedInFrames = this.speedInFrames): boolean {
         // https://github.com/zeldaret/tp/blob/master/libs/JSystem/J3DGraphAnimator/J3DAnimation.cpp
         let oldTime = currentTimeInFrames, newTime = currentTimeInFrames + (speedInFrames * deltaTimeFrames);
-        if (this.loopMode === LoopMode.REPEAT) {
+        if (this.loopMode === LoopMode.Repeat) {
             if (oldTime < this.startFrame) {
                 while (newTime < this.startFrame) {
                     if (this.repeatStartFrame - this.startFrame <= 0.0)

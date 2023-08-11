@@ -203,14 +203,9 @@ export class dRes_info_c {
         if (type === `BMD ` || type === `BMDM` || type === `BMDC` || type === `BMDS` || type === `BSMD` ||
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI`) {
             // J3D models.
-
-            // Sometimes there are J3D2bmd2 files we can't parse, like Ff.arc / ff.bmd. Skip over these.
-            const j3d = new JSystemFileReaderHelper(file.buffer);
-            if (j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4') {
-                const res = new J3DModelData(device, cache, BMD.parseReader(j3d));
-                this.destroyables.push(res);
-                resEntry.res = res;
-            }
+            const res = new J3DModelData(device, cache, BMD.parse(file.buffer));
+            this.destroyables.push(res);
+            resEntry.res = res;
         } else if (type === `BMT ` || type === `BMTM`) {
             // J3D material table.
             const res = new J3DModelMaterialData(device, cache, BMT.parse(file.buffer));

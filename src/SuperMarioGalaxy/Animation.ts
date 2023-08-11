@@ -338,7 +338,7 @@ export class XanimePlayer {
 
     private updateInterpoleRatio(deltaTimeFrames: number = 1): void {
         const frameCtrl = this.frameCtrl;
-        if (frameCtrl.speedInFrames === 0.0 && frameCtrl.loopMode !== LoopMode.ONCE_AND_RESET) {
+        if (frameCtrl.speedInFrames === 0.0 && frameCtrl.loopMode !== LoopMode.OnceAndReset) {
             this.interpoleRatio = 1.0;
             frameCtrl.interpoleFrame = 0;
         } else if (this.interpoleFrameCounter >= frameCtrl.interpoleFrame) {

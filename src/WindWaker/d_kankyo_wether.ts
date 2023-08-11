@@ -2303,10 +2303,10 @@ export class d_thunder extends kankyo_class {
         this.model = new J3DModelInstance(modelData);
 
         const anm = globals.resCtrl.getObjectRes(ResType.Btk, `Always`, 0x60);
-        this.btkAnm.init(modelData, anm, false, LoopMode.REPEAT);
+        this.btkAnm.init(modelData, anm, false, LoopMode.Repeat);
 
         const canm = globals.resCtrl.getObjectRes(ResType.Brk, `Always`, 0x52);
-        this.brkAnm.init(modelData, canm, true, LoopMode.ONCE);
+        this.brkAnm.init(modelData, canm, true, LoopMode.Once);
 
         this.btkTime = cM_rndF(1.0);
 

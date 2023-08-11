@@ -153,7 +153,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
         const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
         const g = resInfo.lazyLoadResource(ResType.Bck, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
-        g.loopMode = LoopMode.REPEAT;
+        g.loopMode = LoopMode.Repeat;
         return g;
     }
 
@@ -197,7 +197,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
             const m = buildModelRes(res);
             const b = globals.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
-            b.loopMode = LoopMode.ONCE;
+            b.loopMode = LoopMode.Once;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
