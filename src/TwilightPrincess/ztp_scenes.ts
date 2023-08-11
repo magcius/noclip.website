@@ -779,13 +779,13 @@ export class ModelCache {
     }
 
     public async fetchObjectData(arcName: string): Promise<RARC.JKRArchive> {
-        const archive = await this.fetchArchive(`Object/${arcName}.arc`);
+        const archive = await this.fetchArchive(`res/Object/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resObj);
         return archive;
     }
 
     public async fetchMsgData(arcName: string) {
-        const archive = await this.fetchArchive(`Msg/${arcName}.arc`);
+        const archive = await this.fetchArchive(`res/Msg/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resSystem);
     }
 
@@ -800,7 +800,7 @@ export class ModelCache {
     }
 
     public requestObjectData(arcName: string): cPhs__Status {
-        const archivePath = `Object/${arcName}.arc`;
+        const archivePath = `res/Object/${arcName}.arc`;
 
         if (this.archiveCache.has(archivePath))
             return cPhs__Status.Complete;
@@ -812,7 +812,7 @@ export class ModelCache {
     }
 
     public requestMsgData(arcName: string): cPhs__Status {
-        const archivePath = `Msg/${arcName}.arc`;
+        const archivePath = `res/Msg/${arcName}.arc`;
 
         if (this.archiveCache.has(archivePath))
             return cPhs__Status.Complete;
@@ -824,7 +824,7 @@ export class ModelCache {
     }
 
     public async fetchStageData(arcName: string): Promise<RARC.JKRArchive> {
-        const archive = await this.fetchArchive(`Stage/${this.currentStage}/${arcName}.arc`);
+        const archive = await this.fetchArchive(`res/Stage/${this.currentStage}/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
         return archive;
     }
@@ -893,51 +893,51 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
-            `Particle/common.jpc`,
-            `Particle/Pscene001.jpc`,
-            `Particle/Pscene010.jpc`,
-            `Particle/Pscene011.jpc`,
-            `Particle/Pscene012.jpc`,
-            `Particle/Pscene013.jpc`,
-            `Particle/Pscene014.jpc`,
-            `Particle/Pscene015.jpc`,
-            `Particle/Pscene020.jpc`,
-            `Particle/Pscene021.jpc`,
-            `Particle/Pscene022.jpc`,
-            `Particle/Pscene032.jpc`,
-            `Particle/Pscene034.jpc`,
-            `Particle/Pscene037.jpc`,
-            `Particle/Pscene040.jpc`,
-            `Particle/Pscene041.jpc`,
-            `Particle/Pscene050.jpc`,
-            `Particle/Pscene052.jpc`,
-            `Particle/Pscene100.jpc`,
-            `Particle/Pscene101.jpc`,
-            `Particle/Pscene102.jpc`,
-            `Particle/Pscene110.jpc`,
-            `Particle/Pscene111.jpc`,
-            `Particle/Pscene112.jpc`,
-            `Particle/Pscene120.jpc`,
-            `Particle/Pscene121.jpc`,
-            `Particle/Pscene122.jpc`,
-            `Particle/Pscene130.jpc`,
-            `Particle/Pscene131.jpc`,
-            `Particle/Pscene140.jpc`,
-            `Particle/Pscene141.jpc`,
-            `Particle/Pscene150.jpc`,
-            `Particle/Pscene151.jpc`,
-            `Particle/Pscene160.jpc`,
-            `Particle/Pscene161.jpc`,
-            `Particle/Pscene170.jpc`,
-            `Particle/Pscene171.jpc`,
-            `Particle/Pscene180.jpc`,
-            `Particle/Pscene181.jpc`,
-            `Particle/Pscene200.jpc`,
-            `Particle/Pscene201.jpc`,
-            `Particle/Pscene202.jpc`,
-            `Particle/Pscene203.jpc`,
-            `Particle/Pscene204.jpc`,
-            `Particle/Pscene205.jpc`,
+            `res/Particle/common.jpc`,
+            `res/Particle/Pscene001.jpc`,
+            `res/Particle/Pscene010.jpc`,
+            `res/Particle/Pscene011.jpc`,
+            `res/Particle/Pscene012.jpc`,
+            `res/Particle/Pscene013.jpc`,
+            `res/Particle/Pscene014.jpc`,
+            `res/Particle/Pscene015.jpc`,
+            `res/Particle/Pscene020.jpc`,
+            `res/Particle/Pscene021.jpc`,
+            `res/Particle/Pscene022.jpc`,
+            `res/Particle/Pscene032.jpc`,
+            `res/Particle/Pscene034.jpc`,
+            `res/Particle/Pscene037.jpc`,
+            `res/Particle/Pscene040.jpc`,
+            `res/Particle/Pscene041.jpc`,
+            `res/Particle/Pscene050.jpc`,
+            `res/Particle/Pscene052.jpc`,
+            `res/Particle/Pscene100.jpc`,
+            `res/Particle/Pscene101.jpc`,
+            `res/Particle/Pscene102.jpc`,
+            `res/Particle/Pscene110.jpc`,
+            `res/Particle/Pscene111.jpc`,
+            `res/Particle/Pscene112.jpc`,
+            `res/Particle/Pscene120.jpc`,
+            `res/Particle/Pscene121.jpc`,
+            `res/Particle/Pscene122.jpc`,
+            `res/Particle/Pscene130.jpc`,
+            `res/Particle/Pscene131.jpc`,
+            `res/Particle/Pscene140.jpc`,
+            `res/Particle/Pscene141.jpc`,
+            `res/Particle/Pscene150.jpc`,
+            `res/Particle/Pscene151.jpc`,
+            `res/Particle/Pscene160.jpc`,
+            `res/Particle/Pscene161.jpc`,
+            `res/Particle/Pscene170.jpc`,
+            `res/Particle/Pscene171.jpc`,
+            `res/Particle/Pscene180.jpc`,
+            `res/Particle/Pscene181.jpc`,
+            `res/Particle/Pscene200.jpc`,
+            `res/Particle/Pscene201.jpc`,
+            `res/Particle/Pscene202.jpc`,
+            `res/Particle/Pscene203.jpc`,
+            `res/Particle/Pscene204.jpc`,
+            `res/Particle/Pscene205.jpc`,
         ];
 
         for (let i = 0; i < particleArchives.length; i++)
