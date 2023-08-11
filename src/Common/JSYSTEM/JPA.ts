@@ -1233,6 +1233,10 @@ export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec
     trans[2] = m[14];
 }
 
+export function JPASetRMtxTVecfromMtx(m: ReadonlyMat4, rot: mat4, trans: vec3): void {
+    JPASetRMtxSTVecFromMtx(null, rot, trans, m);
+}
+
 function mirroredRepeat(t: number, duration: number): number {
     // Which loop are we on?
     const loopNum = (t / duration) | 0;
@@ -1428,6 +1432,18 @@ export class JPABaseEmitter {
 
     public setDrawParticle(v: boolean): void {
         this.drawParticle = v;
+    }
+
+    public setVolumeSize(v: number): void {
+        this.volumeSize = v;
+    }
+
+    public setRate(v: number): void {
+        this.rate = v;
+    }
+
+    public setGlobalRTMatrix(m: mat4): void {
+        JPASetRMtxTVecfromMtx(m, this.globalRotation, this.globalTranslation);
     }
 
     public init(resData: JPAResourceData): void {
