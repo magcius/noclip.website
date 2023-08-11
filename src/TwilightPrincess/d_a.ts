@@ -1006,11 +1006,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorK = (l_colorKR[this.type] << 24) | (l_colorKG[this.type] << 16) | (l_colorKB[this.type] << 8) | 0xFF;
 
         const color_k = colorNewFromRGBA8(l_colorK);
-        const mat_k = this.model.materialInstances[0].materialData.material.colorAmbRegs;
-        mat_k[1].r = color_k.r;
-        mat_k[1].g = color_k.g;
-        mat_k[1].b = color_k.b;
-
+        this.model.materialInstances[0].setColorOverride(ColorKind.AMB1, color_k);
 
         const l_colorCR = [0x96, 0xFF, 0xFF, 0x00];
         const l_colorCG = [0x96, 0x64, 0xFF, 0x96];
@@ -1018,10 +1014,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorC = (l_colorCR[this.type] << 24) | (l_colorCG[this.type] << 16) | (l_colorCB[this.type] << 8) | 0xFF;
 
         const color_c = colorNewFromRGBA8(l_colorC);
-        const mat_c = this.model.materialInstances[0].materialData.material.colorConstants;
-        mat_c[1].r = color_c.r;
-        mat_c[1].g = color_c.g;
-        mat_c[1].b = color_c.b;
+        this.model.materialInstances[0].setColorOverride(ColorKind.C0, color_c);
 
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
     }
@@ -1102,8 +1095,8 @@ class kytag10_class extends fopAc_ac_c {
 
         const ratio3 = this.get_rail_ratio_pos(path, this.pathPnt, this.unk_594, spD6, spD8);
 
-        this.emitter1?.setGlobalTranslation(ratio3);
-        this.emitter2?.setGlobalTranslation(ratio3);
+        this.emitter1.setGlobalTranslation(ratio3);
+        this.emitter2.setGlobalTranslation(ratio3);
 
         this.emitter1.lifeTime = this.lifetime;
         this.emitter2.lifeTime = this.lifetime;
@@ -1601,42 +1594,6 @@ class d_a_obj_lv3water extends fopAc_ac_c {
             mDoExt_modelUpdateDL(globals, this.modelIndirect, renderInstManager, viewerInput, globals.dlst.indirect);
         }
     }
-}
-
-type ModeFunc = (globals: dGlobals, deltaTimeInFrames: number) => void;
-interface ModeFuncExec<T extends number> {
-    curMode: T;
-}
-
-function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], deltaTimeInFrames: number): void {
-    const func = mode_tbl[actor.curMode * 2 + 1];
-    func.call(actor, globals, deltaTimeInFrames);
-}
-
-function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
-    actor.curMode = mode;
-    const func = mode_tbl[actor.curMode * 2 + 0];
-    func.call(actor, globals, 0);
-}
-
-type dPathMoveCB = (dst: vec3, curr: dPath__Point, next: dPath__Point, speed: number) => boolean;
-function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: number, callBack: dPathMoveCB | null = null): number {
-    const pointIdxNext = (pointIdxCurr + 1) % path.points.length;
-    const pointCurr = path.points[pointIdxCurr];
-    const pointNext = path.points[pointIdxNext];
-
-    if (callBack !== null) {
-        if (callBack(dst, pointCurr, pointNext, speed))
-            pointIdxCurr = pointIdxNext;
-    } else {
-        vec3.sub(scratchVec3a, pointNext.pos, pointCurr.pos);
-        vec3.normalize(scratchVec3a, scratchVec3a);
-
-        // todo
-        throw "whoops";
-    }
-
-    return pointIdxCurr;
 }
 
 interface constructor extends fpc_bs__Constructor {
