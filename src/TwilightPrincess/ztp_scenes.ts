@@ -304,35 +304,6 @@ export class dGlobals {
     }
 }
 
-export class ZTPExtraTextures {
-    public extraTextures: BTIData[] = [];
-
-    public addBTI(device: GfxDevice, cache: GfxRenderCache, btiTexture: BTI_Texture): void {
-        this.extraTextures.push(new BTIData(device, cache, btiTexture));
-    }
-
-    public addTex(texture: BTIData): void {
-        this.extraTextures.push(texture);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.extraTextures.length; i++)
-            this.extraTextures[i].destroy(device);
-    }
-
-    public fillTextureMapping = (m: TextureMapping, samplerName: string): boolean => {
-        // Look through for extra textures.
-        const searchName = `${samplerName.toLowerCase()}.bti`;
-        const extraTexture = this.extraTextures.find((extraTex) => extraTex.btiTexture.name === searchName);
-        
-        if (extraTexture !== undefined) {
-            return extraTexture.fillTextureMapping(m);
-        }
-
-        return false;
-    };
-}
-
 function fpcIsObject(n: fpc__ProcessName): boolean {
     if (n === fpc__ProcessName.d_a_bg)
         return false;
@@ -373,7 +344,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: TwilightPrincessRoom[] = [];
-    public extraTextures: ZTPExtraTextures;
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
@@ -669,6 +639,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             pass.attachResolveTexture(opaqueSceneTextureID);
             pass.exec((passRenderer, scope) => {
                 this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
+                dlst.indirect[0].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
                 dlst.indirect[1].resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
                 this.executeListSet(passRenderer, dlst.indirect);
             });
@@ -683,7 +654,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy();
-        this.extraTextures.destroy(device);
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
     }
@@ -956,8 +926,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         const renderer = new TwilightPrincessRenderer(device, globals);
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
-
-        renderer.extraTextures = new ZTPExtraTextures();
 
         modelCache.onloadedcallback = () => {
             fpcCt_Handler(globals.frameworkGlobals, globals);

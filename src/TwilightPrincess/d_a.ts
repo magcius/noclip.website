@@ -113,13 +113,9 @@ class d_a_bg extends fopAc_ac_c {
                 const m = modelInstance.materialInstanceState.textureMappings[i];
                 if (m.gfxTexture === null) {
                     const resname = `${sampler.name.toLowerCase()}.bti`;
-
-                    let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                    if (bti !== null) {
-                        renderer.extraTextures.addTex(bti);
-                    }
-
-                    renderer.extraTextures.fillTextureMapping(m, sampler.name);
+                    const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+                    if (bti !== null)
+                        bti.fillTextureMapping(m);
                 }
             }
 
@@ -132,7 +128,7 @@ class d_a_bg extends fopAc_ac_c {
             }
 
             this.bgModel[i] = modelInstance;
-            
+
             const btk = globals.resCtrl.getStageResByName(ResType.Btk, arcName, btkName[i]);
             if (btk !== null)
                 this.bgBtkAnm[i] = new daBg_btkAnm_c(modelData, btk);
@@ -291,14 +287,14 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const sunRes = globals.resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_sun.bmd`);
         if (sunRes !== null) {
             this.sun = new J3DModelInstance(sunRes);
-            
+
             const anm = globals.resCtrl.getStageResByName(ResType.Btk, `STG_00`, `vrbox_sun.btk`);
             if (anm !== null)
                 this.sunBtkAnm.init(sunRes, anm, false, LoopMode.Repeat);
 
             this.btkTime = 0;
         }
-        
+
 
         const kasumiMaeRes = globals.resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_kasumim.bmd`);
         if (kasumiMaeRes !== null)
@@ -379,7 +375,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         this.daVrbox2_color_set(globals, deltaTimeInFrames);
-        
+
         const envLight = globals.g_env_light;
         if (envLight.curTime > 255.0)
             this.sunBtkAnm.play(deltaTimeInFrames);
@@ -587,7 +583,7 @@ class daBgObj_Spec {
         this.shareTexNum = view.getUint8(offset + 4);
 
         offset += 8;
-        
+
         for (let i = 0; i < this.shareTexNum; i++) {
             const name = readString(buffer, offset);
             offset += name.length + 1;
@@ -608,7 +604,7 @@ class daBgObj_Spec {
         this.soundBlockOffs = offset;
         this.soundNum = (view.getUint32(offset) >> 2) & 0x3FFFFF;
 
-        offset += (view.getUint32(offset) & 0xFFFFFF) + 4; 
+        offset += (view.getUint32(offset) & 0xFFFFFF) + 4;
         return offset;
     }
 
@@ -617,7 +613,7 @@ class daBgObj_Spec {
         this.particleBlockOffs = offset;
         this.particleNum = (view.getUint32(offset) >> 4) & 0xFFFFF;
 
-        offset += (view.getUint32(offset) & 0xFFFFFF) + 4; 
+        offset += (view.getUint32(offset) & 0xFFFFFF) + 4;
         return offset;
     }
 
@@ -625,7 +621,7 @@ class daBgObj_Spec {
         const view = buffer.createDataView();
         this.farInfoBlockOffs = offset;
 
-        offset += 8; 
+        offset += 8;
         return offset;
     }
 
@@ -777,16 +773,12 @@ class d_a_bg_obj extends fopAc_ac_c {
                         const m = modelInstance.materialInstanceState.textureMappings[i];
                         if (m.gfxTexture === null) {
                             const resname = `${sampler.name.toLowerCase()}.bti`;
-        
-                            let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                            if (bti !== null) {
-                                renderer.extraTextures.addTex(bti);
-                            }
-        
-                            renderer.extraTextures.fillTextureMapping(m, sampler.name);
+                            const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+                            if (bti !== null)
+                                bti.fillTextureMapping(m);
                         }
                     }
-        
+
                     const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
                     if (m2 !== null) {
                         m2.lateBinding = 'opaque-scene-texture';
@@ -838,16 +830,12 @@ class d_a_bg_obj extends fopAc_ac_c {
                             const m = modelInstance.materialInstanceState.textureMappings[i];
                             if (m.gfxTexture === null) {
                                 const resname = `${sampler.name.toLowerCase()}.bti`;
-            
-                                let bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-                                if (bti !== null) {
-                                    renderer.extraTextures.addTex(bti);
-                                }
-            
-                                renderer.extraTextures.fillTextureMapping(m, sampler.name);
+                                const bti = resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
+                                if (bti !== null)
+                                    bti.fillTextureMapping(m);
                             }
                         }
-            
+
                         const m2 = modelInstance.getTextureMappingReference('fbtex_dummy');
                         if (m2 !== null) {
                             m2.lateBinding = 'opaque-scene-texture';
@@ -872,7 +860,7 @@ class d_a_bg_obj extends fopAc_ac_c {
                             else
                                 this.btks1[i].init(mdl_data!, btk_data!, true, LoopMode.Repeat);
                         }
-    
+
                         let brkName = `model${i}.brk`;
                         if (j === 1) {
                             brkName = `model${i}_${j}.brk`;
@@ -883,8 +871,8 @@ class d_a_bg_obj extends fopAc_ac_c {
                                 this.brks0[i].init(mdl_data!, brk_data!, true, LoopMode.Repeat);
                             else
                                 this.brks1[i].init(mdl_data!, brk_data!, true, LoopMode.Repeat);
-                        }     
-                    }          
+                        }
+                    }
                 }
             }
             break;
@@ -896,13 +884,13 @@ class d_a_bg_obj extends fopAc_ac_c {
                 if (this.brks0[i] !== null && this.brks0[i] !== undefined && this.brks0[i].anm !== undefined) {
                     this.brks0[i]!.entry(this.models0[i]!);
                 }
-    
+
                 if (this.btks0[i] !== null && this.btks0[i] !== undefined && this.btks0[i].anm !== undefined) {
                     this.btks0[i]!.entry(this.models0[i]!);
                 }
             }
         }
-        
+
         return cPhs__Status.Next;
     }
 
@@ -1017,7 +1005,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorKB = [0x3C, 0x23, 0x00, 0x50];
         const l_colorK = (l_colorKR[this.type] << 24) | (l_colorKG[this.type] << 16) | (l_colorKB[this.type] << 8) | 0xFF;
 
-        const color_k = colorNewFromRGBA8(l_colorK);    
+        const color_k = colorNewFromRGBA8(l_colorK);
         const mat_k = this.model.materialInstances[0].materialData.material.colorAmbRegs;
         mat_k[1].r = color_k.r;
         mat_k[1].g = color_k.g;
@@ -1041,7 +1029,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
 
 class kytag10_class extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.kytag10;
-    
+
     private emitter1: JPABaseEmitter | null;
     private emitter2: JPABaseEmitter | null;
     private volSize: number;
@@ -1096,7 +1084,7 @@ class kytag10_class extends fopAc_ac_c {
 
     public sparks_move(globals: dGlobals, deltaTimeInFrames: number): void {
         const path = this.path;
-        
+
         if (path === null || this.emitter1 === null || this.emitter2 === null)
             return;
 
@@ -1104,7 +1092,7 @@ class kytag10_class extends fopAc_ac_c {
         let end_idx = this.path!.points.length - 1;
         let spD6 = 0;
         let spD8 = 0;
-        
+
         this.get_rail_ratio_pos(path, 0, 0.0, spD6, spD8);
         this.get_rail_ratio_pos(path, end_idx - 1, 1.0, spD6, spD8);
         const ratio1 = this.get_rail_ratio_pos(path, this.pathPnt, 0.0, spD6, spD8);
@@ -1167,7 +1155,7 @@ class kytag10_class extends fopAc_ac_c {
 
         let calc_vec = vec3.create();
         dKyr_get_vectle_calc(point_a, point_b, calc_vec);
-        
+
         o_param3 = cM_atan2s(Math.sqrt(calc_vec[0] * calc_vec[0] + calc_vec[2] * calc_vec[2]), calc_vec[1]);
         o_param4 = cM_atan2s(calc_vec[0], calc_vec[2]);
 
@@ -1191,13 +1179,13 @@ class kytag10_class extends fopAc_ac_c {
 
 class d_a_obj_firepillar2 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_firepillar2;
-    
+
     private emitter1: JPABaseEmitter | null;
     private emitter2: JPABaseEmitter | null;
     private model: J3DModelInstance | null;
     private btk: mDoExt_btkAnm | null;
     private bck: mDoExt_bckAnm | null;
-    
+
     private flags0: number;
     private type: number;
     private actionID: number;
@@ -1223,12 +1211,12 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
 
             this.rot = [0,0,0];
             this.initialized = true;
-        }        
+        }
 
         const status = dComIfG_resLoad(globals, "Obj_yogan");
         if (status !== cPhs__Status.Complete)
             return status;
-        
+
         // CreateHeap
         const resCtrl = globals.resCtrl;
         const mdl_data = resCtrl.getObjectRes(ResType.Model, "Obj_yogan", 8);
@@ -1277,7 +1265,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
             MtxTrans(this.pos, false);
             mDoMtx_ZXYrotM(calc_mtx, [0x4000, this.rot[1], this.rot[2]]);
         }
-        
+
         this.setBaseMtx();
         this.setCullSizeBox(-150.0, -10.0, -150.0, 150.0, 1200.0, 150.0);
 
@@ -1404,7 +1392,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
 
         if (tmp === 0.0) {
             if (this.type === 1) {
-                
+
                 if (cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.04 * deltaTimeInFrames)) {
                     for (let i = 0; i < 3; i++) {
                         if (this.type1Emitters[i] !== undefined && this.type1Emitters[i] !== null) {
@@ -1490,7 +1478,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
         } else if (this.type === 0) {
             vec3.set(vec, 0, 0, 1 * this.unk_948 * 100);
         }
-    
+
         mDoMtx_YrotS(calc_mtx, this.rot[1]);
         //MtxPosition(scratchVec3a, vec);
 
@@ -1548,7 +1536,7 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         const bmdIdrIds = [6, 6, 6, 6, 6, 6, 6,
                            6, 6, 6, 6, 6, 6, 6,
                            6, 6, 6, 6, 6, -1, -1];
-        
+
         const btkIdrIds = [10, 10, 10, 10, 10, 10, 10,
                            10, 10, 10, 10, 10, 10, 10,
                            10, 10, 10, 10, 10, -1, -1];

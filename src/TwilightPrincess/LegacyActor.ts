@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 
-import { TwilightPrincessRenderer, ZTPExtraTextures, dGlobals } from "./ztp_scenes.js";
+import { TwilightPrincessRenderer, dGlobals } from "./ztp_scenes.js";
 import { mat4, vec3 } from "gl-matrix";
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
@@ -17,14 +17,12 @@ import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTev
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback, fopAcM_GetParamBit } from './framework.js';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
-import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { cBgS_GndChk } from '../WindWaker/d_bg.js';
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, mDoMtx_ZXYrotM, calc_mtx, uShortTo2PI, mDoMtx_YrotS, MtxPosition, mDoMtx_YrotM } from "../WindWaker/m_do_mtx.js";
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
 
-const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 
 function animFrame(frame: number): AnimationController {
@@ -1218,7 +1216,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
 const bboxScratch = new AABB();
 const screenProjection = new ScreenSpaceProjection();
-export class BMDObjectRenderer {
+class BMDObjectRenderer {
     public visible = true;
     public isTag = false;
     public modelMatrix: mat4 = mat4.create();
@@ -1257,11 +1255,6 @@ export class BMDObjectRenderer {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
 
-    private setExtraTextures(extraTextures: ZTPExtraTextures): void {
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setExtraTextures(extraTextures);
-    }
-
     public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible || (this.isTag && !globals.renderHacks.tagsVisible))
             return;
@@ -1288,7 +1281,6 @@ export class BMDObjectRenderer {
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
-        this.setExtraTextures(globals.renderer.extraTextures);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);
