@@ -142,9 +142,6 @@ export class J3DFrameCtrl {
                 this.currentTimeInFrames += diff;
             }
             while (this.currentTimeInFrames >= this.endFrame) {
-                if (this.endFrame === 0) {
-                    break;
-                }
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
                 const diff = (this.endFrame - this.repeatStartFrame);
                 if (diff <= 0.0)

@@ -1693,7 +1693,7 @@ export function undwater_init(globals: dGlobals, envLight: dScnKy_env_light_c): 
     const screen_ef_btk = resCtrl.getObjectRes(ResType.Btk, `Always`, 0x3C);
     if (screen_ef_btk === null)
         return;
-    envLight.underwater_screen_ef_btk.init(screen_ef_mdl, screen_ef_btk, true, LoopMode.REPEAT);
+    envLight.underwater_screen_ef_btk.init(screen_ef_mdl, screen_ef_btk, true, LoopMode.Repeat);
 }
 
 export function dKy_undwater_filter_draw(globals: dGlobals, envLight: dScnKy_env_light_c, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

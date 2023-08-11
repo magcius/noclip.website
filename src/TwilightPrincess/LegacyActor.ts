@@ -171,7 +171,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     function parseBCK(rarc: RARC.JKRArchive, path: string) {
         const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
         const g = resInfo.lazyLoadResource(ResType.Bck, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
-        g.loopMode = LoopMode.REPEAT;
+        g.loopMode = LoopMode.Repeat;
         return g;
     }
 
@@ -1040,7 +1040,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'E_gi') fetchArchive(`E_gi`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/gi.bmd`);
         const bck = parseBCK(rarc, `bck/gi_get_up.bck`);
-        bck.loopMode = LoopMode.ONCE_AND_RESET;
+        bck.loopMode = LoopMode.OnceAndReset;
 
         m.bindANK1(bck);
     });
@@ -1114,7 +1114,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             const m = buildModel(rarc, `bmdr/cs.bmd`);
             m.modelInstance.setBaseScale([1.6,1.6,1.6]);
             const bck = parseBCK(rarc, `bck/cs_stop.bck`);
-            bck.loopMode = LoopMode.ONCE;
+            bck.loopMode = LoopMode.Once;
             m.bindANK1(bck);
             break;
         case 1:

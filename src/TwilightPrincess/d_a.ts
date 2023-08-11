@@ -48,7 +48,7 @@ class daBg_btkAnm_c {
     private isSC_01: boolean = false;
 
     constructor(modelData: J3DModelData, anmData: TTK1) {
-        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+        this.anm.init(modelData, anmData, true, LoopMode.Repeat);
     }
 
     public entry(modelInstance: J3DModelInstance): void {
@@ -70,7 +70,7 @@ class daBg_brkAnm_c {
     public anm = new mDoExt_brkAnm();
 
     constructor(modelData: J3DModelData, anmData: TRK1) {
-        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+        this.anm.init(modelData, anmData, true, LoopMode.Repeat);
     }
 
     public entry(modelInstance: J3DModelInstance): void {
@@ -300,7 +300,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             
             const anm = globals.resCtrl.getStageResByName(ResType.Btk, `STG_00`, `vrbox_sun.btk`);
             if (anm !== null)
-                this.sunBtkAnm.init(sunRes, anm, false, LoopMode.REPEAT);
+                this.sunBtkAnm.init(sunRes, anm, false, LoopMode.Repeat);
 
             this.btkTime = 0;
         }
@@ -809,7 +809,7 @@ class d_a_bg_obj extends fopAc_ac_c {
                     }
                     const btk_data = resCtrl.getResByName(ResType.Btk, arcName, btkName, resCtrl.resObj);
                     if (btk_data !== null && mdl_data !== null) {
-                        this.btks0[i].init(mdl_data!, btk_data!, true, LoopMode.REPEAT);
+                        this.btks0[i].init(mdl_data!, btk_data!, true, LoopMode.Repeat);
                     }
 
                     let brkName = `model0.brk`;
@@ -818,7 +818,7 @@ class d_a_bg_obj extends fopAc_ac_c {
                     }
                     const brk_data = resCtrl.getResByName(ResType.Brk, arcName, brkName, resCtrl.resObj);
                     if (brk_data !== null && mdl_data !== null) {
-                        this.brks0[i].init(mdl_data!, brk_data!, true, LoopMode.REPEAT);
+                        this.brks0[i].init(mdl_data!, brk_data!, true, LoopMode.Repeat);
                     }
                 }
             }
@@ -874,9 +874,9 @@ class d_a_bg_obj extends fopAc_ac_c {
                         const btk_data = resCtrl.getResByName(ResType.Btk, arcName, btkName, resCtrl.resObj);
                         if (btk_data !== null && mdl_data !== null) {
                             if (i === 0)
-                                this.btks0[i].init(mdl_data!, btk_data!, true, LoopMode.REPEAT);
+                                this.btks0[i].init(mdl_data!, btk_data!, true, LoopMode.Repeat);
                             else
-                                this.btks1[i].init(mdl_data!, btk_data!, true, LoopMode.REPEAT);
+                                this.btks1[i].init(mdl_data!, btk_data!, true, LoopMode.Repeat);
                         }
     
                         let brkName = `model${i}.brk`;
@@ -886,9 +886,9 @@ class d_a_bg_obj extends fopAc_ac_c {
                         const brk_data = resCtrl.getResByName(ResType.Brk, arcName, brkName, resCtrl.resObj);
                         if (brk_data !== null && mdl_data !== null) {
                             if (i === 0)
-                                this.brks0[i].init(mdl_data!, brk_data!, true, LoopMode.REPEAT);
+                                this.brks0[i].init(mdl_data!, brk_data!, true, LoopMode.Repeat);
                             else
-                                this.brks1[i].init(mdl_data!, brk_data!, true, LoopMode.REPEAT);
+                                this.brks1[i].init(mdl_data!, brk_data!, true, LoopMode.Repeat);
                         }     
                     }          
                 }
@@ -978,10 +978,10 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         this.model = new J3DModelInstance(mdl_data);
 
         const brk_anm = resCtrl.getObjectRes(ResType.Brk, arcName, 8);
-        this.brk.init(mdl_data, brk_anm, true, LoopMode.REPEAT);
+        this.brk.init(mdl_data, brk_anm, true, LoopMode.Repeat);
 
         const btk_anm = resCtrl.getObjectRes(ResType.Btk, arcName, 11);
-        this.btk.init(mdl_data, btk_anm, true, LoopMode.REPEAT);
+        this.btk.init(mdl_data, btk_anm, true, LoopMode.Repeat);
 
         // create
         this.cullMtx = this.model.modelMatrix;
@@ -1242,11 +1242,11 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
 
         const btk_anm = resCtrl.getObjectRes(ResType.Btk, "Obj_yogan", 11);
         this.btk = new mDoExt_btkAnm();
-        this.btk.init(mdl_data, btk_anm, true, LoopMode.REPEAT);
+        this.btk.init(mdl_data, btk_anm, true, LoopMode.Repeat);
 
         const bck_anm = resCtrl.getObjectRes(ResType.Bck, "Obj_yogan", 5);
         this.bck = new mDoExt_bckAnm();
-        this.bck.init(mdl_data, bck_anm, true, LoopMode.REPEAT);
+        this.bck.init(mdl_data, bck_anm, true, LoopMode.Repeat);
 
         // Create
         if (this.type === 1) {
@@ -1569,14 +1569,14 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         this.model = new J3DModelInstance(mdl_data);
 
         const anm0 = resCtrl.getObjectRes(ResType.Btk, arcNames[this.type], btkIds[this.type]);
-        this.btk.init(mdl_data, anm0, true, LoopMode.REPEAT);
+        this.btk.init(mdl_data, anm0, true, LoopMode.Repeat);
 
         if (bmdIdrIds[this.type] !== -1) {
             const mdl_data_idr = resCtrl.getObjectRes(ResType.Model, arcNames[this.type], bmdIdrIds[this.type]);
             this.modelIndirect = new J3DModelInstance(mdl_data_idr);
 
             const anm1 = resCtrl.getObjectRes(ResType.Btk, arcNames[this.type], btkIdrIds[this.type]);
-            this.btkIndirect.init(mdl_data_idr, anm1, true, LoopMode.REPEAT);
+            this.btkIndirect.init(mdl_data_idr, anm1, true, LoopMode.Repeat);
         }
 
         return cPhs__Status.Next;
