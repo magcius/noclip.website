@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
@@ -20,7 +20,7 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { LightType, dKy_GxFog_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
+import { LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
@@ -85,6 +85,7 @@ class d_a_bg extends fopAc_ac_c {
     private bgBrkAnm: (daBg_brkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
     private bgW = new dBgW();
+    private brkFlag: number = 0;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
@@ -109,6 +110,16 @@ class d_a_bg extends fopAc_ac_c {
 
             mDoExt_setIndirectTex(globals, modelInstance);
             mDoExt_setupStageTexture(globals, modelInstance);
+
+            for (let i = 0; i < modelInstance.materialInstances.length; i++) {
+                const materialInstance = modelInstance.materialInstances[i];
+                const name = materialInstance.materialData.material.name;
+
+                const sub = name.slice(3, 7);
+                if (sub === 'MA12' || sub === 'MA18') {
+                    this.brkFlag = 1;
+                }
+            }
 
             this.bgModel[i] = modelInstance;
 
@@ -151,7 +162,7 @@ class d_a_bg extends fopAc_ac_c {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
                 this.bgBtkAnm[i]!.play(deltaTimeInFrames);
-            if (this.bgBrkAnm[i] !== null)
+            if (this.bgBrkAnm[i] !== null && this.brkFlag === 0)
                 this.bgBrkAnm[i]!.play(deltaTimeInFrames);
         }
     }
@@ -163,20 +174,85 @@ class d_a_bg extends fopAc_ac_c {
 
         // force far plane to 100000.0 ?
 
+        globals.dlst.dComIfGd_setListBG();
+
         for (let i = 0; i < this.numBg; i++) {
-            if (this.bgModel[i] === null)
+            const modelInstance = this.bgModel[i];
+
+            if (modelInstance === null)
                 continue;
 
-            settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
-            setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, viewerInput.camera);
-            // this is actually mDoExt_modelEntryDL
+            const lightType: LightType[] = [
+                LightType.BG0,
+                LightType.BG1,
+                LightType.BG2,
+                LightType.BG3,
+                LightType.BG4,
+                LightType.BG5,
+            ];
 
-            const m2 = this.bgModel[i]!.getTextureMappingReference('fbtex_dummy');
-            if (m2 !== null) {
-                mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput, globals.dlst.indirect);
-            } else {
-                mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput);
+            const bgTevStr = this.bgTevStr[i]!;
+            settingTevStruct(globals, lightType[i], null, bgTevStr);
+            setLightTevColorType_MAJI(globals, modelInstance, bgTevStr, viewerInput.camera);
+            dKy_bg_MAxx_proc(globals, modelInstance);
+
+            for (let j = 0; j < modelInstance.materialInstances.length; j++) {
+                const materialInstance = modelInstance.materialInstances[j];
+                const name = materialInstance.materialData.material.name;
+                
+                const sub = name.slice(3, 7);
+                if (sub === 'MA12') {
+                    if (globals.g_env_light.colpatCurr === 6)
+                        this.brkFlag = 0;
+                } else if (sub === 'MA18') {
+                    // if (dDemo_c::getFrame() > 1117 || i_dComIfGs_isEventBit(0x0D04))
+                    //     this.brkFlag = 0;
+                } else if (sub === 'MA15') {
+                    // if (dComIfGs_BossLife_public_Get() === -1)
+                } else if (sub === 'MA09') {
+                    // this.bgBtkAnm[i]!.anm.frameCtrl.setRate(globals.g_env_light.mWaterSurfaceShineRate);
+                } else if (sub === 'MA05') {
+                    bgTevStr.unk_378 |= j;
+                }
+
+                if (globals.stageName === "F_SP127" || globals.stageName === "R_SP127") {
+                    if (name.slice(3).startsWith('MA00_Enkei_Tree_Color') ||
+                        name.slice(3).startsWith('MA00_Gake') ||
+                        name.slice(3).startsWith('MA00_Kusa')) {
+
+                        let g = 0, b = 0, r = 0;
+                        switch (globals.g_env_light.unk_12fe) {
+                        case 2:
+                            r = -3;
+                            g = 0;
+                            b = -4;
+                            break;
+                        case 3:
+                            r = 0;
+                            g = -10;
+                            b = -13;
+                            break;
+                        case 4:
+                            r = 18;
+                            g = 17;
+                            b = 25;
+                            break;
+                        }
+
+                        const c0 = colorNewCopy(OpaqueBlack);
+                        c0.r = Math.min((bgTevStr.colorC0.r / 10.0) ** 2, 1.0) * (r / 255.0);
+                        c0.g = Math.min((bgTevStr.colorC0.g / 10.0) ** 2, 1.0) * (g / 255.0);
+                        c0.b = Math.min((bgTevStr.colorC0.b / 10.0) ** 2, 1.0) * (b / 255.0);
+                        materialInstance.setColorOverride(ColorKind.C0, c0);
+                        materialInstance.setColorOverride(ColorKind.K0, OpaqueBlack);
+                    }
+                }
             }
+
+            // this is actually mDoExt_modelEntryDL
+            mDoExt_modelUpdateDL(globals, modelInstance, renderInstManager, viewerInput);
+
+            globals.dlst.dComIfGd_setListBG();
         }
 
         const roomNo = this.parameters;
@@ -521,7 +597,7 @@ class d_a_obj_suisya extends fopAc_ac_c {
         super.draw(globals, renderInstManager, viewerInput);
 
         settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
     }
 }
@@ -870,7 +946,7 @@ class d_a_bg_obj extends fopAc_ac_c {
 
         for (let i = 0; i < 2; i++) {
             if (this.models0[i] !== null && this.models0[i] !== undefined) {
-                setLightTevColorType(globals, this.models0[i]!, this.tevStr!, viewerInput.camera);
+                setLightTevColorType_MAJI(globals, this.models0[i]!, this.tevStr!, viewerInput.camera);
 
                 const m2 = this.models0[i]!.getTextureMappingReference('fbtex_dummy');
                 if (m2 !== null) {
@@ -944,7 +1020,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         super.draw(globals, renderInstManager, viewerInput);
 
         settingTevStruct(globals, LightType.UNK_0, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
 
         this.brk.entry(this.model);
         this.btk.entry(this.model);
@@ -1430,7 +1506,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.type === 1) {
             settingTevStruct(globals, LightType.UNK_0, this.pos, this.tevStr);
-            setLightTevColorType(globals, this.model!, this.tevStr, viewerInput.camera);
+            setLightTevColorType_MAJI(globals, this.model!, this.tevStr, viewerInput.camera);
 
             this.btk!.entry(this.model!);
             this.bck!.entry(this.model!);
@@ -1525,12 +1601,12 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         super.draw(globals, renderInstManager, viewerInput);
 
         settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
         this.btk.entry(this.model);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
 
         if (this.modelIndirect !== null && this.modelIndirect !== undefined) {
-            setLightTevColorType(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
+            setLightTevColorType_MAJI(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
             this.btkIndirect.entry(this.modelIndirect);
 
             mDoExt_modelUpdateDL(globals, this.modelIndirect, renderInstManager, viewerInput, globals.dlst.indirect);

@@ -83,6 +83,38 @@ export class J3DFrameCtrl {
         this.currentTimeInFrames = 0.0;
     }
 
+    public getFrame(): number {
+        return this.currentTimeInFrames;
+    }
+
+    public setFrame(frame: number): void {
+        this.currentTimeInFrames = frame;
+    }
+
+    public getRate(): number {
+        return this.speedInFrames;
+    }
+
+    public setRate(rate: number): void {
+        this.speedInFrames = rate;
+    }
+
+    public getEnd(): number {
+        return this.endFrame;
+    }
+
+    public setEnd(end: number): void {
+        this.endFrame = end;
+    }
+
+    public getStart(): number {
+        return this.startFrame;
+    }
+
+    public setStart(start: number): void {
+        this.startFrame = start;
+    }
+
     public applyLoopMode(timeInFrames: number): number {
         if (this.loopMode === LoopMode.Once) {
             if (timeInFrames > this.endFrame)

@@ -711,6 +711,8 @@ export class dKankyo_vrkumo_Packet {
     private ddraw = new TDDraw();
     private textures: BTIData[] = [];
     private materialHelper: GXMaterialHelperGfx;
+    public cloudScrollX: number = 0;
+    public cloudScrollY: number = 0;
 
     constructor(globals: dGlobals) {
         const tex01 = globals.resCtrl.getStageResByName(ResType.Bti, `STG_00`, "cloudtx_01.bti");

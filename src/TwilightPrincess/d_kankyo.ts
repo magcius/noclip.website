@@ -1,11 +1,11 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorCopy } from "../Color.js";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorCopy, colorNewFromRGBA } from "../Color.js";
 import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material.js";
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers.js";
+import { lerp, invlerp, clamp, MathConstants, Vec3UnitY, texEnvMtx, projectionMatrixForFrustum } from "../MathHelpers.js";
 import { nArray, assert, arrayRemove, assertExists, readString } from "../util.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { J3DModelInstance, MaterialData, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { Camera } from "../Camera.js";
 import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
@@ -27,6 +27,7 @@ export const enum LightType {
     UNK_3 = 3,
     UNK_4 = 4,
     UNK_5 = 5,
+    UNK_6 = 6,
     UNK_7 = 7,
     UNK_8 = 8,
     UNK_9 = 9,
@@ -206,6 +207,7 @@ export class dScnKy_env_light_c {
     public colpatBlendGather: number = -1.0;
 
     public unk_12cc: number = 0;
+    public unk_12fe: number = 0; // fishing pond season
 
     // These appear to be enums ranging from 0-2? I don't know.
     public colpatMode: number = 0;
@@ -312,7 +314,7 @@ export class dKy_tevstr_c {
     
     public unk_374: number = 1.0;
     public unk_378: number = 0;
-    public unk_37a: number;
+    public lightType: LightType;
     public initTimer: number = 1;
 
     // someAnimTimer
@@ -699,7 +701,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
             tevStr.colorC0.b = 0;
         }
     } else {
-        if (tevStr.unk_37a == LightType.UNK_10 || tevStr.unk_37a == LightType.UNK_9 || tevStr.unk_378 != 0) {
+        if (tevStr.lightType == LightType.UNK_10 || tevStr.lightType == LightType.UNK_9 || tevStr.unk_378 != 0) {
             dKy_calc_color_set(envLight, tevStr.colorC0, ret.palePrevA.actCol, ret.palePrevB.actCol, ret.paleCurrA.actCol, ret.paleCurrB.actCol, ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, tevStr.unk_374 * envLight.ColActColRatio * envLight.ColActColRatio);
         } else {
             dKy_calc_color_set(envLight, tevStr.colorC0, ret.palePrevA.actCol, ret.palePrevB.actCol, ret.paleCurrA.actCol, ret.paleCurrB.actCol, ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, tevStr.unk_374 * envLight.unk_1210 * envLight.ColActColRatio * envLight.ColActColRatio);
@@ -708,7 +710,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
         const sp50 = nArray(6, () => colorNewCopy(OpaqueBlack));
         for (let i = 0; i < 6; i++) {
             if (i === 0) {
-                if (tevStr.unk_37a === LightType.UNK_10 || tevStr.unk_37a === LightType.UNK_9 || tevStr.unk_378 !== 0) {
+                if (tevStr.lightType === LightType.UNK_10 || tevStr.lightType === LightType.UNK_9 || tevStr.unk_378 !== 0) {
                     dKy_calc_color_set(envLight, sp50[i], ret.palePrevA.unkCol2[i], ret.palePrevB.unkCol2[i], ret.paleCurrA.unkCol2[i], ret.paleCurrB.unkCol2[i], ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, 1.0);
     
                     tevStr.lights[i].Color = dKy_light_influence_col(sp50[i], tevStr.unk_374);
@@ -717,7 +719,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
                 
                     kankyo_color_ratio_calc(tevStr.lights[i].Color, sp50[i], envLight.unk_1210 * tevStr.unk_374);
                 }
-            } else if (tevStr.unk_37a === LightType.UNK_10 || tevStr.unk_37a === LightType.UNK_9 || tevStr.unk_378 !== 0) {
+            } else if (tevStr.lightType === LightType.UNK_10 || tevStr.lightType === LightType.UNK_9 || tevStr.unk_378 !== 0) {
                 dKy_calc_color_set(envLight, sp50[i], ret.palePrevA.unkCol2[i], ret.palePrevB.unkCol2[i], ret.paleCurrA.unkCol2[i], ret.paleCurrB.unkCol2[i], ret.blendPaleAB, tevStr.colpatBlend, envLight.actorAddAmb, envLight.ColActColRatio * envLight.ColActColRatio);
     
                 tevStr.lights[i].Color = dKy_light_influence_col(sp50[i], tevStr.unk_374);
@@ -765,7 +767,7 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, outColor: 
     if (tevStr.colpatPrev !== tevStr.colpatCurr)
         tevStr.colpatBlend = envLight.colpatBlend;
 
-    const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight)
+    const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight);
 
     if (ret.palePrevA === null) {
         for (let i = 0; i < 4; i++) {
@@ -819,9 +821,9 @@ function settingTevStruct_plightcol_plus(globals: dGlobals, pos: vec3, tevStr: d
 
     let plightIdx = dKy_light_influence_id(globals, pos, 0);
 
-    if (tevStr.unk_37a === 7 || tevStr.unk_37a === 1 || tevStr.unk_37a === 2 || tevStr.unk_37a === 6 || tevStr.unk_37a === 3 || tevStr.unk_37a === 4 || tevStr.unk_37a === 5) {
+    if (tevStr.lightType === 7 || tevStr.lightType === 1 || tevStr.lightType === 2 || tevStr.lightType === 6 || tevStr.lightType === 3 || tevStr.lightType === 4 || tevStr.lightType === 5) {
         plightIdx = -2;
-    } else if (tevStr.unk_37a === 9 && dKy_darkworld_check(globals)) {
+    } else if (tevStr.lightType === 9 && dKy_darkworld_check(globals)) {
         plightIdx = -2;
     }
 
@@ -880,8 +882,8 @@ function settingTevStruct_colget_actor(globals: dGlobals, envLight: dScnKy_env_l
         }
     }
 
-    if ((tevStr.unk_37a !== 0 && tevStr.unk_37a <= LightType.UNK_7) || (tevStr.unk_37a === LightType.UNK_9 && dKy_darkworld_check(globals))) {
-        if ((tevStr.unk_37a !== LightType.UNK_2 && tevStr.unk_37a !== LightType.UNK_3) || dKy_darkworld_check(globals)) {
+    if ((tevStr.lightType !== 0 && tevStr.lightType <= LightType.UNK_7) || (tevStr.lightType === LightType.UNK_9 && dKy_darkworld_check(globals))) {
+        if ((tevStr.lightType !== LightType.UNK_2 && tevStr.lightType !== LightType.UNK_3) || dKy_darkworld_check(globals)) {
             tevStr.unk_374 = 0.0;
         }
     }
@@ -889,7 +891,7 @@ function settingTevStruct_colget_actor(globals: dGlobals, envLight: dScnKy_env_l
     if (tevStr.envrIdxPrev !== tevStr.envrIdxCurr && (tevStr.colpatBlend >= 0.0 || tevStr.colpatBlend <= 1.0))
         tevStr.colpatBlend = 0.0;
 
-    if (tevStr.unk_37a !== 8) {
+    if (tevStr.lightType !== 8) {
         setLight_actor(globals, envLight, tevStr);
 
         envLight.actorAmbience.r = tevStr.colorC0.r;
@@ -934,7 +936,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
         tevStr.unk_374 = envLight.actorLightEffect / 100;
     }
 
-    tevStr.unk_37a = lightType;
+    tevStr.lightType = lightType;
 
     if (tevStr.initType !== 123 && tevStr.initType !== 124) {
         dKy_tevstr_init(tevStr, globals.mStayNo);
@@ -1121,7 +1123,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
         }
     } else {
         tevStr.lightMode = LightMode.BG;
-        if (tevStr.unk_37a !== 20) {
+        if (tevStr.lightType !== 20) {
             tevStr.unk_374 = globals.g_env_light.paletteTerrainLightEffect;
         } else {
             switch (tevStr.unk_364) {
@@ -1249,7 +1251,38 @@ export function dKy_setLight__OnMaterialParams(envLight: dScnKy_env_light_c, mat
     lightSetFromWorldLight(materialParams.u_Lights[1], envLight.lightStatus[1], camera);
 }
 
-export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
+function setLightTevColorType_MAJI_sub(globals: dGlobals, materialInstance: MaterialInstance, tevStr: dKy_tevstr_c, param_2: number): void {
+}
+
+function dKy_cloudshadow_scroll(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, param_2: number): void {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++) {
+        const materialInstance = modelInstance.materialInstances[i];
+        const name = materialInstance.materialData.material.name;
+
+        let tmp = param_2;
+        if (tevStr.unk_378 !== 0 && tevStr.unk_378 === 1)
+            tmp = 2;
+
+        setLightTevColorType_MAJI_sub(globals, materialInstance, tevStr, tmp);
+
+        const sub = name.slice(3, 7);
+        if (sub === 'MA00' || sub === 'MA01' || sub === 'MA16') {
+            if (sub === 'MA00' || sub === 'MA01') {
+                const k1 = colorNewCopy(TransparentBlack);
+                k1.r = globals.g_env_light.fogDensity;
+                materialInstance.setColorOverride(ColorKind.K1, k1);
+            }
+
+            const texMtx = materialInstance.materialData.material.texMatrices[1];
+            if (texMtx !== null && globals.g_env_light.vrkumoPacket !== null) {
+                texMtx.matrix[12] = globals.g_env_light.vrkumoPacket.cloudScrollX;
+                texMtx.matrix[13] = globals.g_env_light.vrkumoPacket.cloudScrollY;
+            }
+        }
+    }
+}
+
+export function setLightTevColorType_MAJI(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
     const envLight = globals.g_env_light;
 
     const light0 = modelInstance.getGXLightReference(0);
@@ -1263,6 +1296,15 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
 
     for (let i = 0; i < modelInstance.materialInstances.length; i++)
         GxFogSet_Sub(modelInstance.materialInstances[i].fogBlock, tevStr, camera);
+
+    const tmp = (tevStr.lightType > 10 && tevStr.lightType !== 12 && tevStr.lightType !== 13) ? 1 : 0;
+
+    if (!!(tevStr.lightType & 0x20)) {
+        dKy_cloudshadow_scroll(globals, modelInstance, tevStr, tmp);
+    } else {
+        for (let i = 0; i < modelInstance.materialInstances.length; i++)
+            setLightTevColorType_MAJI_sub(globals, modelInstance.materialInstances[i], tevStr, tmp);
+    }
 }
 
 function SetBaseLight(globals: dGlobals): void {
@@ -2029,6 +2071,161 @@ export function dKy_darkworld_check(globals: dGlobals): boolean {
     }
 
     return false;
+}
+
+function dKy_murky_set(globals: dGlobals, materialInstance: MaterialInstance): void {
+}
+
+function projectionMatrixForLightPerspective(dst: mat4, fovY: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const cot = 1.0 / Math.tan(fovY * 0.5);
+
+    dst[0] = (cot / aspect) * scaleS;
+    dst[4] = 0.0;
+    dst[8] = -transS;
+    dst[12] = 0.0;
+
+    dst[1] = 0.0;
+    dst[5] = cot * scaleT;
+    dst[9] = -transT;
+    dst[13] = 0.0;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 1.0;
+}
+
+export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): void {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++) {
+        const materialInstance = modelInstance.materialInstances[i];
+        const name = materialInstance.materialData.material.name;
+
+        if (name.charAt(3) === 'M' && name.charAt(4) === 'A') {
+            const sub = name.slice(3, 7);
+            if (sub === 'MA06')
+                dKy_murky_set(globals, materialInstance);
+
+            if (sub === 'MA03' || sub === 'MA09' || sub === 'MA17' || sub === 'MA19') {
+                if (sub.charAt(2) !== '1')
+                    null; // globals.dlst.dComIfGd_setListDarkBG();
+                else if (sub.charAt(3) === '9')
+                    globals.dlst.dComIfGd_setListInvisisble();
+
+                if (sub === 'MA09') {
+                    // patch fog block
+                    // materialInstance.materialData.material.gxMaterial.ropInfo.fogType
+                } else {
+                    // patch fog block
+                    // materialInstance.materialData.material.gxMaterial.ropInfo.fogType
+                }
+            }
+
+            if (sub === 'MA07') {
+                // const bright = globals.g_env_light.thunderEff.field_0x08 * (100.0 / 255.0);
+                // const color = colorNewFromRGBA(bright, bright, bright);
+                // materialInstance.setColorOverride(ColorKind.C0, color);
+            }
+
+            if (sub === 'MA10' || sub === 'MA02') {
+                globals.dlst.dComIfGd_setListInvisisble();
+                // set viewproj effect mtx based on whether this is MA10 or MA02
+                // TODO(jstpierre): This require some work in J3DGraphBase because ViewProj
+                // assumes that the effectMtx is predetermined for us...
+            }
+
+            if (sub === 'MA00' || sub === 'MA01' || sub === 'MA04' || sub === 'MA16') {
+                const color = colorNewCopy(TransparentBlack);
+                color.r = globals.g_env_light.fogDensity;
+
+                if (sub === 'MA01') {
+                    if (globals.g_env_light.cameraInWater) {
+                        color.a = 1.0;
+                        // patch alpha comp / zmode
+                    } else {
+                        // patch alpha comp / zmode
+                    }
+                }
+
+                materialInstance.setColorOverride(ColorKind.K1, color);
+            }
+
+            if (sub === 'MA11') {
+                if (dKy_darkworld_check(globals)) {
+                    // globals.dlst.dComIfGd_setListDarkBG();
+
+                    const c1 = colorNewCopy(TransparentBlack);
+                    c1.r = 170 / 255;
+                    c1.g = 160 / 255;
+                    c1.b = 255 / 255;
+                    c1.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                    const c2 = colorNewCopy(TransparentBlack);
+                    c2.r = 50 / 255;
+                    c2.g = 20 / 255;
+                    c2.b = 90 / 255;
+                    c2.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C2, c2);
+                } else {
+                    const c1 = colorNewCopy(TransparentBlack);
+                    c1.r = 120 / 255;
+                    c1.g = 90 / 255;
+                    c1.b = 180 / 255;
+                    c1.a = 255 / 255;
+
+                    if (globals.scnPlay.getLayerNo(0) == 1)
+                        c1.a = 0.0;
+
+                    materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                    const c2 = colorNewCopy(TransparentBlack);
+                    c2.r = 40 / 255;
+                    c2.g = 30 / 255;
+                    c2.b = 65 / 255;
+                    c2.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C2, c2);
+
+                    // kytag08 effect mtx
+                }
+            } else if (sub === 'MA20') {
+                // patch fog block
+
+                const c1 = colorNewCopy(globals.g_env_light.bgAmbience[3], 1.0);
+                materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                const texMtx = materialInstance.materialData.material.texMatrices[2];
+                if (texMtx !== null) {
+                    const target = vec3.clone(globals.playerPosition);
+                    target[1] = -14770;
+
+                    const eye = vec3.clone(globals.playerPosition);
+                    eye[1] = -14570;
+
+                    projectionMatrixForLightPerspective(texMtx.effectMatrix, 170.0 * MathConstants.DEG_TO_RAD, 1.0, 1.5, 1.5, 0.0, 0.0);
+                    const lookAt = mat4.create();
+                    mat4.lookAt(lookAt, eye, target, Vec3UnitY);
+                    mat4.mul(texMtx.effectMatrix, texMtx.effectMatrix, lookAt);
+                }
+            } else if (sub === 'MA13') {
+                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.bgAmbience[3]);
+            } else if (sub === 'MA14') {
+                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.fogColor);
+                const k3 = colorNewCopy(TransparentBlack, globals.g_env_light.bgAmbience[3].a);
+                materialInstance.setColorOverride(ColorKind.K3, k3);
+            } else if (sub === 'MA16') {
+                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.bgAmbience[1]);
+                const k3 = colorNewCopy(TransparentBlack, globals.g_env_light.bgAmbience[3].a);
+                materialInstance.setColorOverride(ColorKind.K3, k3);
+            }
+        } else if (name.slice(3, 10) === 'Rainbow') {
+            // TODO: K3
+        }
+    }
 }
 
 class d_kankyo extends kankyo_class {

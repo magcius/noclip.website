@@ -13,7 +13,7 @@ import { ResType, ResEntry, ResAssetType } from './d_resorce.js';
 import AnimationController from '../AnimationController.js';
 import { AABB } from '../Geometry.js';
 import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
-import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo.js';
+import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType_MAJI } from './d_kankyo.js';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback, fopAcM_GetParamBit } from './framework.js';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
@@ -1279,7 +1279,7 @@ class BMDObjectRenderer {
 
         mat4.getTranslation(scratchVec3a, this.modelMatrix);
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
-        setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
+        setLightTevColorType_MAJI(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)

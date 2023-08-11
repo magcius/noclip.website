@@ -7,11 +7,10 @@ import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import * as UI from '../ui.js';
 
 import * as JPA from '../Common/JSYSTEM/JPA.js';
-import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { readString, leftPad, assertExists, assert, nArray, hexzero } from '../util.js';
-import { GfxDevice, GfxRenderPass, GfxFormat, GfxProgram } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxRenderPass, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -20,7 +19,7 @@ import { range, getMatrixAxisZ } from '../MathHelpers.js';
 import { mat4, vec3} from 'gl-matrix';
 import { Camera, texProjCameraSceneTex, CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
-import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
@@ -29,14 +28,10 @@ import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
-import { PeekZManager } from '../WindWaker/d_dlst_peekZ.js';
 import { dBgS } from '../WindWaker/d_bg.js';
 import { TransparentBlack } from '../Color.js';
 import { dPa_control_c } from './d_particle.js';
-
-import { preprocessProgram_GLSL } from '../gfx/shaderc/GfxShaderCompiler.js';
-import { GfxShaderLibrary } from '../gfx/helpers/GfxShaderLibrary.js';
-
+import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -176,46 +171,6 @@ class RenderHacks {
     public renderHacksChanged = false;
 }
 
-export type dDlst_list_Set = [GfxRenderInstList, GfxRenderInstList];
-
-export class dDlst_list_c {
-    public sky: dDlst_list_Set = [
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-    ];
-    public indirect: dDlst_list_Set = [
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-    ];
-    // This really should be .sky[15], but we don't have multiple buffers in the render inst list...
-    public main: dDlst_list_Set = [
-        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
-        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
-    ];
-    public wetherEffect = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards);
-    public wetherEffectSet: dDlst_list_Set = [
-        this.wetherEffect, this.wetherEffect,
-    ]
-    public effect: GfxRenderInstList[] = [
-        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
-    ];
-    public ui: dDlst_list_Set = [
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-    ];
-
-    public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
-    public peekZ = new PeekZManager();
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.peekZ.destroy(device);
-    }
-}
-
 export class dGlobals {
     public g_env_light = new dScnKy_env_light_c();
     public dlst: dDlst_list_c;
@@ -268,7 +223,7 @@ export class dGlobals {
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
         }
 
-        this.dlst = new dDlst_list_c(modelCache.device, modelCache.cache, extraSymbolData);
+        this.dlst = new dDlst_list_c();
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -821,6 +776,10 @@ class d_s_play extends fopScn {
         /* globals.bloom_c.enable = true;
         globals.bloom_c.monoColor = colorNewCopy(White);
         globals.bloom_c.draw(globals, renderInstManager, viewerInput); */
+    }
+
+    public getLayerNo(roomNo: number = -1): number {
+        return 0;
     }
 
     public override delete(globals: dGlobals): void {

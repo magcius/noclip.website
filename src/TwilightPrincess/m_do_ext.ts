@@ -4,11 +4,12 @@ import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformIn
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dGlobals, dDlst_list_Set } from "./ztp_scenes.js";
+import { dGlobals } from "./ztp_scenes.js";
 import { mat4 } from "gl-matrix";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { ResType } from "./d_resorce.js";
+import { dDlst_list_Set } from "./d_drawlist.js";
 
 export function mDoExt_setIndirectTex(globals: dGlobals, modelInstance: J3DModelInstance): void {
     let m;
@@ -72,6 +73,14 @@ abstract class mDoExt_baseAnm<T extends AnimationBase> {
         return hasStopped;
     }
 
+    public setFrame(frame: number): void {
+        this.frameCtrl.setFrame(frame);
+    }
+
+    public entryFrame(frame: number): void {
+        this.setFrame(frame);
+    }
+
     public abstract entry(modelInstance: J3DModelInstance): void;
 }
 
@@ -121,7 +130,7 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     const device = globals.modelCache.device;
 
     if (drawListSet === null)
-        drawListSet = globals.dlst.main;
+        drawListSet = globals.dlst.current;
 
     modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
