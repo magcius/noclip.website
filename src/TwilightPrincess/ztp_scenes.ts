@@ -184,6 +184,7 @@ export class dGlobals {
     public bloom_c = new mDoGph_bloom_c(); 
 
     public scnPlay: d_s_play;
+    public counter = 0;
 
     // "Current" room number.
     public mStayNo: number = 0;
@@ -295,6 +296,8 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
+    private bgAmbRatioSlider: UI.Slider;
+    private actAmbRatioSlider: UI.Slider;
 
     public renderHelper: GXRenderHelperGfx;
 
@@ -399,25 +402,23 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         environmentPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         environmentPanel.setTitle(UI.RENDER_HACKS_ICON, 'Environment Debug');
-        const slider = new UI.Slider();
-        slider.setRange(0, 1, 0.01);
-        slider.setLabel("Actor Color Ratio: " + this.globals.g_env_light.ColActColRatio);
-        slider.setValue(this.globals.g_env_light.ColActColRatio);
-        slider.onvalue = () => {
-            slider.setLabel("Actor Color Ratio: " + slider.getValue());
-            this.globals.g_env_light.ColActColRatio = slider.getValue();
-        }
-        environmentPanel.contents.appendChild(slider.elem);
+        this.actAmbRatioSlider = new UI.Slider();
+        this.actAmbRatioSlider.setRange(0, 1, 0.01);
+        this.actAmbRatioSlider.setLabel("Actor Color Ratio: " + this.globals.g_env_light.actAmbColRatio);
+        this.actAmbRatioSlider.setValue(this.globals.g_env_light.actAmbColRatio);
+        this.actAmbRatioSlider.onvalue = () => {
+            this.actAmbRatioSlider.setLabel("Actor Color Ratio: " + this.actAmbRatioSlider.getValue());
+        };
+        environmentPanel.contents.appendChild(this.actAmbRatioSlider.elem);
 
-        const bg_ratio_slider = new UI.Slider();
-        bg_ratio_slider.setRange(0, 1, 0.01);
-        bg_ratio_slider.setLabel("BG Color Ratio: " + this.globals.g_env_light.ColBgColRatio);
-        bg_ratio_slider.setValue(this.globals.g_env_light.ColBgColRatio);
-        bg_ratio_slider.onvalue = () => {
-            bg_ratio_slider.setLabel("BG Color Ratio: " + bg_ratio_slider.getValue());
-            this.globals.g_env_light.ColBgColRatio = bg_ratio_slider.getValue();
-        }
-        environmentPanel.contents.appendChild(bg_ratio_slider.elem);
+        this.bgAmbRatioSlider = new UI.Slider();
+        this.bgAmbRatioSlider.setRange(0, 1, 0.01);
+        this.bgAmbRatioSlider.setLabel("BG Color Ratio: " + this.globals.g_env_light.bgAmbColRatio);
+        this.bgAmbRatioSlider.setValue(this.globals.g_env_light.bgAmbColRatio);
+        this.bgAmbRatioSlider.onvalue = () => {
+            this.bgAmbRatioSlider.setLabel("BG Color Ratio: " + this.bgAmbRatioSlider.getValue());
+        };
+        environmentPanel.contents.appendChild(this.bgAmbRatioSlider.elem);
 
         return [roomsPanel, scenarioPanel, renderHacksPanel, environmentPanel];
     }
@@ -447,10 +448,15 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     }
 
     private executeDrawAll(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        const globals = this.globals;
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        this.globals.g_env_light.bgAmbColRatioGather = this.bgAmbRatioSlider.getValue();
+        this.globals.g_env_light.actAmbColRatioGather = this.actAmbRatioSlider.getValue();
+
         this.time = viewerInput.time;
+        globals.counter += viewerInput.deltaTime / 30.0;
 
         if (!this.cameraFrozen) {
             mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);

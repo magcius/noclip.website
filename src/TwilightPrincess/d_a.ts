@@ -221,7 +221,7 @@ class d_a_bg extends fopAc_ac_c {
                         name.slice(3).startsWith('MA00_Kusa')) {
 
                         let g = 0, b = 0, r = 0;
-                        switch (globals.g_env_light.unk_12fe) {
+                        switch (globals.g_env_light.pondSeason) {
                         case 2:
                             r = -3;
                             g = 0;
@@ -240,9 +240,9 @@ class d_a_bg extends fopAc_ac_c {
                         }
 
                         const c0 = colorNewCopy(OpaqueBlack);
-                        c0.r = Math.min((bgTevStr.colorC0.r / 10.0) ** 2, 1.0) * (r / 255.0);
-                        c0.g = Math.min((bgTevStr.colorC0.g / 10.0) ** 2, 1.0) * (g / 255.0);
-                        c0.b = Math.min((bgTevStr.colorC0.b / 10.0) ** 2, 1.0) * (b / 255.0);
+                        c0.r = Math.min((bgTevStr.ambCol.r / 10.0) ** 2, 1.0) * (r / 255.0);
+                        c0.g = Math.min((bgTevStr.ambCol.g / 10.0) ** 2, 1.0) * (g / 255.0);
+                        c0.b = Math.min((bgTevStr.ambCol.b / 10.0) ** 2, 1.0) * (b / 255.0);
                         materialInstance.setColorOverride(ColorKind.C0, c0);
                         materialInstance.setColorOverride(ColorKind.K0, OpaqueBlack);
                     }

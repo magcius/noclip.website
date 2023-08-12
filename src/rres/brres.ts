@@ -3071,8 +3071,8 @@ export class LightSet {
                 m[i].copy(lightObj.light);
 
                 if (lightObj.space === LightObjSpace.WORLD_SPACE) {
-                    GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
-                    GX_Material.lightSetWorldDirectionNormalMatrix(m[i], viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+                    GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position);
+                    GX_Material.lightSetWorldDirectionNormalMatrix(m[i], viewMatrix, lightObj.light.Direction);
                 } else if (lightObj.space === LightObjSpace.VIEW_SPACE) {
                     // Parameters are in view-space; already copied correctly.
                 }

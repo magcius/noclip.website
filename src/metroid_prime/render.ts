@@ -294,8 +294,8 @@ class MaterialGroupInstance {
                 if (actorLights !== null && i < actorLights.lights.length) {
                     const light = actorLights.lights[i].gxLight;
                     materialParams.u_Lights[i].copy(light);
-                    lightSetWorldPositionViewMatrix(materialParams.u_Lights[i], viewMatrix, light.Position[0], light.Position[1], light.Position[2]);
-                    lightSetWorldDirectionNormalMatrix(materialParams.u_Lights[i], viewMatrix, light.Direction[0], light.Direction[1], light.Direction[2]);
+                    lightSetWorldPositionViewMatrix(materialParams.u_Lights[i], viewMatrix, light.Position);
+                    lightSetWorldDirectionNormalMatrix(materialParams.u_Lights[i], viewMatrix, light.Direction);
                 } else {
                     materialParams.u_Lights[i].reset();
                 }

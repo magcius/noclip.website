@@ -77,46 +77,46 @@ function colorFromRGB8(dst: Color, n: number): void {
 }
 
 export class stage_palet_info_class {
-    public actCol = colorNewCopy(White);
-    public unkCol = nArray(4, () => colorNewCopy(White));
-    public unkCol2 = nArray(6, () => colorNewCopy(White));
-    public unkCol3 = colorNewCopy(White);
+    public actorAmbCol = colorNewCopy(White);
+    public bgAmbCol = nArray(4, () => colorNewCopy(White));
+    public lightCol = nArray(6, () => colorNewCopy(White));
+    public fogCol = colorNewCopy(White);
     public fogStartZ: number;
     public fogEndZ: number;
 
     public virtIdx: number;
-    public unk_2d: number;
-    public unk_2e: number;
+    public terrainLightInfluence: number;
+    public cloudShadowDensity: number;
     public unk_2f: number;
-    public unk_30: number;
-    public unk_31: number;
-    public unk_32: number;
-    public unk_33: number;
+    public bloomTblIdx: number;
+    public bgAmbColor1A: number;
+    public bgAmbColor2A: number;
+    public bgAmbColor3A: number;
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
-        colorFromRGB8(this.actCol, view.getUint32(0x00));
-        colorFromRGB8(this.unkCol[0], view.getUint32(0x03));
-        colorFromRGB8(this.unkCol[1], view.getUint32(0x06));
-        colorFromRGB8(this.unkCol[2], view.getUint32(0x09));
-        colorFromRGB8(this.unkCol[3], view.getUint32(0x0C));
-        colorFromRGB8(this.unkCol2[0], view.getUint32(0x0F));
-        colorFromRGB8(this.unkCol2[1], view.getUint32(0x12));
-        colorFromRGB8(this.unkCol2[2], view.getUint32(0x15));
-        colorFromRGB8(this.unkCol2[3], view.getUint32(0x18));
-        colorFromRGB8(this.unkCol2[4], view.getUint32(0x1B));
-        colorFromRGB8(this.unkCol2[5], view.getUint32(0x1E));
-        colorFromRGB8(this.unkCol3, view.getUint32(0x21));
+        colorFromRGB8(this.actorAmbCol, view.getUint32(0x00));
+        colorFromRGB8(this.bgAmbCol[0], view.getUint32(0x03));
+        colorFromRGB8(this.bgAmbCol[1], view.getUint32(0x06));
+        colorFromRGB8(this.bgAmbCol[2], view.getUint32(0x09));
+        colorFromRGB8(this.bgAmbCol[3], view.getUint32(0x0C));
+        colorFromRGB8(this.lightCol[0], view.getUint32(0x0F));
+        colorFromRGB8(this.lightCol[1], view.getUint32(0x12));
+        colorFromRGB8(this.lightCol[2], view.getUint32(0x15));
+        colorFromRGB8(this.lightCol[3], view.getUint32(0x18));
+        colorFromRGB8(this.lightCol[4], view.getUint32(0x1B));
+        colorFromRGB8(this.lightCol[5], view.getUint32(0x1E));
+        colorFromRGB8(this.fogCol, view.getUint32(0x21));
         this.fogStartZ = view.getFloat32(0x24);
         this.fogEndZ = view.getFloat32(0x28);
         this.virtIdx = view.getUint8(0x2C);
-        this.unk_2d = view.getUint8(0x2D);
-        this.unk_2e = view.getUint8(0x2E);
+        this.terrainLightInfluence = view.getUint8(0x2D);
+        this.cloudShadowDensity = view.getUint8(0x2E);
         this.unk_2f = view.getUint8(0x2F);
-        this.unk_30 = view.getUint8(0x30);
-        this.unk_31 = view.getUint8(0x31);
-        this.unk_32 = view.getUint8(0x32);
-        this.unk_33 = view.getUint8(0x33);
+        this.bloomTblIdx = view.getUint8(0x30);
+        this.bgAmbColor1A = view.getUint8(0x31);
+        this.bgAmbColor2A = view.getUint8(0x32);
+        this.bgAmbColor3A = view.getUint8(0x33);
         return 0x34;
     }
 }

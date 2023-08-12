@@ -5,7 +5,7 @@ import * as GX from './gx_enum.js';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color.js';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat.js';
-import { vec3, mat4 } from 'gl-matrix';
+import { vec3, mat4, ReadonlyVec3 } from 'gl-matrix';
 import { Camera } from '../Camera.js';
 import { assert } from '../util.js';
 import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers.js';
@@ -1882,33 +1882,28 @@ export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID
     }
 }
 
-const scratchVec3 = vec3.create();
-export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec3 = scratchVec3): void {
-    vec3.set(v, x, y, z);
-    transformVec3Mat4w1(v, viewMatrix, v);
-    vec3.set(light.Position, v[0], v[1], v[2]);
+export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, v: ReadonlyVec3): void {
+    transformVec3Mat4w1(light.Position, viewMatrix, v);
 }
 
-export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec3 = scratchVec3): void {
-    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
+export function lightSetWorldPosition(light: Light, camera: Camera, v: ReadonlyVec3): void {
+    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, v);
 }
 
-export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec3 = scratchVec3): void {
-    vec3.set(v, x, y, z);
-    transformVec3Mat4w0(v, normalMatrix, v);
-    vec3.normalize(v, v);
-    vec3.set(light.Direction, v[0], v[1], v[2]);
+export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, v: ReadonlyVec3): void {
+    transformVec3Mat4w0(light.Direction, normalMatrix, v);
+    vec3.normalize(light.Direction, v);
 }
 
-export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec3 = scratchVec3): void {
+export function lightSetWorldDirection(light: Light, camera: Camera, v: ReadonlyVec3): void {
     // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
     // However, I don't want to calculate that right now, and it shouldn't matter too much...
-    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
+    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, v);
 }
 
 export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
-    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
-    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
+    lightSetWorldPosition(dst, camera, worldLight.Position);
+    lightSetWorldDirection(dst, camera, worldLight.Direction);
     vec3.copy(dst.DistAtten, worldLight.DistAtten);
     vec3.copy(dst.CosAtten, worldLight.CosAtten);
     colorCopy(dst.Color, worldLight.Color);

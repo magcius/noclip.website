@@ -361,7 +361,7 @@ function kankyo_color_ratio_set(v0A: number, v0B: number, blendAB: number, v1A: 
     return clamp((lerp(v0, v1, blend01) + add) * mul, 0.0, 1.0);
 }
 
-function kankyo_color_ratio_set__Color(envLight: dScnKy_env_light_c, dst: Color, c0A: Color, c0B: Color, blendAB: number, c1A: Color, c1B: Color, blend01: number, add: Color | null, ratio: number): void {
+function dKy_calc_color_set(envLight: dScnKy_env_light_c, dst: Color, c0A: Color, c0B: Color, blendAB: number, c1A: Color, c1B: Color, blend01: number, add: Color | null, ratio: number): void {
     const mul = ratio * envLight.allColRatio;
     dst.r = kankyo_color_ratio_set(c0A.r, c0B.r, blendAB, c1A.r, c1B.r, blend01, add !== null ? add.r : 0, mul);
     dst.g = kankyo_color_ratio_set(c0A.g, c0B.g, blendAB, c1A.g, c1B.g, blend01, add !== null ? add.g : 0, mul);
@@ -374,26 +374,26 @@ const setLight_palno_ret_scratch = new setLight_palno_ret();
 function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
     const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, envLight.actCol.C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, envLight.colpatBlend, null, envLight.actColRatio * envLight.actColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.actCol.K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, envLight.colpatBlend, null, envLight.actColRatio);
+    dKy_calc_color_set(envLight, envLight.actCol.C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, envLight.colpatBlend, null, envLight.actColRatio * envLight.actColRatio);
+    dKy_calc_color_set(envLight, envLight.actCol.K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, envLight.colpatBlend, null, envLight.actColRatio);
     for (let whichBG = 0; whichBG < 4; whichBG++) {
-        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.colpatBlend, null, envLight.bgColRatio);
-        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.colpatBlend, null, envLight.bgColRatio);
+        dKy_calc_color_set(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.colpatBlend, null, envLight.bgColRatio);
+        dKy_calc_color_set(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.colpatBlend, null, envLight.bgColRatio);
     }
-    kankyo_color_ratio_set__Color(envLight, envLight.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
+    dKy_calc_color_set(envLight, envLight.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
     envLight.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, envLight.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
-    envLight.fogEndZ = Math.max(envLight.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
+    envLight.fogEndZ = Math.max(envLight.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.colpatBlend, envLight.fogGlobalEndZ, envLight.fogGlobalRatio));
 
     const virt0A = envLight.virt[ret.palePrevA.virtIdx] || envLight.virt[0];
     const virt0B = envLight.virt[ret.palePrevB.virtIdx] || envLight.virt[0];
     const virt1A = envLight.virt[ret.paleCurrA.virtIdx] || envLight.virt[0];
     const virt1B = envLight.virt[ret.paleCurrB.virtIdx] || envLight.virt[0];
 
-    kankyo_color_ratio_set__Color(envLight, envLight.vrSkyCol, virt0A.skyCol, virt0B.skyCol, ret.blendPaleAB, virt1A.skyCol, virt1B.skyCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrSoraColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrUsoUmiCol, virt0A.usoUmiCol, virt0B.usoUmiCol, ret.blendPaleAB, virt1A.usoUmiCol, virt1B.usoUmiCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrSoraColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCol, virt0A.kumoCol, virt0B.kumoCol, ret.blendPaleAB, virt1A.kumoCol, virt1B.kumoCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCenterCol, virt0A.kumoCenterCol, virt0B.kumoCenterCol, ret.blendPaleAB, virt1A.kumoCenterCol, virt1B.kumoCenterCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKasumiMaeCol, virt0A.kasumiMaeCol, virt0B.kasumiMaeCol, ret.blendPaleAB, virt1A.kasumiMaeCol, virt1B.kasumiMaeCol, envLight.colpatBlend, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
+    dKy_calc_color_set(envLight, envLight.vrSkyCol, virt0A.skyCol, virt0B.skyCol, ret.blendPaleAB, virt1A.skyCol, virt1B.skyCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrSoraColRatio);
+    dKy_calc_color_set(envLight, envLight.vrUsoUmiCol, virt0A.usoUmiCol, virt0B.usoUmiCol, ret.blendPaleAB, virt1A.usoUmiCol, virt1B.usoUmiCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrSoraColRatio);
+    dKy_calc_color_set(envLight, envLight.vrKumoCol, virt0A.kumoCol, virt0B.kumoCol, ret.blendPaleAB, virt1A.kumoCol, virt1B.kumoCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
+    dKy_calc_color_set(envLight, envLight.vrKumoCenterCol, virt0A.kumoCenterCol, virt0B.kumoCenterCol, ret.blendPaleAB, virt1A.kumoCenterCol, virt1B.kumoCenterCol, envLight.colpatBlend, envLight.vrSky0Add, envLight.vrKumoColRatio);
+    dKy_calc_color_set(envLight, envLight.vrKasumiMaeCol, virt0A.kasumiMaeCol, virt0B.kasumiMaeCol, ret.blendPaleAB, virt1A.kasumiMaeCol, virt1B.kasumiMaeCol, envLight.colpatBlend, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
 }
 
 function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c): void {
@@ -404,10 +404,10 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, tevStr.colorC0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.colpatBlend, envLight.actAdd.C0, envLight.actColRatio * envLight.actColRatio);
-    kankyo_color_ratio_set__Color(envLight, tevStr.colorK0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, tevStr.colpatBlend, envLight.actAdd.K0, envLight.actColRatio);
+    dKy_calc_color_set(envLight, tevStr.colorC0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.colpatBlend, envLight.actAdd.C0, envLight.actColRatio * envLight.actColRatio);
+    dKy_calc_color_set(envLight, tevStr.colorK0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, tevStr.colpatBlend, envLight.actAdd.K0, envLight.actColRatio);
 
-    kankyo_color_ratio_set__Color(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
+    dKy_calc_color_set(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
     tevStr.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, tevStr.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
     tevStr.fogEndZ = Math.max(tevStr.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, tevStr.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
 }
@@ -420,14 +420,14 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dK
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, tevStr.colorC0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, tevStr.colpatBlend, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
-    kankyo_color_ratio_set__Color(envLight, tevStr.colorK0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, tevStr.colpatBlend, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
+    dKy_calc_color_set(envLight, tevStr.colorC0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, tevStr.colpatBlend, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
+    dKy_calc_color_set(envLight, tevStr.colorK0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, tevStr.colpatBlend, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
 
     if (whichBG === 1) {
         // BG1 (Sea) gets UsoUmi as a fog color
         colorCopy(tevStr.fogCol, envLight.vrUsoUmiCol);
     } else {
-        kankyo_color_ratio_set__Color(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
+        dKy_calc_color_set(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.colpatBlend, envLight.fogAdd, envLight.fogColRatio);
     }
 
     tevStr.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, tevStr.colpatBlend, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
