@@ -7,7 +7,7 @@ import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_chaseF, cM_atan2s } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_chaseF, cM_atan2s, cM_rndF } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
 import { MtxTrans, calc_mtx, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, scratchVec3a } from "../WindWaker/m_do_mtx.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
@@ -20,10 +20,10 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
-import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec } from "./d_kankyo_wether.js";
+import { dKy_event_proc, dice_rain_minus, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
+import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
-import { dPath, dPath_GetRoomPath, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
+import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
 import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
@@ -1613,6 +1613,474 @@ class d_a_obj_lv3water extends fopAc_ac_c {
     }
 }
 
+class kytag17_class extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.kytag17;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+
+        envLight.lightMaskType = this.parameters & 0xFF;
+
+        return cPhs__Status.Next;
+    }
+}
+
+// Dice Weather System Manager Tag
+class kytag06_class extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.kytag06;
+    public type: number;
+    public mode: number;
+    public windPower: number = 0.0;
+    public path: dPath | null;
+    private unk_580: JPABaseEmitter[] = [];
+    private unk_591: number;
+    private unk_574: number;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+
+        this.type = (this.parameters >> 0x18) & 0xF;
+
+        switch (this.type) {
+        case 1:
+            this.path = this.set_path_info(globals);
+            break;
+        case 2:
+            this.daKytag06_type02_init();
+            break;
+        case 3:
+            this.daKytag06_type03_init();
+            break;
+        case 4:
+            this.daKytag06_type04_init();
+            break;
+        case 6:
+            this.daKytag06_type06_init();
+            break;
+        case 7:
+            this.mode = 0;
+            this.unk_591 = 0;
+            this.unk_574 = 0;
+            break;
+        case 8:
+            this.daKytag06_type06_init();
+            break;
+        case 9:
+            this.daKytag06_type06_init();
+            break;
+        case 10:
+            if (globals.stageName === "F_SP114") {
+                this.daKytag06_type03_init();
+            } else {
+                this.daKytag06_type06_init();
+            }
+            break;
+        case 11:
+            this.daKytag06_type06_init();
+            break;
+        case 5:
+            break;
+        default:
+            envLight.colpatWeather = 3;
+            envLight.colpatPrev = 3;
+            envLight.colpatCurr = 3;
+
+            this.mode = 0;
+            this.unk_591 = 0;
+            this.unk_574 = 640;
+            break;
+        }
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+        const envLight = globals.g_env_light;
+
+        switch (this.type) {
+        case 1:
+            if (this.path !== null) {
+                const near_point = this.near_rail_get(globals.cameraPosition);
+
+                if (near_point !== null && near_point.arg3 !== 0xFF) {
+                    dKy_change_colpat(envLight, near_point.arg3);
+                }
+            }
+            break;
+        case 2:
+            // changes colpat based on a room switch being set
+            break;
+        case 3:
+            // Midna's Desperate Hour weather?
+            // this.daKytag06_type_03_Execute();
+            break;
+        case 4:
+            this.daKytag06_type_04_Execute(globals, deltaTimeInFrames);
+            break;
+        case 5:
+            // something player position specific?
+            // this.daKytag06_type_05_Execute();
+            break;
+        case 6:
+            this.daKytag06_type_06_Execute(globals, deltaTimeInFrames);
+            break;
+        case 7:
+            this.daKytag06_type_07_Execute(globals, deltaTimeInFrames);
+            break;
+        case 8:
+            this.daKytag06_type_08_Execute(globals, deltaTimeInFrames);
+            break;
+        case 9:
+            // this.daKytag06_type_09_Execute();
+            break;
+        case 10:
+            if (globals.stageName === "F_SP114") {
+                // Midna's Desperate Hour weather?
+                // this.daKytag06_type_03_Execute();
+            } else {
+                this.daKytag06_type_10_Execute(globals, deltaTimeInFrames);
+            }
+            break;
+        case 11:
+            // this is for Twilight layer 14 specific related stuff
+            // this.daKytag06_type_11_Execute();
+            break;
+        default:
+            break;
+        }
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+
+    public set_path_info(globals: dGlobals): dPath | null {
+        let ret = null;
+        const path_id = (this.parameters >> 0x10) & 0xFF;
+
+        if (path_id !== -1) {
+            ret = dPath_GetRoomPath(globals, path_id, this.roomNo);
+        }
+
+        return ret;
+    }
+
+    public near_rail_get(pos: vec3): dPath__Point | null {
+        let nearest_dist = Infinity;
+        let near_point = null;
+
+        for (let i = 0; i < this.path!.points.length; i++) {
+            let pnt_dist = vec3.squaredDistance(pos, this.path!.points[i].pos);
+
+            if (pnt_dist < nearest_dist) {
+                nearest_dist = pnt_dist;
+                near_point = this.path!.points[i];
+            }
+        }
+
+        return near_point;
+    }
+
+    public daKytag06_type02_init(): void {
+        this.mode = 0;
+    }
+
+    public daKytag06_type03_init(): void {
+        this.mode = 0;
+    }
+
+    public daKytag06_type04_init(): void {
+        this.mode = 0;
+    }
+
+    public daKytag06_type06_init(): void {
+        this.mode = 0;
+    }
+
+    public daKytag06_type_04_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        dKy_event_proc(globals, deltaTimeInFrames);
+    }
+
+
+    public daKytag06_type_06_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+        const w_eff_name = [0x8753, 0x8754, 0x8755, 0x8756];
+
+        this.daKytag06_wether_proc(globals, deltaTimeInFrames, envLight.unk_12cc);
+
+        if (this.unk_574 === 0) {
+            if (envLight.curTime > 285.0 || envLight.curTime < 82.5) {
+                this.unk_591 = 1;
+            } else {
+                this.unk_591 = 0;
+            }
+        }
+
+        switch (this.mode) {
+        case 0:
+            if (this.unk_591 !== 0) {
+                cLib_addCalc(this.windPower, 0.8, 0.5, 1.0, 0.0001);
+                if (this.windPower > 0.79)
+                    this.mode++;
+            }
+            break;
+        case 1:
+            cLib_addCalc(this.windPower, 0.6, 0.5, 1.5, 0.0001);
+            if (this.windPower < 0.61)
+                this.mode++;
+            break;
+        case 2:
+            cLib_addCalc(this.windPower, 1.0, 0.5, 1.5, 0.0001);
+            if (this.windPower > 0.99) {
+                this.windPower = 1.0;
+                this.mode++;
+            }
+            break;
+        case 3:
+            if (this.unk_591 === 0) {
+                cLib_addCalc(this.windPower, 0.0, 0.5, 1.0, 0.0001);
+                if (this.windPower < 0.01) {
+                    this.windPower = 0.0;
+                    this.mode = 0;
+                }
+            }
+            break;
+        }
+
+        envLight.bgAmbCol[3].r = (this.windPower * 245.0 + 10.0) / 255.0;
+        envLight.bgAmbCol[3].g = (this.windPower * 185.0 + 15.0) / 255.0;
+        envLight.bgAmbCol[3].b = (this.windPower * 130.0 + 20.0) / 255.0;
+
+        for (let i = 0; i < 4; i++) {
+            this.unk_580[i] = globals.particleCtrl.set(globals, 0, w_eff_name[i], null)!;
+        }
+    }
+
+    public daKytag06_wether_proc(globals: dGlobals, deltaTimeInFrames: number, type: number): void {
+        const envLight = globals.g_env_light;
+        envLight.thunderMode = 0;
+
+        let colpat_weather = envLight.colpatWeather;
+        switch (type) {
+        case 0:
+            colpat_weather = 0;
+            dice_rain_minus(envLight, deltaTimeInFrames);
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 1:
+            colpat_weather = 1;
+            dice_rain_minus(envLight, deltaTimeInFrames);
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 2:
+            colpat_weather = 1;
+            
+            if ((deltaTimeInFrames & 3) == 0) {
+                if (envLight.rainCount < 40) {
+                    envLight.rainCount++;
+                    dKyw_rain_set(envLight, envLight.rainCount);
+                } else {
+                    envLight.rainCount--;
+                    dKyw_rain_set(envLight, envLight.rainCount);
+                }
+            }
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 3:
+            colpat_weather = 1;
+            
+            if (envLight.rainCount < 250) {
+                envLight.rainCount++;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            }
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 4:
+            envLight.thunderMode = 1;
+            colpat_weather = 1;
+            
+            if (envLight.rainCount < 250) {
+                envLight.rainCount++;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            }
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 5:
+            envLight.thunderMode = 1;
+            colpat_weather = 1;
+            
+            dice_rain_minus(envLight, deltaTimeInFrames);
+
+            if (envLight.snowCount !== 0)
+                envLight.snowCount--;
+            break;
+        case 6:
+            colpat_weather = 1;
+            
+            if (envLight.snowCount < 125) {
+                if ((deltaTimeInFrames & 3) == 0) {
+                    envLight.snowCount++;
+                }
+            } else {
+                envLight.snowCount--;
+            }
+            break;
+        case 7:
+            colpat_weather = 2;
+
+            if (envLight.snowCount < 500)
+                envLight.snowCount++;
+            break;
+        }
+
+        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+            envLight.colpatWeather = colpat_weather;
+            dKy_change_colpat(envLight, colpat_weather);
+        }
+    }
+
+    public daKytag06_type_07_wether_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.daKytag06_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+    }
+
+    public daKytag06_type_07_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        if (this.unk_574 === 0) {
+            if (envLight.curTime > 285.0 || envLight.curTime < 82.5) {
+                this.unk_591 = 1;
+            } else {
+                this.unk_591 = 0;
+            }
+        }
+
+        switch (this.mode) {
+        case 0:
+            if (this.unk_591 !== 0) {
+                cLib_addCalc(this.windPower, 0.8, 0.5, 1.0, 0.0001);
+                if (this.windPower > 0.79)
+                    this.mode++;
+            }
+            break;
+        case 1:
+            cLib_addCalc(this.windPower, 0.6, 0.5, 1.5, 0.0001);
+            if (this.windPower < 0.61)
+                this.mode++;
+            break;
+        case 2:
+            cLib_addCalc(this.windPower, 1.0, 0.5, 1.5, 0.0001);
+            if (this.windPower > 0.99) {
+                this.windPower = 1.0;
+                this.mode++;
+            }
+            break;
+        case 3:
+            if (this.unk_591 === 0) {
+                cLib_addCalc(this.windPower, 0.0, 0.5, 1.0, 0.0001);
+                if (this.windPower < 0.01) {
+                    this.windPower = 0.0;
+                    this.mode = 0;
+                }
+            }
+            break;
+        }
+
+        this.daKytag06_type_07_wether_Execute(globals, deltaTimeInFrames);
+
+        if (globals.cameraPosition[1] > 0.0) {
+            envLight.bgAmbCol[3].r = (this.windPower * 230.0 + 25.0) / 255.0;
+            envLight.bgAmbCol[3].g = (this.windPower * 215.0 + 30.0) / 255.0;
+            envLight.bgAmbCol[3].b = (this.windPower * 155.0 + 25.0) / 255.0;
+        } else {
+            envLight.bgAmbCol[3].r = 0;
+            envLight.bgAmbCol[3].g = 0;
+            envLight.bgAmbCol[3].b = 0;
+            envLight.thunderMode = 0;
+        }
+    }
+
+    public daKytag06_lv7_boss_wether_proc(globals: dGlobals, deltaTimeInFrames: number, mode: number): void {
+        const envLight = globals.g_env_light;
+
+        envLight.thunderMode = 0;
+        
+        let colpat_weather = envLight.colpatWeather;
+        switch (mode) {
+        case 0:
+            colpat_weather = 0;
+            
+            if (envLight.rainCount > 20)
+                envLight.rainCount -= 4;
+            else if (envLight.rainCount !== 0)
+                envLight.rainCount--;
+
+            dKyw_rain_set(envLight, envLight.rainCount);
+            break;
+        case 1:
+            colpat_weather = 1;
+            dice_rain_minus(envLight, deltaTimeInFrames);
+            break;
+        case 2:
+            colpat_weather = 2;
+            
+            if (envLight.rainCount < 250) {
+                envLight.rainCount++;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            }
+
+            envLight.thunderMode = 1;
+            break;
+        }
+
+        if (envLight.colpatWeather != colpat_weather && !envLight.cameraInWater) {
+            envLight.colpatWeather = colpat_weather;
+            dKy_change_colpat(envLight, colpat_weather);
+        }
+    }
+
+    public daKytag06_type_08_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        this.daKytag06_lv7_boss_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+    }
+
+    public daKytag06_Ganon_wether_proc(globals: dGlobals, deltaTimeInFrames: number, mode: number): void {
+        const envLight = globals.g_env_light;
+
+        envLight.thunderMode = 0;
+        
+        // sets a bunch of moya values, setup properly later
+    }
+
+    public daKytag06_type_09_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        this.daKytag06_Ganon_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+    }
+
+    public daKytag06_type_10_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        // normally the game sets this depending on various event flags set
+        let colpat_change = 0;
+
+        dKy_change_colpat(envLight, colpat_change);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -1630,6 +2098,8 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_suisya);
     R(d_a_obj_glowSphere);
     R(kytag10_class);
+    R(kytag17_class);
+    R(kytag06_class);
     R(d_a_obj_firepillar2);
     R(d_a_obj_lv3water);
 }

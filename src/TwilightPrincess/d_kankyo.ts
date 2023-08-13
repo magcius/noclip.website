@@ -11,7 +11,7 @@ import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete } from "./d_kankyo_wether.js";
-import { cLib_addCalc } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cM_rndF } from "../WindWaker/SComponent.js";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -93,6 +93,9 @@ export class dScnKy_env_light_c {
     // Rain.
     public rainCount: number = 0;
     public rainCountOrig: number = 0;
+
+    // Snow
+    public snowCount: number = 0;
 
     // Thunder.
     public thunderMode: ThunderMode = ThunderMode.Off;
@@ -227,6 +230,8 @@ export class dScnKy_env_light_c {
 
     public lightSize: number = 1;
 
+    public lightMaskType: number = 0;
+
     // The game records this in a separate struct with a bunch of extra data, but we don't need it lol.
     public lightStatus = nArray(2, () => new Light());
 }
@@ -338,6 +343,7 @@ enum DiceWeatherMode {
     HeavyRain = 3,
     LightThunder = 4,
     HeavyThunder = 5,
+    UNK_MODE_6 = 6,
     Done = 0xFF,
 }
 
@@ -1366,17 +1372,8 @@ function GetTimePass(globals: dGlobals): boolean {
     return globals.g_env_light.forceTimePass || globals.dStage_dt.rtbl[globals.mStayNo].isTimePass;
 }
 
-function dice_rain_minus(envLight: dScnKy_env_light_c): void {
-    if (envLight.rainCount > 0) {
-        if (envLight.rainCount < 41)
-            dKyw_rain_set(envLight, envLight.rainCount - 1);
-        else
-            dKyw_rain_set(envLight, envLight.rainCount - 3);
-    }
-}
-
-const S_wether_table = [0, 1, 3, 2, 0, 1, 3, 2];
-const S_wether_time_table = [120, 150, 90, 120, 120, 150, 150, 120];
+const S_time_table = [45.0, 75.0, 120.0, 150.0, 180.0, 240.0, 270.0, 360.0];
+const S_wether_table = [0, 1, 3, 2, 4, 0, 1, 2];
 const S_wether_mode_pat = [
     // Pattern 1: Dip into light rain
     [
@@ -1385,50 +1382,196 @@ const S_wether_mode_pat = [
         DiceWeatherMode.Overcast,
         DiceWeatherMode.Done,
     ],
-    // Pattern 2: Dip into heavy thunder
+    // Pattern 2: Dip into light thunder
     [
+        DiceWeatherMode.Overcast,
         DiceWeatherMode.LightThunder,
-        DiceWeatherMode.HeavyThunder,
-        DiceWeatherMode.LightThunder,
+        DiceWeatherMode.Overcast,
         DiceWeatherMode.Done,
     ],
     // Pattern 3: Dip into heavy rain
     [
-        DiceWeatherMode.LightRain,
+        DiceWeatherMode.Overcast,
         DiceWeatherMode.HeavyRain,
-        DiceWeatherMode.LightRain,
+        DiceWeatherMode.Overcast,
         DiceWeatherMode.Done,
     ],
-    // Pattern 3: Light thunder for a bit.
+    // Pattern 4: Overcast for a bit.
     [
-        DiceWeatherMode.LightThunder,
+        DiceWeatherMode.Overcast,
         DiceWeatherMode.Done,
     ],
-];
-const S_wether_time_pat = [
-    [5, 10, 5],
-    [7, 15, 5],
-    [5, 12.5, 5],
-    [10],
+    // Pattern 5: Dip into heavy thunder
+    [
+        DiceWeatherMode.Overcast,
+        DiceWeatherMode.HeavyThunder,
+        DiceWeatherMode.Overcast,
+        DiceWeatherMode.Done,
+    ],
 ];
 
-function dice_wether_init(envLight: dScnKy_env_light_c, mode: DiceWeatherMode, timeChange: number, time: number): void {
+const S_wether_time_pat = [
+    [7.5, 7.5, 7.5],
+    [5.0, 15.0, 5.0],
+    [7.5, 15.0, 7.5],
+    [30],
+    [3.75, 3.75, 3.75],
+];
+
+export function dice_rain_minus(envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+    if ((deltaTimeInFrames & 3) === 0) {
+        if (envLight.rainCount > 40) {
+            envLight.rainCount -= 3;
+        } else if (envLight.rainCount !== 0) {
+            envLight.rainCount--;
+        }
+
+        dKyw_rain_set(envLight, envLight.rainCount);
+    }
+}
+
+function dice_wether_init(envLight: dScnKy_env_light_c, mode: number, timeChange: number, currentTime: number): void {
     console.log(`d_kankyo: dice_wether_init`, DiceWeatherMode[mode]);
 
     envLight.diceWeatherMode = mode;
-    envLight.diceWeatherTime = (time + timeChange) % 360.0;
+    envLight.diceWeatherTime = currentTime + timeChange + cM_rndF(timeChange) + cM_rndF(timeChange);
+
+    if (envLight.diceWeatherTime >= 360.0)
+        envLight.diceWeatherTime -= 360.0;
 }
 
-function dice_wether_execute(envLight: dScnKy_env_light_c, mode: DiceWeatherMode, timeChange: number, time: number): void {
+function dice_wether_execute(envLight: dScnKy_env_light_c, mode: number, timeChange: number, currentTime: number): void {
     console.log(`d_kankyo: dice_wether_execute`, DiceWeatherMode[mode]);
 
-    if (mode === DiceWeatherMode.Done) {
-        envLight.diceWeatherMode = DiceWeatherMode.Sunny;
-        envLight.diceWeatherState = DiceWeatherState.Next;
-    } else {
-        envLight.diceWeatherMode = mode;
-        envLight.diceWeatherTime = (time + timeChange) % 360.0;
+    envLight.diceWeatherMode = mode;
+
+    if (envLight.diceWeatherMode !== DiceWeatherMode.Done) {
+        envLight.diceWeatherTime = currentTime + timeChange + cM_rndF(timeChange) + cM_rndF(timeChange);
+        if (envLight.diceWeatherTime >= 360.0)
+            envLight.diceWeatherTime -= 360.0;
+
         envLight.diceWeatherCounter++;
+    } else {
+        envLight.diceWeatherMode = DiceWeatherMode.Sunny;
+        envLight.diceWeatherState++;
+    }
+}
+
+export function dKy_event_proc(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.cameraInWater)
+        return;
+
+    const current_time = envLight.curTime;
+
+    switch (envLight.diceWeatherState) {
+    case DiceWeatherState.Uninitialized:
+        if (current_time > envLight.diceWeatherChangeTime && current_time - envLight.diceWeatherChangeTime < 15.0) {
+            envLight.diceWeatherState = DiceWeatherState.Init;
+        }
+        break;
+    case DiceWeatherState.Init:
+        const patternIdx = Math.floor(cM_rndF(12.99));
+        if (patternIdx >= 8) {
+            envLight.diceWeatherState = DiceWeatherState.Next;
+        } else {
+            envLight.diceWeatherCurrPattern = S_wether_table[patternIdx];
+            envLight.diceWeatherCounter = 0;
+
+            const pattern = envLight.diceWeatherCurrPattern;
+            const idx = envLight.diceWeatherCounter;
+            dice_wether_init(envLight, S_wether_mode_pat[pattern][idx], S_wether_time_pat[pattern][idx], current_time);
+
+            envLight.diceWeatherCounter++;
+            envLight.diceWeatherState++;
+        }
+        break;
+    case DiceWeatherState.Execute:
+        if (current_time > envLight.diceWeatherTime && current_time - envLight.diceWeatherTime < 180.0) {
+            const pattern = envLight.diceWeatherCurrPattern;
+            const idx = envLight.diceWeatherCounter;
+            dice_wether_execute(envLight, S_wether_mode_pat[pattern][idx], S_wether_time_pat[pattern][idx], current_time);
+        }
+        break;
+    case DiceWeatherState.Next:
+        envLight.diceWeatherChangeTime = current_time + S_time_table[Math.floor(cM_rndF(7.99))];
+
+        if (envLight.diceWeatherChangeTime >= 360.0) {
+            envLight.diceWeatherChangeTime -= 360.0;
+        }
+
+        envLight.diceWeatherState = DiceWeatherState.Uninitialized;
+        break;
+    }
+
+    if (envLight.lightMaskType === 1) {
+        envLight.diceWeatherMode = DiceWeatherMode.UNK_MODE_6;
+    }
+
+    if (envLight.colpatMode === 0 && envLight.colpatModeGather === 0) {
+        let colpat = 0;
+
+        switch (envLight.diceWeatherMode) {
+        case DiceWeatherMode.Sunny:
+            colpat = 0;
+            if (envLight.thunderMode === 1)
+                envLight.thunderMode = 0;
+
+            dice_rain_minus(envLight, deltaTimeInFrames);
+            break;
+        case DiceWeatherMode.Overcast:
+            envLight.thunderMode = 0;
+            colpat = 1;
+            dice_rain_minus(envLight, deltaTimeInFrames);
+            break;
+        case DiceWeatherMode.LightRain:
+            colpat = 1;
+            if (envLight.rainCount < 40) {
+                envLight.rainCount++;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            } else {
+                envLight.rainCount--;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            }
+            break;
+        case DiceWeatherMode.HeavyRain:
+            colpat = 2;
+            if (envLight.rainCount < 250) {
+                envLight.rainCount++;
+                dKyw_rain_set(envLight, envLight.rainCount);
+            }
+            break;
+        case DiceWeatherMode.LightThunder:
+            colpat = 1;
+            envLight.thunderMode = 1;
+            dice_rain_minus(envLight, deltaTimeInFrames);
+            break;
+        case DiceWeatherMode.HeavyThunder:
+            envLight.thunderMode = 1;
+            break;
+        case DiceWeatherMode.UNK_MODE_6:
+            colpat = 0;
+            if (envLight.thunderMode === 1)
+                envLight.thunderMode = 0;
+
+            if (envLight.rainCount > 2)
+                envLight.rainCount -= 2;
+            else
+                envLight.rainCount = 0;
+
+            dKyw_rain_set(envLight, envLight.rainCount);
+            break;
+        }
+
+        if (envLight.colpatWeather != colpat) {
+            envLight.colpatWeather = colpat;
+            envLight.colpatCurrGather = colpat;
+        }
+    }
+
+    if (envLight.colpatMode === 0 && envLight.colpatModeGather === 0 && envLight.colpatCurrGather !== -1 && envLight.colpatCurrGather !== envLight.colpatCurr) {
+        envLight.colpatBlendGather = 0.0;
     }
 }
 
@@ -1974,7 +2117,7 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
 
 export function dKy_SunMoon_Light_Check(globals: dGlobals): boolean {
     if (globals.g_env_light.sunPacket !== null && !dKy_darkworld_check(globals)) {
-        if (globals.stageName !== "D_MN07" && globals.stageName !== "D_MN09" && globals.stageName !== "F_SP200") {
+        if (!globals.stageName.startsWith("D_MN07") && !globals.stageName.startsWith("D_MN09") && globals.stageName !== "F_SP200") {
             return true;
         }
     }
