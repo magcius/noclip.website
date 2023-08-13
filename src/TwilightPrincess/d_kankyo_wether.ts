@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./ztp_scenes.js";
 import { cM_rndF, cLib_addCalc, cM_rndFX } from "../WindWaker/SComponent.js";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, TransparentBlack } from "../Color.js";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, TransparentBlack, Magenta } from "../Color.js";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
@@ -29,6 +29,8 @@ import { dfRange, dfShow } from "../DebugFloaters.js";
 import { _T } from "../gfx/platform/GfxPlatformImpl.js";
 import { dKy_undwater_filter_draw, dKy_daynight_check } from "./d_kankyo.js"
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -286,9 +288,12 @@ export class dKankyo_sun_Packet {
     private ddraw = new TDDraw();
 
     // Sun/Moon
-    private moonTextures: BTIData[] = [];
-    private sunTexture: BTIData;
+    private moonTexture0: BTIData;
+    private moonTextureA: BTIData;
+    private moonTexturePhase: BTIData[] = [];
+    private moonGlowTexture: BTIData;
     private materialHelperSunMoon: GXMaterialHelperGfx;
+    private materialHelperMoonShine: GXMaterialHelperGfx;
     public sunPos = vec3.create();
     public moonPos = vec3.create();
     public sunAlpha: number = 0.0;
@@ -321,14 +326,14 @@ export class dKankyo_sun_Packet {
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
 
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a00.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a01.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a02.bti`)!);
-        this.moonTextures.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a03.bti`)!);
+        this.moonTexture0 = resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon.bti`)!;
+        this.moonTextureA = resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a.bti`)!;
+        this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a00.bti`)!);
+        this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a01.bti`)!);
+        this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a02.bti`)!);
+        this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a03.bti`)!);
 
-        this.sunTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
+        this.moonGlowTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
         this.lensTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x5C);
         this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x57);
 
@@ -337,30 +342,31 @@ export class dKankyo_sun_Packet {
 
         const mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
+        mb.setTevColorIn(0, GX.CC.C1, GX.CC.C0, GX.CC.TEXC, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.A0, GX.CA.TEXA, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
-        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelperMoonShine = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet moon glow'));
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
         mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.A0, GX.CA.TEXA, GX.CA.ZERO);
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
 
-        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
         mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
         mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
 
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setUsePnMtxIdx(false);
         this.materialHelperSunMoon = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet'));
 
         mb.setZMode(false, GX.CompareType.LEQUAL, false);
@@ -413,16 +419,15 @@ export class dKankyo_sun_Packet {
             this.moonAlpha = 1.0;
         }
 
-        let drawSun = this.sunAlpha > 0.0;
         let drawMoon = this.moonAlpha > 0.0;
 
-        const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
-        if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
+        const stType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
+        if (envLight.baseLight.color.r === 0.0 && stType !== 2) {
             if (envLight.curTime > 285 || envLight.curTime < 105)
                 drawMoon = false;
         }
 
-        if (!drawSun && !drawMoon)
+        if (!drawMoon)
             return;
 
         const camPitch = vecPitch(globals.cameraFwd);
@@ -435,7 +440,7 @@ export class dKankyo_sun_Packet {
                 dayOfWeek = (dayOfWeek + 7 - 1) % 7;
 
             const moonPos = this.moonPos;
-            if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
+            if (envLight.baseLight.color.r === 0.0 && stType !== 2) {
                 vec3.copy(moonPos, this.sunPos);
             } else {
                 // Mirror the sun position
@@ -467,22 +472,27 @@ export class dKankyo_sun_Packet {
                 mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -MathConstants.TAU))));
 
                 if (i === 0) {
-                    this.moonTextures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
-
-                    colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xF3FF94FF);
-                    materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha;
-                    colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x000000FF);
-
-                    this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0);
-                } else {
-                    mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * 50 * scaleX);
-
-                    // envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                    this.moonTexture0.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                    this.moonTextureA.fillTextureMapping(materialParams.m_TextureMapping[1]);
+                    this.moonTexturePhase[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[2]);
 
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFCF4C);
                     materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha;
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xC56923FF);
                     materialParams.u_Color[ColorKind.C1].a *= this.moonAlpha;
+
+                    this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0);
+
+                    const renderInst = ddraw.makeRenderInst(renderInstManager);
+                    submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
+                } else {
+                    this.moonGlowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+                    mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * 50 * scaleX);
+
+                    colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
+                    materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha * (40 / 255);
+                    colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x000000FF);
 
                     let moonShineSize = moonSize;
                     if (dayOfWeek === 1 || dayOfWeek === 6)
@@ -491,43 +501,10 @@ export class dKankyo_sun_Packet {
                         moonShineSize *= 0.6;
 
                     this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0, moonShineSize);
+
+                    const renderInst = ddraw.makeRenderInst(renderInstManager);
+                    submitScratchRenderInst(renderInstManager, this.materialHelperMoonShine, renderInst, viewerInput);
                 }
-
-                const renderInst = ddraw.makeRenderInst(renderInstManager);
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
-            }
-        }
-
-        if (drawSun) {
-            const sunPos = this.sunPos;
-
-            const sunPitch = vecPitch(sunPos);
-            computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
-            mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (-50 + (360.0 * ((sunPitch - camPitch) / -8.0))));
-
-            let sunSizeBase = 575.0;
-            if (this.visibility > 0)
-                sunSizeBase += (500 * this.visibility) * sqr(1.0 - this.distFalloff);
-
-            for (let i = 1; i >= 0; i--) {
-                let sunSize = sunSizeBase;
-                if (i === 1)
-                    sunSize *= 1.6;
-    
-                if (i === 0) {
-                    this.sunTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-                } else {
-                    // envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-                }
-
-                colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFF1FF);
-                materialParams.u_Color[ColorKind.C0].a = this.sunAlpha;
-                colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF9100FF);
-
-                this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
-                const renderInst = ddraw.makeRenderInst(renderInstManager);
-
-                submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
     }
@@ -1518,6 +1495,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.sunPos, scratchVec3);
     }
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
+    const horizonY = scratchVec3[1];
 
     let sunCanGlare = true;
     if (envLight.colpatWeather !== 0 || (envLight.colpatCurr !== 0 && envLight.colpatBlend > 0.5)) {
@@ -1596,12 +1574,15 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
 
     if (pkt.sunPos[1] > 0.0) {
-        const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
+        const pulsePos = 1.0 - (1.0 - saturate(horizonY))**2;
 
-        dKy_set_actcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
-        dKy_set_bgcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
-        dKy_set_fogcol_ratio(envLight, 1.0 + 0.5 * (pulsePos * staringAtSunAmount * pkt.visibility));
-        dKy_set_vrboxcol_ratio(envLight, 1.0 + 0.5 * (pulsePos * staringAtSunAmount * pkt.visibility));
+        const arg0 = dStage_stagInfo_GetArg0(globals.dStage_dt.stag);
+        if (arg0 !== 0) {
+            dKy_set_actcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
+            dKy_set_bgcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
+            dKy_set_fogcol_ratio(envLight, 1.0 + 0.5 * (pulsePos * staringAtSunAmount * pkt.visibility));
+            dKy_set_vrboxcol_ratio(envLight, 1.0 + 0.5 * (pulsePos * staringAtSunAmount * pkt.visibility));
+        }
     }
 
     if (dKyr_moon_arrival_check(envLight)) {

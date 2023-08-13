@@ -384,7 +384,7 @@ export class dKankyo_sun_Packet {
 
             let sunSizeBase = 575.0;
             if (this.visibility > 0)
-                sunSizeBase += (500 * this.visibility) * sqr(1.0 - this.distFalloff);
+                sunSizeBase += (500 * this.visibility) * (1.0 - this.distFalloff)**2;
 
             for (let i = 1; i >= 0; i--) {
                 let sunSize = sunSizeBase;
@@ -438,10 +438,10 @@ export class dKankyo_sun_Packet {
             renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
 
         const invDist = 1.0 - this.distFalloff;
-        const flareViz = (0.6 + (0.8 * this.visibility * sqr(invDist)));
+        const flareViz = (0.6 + (0.8 * this.visibility * invDist**2));
         const innerRad = 300 * flareViz;
         const flareScale = this.lensflareBaseSize * flareViz * (3.0 + invDist);
-        const vizSq = sqr(this.visibility);
+        const vizSq = this.visibility**2;
 
         let angle0 = this.lensflareAngles[0];
         let angle1 = this.lensflareAngles[1];
@@ -472,7 +472,7 @@ export class dKankyo_sun_Packet {
 
             const outerRadScale2: number = this.lensflareSizes[whichScale];
 
-            const outerRad = outerRadScale * (this.visibility * (sqr(this.visibility) + outerRadScale2));
+            const outerRad = outerRadScale * (this.visibility * (this.visibility**2 + outerRadScale2));
             vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
@@ -515,7 +515,7 @@ export class dKankyo_sun_Packet {
             } else {
                 size = (
                     ((0.04 + (0.075 * this.visibility)) * scaleTable[i]) +
-                    ((0.2 * this.visibility * scaleTable[i]) * sqr(invDist))
+                    ((0.2 * this.visibility * scaleTable[i]) * invDist**2)
                 );
             }
 
@@ -1321,10 +1321,6 @@ export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: ve
     vec3.normalize(dst, dst);
 }
 
-function sqr(n: number): number {
-    return n * n;
-}
-
 function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec4.set(v4, v[0], v[1], v[2], 1.0);
     vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
@@ -1382,6 +1378,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.sunPos, scratchVec3);
     }
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
+    const horizonY = scratchVec3[1];
 
     let sunCanGlare = true;
     if (envLight.colpatWeather !== 0 || (envLight.colpatCurr !== 0 && envLight.colpatBlend > 0.5)) {
@@ -1432,9 +1429,9 @@ function dKyr_sun_move(globals: dGlobals): void {
         const distance = vec3.length(scratchVec3) * 320.0;
 
         const normalizedDist = Math.min(distance / 450.0, 1.0);
-        const distFalloff = sqr(1.0 - normalizedDist);
+        const distFalloff = (1.0 - normalizedDist)**2;
         pkt.distFalloff = 1.0 - distFalloff;
-        staringAtSunAmount = sqr(distFalloff);
+        staringAtSunAmount = distFalloff**2;
     } else {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.5, 0.1, 0.01);
     }
@@ -1456,7 +1453,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     pkt.drawLenzInSky = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
-        const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
+        const pulsePos = 1.0 - (1.0 - saturate(horizonY))**2;
 
         dKy_set_actcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
         dKy_set_bgcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
@@ -2165,7 +2162,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
         if (globals.stageName === 'sea' && globals.mStayNo === 9) {
             vec3.set(scratchVec3, -180000.0, 750.0, -200000.0);
             const sqrDist = vec3.squaredDistance(globals.cameraPosition, scratchVec3);
-            if (sqrDist < sqr(2500))
+            if (sqrDist < 2500**2)
                 pkt.strength = 1.0;
         }
 

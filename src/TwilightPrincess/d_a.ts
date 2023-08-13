@@ -354,7 +354,6 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.btkTime = 0;
         }
 
-
         const kasumiMaeRes = globals.resCtrl.getStageResByName(ResType.Model, `STG_00`, `vrbox_kasumim.bmd`);
         if (kasumiMaeRes !== null)
             this.kasumiMae = new J3DModelInstance(kasumiMaeRes);
@@ -471,7 +470,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mat4.copy(this.backCloud.modelMatrix, calc_mtx);
         mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
 
-        if (dStage_stagInfo_GetArg0(globals.dStage_dt.stag) != 0 && this.sun !== null && envLight.sunPacket !== null) {
+        if (dStage_stagInfo_GetArg0(globals.dStage_dt.stag) !== 0 && this.sun !== null && envLight.sunPacket !== null) {
             mDoExt_modelUpdateDL(globals, this.sun, renderInstManager, viewerInput, globals.dlst.sky);
         }
     }

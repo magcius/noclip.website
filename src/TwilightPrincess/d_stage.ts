@@ -54,12 +54,12 @@ class dStage_dt {
     public rpat: dPath[] = [];
     public rppn: dPath__Point[] = [];
 
-    public lgtv: stage_pure_lightvec_info_class[] = [];
+    public lgtv: stage_pure_lightvec_info_class[][] = [];
     public lght: stage_plight_info_class[] = [];
-    public pale: stage_palet_info_class[] = [];
-    public colo: stage_pselect_info_class[] = [];
-    public virt: stage_vrbox_info_class[] = [];
-    public envr: stage_envr_info_class[] = [];
+    public pale: stage_palet_info_class[][] = [];
+    public colo: stage_pselect_info_class[][] = [];
+    public virt: stage_vrbox_info_class[][] = [];
+    public envr: stage_envr_info_class[][] = [];
 }
 
 export class stage_palet_info_class__DifAmb {
@@ -442,39 +442,47 @@ export class dStage_stageDt_c extends dStage_dt {
     public rtbl: roomRead_class[] = [];
 }
 
-function dStage_paletInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number): void {
+function dStage_paletInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    dt.pale[layer] = [];
+
     let offs = 0;
     for (let i = 0; i < count; i++) {
         const pale = new stage_palet_info_class();
         offs += pale.parse(buffer.slice(offs));
-        dt.pale.push(pale);
+        dt.pale[layer].push(pale);
     }
 }
 
-function dStage_pselectInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number): void {
+function dStage_pselectInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    dt.colo[layer] = [];
+
     let offs = 0;
     for (let i = 0; i < count; i++) {
         const colo = new stage_pselect_info_class();
         offs += colo.parse(buffer.slice(offs));
-        dt.colo.push(colo);
+        dt.colo[layer].push(colo);
     }
 }
 
-function dStage_vrboxInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number): void {
+function dStage_vrboxInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    dt.virt[layer] = [];
+
     let offs = 0;
     for (let i = 0; i < count; i++) {
         const virt = new stage_vrbox_info_class();
         offs += virt.parse(buffer.slice(offs));
-        dt.virt.push(virt);
+        dt.virt[layer].push(virt);
     }
 }
 
-function dStage_envrInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number): void {
+function dStage_envrInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    dt.envr[layer] = [];
+
     let offs = 0;
     for (let i = 0; i < count; i++) {
         const envr = new stage_envr_info_class();
         offs += envr.parse(buffer.slice(offs));
-        dt.envr.push(envr);
+        dt.envr[layer].push(envr);
     }
 }
 
@@ -493,7 +501,7 @@ function dStage_stagInfoInit(globals: dGlobals, dt: dStage_stageDt_c, buffer: Ar
     dt.stag.parse(buffer);
 }
 
-function dStage_plightInfoInit(globals: dGlobals, dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
+function dStage_plightInfoInit(globals: dGlobals, dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
     let offs = 0;
     for (let i = 0; i < count; i++) {
         const lght = new stage_plight_info_class();
@@ -592,14 +600,14 @@ function dStage_filiInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: Arr
     }
 }
 
-function dStage_lgtvInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number): void {
+function dStage_lgtvInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    dt.lgtv[layer] = [];
+
     if (count !== 0) {
         const data = new stage_pure_lightvec_info_class();
         data.parse(buffer);
 
-        dt.lgtv.push(data);
-    } else {
-        dt.lgtv.length = 0;
+        dt.lgtv[layer].push(data);
     }
 }
 

@@ -118,9 +118,9 @@ export class dScnKy_env_light_c {
     public starPacket: dKankyo_star_Packet | null = null;
     public housiPacket: dKankyo_housi_Packet | null = null;
 
-    public sunPos2 = vec3.create();
     public plightNearPos = vec3.create();
     public sunPos = vec3.create();
+    public sunPosLocal = vec3.create();
     public moonPos = vec3.create();
     public unk_10a0 = vec3.create();
 
@@ -1321,23 +1321,13 @@ export function setLightTevColorType_MAJI(globals: dGlobals, modelInstance: J3DM
 
 function SetBaseLight(globals: dGlobals): void {
     const envLight = globals.g_env_light;
-
-    if (dKy_SunMoon_Light_Check(globals)) {
-        if (envLight.curTime > 67.5 && envLight.curTime < 292.5) {
-            vec3.copy(envLight.baseLight.pos, envLight.sunPos2);
-        } else {
-            let calc_pos = vec3.create();
-            vec3.add(calc_pos, globals.cameraPosition, envLight.moonPos);
-            vec3.copy(envLight.baseLight.pos, calc_pos);
-        }
-    }
-
+    vec3.copy(envLight.baseLight.pos, envLight.sunPos);
     colorFromRGBA(envLight.baseLight.color, 1.0, 1.0, 1.0, 1.0);
     envLight.baseLight.power = 0.0;
     envLight.baseLight.fluctuation = 0.0;
 }
 
-function setSunpos(globals: dGlobals, cameraPos: vec3): void {
+function setSunpos(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     if (globals.stageName === "F_SP200")
         return;
@@ -1351,17 +1341,14 @@ function setSunpos(globals: dGlobals, cameraPos: vec3): void {
     const theta = MathConstants.DEG_TO_RAD * angle;
     const sinR = Math.sin(theta), cosR = Math.cos(theta);
     const baseX = 80000 * sinR, baseY = -80000 * cosR, baseZ = -48000 * cosR;
-    vec3.set(envLight.sunPos,   baseX,  baseY,  baseZ);
-    vec3.set(envLight.moonPos, -baseX, -baseY, -baseZ);
-
-    vec3.add(envLight.sunPos, envLight.sunPos, cameraPos);
-    vec3.add(envLight.moonPos, envLight.moonPos, cameraPos);
+    vec3.set(envLight.sunPosLocal, baseX,  baseY,  baseZ);
+    vec3.add(envLight.sunPos, globals.cameraPosition, envLight.sunPosLocal);
 }
 
 function drawKankyo(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    setSunpos(globals, globals.cameraPosition);
+    setSunpos(globals);
     SetBaseLight(globals);
     setLight(globals, envLight);
     dKy_setLight_nowroom(globals, globals.mStayNo);
@@ -1719,18 +1706,17 @@ export function dKy_Sound_init(envLight: dScnKy_env_light_c): void {
 
 export function dungeonlight_init(envLight: dScnKy_env_light_c): void {
     for (let i = 0; i < 8; i++) {
-        // original uses test_pos_tbl but all values are identical and readonly
-        vec3.set(envLight.dungeonLight[i].pos, 0, -99999, 0);
-        envLight.dungeonLight[i].refDist = 1.0;
-        envLight.dungeonLight[i].color.r = 0;
-        envLight.dungeonLight[i].color.g = 0;
-        envLight.dungeonLight[i].color.b = 0;
-        envLight.dungeonLight[i].color.a = 1.0;
+        const dungeonLight = envLight.dungeonLight[i];
 
-        vec3.copy(envLight.dungeonLight[i].influence.pos, envLight.dungeonLight[i].pos);
-        envLight.dungeonLight[i].influence.color = envLight.dungeonLight[i].color;
-        envLight.dungeonLight[i].influence.power = envLight.dungeonLight[i].refDist * 100;
-        envLight.dungeonLight[i].influence.fluctuation = 0;
+        // original uses test_pos_tbl but all values are identical and readonly
+        vec3.set(dungeonLight.pos, 0, -99999, 0);
+        dungeonLight.refDist = 1.0;
+        colorCopy(dungeonLight.color, OpaqueBlack);
+
+        vec3.copy(dungeonLight.influence.pos, dungeonLight.pos);
+        dungeonLight.influence.color = dungeonLight.color;
+        dungeonLight.influence.power = dungeonLight.refDist * 100;
+        dungeonLight.influence.fluctuation = 0;
     }
 }
 
@@ -1799,16 +1785,18 @@ export function plight_set(globals: dGlobals, envLight: dScnKy_env_light_c): voi
 export function envcolor_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    envLight.pale = globals.dStage_dt.pale;
+    const layerNo = globals.scnPlay.getLayerNo(0);
+
+    envLight.pale = globals.dStage_dt.pale[layerNo];
     if (envLight.pale.length === 0)
         envLight.pale = dKyd_dmpalet_getp(globals);
-    envLight.colo = globals.dStage_dt.colo;
+    envLight.colo = globals.dStage_dt.colo[layerNo];
     if (envLight.colo.length === 0)
         envLight.colo = dKyd_dmpselect_getp(globals);
-    envLight.envr = globals.dStage_dt.envr;
+    envLight.envr = globals.dStage_dt.envr[layerNo];
     if (envLight.envr.length === 0)
         envLight.envr = dKyd_dmenvr_getp(globals);
-    envLight.virt = globals.dStage_dt.virt;
+    envLight.virt = globals.dStage_dt.virt[layerNo];
     if (envLight.virt.length === 0)
         envLight.virt = dKyd_dmvrbox_getp(globals);
 
@@ -1985,7 +1973,7 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
 }
 
 export function dKy_SunMoon_Light_Check(globals: dGlobals): boolean {
-    if (globals.g_env_light.sunPacket !== null && dKy_darkworld_check(globals)) {
+    if (globals.g_env_light.sunPacket !== null && !dKy_darkworld_check(globals)) {
         if (globals.stageName !== "D_MN07" && globals.stageName !== "D_MN09" && globals.stageName !== "F_SP200") {
             return true;
         }
@@ -2017,21 +2005,17 @@ let lightMask: number = 0;
 export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, param_2: number): void {
     const envLight = globals.g_env_light;
     lightMask = 0;
-    
-    let lightvec_num = globals.roomStatus[roomNo].lgtv.length;
-    if (lightvec_num > 6) {
-        lightvec_num = 6;
-    }
 
-    if (lightvec_num > 0) {
-        for (let i = 0; i < lightvec_num; i++) {
-            if (globals.roomStatus[roomNo].lgtv[i] !== null) {
-                lightMask |= (1 << i + 2);
-            }
+    const layerNo = globals.scnPlay.getLayerNo();
+
+    const lgtv = globals.roomStatus[roomNo].lgtv[layerNo];
+    for (let i = 0; i < 6; i++) {
+        if (lgtv[i] !== null) {
+            lightMask |= (1 << i + 2);
         }
     }
 
-    if (dKy_SunMoon_Light_Check(globals) && lightvec_num === 0) {
+    if (dKy_SunMoon_Light_Check(globals) && lightMask === 0) {
         lightMask |= (1 << 2) | (1 << 3);
     }
 
