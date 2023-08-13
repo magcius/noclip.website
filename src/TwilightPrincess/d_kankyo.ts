@@ -2152,9 +2152,11 @@ export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, p
     const layerNo = globals.scnPlay.getLayerNo();
 
     const lgtv = globals.roomStatus[roomNo].lgtv[layerNo];
-    for (let i = 0; i < 6; i++) {
-        if (lgtv[i] !== null) {
-            lightMask |= (1 << i + 2);
+    if (lgtv !== undefined) {
+        for (let i = 0; i < 6; i++) {
+            if (lgtv[i] !== null) {
+                lightMask |= (1 << i + 2);
+            }
         }
     }
 
