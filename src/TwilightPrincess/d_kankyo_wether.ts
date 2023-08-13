@@ -1052,7 +1052,7 @@ export class dKankyo_rain_Packet {
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
 
-        this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x85);
+        this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x57);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -2069,22 +2069,15 @@ export function dKyw_get_AllWind_vecpow(dst: vec3, envLight: dScnKy_env_light_c,
 export class d_thunder extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_thunder;
     private model: J3DModelInstance;
-    private btkAnm = new mDoExt_btkAnm();
-    private btkTime = 0.0;
     private brkAnm = new mDoExt_brkAnm();
     private rotation: number = 0.0;
 
     public override subload(globals: dGlobals): cPhs__Status {
-        const modelData = globals.resCtrl.getObjectRes(ResType.Model, `Always`, 0x3E);
+        const modelData = globals.resCtrl.getObjectRes(ResType.Model, `Always`, 0x1E);
         this.model = new J3DModelInstance(modelData);
 
-        const anm = globals.resCtrl.getObjectRes(ResType.Btk, `Always`, 0x60);
-        this.btkAnm.init(modelData, anm, false, LoopMode.Repeat);
-
-        const canm = globals.resCtrl.getObjectRes(ResType.Brk, `Always`, 0x52);
+        const canm = globals.resCtrl.getObjectRes(ResType.Brk, `Always`, 0x2F);
         this.brkAnm.init(modelData, canm, true, LoopMode.Once);
-
-        this.btkTime = cM_rndF(1.0);
 
         const nearMul = ((globals.g_env_light.thunderState < ThunderState.NearThresh) ? 1.0 : 0.5);
         this.rotation = cM_rndFX(4000) * nearMul;
@@ -2115,7 +2108,6 @@ export class d_thunder extends kankyo_class {
         mat4.copy(this.model.modelMatrix, calc_mtx);
         vec3.copy(this.model.baseScale, this.scale);
 
-        this.btkAnm.entry(this.model, this.btkTime);
         this.brkAnm.entry(this.model);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }

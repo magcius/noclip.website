@@ -206,7 +206,7 @@ export class dKy_tevstr_c {
     public lightMode: LightMode;
 }
 
-enum DiceWeatherMode {
+export enum DiceWeatherMode {
     Sunny = 0,
     Overcast = 1,
     LightRain = 2,
@@ -216,7 +216,7 @@ enum DiceWeatherMode {
     Done = 0xFF,
 }
 
-const enum DiceWeatherState {
+export const enum DiceWeatherState {
     Uninitialized = 0,
     Init,
     Execute,
