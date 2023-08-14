@@ -3,11 +3,12 @@ import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from ".
 import { DZS } from "./d_resorce.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { nArray, assert, readString } from "../util.js";
-import { dKy_tevstr_c } from "./d_kankyo.js";
+import { dKy_lightdir_set, dKy_tevstr_c } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian.js";
 import { dGlobals } from "./ztp_scenes.js";
 import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
+import * as GX from "../gx/gx_enum.js";
 
 export class dPath__Point {
     public arg0: number;
@@ -110,8 +111,8 @@ export class stage_palet_info_class {
         this.fogStartZ = view.getFloat32(0x24);
         this.fogEndZ = view.getFloat32(0x28);
         this.virtIdx = view.getUint8(0x2C);
-        this.terrainLightInfluence = view.getUint8(0x2D);
-        this.cloudShadowDensity = view.getUint8(0x2E);
+        this.terrainLightInfluence = view.getUint8(0x2D) / 100;
+        this.cloudShadowDensity = view.getUint8(0x2E) / 255;
         this.unk_2f = view.getUint8(0x2F);
         this.bloomTblIdx = view.getUint8(0x30);
         this.bgAmbColor1A = view.getUint8(0x31);
@@ -229,7 +230,12 @@ export class dStage_FileList_dt_c {
 
 export class stage_pure_lightvec_info_class {
     public pos = vec3.create();
-    public radius: number = 0;
+    public radius: number = 0; // refDist
+    public dir = vec3.create();
+    public spotFn: GX.SpotFunction = GX.SpotFunction.OFF;
+    public spotCutoff: number = 0;
+    public distFn: GX.DistAttnFunction = GX.DistAttnFunction.OFF;
+    public switch: number;
     public fluctuation: number = 0;
 
     public parse(buffer: ArrayBufferSlice): number {
@@ -240,7 +246,14 @@ export class stage_pure_lightvec_info_class {
         const posZ = view.getFloat32(0x08);
         vec3.set(this.pos, posX, posY, posZ);
         this.radius = view.getFloat32(0x0C);
-        this.fluctuation = view.getUint8(0x01B);
+        const dirX = view.getFloat32(0x10);
+        const dirY = view.getFloat32(0x14);
+        dKy_lightdir_set(this.dir, dirX, dirY);
+        this.spotCutoff = view.getFloat32(0x18);
+        this.fluctuation = view.getUint8(0x1B);
+        this.spotFn = view.getUint8(0x1C);
+        this.distFn = view.getUint8(0x1D);
+        this.switch = view.getUint8(0x1E);
         return 0x20;
     }
 }
@@ -571,7 +584,6 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
         'Env0': dStage_envrInfoInit,
         // FILI (??)
         'Door': dStage_tgscInfoInit,
-        // LGTV (??)
         // FLOR
         'TGDR': dStage_stageDrtgInfoInit,
     });
@@ -602,11 +614,9 @@ function dStage_filiInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: Arr
 
 function dStage_lgtvInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
     dt.lgtv[layer] = [];
-
-    if (count !== 0) {
+    for (let i = 0; i < count; i++) {
         const data = new stage_pure_lightvec_info_class();
         data.parse(buffer);
-
         dt.lgtv[layer].push(data);
     }
 }
@@ -624,7 +634,6 @@ function dStage_roomDrtgInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer:
 export function dStage_dt_c_roomLoader(globals: dGlobals, dt: dStage_roomDt_c, dzs: DZS): void {
     dStage_dt_decode(globals, dt, dzs, {
         'FILI': dStage_filiInfoInit,
-        'LGT0': dStage_lgtvInfoInit,
         'RPPN': dStage_rppnInfoInit,
         'RPAT': dStage_rpatInfoInit,
     });

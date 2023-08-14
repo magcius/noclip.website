@@ -199,7 +199,7 @@ class d_a_bg extends fopAc_ac_c {
             for (let j = 0; j < modelInstance.materialInstances.length; j++) {
                 const materialInstance = modelInstance.materialInstances[j];
                 const name = materialInstance.materialData.material.name;
-                
+
                 const sub = name.slice(3, 7);
                 if (sub === 'MA12') {
                     if (globals.g_env_light.colpatCurr === 6)

@@ -994,7 +994,7 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Bomb Warehouse", "R_SP109", [5]),
     new TwilightPrincessSceneDesc("Abandoned House", "R_SP109", [6]),
     new TwilightPrincessSceneDesc("Goron Elder's Hall", "R_SP110"),
-    
+
     "Lanayru",
     new TwilightPrincessSceneDesc("Outside Castle Town - West", "F_SP122", [8]),
     new TwilightPrincessSceneDesc("Outside Castle Town - South", "F_SP122", [16]),
