@@ -204,7 +204,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     
                 m.modelInstance.setBaseScale(scale);
                 m.modelInstance.setColorOverride(ColorKind.K3, colorNewFromRGBA8(rgba8Color));
-                m.lightTevColorType = LightType.UNK_0;
             });
         } else if (shape === TagShape.Cylinder) {
             fetchArchive(`K_cyli00`).then((rarc) => {
@@ -213,7 +212,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
                 m.modelInstance.setBaseScale(scale);
                 m.modelInstance.setColorOverride(ColorKind.MAT0, colorNewFromRGBA8(rgba8Color));
                 m.modelInstance.setColorOverride(ColorKind.AMB0, colorNewFromRGBA8(rgba8Color));
-                m.lightTevColorType = LightType.UNK_0;
             });
         }
     }
@@ -312,19 +310,19 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         case 0:
             fetchArchive(`J_tubo_00`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/j_tubo_00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 1:
             fetchArchive(`J_tubo_01`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/j_tubo_01.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 2:
             fetchArchive(`Kkiba_00`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/j_hako_00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
 
                 scaleMatrix(m.modelMatrix, m.modelMatrix, 0.5);
             });
@@ -332,67 +330,67 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         case 3:
             fetchArchive(`Y_ironbal`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/yironball.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 4:
             fetchArchive(`J_taru00`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/j_taru_00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 5:
             fetchArchive(`J_doku00`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/j_doku_00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 6:
             fetchArchive(`Obj_bkl`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/k_hb00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 7:
             fetchArchive(`K_tubo02`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/k_tubo02.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 8:
             fetchArchive(`Obj_ballS`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/lv8_obj_hikaris.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 9:
             fetchArchive(`Obj_ballS`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/lv8_obj_hikaris.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 10:
             fetchArchive(`D_aotubo0`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/d_aotubo00.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 11:
             fetchArchive(`Obj_tama`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/lv8_tama.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 12:
             fetchArchive(`O_tuboS`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/o_tubos_lv8.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         case 13:
             fetchArchive(`O_tuboB`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/o_tubob_lv8.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
             break;
         } 
@@ -760,7 +758,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Wind Stone
     else if (actorName === 'WdStone') fetchArchive(`WindStone`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/model0.bmd`);
-        m.lightTevColorType = LightType.UNK_16;
+        m.lightTevColorType = LightType.UNK_8;
     });
     // Upper Zora's River Bridge
     else if (actorName === 'Bhhashi') fetchArchive(`BHBridge`).then((rarc) => {
@@ -777,12 +775,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         if (globals.stageName === "R_SP209") {
             fetchArchive(`CstaFB`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/cs_f_b.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
         } else {
             fetchArchive(`CstaF`).then((rarc) => {
                 const m = buildModel(rarc, `bmdr/cs_f_a.bmd`);
-                m.lightTevColorType = LightType.UNK_16;
+                m.lightTevColorType = LightType.UNK_8;
             });
         }
     }
@@ -876,68 +874,49 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const furnitureMdl = buildModel(rarc, `bmdr/t_r50furniture.bmd`);
         furnitureMdl.lightTevColorType = LightType.UNK_16;
     });
-    // Imp Poe
-    else if (actorName === 'E_hp') fetchArchive(`E_hp`).then((rarc) => {
-        const hp_mdl = buildModel(rarc, `bmdr/hp.bmd`);
-        hp_mdl.lightTevColorType = LightType.UNK_0;
-
-        const lanternModel = buildChildModel(rarc, `bmdr/hp_ori.bmd`);
-        lanternModel.setParentJoint(hp_mdl, `leg03`);
-        mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 2);
-        mat4.rotateY(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 2);
-
-        hp_mdl.bindANK1(parseBCK(rarc, `bck/hp_wait.bck`));
-
-        hp_mdl.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-
-        scaleMatrix(hp_mdl.modelMatrix, hp_mdl.modelMatrix, 1.2);
-        // pos still seems off, needs more research
-        mat4.translate(hp_mdl.modelMatrix, hp_mdl.modelMatrix, [0, 130, 0]);
-        mat4.translate(lanternModel.modelMatrix, lanternModel.modelMatrix, [0, -10, 0]);
-    });
     // Normal Beamos
     else if (actorName === 'Obj_bm') fetchArchive(`Obj_bm`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/bm.bmd`);
         m.bindTRK1(parseBRK(rarc, `brk/turn.brk`), animFrame(0));
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Temple of Time Beamos
     else if (actorName === 'E_bm6') fetchArchive(`E_bm6`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/bm6.bmd`);
         m.bindTRK1(parseBRK(rarc, `brk/bm6_turn.brk`), animFrame(0));
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Forest Temple Torch
     else if (actorName === 'Cldst00') fetchArchive(`lv1cdl00`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/d_lv1candl_00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_64;
     });
     // Web 0
     else if (actorName === 'Obj_w0') fetchArchive(`Obj_web0`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_kum_kabe00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Web 1
     else if (actorName === 'Obj_w1') fetchArchive(`Obj_web1`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_kum_yuka00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Morpheel water
     else if (actorName === 'l3watB') fetchArchive(`L3_bwater`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/lv3boss_water.bmd`);
         m.bindTTK1(parseBTK(rarc, `btk/lv3boss_water.btk`));
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Lakebed central room water
     else if (actorName === 'l3wat02') fetchArchive(`Kr03wat04`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_r03water04.bmd`);
         m.bindTTK1(parseBTK(rarc, `btk/k_r03water04.btk`));
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Lakebed stairs
     else if (actorName === 'rstair') fetchArchive(`K_spkai00`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_spkaidan_00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
 
         // flip stairs to default orientation in original
         mat4.rotateY(m.modelMatrix, m.modelMatrix, Math.PI);
@@ -945,7 +924,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Forest Temple Torch
     else if (actorName === 'Cldst01') fetchArchive(`lv1cdl01`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/d_lv1candl_01.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_64;
 
         let particlePos = vec3.create();
         vec3.set(particlePos, actor.pos![0], actor.pos![1] + 120, actor.pos![2]);
@@ -962,10 +941,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Temple of Time Door of Time
     else if (actorName === 'szGate') fetchArchive(`L6SzGate`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/lv6_obj_skzogate.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
 
         const m2 = buildModel(rarc, `bmdr/lv6_obj_skzogate.bmd`);
-        m2.lightTevColorType = LightType.UNK_0;
+        m2.lightTevColorType = LightType.UNK_16;
 
         mat4.rotateY(m2.modelMatrix, m2.modelMatrix, Math.PI);
         mat4.translate(m.modelMatrix, m.modelMatrix, [-200, 0, 0]);
@@ -973,10 +952,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'l6SwGt') fetchArchive(`L6SwGate`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/lv6_obj_swgate.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
 
         const m2 = buildModel(rarc, `bmdr/lv6_obj_swgate.bmd`);
-        m2.lightTevColorType = LightType.UNK_0;
+        m2.lightTevColorType = LightType.UNK_16;
 
         mat4.rotateY(m2.modelMatrix, m2.modelMatrix, Math.PI);
         mat4.translate(m.modelMatrix, m.modelMatrix, [-150, 0, 0]);
@@ -984,10 +963,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'Tenbin') fetchArchive(`L6Tenbin`).then((rarc) => {
         const m = buildModel(rarc, `bmde/lv6_obj_tenbin.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
 
         const m2 = buildModel(rarc, `bmde/lv6_obj_tenbin_r.bmd`);
-        m2.lightTevColorType = LightType.UNK_0;
+        m2.lightTevColorType = LightType.UNK_16;
 
         mat4.translate(m.modelMatrix, m.modelMatrix, [480, 0, 0]);
         mat4.translate(m2.modelMatrix, m2.modelMatrix, [-480, 0, 0]);
@@ -996,12 +975,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'E_ai') fetchArchive(`E_ai`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/ai.bmd`);
         m.bindTRK1(parseBRK(rarc, `brk/ai_stop.brk`), animFrame(0));
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_8;
     });
     // Armor Suit
     else if (actorName === 'E_MD') fetchArchive(`E_md`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/md.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_8;
     });
     // Lizalfos
     else if (actorName === 'E_dn') fetchArchive(`E_dn`).then((rarc) => {
@@ -1018,6 +997,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Deku Baba
     else if (actorName === 'E_db') fetchArchive(`E_db`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/db.bmd`);
+        m.lightTevColorType = LightType.UNK_0;
         m.bindANK1(parseBCK(rarc, `bck/db_defaultpose.bck`));
         buildModel(rarc, `bmdr/dl.bmd`);
         buildModel(rarc, `bmdr/dt.bmd`);
@@ -1027,6 +1007,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Big Baba
     else if (actorName === 'E_gb') fetchArchive(`E_gb`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/gb.bmd`);
+        m.lightTevColorType = LightType.UNK_0;
         m.bindANK1(parseBCK(rarc, `bck/gb_wait.bck`));
 
         const gf = buildModel(rarc, `bmdr/gf.bmd`);
@@ -1037,6 +1018,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Redead
     else if (actorName === 'E_gi') fetchArchive(`E_gi`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/gi.bmd`);
+        m.lightTevColorType = LightType.UNK_0;
         const bck = parseBCK(rarc, `bck/gi_get_up.bck`);
         bck.loopMode = LoopMode.OnceAndReset;
 
@@ -1045,6 +1027,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     // Darknut
     else if (actorName === 'B_tn') fetchArchive(`B_tnp`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/tn.bmd`);
+        m.lightTevColorType = LightType.UNK_0;
 
         const arm_l = buildChildModel(rarc, `bmdr/tn_armor_arm_l.bmd`);
         arm_l.setParentJoint(m, `arm_L_2`);
@@ -1110,53 +1093,59 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         switch (type) {
         case 0:
             const m = buildModel(rarc, `bmdr/cs.bmd`);
+            m.lightTevColorType = LightType.UNK_8;
             m.modelInstance.setBaseScale([1.6,1.6,1.6]);
             const bck = parseBCK(rarc, `bck/cs_stop.bck`);
             bck.loopMode = LoopMode.Once;
             m.bindANK1(bck);
             break;
         case 1:
-            buildModel(rarc, `bmdr/cs_b.bmd`);
+            const m2 = buildModel(rarc, `bmdr/cs_b.bmd`);
+            m2.lightTevColorType = LightType.UNK_8;
             break;
         }
     });
     else if (actorName === 'E_fb') fetchArchive(`E_fl`).then((rarc) => {
         const m = buildModel(rarc, `bmde/fl_model.bmd`);
         const bck = parseBCK(rarc, `bck/fl_wait.bck`);
+        m.lightTevColorType = LightType.UNK_0;
 
         m.bindANK1(bck);
     });
     else if (actorName === 'E_fz') fetchArchive(`E_fz`).then((rarc) => {
         const m = buildModel(rarc, `bmde/fz.bmd`);
+        m.lightTevColorType = LightType.UNK_0;
     });
     else if (actorName === 'l5icewl') fetchArchive(`l5IceWall`).then((rarc) => {
         const m = buildModel(rarc, `bmde/yicewall_01.bmd`);
+        m.lightTevColorType = LightType.UNK_16;
     });
     else if (actorName === 'iceblk') fetchArchive(`Y_icecube`).then((rarc) => {
         const m = buildModel(rarc, `bmde/y_icecubeice.bmd`);
+        m.lightTevColorType = LightType.UNK_16;
     });
     else if (actorName === 'spnGear') fetchArchive(`P_Sswitch`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/p_sswitch_a.bmd`);
         buildModel(rarc, `bmdr/p_sswitch_b.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Lakebed wheel
     else if (actorName === 'swhel01') fetchArchive(`S_wheel00`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/s_wheel00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     else if (actorName === 'kwhel00') fetchArchive(`K_wheel00`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_wheel00.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     else if (actorName === 'kwhel01') fetchArchive(`K_wheel01`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_wheel01.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Stalactites
     else if (actorName === 'syRock') fetchArchive(`syourock`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/k_syourock_01.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
     // Lakebed Hang Switches
     else if (actorName === 'buraA') fetchArchive(`S_bura_A`).then((rarc) => {
@@ -1174,7 +1163,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         }
 
         const m = buildModel(rarc, `bmdr/s_zgate.bmd`);
-        m.lightTevColorType = LightType.UNK_0;
+        m.lightTevColorType = LightType.UNK_16;
     });
 
     // Experimental Tag view

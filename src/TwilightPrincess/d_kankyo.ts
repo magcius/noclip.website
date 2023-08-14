@@ -45,6 +45,7 @@ export const enum LightType {
     BG3 = 35,
     BG4 = 35,
     BG5 = 32,
+    UNK_64 = 64,
 }
 
 export class dScnKy_env_light_c {
@@ -68,8 +69,8 @@ export class dScnKy_env_light_c {
     // Lighting
     public baseLight = new LIGHT_INFLUENCE();
     public lightInfluence = nArray(30, () => new LIGHT_INFLUENCE());
-    public plights = nArray(100, () => new LIGHT_INFLUENCE());
-    public eflights = nArray(5, () => new LIGHT_INFLUENCE());
+    public plights: LIGHT_INFLUENCE[] = [];
+    public eflights: LIGHT_INFLUENCE[] = [];
     public unk_72c = nArray(5, () => new LIGHT_INFLUENCE());
     public unk_740 = new LIGHT_INFLUENCE();
     public BGpartsActiveLight = nArray(2, () => new LIGHT_INFLUENCE());
@@ -401,6 +402,18 @@ function findTimeInSchejule(schedule: dScnKy__Schedule, time: number): dScnKy__S
     throw "whoops";
 }
 
+export function dKy_plight_priority_set(envLight: dScnKy_env_light_c, lightInfluence: LIGHT_INFLUENCE): void {
+    console.log(`dKy_plight_priority_set: checking`, envLight.plights);
+    for (let i = 0; i < 50; i++) {
+        if (envLight.plights[i] !== null) {
+            console.log(`dKy_plight_priority_set: plight set`, i);
+            envLight.plights[i] = lightInfluence;
+            envLight.plights[i].index = -(i + 1);
+            break;
+        }
+    }
+}
+
 function dKy_light_influence_id(globals: dGlobals, pos: ReadonlyVec3, which: number): number {
     let envLight = globals.g_env_light;
 
@@ -471,15 +484,15 @@ function dKy_light_influence_id(globals: dGlobals, pos: ReadonlyVec3, which: num
     return ret;
 }
 
-function dKy_eflight_influence_id(globals: dGlobals, pos: vec3, param_1: number): number {
+function dKy_eflight_influence_id(globals: dGlobals, pos: ReadonlyVec3, which: number): number {
     let envLight = globals.g_env_light;
 
     let bestDistance = 1000000;
     let bestIdx1 = -1;
     let bestIdx2 = -1;
 
-    for (let i = 0; i <= param_1; i++) {
-        for (let j = 0; j < 5; j++) {
+    for (let i = 0; i <= which; i++) {
+        for (let j = 0; j < envLight.eflights.length; j++) {
             const light = envLight.eflights[j];
 
             if (light !== null && (i === 0 || j !== bestIdx1)) {
@@ -498,7 +511,7 @@ function dKy_eflight_influence_id(globals: dGlobals, pos: vec3, param_1: number)
     }
 
     let ret = bestIdx2;
-    if (param_1 === 0) {
+    if (which === 0) {
         ret = bestIdx1;
     }
 
@@ -1976,8 +1989,8 @@ export function darkmist_init(envLight: dScnKy_env_light_c): void {
 
 export function plight_init(envLight: dScnKy_env_light_c): void {
     envLight.lightInfluence[0].power = 99999.9;
-    //envLight.plights.length = 0;
-    //envLight.eflights.length = 0;
+    envLight.plights.length = 0;
+    envLight.eflights.length = 0;
 
     envLight.playerPlightIdx = -1;
     envLight.playerEflightIdx = -1;
