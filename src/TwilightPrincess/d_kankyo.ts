@@ -2282,6 +2282,8 @@ function projectionMatrixForLightPerspective(dst: mat4, fovY: number, aspect: nu
 }
 
 export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): void {
+    const envLight = globals.g_env_light;
+
     for (let i = 0; i < modelInstance.materialInstances.length; i++) {
         const materialInstance = modelInstance.materialInstances[i];
         const name = materialInstance.materialData.material.name;
@@ -2303,11 +2305,16 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
                 } else {
                     // patch fog block
                     // materialInstance.materialData.material.gxMaterial.ropInfo.fogType
+
+                    materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[2]);
+
+                    const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[1].a);
+                    materialInstance.setColorOverride(ColorKind.K3, k3);
                 }
             }
 
             if (sub === 'MA07') {
-                // const bright = globals.g_env_light.thunderEff.field_0x08 * (100.0 / 255.0);
+                // const bright = envLight.thunderEff.field_0x08 * (100.0 / 255.0);
                 // const color = colorNewFromRGBA(bright, bright, bright);
                 // materialInstance.setColorOverride(ColorKind.C0, color);
             }
@@ -2321,10 +2328,10 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
 
             if (sub === 'MA00' || sub === 'MA01' || sub === 'MA04' || sub === 'MA16') {
                 const color = colorNewCopy(TransparentBlack);
-                color.r = globals.g_env_light.cloudShadowDensity;
+                color.r = envLight.cloudShadowDensity;
 
                 if (sub === 'MA01') {
-                    if (globals.g_env_light.cameraInWater) {
+                    if (envLight.cameraInWater) {
                         color.a = 1.0;
                         // patch alpha comp / zmode
                     } else {
@@ -2376,7 +2383,7 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
             } else if (sub === 'MA20') {
                 // patch fog block
 
-                const c1 = colorNewCopy(globals.g_env_light.bgAmbCol[3], 1.0);
+                const c1 = colorNewCopy(envLight.bgAmbCol[3], 1.0);
                 materialInstance.setColorOverride(ColorKind.C1, c1);
 
                 const texMtx = materialInstance.materialData.material.texMatrices[2];
@@ -2393,14 +2400,14 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
                     mat4.mul(texMtx.effectMatrix, texMtx.effectMatrix, lookAt);
                 }
             } else if (sub === 'MA13') {
-                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.bgAmbCol[3]);
+                materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[3]);
             } else if (sub === 'MA14') {
-                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.fogCol);
-                const k3 = colorNewCopy(TransparentBlack, globals.g_env_light.bgAmbCol[3].a);
+                materialInstance.setColorOverride(ColorKind.C1, envLight.fogCol);
+                const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[3].a);
                 materialInstance.setColorOverride(ColorKind.K3, k3);
             } else if (sub === 'MA16') {
-                materialInstance.setColorOverride(ColorKind.C1, globals.g_env_light.bgAmbCol[1]);
-                const k3 = colorNewCopy(TransparentBlack, globals.g_env_light.bgAmbCol[3].a);
+                materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[1]);
+                const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[3].a);
                 materialInstance.setColorOverride(ColorKind.K3, k3);
             }
         } else if (name.slice(3, 10) === 'Rainbow') {

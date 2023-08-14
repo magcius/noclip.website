@@ -115,9 +115,9 @@ export class stage_palet_info_class {
         this.cloudShadowDensity = view.getUint8(0x2E) / 255;
         this.unk_2f = view.getUint8(0x2F);
         this.bloomTblIdx = view.getUint8(0x30);
-        this.bgAmbColor1A = view.getUint8(0x31);
-        this.bgAmbColor2A = view.getUint8(0x32);
-        this.bgAmbColor3A = view.getUint8(0x33);
+        this.bgAmbColor1A = view.getUint8(0x31) / 255;
+        this.bgAmbColor2A = view.getUint8(0x32) / 255;
+        this.bgAmbColor3A = view.getUint8(0x33) / 255;
         return 0x34;
     }
 }
