@@ -1119,7 +1119,7 @@ function dKyd_dmvrbox_getp(globals: dGlobals): stage_vrbox_info_class[] {
     return envr;
 }
 
-export function envcolor_init(globals: dGlobals): void {
+function envcolor_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
     envLight.pale = globals.dStage_dt.pale;

@@ -181,7 +181,7 @@ export class dGlobals {
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
     public particleCtrl: dPa_control_c;
 
-    public bloom_c = new mDoGph_bloom_c(); 
+    public bloom: mDoGph_bloom_c;
 
     public scnPlay: d_s_play;
     public counter = 0;
@@ -225,6 +225,8 @@ export class dGlobals {
         }
 
         this.dlst = new dDlst_list_c();
+
+        this.bloom = new mDoGph_bloom_c(this);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -447,10 +449,22 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         return -1;
     }
 
-    private executeDrawAll(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+    private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
+        list.drawOnPassRenderer(this.renderCache, passRenderer);
+    }
+
+    private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {
+        this.executeList(passRenderer, listSet[0]);
+        this.executeList(passRenderer, listSet[1]);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const globals = this.globals;
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
+
+        const dlst = globals.dlst;
+        dlst.peekZ.beginFrame(device);
 
         this.globals.g_env_light.bgAmbColRatioGather = this.bgAmbRatioSlider.getValue();
         this.globals.g_env_light.actAmbColRatioGather = this.actAmbRatioSlider.getValue();
@@ -503,10 +517,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
-        const dlst = this.globals.dlst;
-
         renderInstManager.setCurrentRenderInstList(dlst.alphaModel);
-
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
         {
             this.globals.particleCtrl.calc(viewerInput);
@@ -527,26 +538,8 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             renderInstManager.setCurrentRenderInstList(dlst.indirect[0]);
         }
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.globals.renderHacks.renderHacksChanged = false;
-    }
 
-    private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
-        list.drawOnPassRenderer(this.renderCache, passRenderer);
-    }
-
-    private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {
-        this.executeList(passRenderer, listSet[0]);
-        this.executeList(passRenderer, listSet[1]);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const dlst = this.globals.dlst;
-        dlst.peekZ.beginFrame(device);
-
-        this.executeDrawAll(device, viewerInput);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
@@ -605,8 +598,14 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 this.executeListSet(passRenderer, dlst.indirect);
             });
         });
+        this.globals.bloom.pushPasses(this.globals, builder, renderInstManager, mainColorTargetID);
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
+
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
@@ -761,6 +760,7 @@ class d_s_play extends fopScn {
     public bgS = new dBgS();
 
     public vrboxLoaded: boolean = false;
+    public layerNo = 0;
 
     public override load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
@@ -777,15 +777,10 @@ class d_s_play extends fopScn {
         const frameCount = viewerInput.time / 1000.0 * 30;
 
         fopDw_Draw(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
-
-        // TODO: fix bloom, errors atm
-        /* globals.bloom_c.enable = true;
-        globals.bloom_c.monoColor = colorNewCopy(White);
-        globals.bloom_c.draw(globals, renderInstManager, viewerInput); */
     }
 
     public getLayerNo(roomNo: number = -1): number {
-        return 0;
+        return this.layerNo;
     }
 
     public override delete(globals: dGlobals): void {

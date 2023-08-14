@@ -19,18 +19,25 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import * as GX from '../gx/gx_enum.js';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
-import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ, GfxFormat, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { nArray, assertExists, assert } from "../util.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { PeekZResult, PeekZManager } from "../WindWaker/d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
-import { _T } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxProgram, _T } from "../gfx/platform/GfxPlatformImpl.js";
 import { dKy_undwater_filter_draw, dKy_daynight_check } from "./d_kankyo.js"
-import { TevDefaultSwapTables } from "../gx/gx_material.js";
+import { GXShaderLibrary, TevDefaultSwapTables } from "../gx/gx_material.js";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph.js";
+import { DeviceProgram } from "../Program.js";
+import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
+import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { TextureMapping } from "../TextureHolder.js";
+import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -2120,92 +2127,252 @@ export class d_thunder extends kankyo_class {
     }
 }
 
+class BloomPassBaseProgram extends DeviceProgram {
+    public static BindingsDefinition = `
+uniform sampler2D u_Texture;
+
+layout(std140) uniform ub_Params {
+    vec4 u_MonoColor;
+    vec4 u_BlendColor;
+    vec4 u_Misc[1];
+};
+#define u_Point          (u_Misc[0].x)
+#define u_Size           (u_Misc[0].y)
+#define u_Ratio          (u_Misc[0].z)
+`;
+
+    public override vert = GfxShaderLibrary.fullscreenVS;
+}
+
+class BloomPassMonoProgram extends BloomPassBaseProgram {
+    public override frag: string = `
+${BloomPassBaseProgram.BindingsDefinition}
+
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Sample = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor = vec4(mix(t_Sample.rgb, t_Sample.rrr * u_MonoColor.rgb, u_MonoColor.aaa), t_Sample.a);
+}
+`;
+}
+
+class BloomPassThresholdProgram extends BloomPassBaseProgram {
+    public override frag: string = `
+${BloomPassBaseProgram.BindingsDefinition}
+
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Sample = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    float t_Mono = (t_Sample.r * 0.25 + t_Sample.g * 0.25 + t_Sample.b * 0.5) - u_Point;
+    gl_FragColor = vec4(t_Sample.rgb * t_Mono, t_Sample.a);
+}
+`;
+}
+
+class BloomPassBlurProgram extends BloomPassBaseProgram {
+    public override frag: string = `
+${BloomPassBaseProgram.BindingsDefinition}
+${GfxShaderLibrary.saturate}
+
+in vec2 v_TexCoord;
+
+${generateBlurFunction(`Blur`, 7, `u_Size`, `u_Ratio`)}
+
+void main() {
+    vec2 t_Size = vec2(textureSize(SAMPLER_2D(u_Texture), 0));
+    vec2 t_Aspect = vec2((t_Size.y / t_Size.x) / (14.0/19.0), 1.0);
+
+    vec3 t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));
+    gl_FragColor = vec4(t_BlurredValue.rgb, 0.25);
+}
+`;
+}
+
+class BloomPassCombineProgram extends BloomPassBaseProgram {
+    public override frag: string = `
+${BloomPassBaseProgram.BindingsDefinition}
+${GfxShaderLibrary.saturate}
+${GXShaderLibrary.TevOverflow}
+
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Sample = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor = vec4(t_Sample.rgb * u_BlendColor.rgb, u_BlendColor.a);
+}
+`;
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 1 },
+];
+
 export class mDoGph_bloom_c {
-    public blendColor;
-    public monoColor = colorNewCopy(TransparentBlack);
-    public enable: boolean;
-    public mode: number;
-    public point: number;
-    public blurSize: number;
-    public blurRatio: number;
+    public blendColor = colorNewCopy(White);
+    public monoColor = colorNewCopy(White, 0.0);
+    public enable: boolean = false;
+    public mode: number = 0;
+    public point: number = 0.5;
+    public blurSize: number = 64;
+    public blurRatio: number = 0.5;
+    public freeze = false;
 
-    private ddraw = new TDDraw();
-    private materialHelper: GXMaterialHelperGfx;
+    private monoProgram: GfxProgram;
+    private thresholdProgram: GfxProgram;
+    private blurProgram: GfxProgram;
+    private combineProgram: GfxProgram;
+    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
-    constructor() {
-        this.enable = false;
-        this.mode = 0;
-        this.point = 128;
-        this.blurSize = 64;
-        this.blurRatio = 128;
-        this.blendColor = colorNewCopy(White);
+    constructor(globals: dGlobals) {
+        const cache = globals.modelCache.cache;
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[0].gfxSampler = linearSampler;
 
-        this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-
-        const mb = new GXMaterialBuilder();
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setZMode(false, GX.CompareType.ALWAYS, false);
-        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
-        
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C2, GX.CC.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A2);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevSwapMode(0, TevDefaultSwapTables[1], TevDefaultSwapTables[1]);
-        colorCopy(materialParams.u_Color[ColorKind.C1], this.monoColor);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        mb.setUsePnMtxIdx(false);
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish('Bloom Mono'));
+        this.monoProgram = cache.createProgram(new BloomPassMonoProgram());
+        this.thresholdProgram = cache.createProgram(new BloomPassThresholdProgram());
+        this.blurProgram = cache.createProgram(new BloomPassBlurProgram());
+        this.combineProgram = cache.createProgram(new BloomPassCombineProgram());
     }
 
-    public drawFilterQuad(ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, p0: number, p1: number): void {
-        ddraw.begin(GX.Command.DRAW_QUADS);
+    private allocateParameterBuffer(renderInst: GfxRenderInst) {
+        let offs = renderInst.allocateUniformBuffer(0, 12);
+        const d = renderInst.mapUniformBufferF32(0);
 
-        ddraw.position3f32(0, 0, 0);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+        offs += fillColor(d, offs, this.monoColor);
+        offs += fillColor(d, offs, this.blendColor);
+        const size = this.blurSize / 6400.0;
+        offs += fillVec4(d, offs, this.point, size, this.blurRatio);
+    }
 
-        ddraw.position3f32(p0, 0, 0);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+    public pushPasses(globals: dGlobals, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: GfxrRenderTargetID): void {
+        if (!this.enable && this.monoColor.a === 0)
+            return;
 
-        ddraw.position3f32(p0, p1, 0);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.setBindingLayouts(bindingLayouts);
+        this.allocateParameterBuffer(renderInst);
+        renderInst.drawPrimitives(3);
 
-        ddraw.position3f32(0, p1, 0);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+        const mainResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
-        ddraw.end();
+        if (this.monoColor.a !== 0) {
+            builder.pushPass((pass) => {
+                pass.setDebugName(`bloom_c Mono`);
 
-        if (ddraw.hasIndicesToDraw()) {
-            const renderInst = ddraw.makeRenderInst(renderInstManager);
-            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachResolveTexture(mainResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.monoProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainResolveTextureID);
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
         }
-    }
 
-    public drawMono(renderInstManager: GfxRenderInstManager, ddraw: TDDraw, viewerInput: ViewerRenderInput) {
-        if (this.enable || this.monoColor.a !== 0) {
-            const ddraw = this.ddraw;
-            this.drawFilterQuad(ddraw, renderInstManager, viewerInput, 4, 4);
-            const renderInst = ddraw.makeRenderInst(renderInstManager);
-            this.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, renderInst);
-            renderInstManager.submitRenderInst(renderInst);
+        if (this.enable) {
+            const mainColorDesc = builder.getRenderTargetDescription(mainColorTargetID);
+
+            const thresholdTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+            thresholdTargetDesc.setDimensions(mainColorDesc.width >>> 1, mainColorDesc.height >>> 1, 1);
+            const thresholdTargetID = builder.createRenderTargetID(thresholdTargetDesc, `bloom_c Threshold`);
+
+            builder.pushPass((pass) => {
+                pass.setDebugName(`bloom_c Threshold`);
+
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, thresholdTargetID);
+                pass.attachResolveTexture(mainResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.thresholdProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainResolveTextureID);
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
+
+            builder.pushDebugThumbnail(thresholdTargetID);
+
+            const blurTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+            blurTargetDesc.setDimensions(thresholdTargetDesc.width >>> 1, thresholdTargetDesc.height >>> 1, 1);
+            const blurTargetID = builder.createRenderTargetID(blurTargetDesc, `bloom_c Blur`);
+
+            builder.pushPass((pass) => {
+                pass.setDebugName(`bloom_c Blur 1`);
+
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurTargetID);
+
+                const thresholdResolveTextureID = builder.resolveRenderTarget(thresholdTargetID);
+                pass.attachResolveTexture(thresholdResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.blurProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(thresholdResolveTextureID);
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
+
+            builder.pushDebugThumbnail(blurTargetID);
+
+            builder.pushPass((pass) => {
+                pass.setDebugName(`bloom_c Blur 2`);
+
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurTargetID);
+
+                const blurResolveTextureID = builder.resolveRenderTarget(blurTargetID);
+                pass.attachResolveTexture(blurResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.blurProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor: GfxBlendFactor.SrcAlpha, blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha });
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(blurResolveTextureID);
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
+
+            builder.pushDebugThumbnail(blurTargetID);
+
+            builder.pushPass((pass) => {
+                pass.setDebugName(`bloom_c Combine`);
+
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+
+                const blurResolveTextureID = builder.resolveRenderTarget(blurTargetID);
+                pass.attachResolveTexture(blurResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.combineProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    const blendSrcFactor = (this.mode === 1) ? GfxBlendFactor.OneMinusDst : GfxBlendFactor.One;
+                    setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.Add, blendSrcFactor, blendDstFactor: GfxBlendFactor.SrcAlpha });
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(blurResolveTextureID);
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
+            });
         }
-    }
-
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        renderInstManager.setCurrentRenderInstList(globals.dlst.ui[1]);
-        
-        const ddraw = this.ddraw;
-        ddraw.beginDraw(globals.modelCache.cache);
-        ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4);
-        this.drawMono(renderInstManager, ddraw, viewerInput);
-        ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
-        this.monoColor.a = 0;
-        this.ddraw.destroy(device);
     }
 }
 
