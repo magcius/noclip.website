@@ -247,9 +247,9 @@ class dScnKy__Schedule {
         for (let i = 0; i < 11; i++) {
             const timeBegin = view.getFloat32(offs + 0x00);
             const timeEnd = view.getFloat32(offs + 0x04);
-            const palIdx0 = view.getUint8(offs + 0x08);
-            const palIdx1 = view.getUint8(offs + 0x09);
-            this.entries.push({ timeBegin, timeEnd, palIdxA: palIdx0, palIdxB: palIdx1 });
+            const palIdxA = view.getUint8(offs + 0x08);
+            const palIdxB = view.getUint8(offs + 0x09);
+            this.entries.push({ timeBegin, timeEnd, palIdxA, palIdxB });
             offs += 0x0C;
         }
     }

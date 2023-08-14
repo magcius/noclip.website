@@ -606,7 +606,7 @@ class dkydata_bloomInfo {
     constructor(buffer: ArrayBufferSlice) {
         const view = buffer.createDataView();
         let offs = 0x00;
-        for (let i = 0; i < 11; i++) {
+        for (let i = 0; i < 64; i++) {
             const mode = view.getUint8(offs + 0x00);
             const point = view.getUint8(offs + 0x01) / 255;
             const blureSize = view.getUint8(offs + 0x02);
