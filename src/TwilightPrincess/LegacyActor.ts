@@ -874,25 +874,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const furnitureMdl = buildModel(rarc, `bmdr/t_r50furniture.bmd`);
         furnitureMdl.lightTevColorType = LightType.UNK_16;
     });
-    // Imp Poe
-    else if (actorName === 'E_hp') fetchArchive(`E_hp`).then((rarc) => {
-        const hp_mdl = buildModel(rarc, `bmdr/hp.bmd`);
-        hp_mdl.lightTevColorType = LightType.UNK_0;
-
-        const lanternModel = buildChildModel(rarc, `bmdr/hp_ori.bmd`);
-        lanternModel.setParentJoint(hp_mdl, `leg03`);
-        mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 2);
-        mat4.rotateY(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 2);
-
-        hp_mdl.bindANK1(parseBCK(rarc, `bck/hp_wait.bck`));
-
-        hp_mdl.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-
-        scaleMatrix(hp_mdl.modelMatrix, hp_mdl.modelMatrix, 1.2);
-        // pos still seems off, needs more research
-        mat4.translate(hp_mdl.modelMatrix, hp_mdl.modelMatrix, [0, 130, 0]);
-        mat4.translate(lanternModel.modelMatrix, lanternModel.modelMatrix, [0, -10, 0]);
-    });
     // Normal Beamos
     else if (actorName === 'Obj_bm') fetchArchive(`Obj_bm`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/bm.bmd`);

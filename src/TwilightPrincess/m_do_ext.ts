@@ -149,7 +149,7 @@ export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelI
 }
 
 const scratchTransform = new JointTransformInfo();
-export class mDoExt_McaMorf implements JointMatrixCalc {
+export class mDoExt_morf_c implements JointMatrixCalc {
     public model: J3DModelInstance;
     public frameCtrl = new J3DFrameCtrl(0);
     private prevMorf: number = -1.0;

@@ -20,6 +20,7 @@ export const enum fpc__ProcessName {
     d_a_obj_suisya      = 0x011D,
     d_a_obj_firepillar2 = 0x015E,
     d_a_obj_glowSphere  = 0x017B,
+    d_a_e_hp            = 0x01E1,
     kytag06             = 0x02B0,
     kytag07             = 0x02B1,
     kytag10             = 0x02B4,

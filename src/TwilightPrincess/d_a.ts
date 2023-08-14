@@ -7,9 +7,9 @@ import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_chaseF, cM_atan2s, cM_rndF } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cM_atan2s, cM_rndF } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
-import { MtxTrans, calc_mtx, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, scratchVec3a } from "../WindWaker/m_do_mtx.js";
+import { MtxTrans, MtxPosition, calc_mtx, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_XrotM, mDoMtx_ZrotM, mDoMtx_ZXYrotM, scratchVec3a, scratchVec3b, kUshortTo2PI } from "../WindWaker/m_do_mtx.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -20,13 +20,14 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dKy_event_proc, dice_rain_minus, dKy_plight_priority_set, dKy_plight_cut, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct, LIGHT_INFLUENCE } from "./d_kankyo.js";
+import { dKy_event_proc, dice_rain_minus, dKy_plight_priority_set, dKy_plight_cut, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct, LIGHT_INFLUENCE, dKy_daynight_check } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
+import { mDoExt_morf_c, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
 import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
+import { scaleMatrix } from "../MathHelpers.js";
 
 // Framework'd actors
 
@@ -2124,6 +2125,136 @@ class kytag07_class extends fopAc_ac_c {
     }
 }
 
+// Imp Poe
+class d_a_e_hp extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_e_hp;
+    private morf: mDoExt_morf_c;
+    private lanternModel: J3DModelInstance;
+    private glowMorf: mDoExt_morf_c;
+    private swingAngle = vec3.create();
+    private unk_7aa: number = 0;
+    private unk_744 = vec3.create();
+    private unk_75c = vec3.create();
+    private swingRate: number = 0;
+    private counter: number = 0;
+    private height: number = 170.0;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+        const arcName = "E_HP";
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.rot[2] = 0;
+        this.rot[0] = 0;
+
+        // CreateHeap
+        const resCtrl = globals.resCtrl;
+        const mdl_data = resCtrl.getObjectRes(ResType.Model, arcName, 0x13);
+        const bck = resCtrl.getObjectRes(ResType.Bck, arcName, 0xD);
+        this.morf = new mDoExt_morf_c(mdl_data, null, null, bck, LoopMode.Repeat);
+        this.morf.model.jointMatrixCalcCallback = this.ctrlJoint;
+
+        const lantern_mdlData = resCtrl.getObjectRes(ResType.Model, arcName, 0x14);
+        this.lanternModel = new J3DModelInstance(lantern_mdlData);
+        this.lanternModel.jointMatrixCalcCallback = this.LampJointCallBack;
+
+        const glow_mdlData = resCtrl.getObjectRes(ResType.Model, arcName, 0x12);
+        const glow_bck = resCtrl.getObjectRes(ResType.Bck, arcName, 4);
+        this.glowMorf = new mDoExt_morf_c(glow_mdlData, null, null, glow_bck, LoopMode.Repeat);
+
+        this.setCullSizeBox(-200, -200, -200, 200, 200, 200);
+
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.height = 170.0 + Math.sin(this.counter * 1000 * kUshortTo2PI) * 20;
+
+        this.mtx_set();
+
+        this.morf.play(deltaTimeInFrames);
+        this.glowMorf.play(deltaTimeInFrames);
+
+        this.counter++;
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(globals, renderInstManager, viewerInput);
+
+        if (!dKy_daynight_check(globals))
+            return;
+
+        settingTevStruct(globals, LightType.UNK_0, this.pos, this.tevStr);
+        setLightTevColorType_MAJI(globals, this.morf.model, this.tevStr, viewerInput.camera);
+
+        // later set this up for a wolf sense mode
+        //mDoExt_modelUpdateDL(globals, this.morf.model, renderInstManager, viewerInput, globals.dlst.main);
+
+        setLightTevColorType_MAJI(globals, this.lanternModel, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.lanternModel, renderInstManager, viewerInput, globals.dlst.main);
+
+        mat4.copy(calc_mtx, this.morf.model.shapeInstanceState.jointToWorldMatrixArray[13]);
+        MtxPosition(this.unk_75c, vec3.set(scratchVec3a, 55, 0, 0));
+        MtxTrans(this.unk_75c, false);
+        scaleMatrix(calc_mtx, calc_mtx, 1.2);
+        
+        vec3.copy(scratchVec3a, this.unk_75c);
+        vec3.sub(scratchVec3a, globals.cameraPosition, scratchVec3a);
+        mDoMtx_YrotM(calc_mtx, cM_atan2s(scratchVec3a[0], scratchVec3a[2]));
+
+        vec3.set(scratchVec3b, scratchVec3a[0], 0, scratchVec3a[2]);
+        mDoMtx_XrotM(calc_mtx, cM_atan2s(-scratchVec3a[1], vec3.squaredLength(scratchVec3b)));
+        mat4.copy(this.glowMorf.model.modelMatrix, calc_mtx);
+
+        mDoExt_modelUpdateDL(globals, this.glowMorf.model, renderInstManager, viewerInput, globals.dlst.main);
+    }
+
+    private ctrlJoint = (dst: mat4, modelData: J3DModelData, i: number) => {
+        if (i === 8) {
+            mDoMtx_XrotM(dst, this.unk_7aa);
+        }
+    }
+
+    private LampJointCallBack = (dst: mat4, modelData: J3DModelData, i: number) => {
+        if (i === 2) {
+            mDoMtx_XrotM(dst, this.swingAngle[0]);
+            mDoMtx_ZrotM(dst, this.swingAngle[2]);
+        }
+    }
+
+    public mtx_set(): void {
+        MtxTrans(this.pos, false);
+        MtxTrans(vec3.set(scratchVec3a, 0, this.height, 0), true);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        scaleMatrix(calc_mtx, calc_mtx, 1.2);
+        mat4.copy(this.morf.model.modelMatrix, calc_mtx);
+        this.morf.calc();
+
+        vec3.copy(scratchVec3b, this.unk_744);
+
+        mat4.copy(calc_mtx, this.morf.model.shapeInstanceState.jointToWorldMatrixArray[13]);
+        MtxPosition(this.unk_744, vec3.set(scratchVec3a, 12, 0, 0));
+        MtxTrans(this.unk_744, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        scaleMatrix(calc_mtx, calc_mtx, 1.2);
+        mat4.copy(this.lanternModel.modelMatrix, calc_mtx);
+
+        vec3.sub(scratchVec3b, scratchVec3b, this.unk_744);
+        let swing = vec3.squaredLength(scratchVec3b) * 400.0 + 1000.0;
+        if (swing > 6000.0)
+            swing = 6000.0
+
+        this.swingRate = cLib_addCalc2(this.swingRate, swing, 0.1, swing * 0.1);
+        this.swingAngle[0] = cLib_addCalcAngleS2(this.swingAngle[0], this.swingRate * Math.sin(this.counter * 2000 * kUshortTo2PI), 8, 0x400);
+        this.swingAngle[2] = this.swingRate * Math.sin(this.counter * 2500.0 * kUshortTo2PI);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -2146,4 +2277,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(kytag07_class);
     R(d_a_obj_firepillar2);
     R(d_a_obj_lv3water);
+    R(d_a_e_hp);
 }
