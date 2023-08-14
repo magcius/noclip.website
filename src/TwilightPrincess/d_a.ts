@@ -20,7 +20,7 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dKy_event_proc, dice_rain_minus, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
+import { dKy_event_proc, dice_rain_minus, dKy_plight_priority_set, dKy_plight_cut, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct, LIGHT_INFLUENCE } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
@@ -2081,6 +2081,49 @@ class kytag06_class extends fopAc_ac_c {
     }
 }
 
+class kytag07_class extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.kytag07;
+
+    private lightInfluence: LIGHT_INFLUENCE = new LIGHT_INFLUENCE();
+    private unk_588: number;
+    private unk_58c: number;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+
+        vec3.copy(this.lightInfluence.pos, this.pos);
+        this.lightInfluence.color.r = (this.parameters & 0xFF) / 255.0;
+        this.lightInfluence.color.g = ((this.parameters >> 8) & 0xFF) / 255.0;
+        this.lightInfluence.color.b = ((this.parameters >> 0x10) & 0xFF) / 255.0;
+        this.lightInfluence.power = 0.0000000001;
+        this.lightInfluence.fluctuation = 1.0;
+        this.unk_588 = 1000.0 * this.scale[0];
+        this.unk_58c = 0;
+
+        dKy_plight_priority_set(envLight, this.lightInfluence);
+        return cPhs__Status.Next;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+        const envLight = globals.g_env_light;
+
+        if (this.unk_58c !== 99) {
+            cLib_addCalc(this.lightInfluence.power, this.unk_588, 0.1, 1000.0, 0.001);
+        } else if (this.lightInfluence.power <= 0.01) {
+            // Delete
+            this.unk_58c = 99;
+            dKy_plight_cut(envLight, this.lightInfluence);
+        }
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -2100,6 +2143,7 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(kytag10_class);
     R(kytag17_class);
     R(kytag06_class);
+    R(kytag07_class);
     R(d_a_obj_firepillar2);
     R(d_a_obj_lv3water);
 }
