@@ -35,27 +35,6 @@ vec2 BlurAspect(PD_SAMPLER_2D(t_Texture)) {
 }
 `;
 
-export function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityPerTapStr: string, angleOffset: number = 0.0): string {
-    let S = `
-vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Aspect) {
-    vec3 c = vec3(0.0);
-`;
-
-    for (let i = 0; i < tapCount; i++) {
-        const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
-        const x = Math.cos(theta), y = -Math.sin(theta);
-
-        S += `
-    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + t_Aspect * vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityPerTapStr});`;
-    }
-
-    S += `
-    return c;
-}
-`;
-    return S;
-}
-
 abstract class ImageEffectBase extends NameObj {
     public visibleScenario = true;
     public active = false;
@@ -171,7 +150,7 @@ abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
             const radius = -radiusL[i];
             const radiusStr = radius.toFixed(5);
             const angleOffset = ofsL[i];
-            funcs += generateBlurFunction(funcName, tapCount, radiusStr, intensityVar, angleOffset);
+            funcs += GXShaderLibrary.generateBlurFunction(funcName, tapCount, radiusStr, intensityVar, angleOffset);
             main += `
     f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));`;
         }
@@ -456,7 +435,7 @@ class BloomSimpleBlurProgram extends DeviceProgram {
         this.frag = `
 ${BloomSimplePSCommon}
 
-${generateBlurFunction(`Blur`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
+${GXShaderLibrary.generateBlurFunction(`Blur`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 void main() {
     vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
@@ -598,7 +577,7 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-${generateBlurFunction(`Blur`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
+${GXShaderLibrary.generateBlurFunction(`Blur`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
 
 void main() {
     float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord).r;

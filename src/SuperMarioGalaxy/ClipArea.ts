@@ -20,7 +20,6 @@ import { isFirstStep, isGreaterStep, isLessStep } from "./Spine.js";
 import { invlerp, saturate, setMatrixTranslation, Vec3Zero } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
-import { generateBlurFunction } from "./ImageEffect.js";
 import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxDevice, GfxMegaStateDescriptor, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
@@ -35,6 +34,7 @@ import { emitEffectHitPos } from "./EffectSystem.js";
 import { createStageSwitchCtrl, isExistStageSwitchAppear, StageSwitchCtrl } from "./Switch.js";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { TDDraw } from "./DDraw.js";
+import { GXShaderLibrary } from "../gx/gx_material.js";
 
 const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
@@ -571,7 +571,7 @@ ${GfxShaderLibrary.fullscreenVS}
     public override frag = `
 ${FallOutFieldDrawBlurProgram.Common}
 ${GfxShaderLibrary.saturate}
-${generateBlurFunction('Blur', 5, '0.004', glslGenerateFloat(1.0))}
+${GXShaderLibrary.generateBlurFunction('Blur', 5, '0.004', glslGenerateFloat(1.0))}
 
 in vec2 v_TexCoord;
 

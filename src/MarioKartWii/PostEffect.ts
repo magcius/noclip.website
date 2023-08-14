@@ -15,7 +15,6 @@ import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, Gfxr
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXShaderLibrary } from "../gx/gx_material.js";
 import { DeviceProgram } from "../Program.js";
-import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { assert, assertExists, nArray, readString } from "../util.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
@@ -116,7 +115,7 @@ class EggBloomBlurProgram extends EggBloomBaseProgram {
         for (let i = 0; i < numPasses; i++) {
             const passTapCount = (i + 1) * tapCount;
             const funcName = `BlurPass${i}`;
-            funcs += generateBlurFunction(funcName, passTapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap));
+            funcs += GXShaderLibrary.generateBlurFunction(funcName, passTapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap));
             code += `
     c += saturate(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));`;
         }
@@ -448,7 +447,7 @@ class EggDOFMode2BlurProgram extends EggDOFBaseProgram {
         this.frag = `
 ${EggDOFBaseProgram.BindingsDefinition}
 ${GfxShaderLibrary.saturate}
-${generateBlurFunction(`BlurPass0`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
+${GXShaderLibrary.generateBlurFunction(`BlurPass0`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 in vec2 v_TexCoord;
 

@@ -33,6 +33,27 @@ float GXIntensity(vec3 t_Color) {
 }
 `;
 
+export function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityPerTapStr: string, angleOffset: number = 0.0): string {
+    let S = `
+vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Aspect) {
+    vec3 c = vec3(0.0);
+`;
+
+    for (let i = 0; i < tapCount; i++) {
+        const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
+        const x = Math.cos(theta), y = -Math.sin(theta);
+
+        S += `
+    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + t_Aspect * vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityPerTapStr});`;
+    }
+
+    S += `
+    return c;
+}
+`;
+    return S;
+}
+
 }
 
 // #region Material definition.

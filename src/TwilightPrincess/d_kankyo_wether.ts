@@ -1,43 +1,40 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_bg1_addcol_amb_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_darkworld_check } from "./d_kankyo.js";
-import { dGlobals } from "./ztp_scenes.js";
-import { cM_rndF, cLib_addCalc, cM_rndFX } from "../WindWaker/SComponent.js";
-import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, TransparentBlack, Magenta } from "../Color.js";
-import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";
-import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
-import { ResType } from "./d_resorce.js";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx, uShortTo2PI } from "../WindWaker/m_do_mtx.js";
-import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
-import { Camera, divideByW } from "../Camera.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
-import * as GX from '../gx/gx_enum.js';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
-import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ, GfxFormat, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform.js";
+import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { nArray, assertExists, assert } from "../util.js";
+import { Camera, divideByW } from "../Camera.js";
+import { Color, TransparentBlack, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
-import { PeekZResult, PeekZManager } from "../WindWaker/d_dlst_peekZ.js";
-import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
-import { GfxProgram, _T } from "../gfx/platform/GfxPlatformImpl.js";
-import { dKy_undwater_filter_draw, dKy_daynight_check } from "./d_kankyo.js"
-import { GXShaderLibrary, TevDefaultSwapTables } from "../gx/gx_material.js";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID, GfxrResolveTextureID } from "../gfx/render/GfxRenderGraph.js";
+import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
-import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/GfxShaderLibrary.js";
-import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { generateBlurFunction } from "../SuperMarioGalaxy/ImageEffect.js";
+import { cLib_addCalc, cM_rndF, cM_rndFX } from "../WindWaker/SComponent.js";
+import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ.js";
+import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM, uShortTo2PI } from "../WindWaker/m_do_mtx.js";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxClipSpaceNearZ, GfxCompareMode, GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from '../gx/gx_enum.js';
+import { GXShaderLibrary } from "../gx/gx_material.js";
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { assert, assertExists, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { dKy_actor_addcol_amb_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_darkworld_check, dKy_daynight_check, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_undwater_filter_draw, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
+import { ResType } from "./d_resorce.js";
+import { dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
+import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { dGlobals } from "./ztp_scenes.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
@@ -2178,7 +2175,7 @@ ${GfxShaderLibrary.saturate}
 
 in vec2 v_TexCoord;
 
-${generateBlurFunction(`Blur`, 7, `u_Size`, `u_Ratio`)}
+${GXShaderLibrary.generateBlurFunction(`Blur`, 7, `u_Size`, `u_Ratio`)}
 
 void main() {
     vec2 t_Size = vec2(textureSize(SAMPLER_2D(u_Texture), 0));
