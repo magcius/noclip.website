@@ -6,28 +6,26 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
+import { scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cM_atan2s, cM_rndF } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cM_atan2s } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
-import { MtxTrans, MtxPosition, calc_mtx, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_XrotM, mDoMtx_ZrotM, mDoMtx_ZXYrotM, scratchVec3a, scratchVec3b, kUshortTo2PI } from "../WindWaker/m_do_mtx.js";
-import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";
+import { MtxPosition, MtxTrans, calc_mtx, kUshortTo2PI, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, scratchVec3a, scratchVec3b } from "../WindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
-import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dKy_event_proc, dice_rain_minus, dKy_plight_priority_set, dKy_plight_cut, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType_MAJI, settingTevStruct, LIGHT_INFLUENCE, dKy_daynight_check } from "./d_kankyo.js";
+import { LIGHT_INFLUENCE, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_morf_c, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
-import { dGlobals, /* dDlst_alphaModel__Type */ } from "./ztp_scenes.js";
-import { scaleMatrix } from "../MathHelpers.js";
+import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupStageTexture } from "./m_do_ext.js";
+import { dGlobals } from "./ztp_scenes.js";
 
 // Framework'd actors
 
@@ -1804,7 +1802,6 @@ class kytag06_class extends fopAc_ac_c {
     public daKytag06_type_04_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
         dKy_event_proc(globals, deltaTimeInFrames);
     }
-
 
     public daKytag06_type_06_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const envLight = globals.g_env_light;

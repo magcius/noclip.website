@@ -1402,27 +1402,26 @@ function setSunpos(globals: dGlobals): void {
     if (globals.stageName === "F_SP200")
         return;
 
-    let sunTime = envLight.curTime, sunAngle: number;
-    if (sunTime >= 90.0 && sunTime <= 270.0) {
-        sunAngle = invlerp(90.0, 270.0, sunTime) * 150.0 + 105.0;
-    } else {
-        if (sunTime < 90.0)
-            sunTime += 360.0;
+    function getAngle(time: number): number {
+        if (time >= 360.0)
+            time -= 360.0;
 
-        sunAngle = invlerp(270.0, 450.0, sunTime) * 210 + 255.0;
-        if (sunAngle > 360.0)
-            sunAngle -= 360.0;
+        let angle: number;
+        if (time >= 90.0 && time <= 270.0) {
+            angle = invlerp(90.0, 270.0, time) * 150.0 + 105.0;
+        } else {
+            if (time < 90.0)
+                time += 360.0;
+    
+            angle = invlerp(270.0, 450.0, time) * 210.0 + 255.0;
+            if (angle > 360.0)
+                angle -= 360.0;
+        }
+        return angle;
     }
 
-    let moonTime = envLight.curTime + 180.0, moonAngle: number;
-    if (moonTime >= 360.0)
-        moonTime -= 360.0;
-
-    moonAngle = invlerp(270.0, 450.0, moonTime) * 210.0 + 255.0;
-    if (moonAngle >= 360.0)
-        moonAngle -= 360.0;
-
     {
+        const sunAngle = getAngle(envLight.curTime);
         const theta = MathConstants.DEG_TO_RAD * sunAngle;
         const sinR = Math.sin(theta), cosR = Math.cos(theta);
         const baseX = 80000 * sinR, baseY = -80000 * cosR, baseZ = -48000 * cosR;
@@ -1431,6 +1430,7 @@ function setSunpos(globals: dGlobals): void {
     }
 
     {
+        const moonAngle = getAngle(envLight.curTime + 180.0);
         const theta = MathConstants.DEG_TO_RAD * moonAngle;
         const sinR = Math.sin(theta), cosR = Math.cos(theta);
         const baseX = 80000 * sinR, baseY = -80000 * cosR, baseZ = -48000 * cosR;
@@ -1548,7 +1548,7 @@ function dice_wether_execute(envLight: dScnKy_env_light_c, mode: number, timeCha
 export function dKy_event_proc(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
-    if (envLight.cameraInWater)
+    if (envLight.cameraInWater || envLight.diceWeatherStop)
         return;
 
     const current_time = envLight.curTime;
