@@ -215,8 +215,8 @@ export class dKankyo_sun_Packet {
     private ringHalfTexture: BTIData;
     private materialHelperLenzflare: GXMaterialHelperGfx;
     private materialHelperLenzflareSolid: GXMaterialHelperGfx;
-    public lenzflarePos = nArray(6, () => vec3.create());
-    public lenzflareAngle: number = 0.0;
+    public lensflarePos = nArray(6, () => vec3.create());
+    public lensflareAngle: number = 0.0;
     public distFalloff: number = 0.0;
     public drawLenzInSky: boolean = false;
 
@@ -497,7 +497,7 @@ export class dKankyo_sun_Packet {
         const renderInst = ddraw.makeRenderInst(renderInstManager);
         submitScratchRenderInst(renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
 
-        mat4.rotateZ(scratchMatrix, scratchMatrix, this.lenzflareAngle);
+        mat4.rotateZ(scratchMatrix, scratchMatrix, this.lensflareAngle);
 
         const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
         const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
@@ -519,11 +519,7 @@ export class dKankyo_sun_Packet {
                 );
             }
 
-            let basePos: vec3;
-            if (i >= 2)
-                basePos = this.lenzflarePos[i - 2];
-            else
-                basePos = this.sunPos;
+            const basePos = i >= 2 ? this.lensflarePos[i - 2] : this.sunPos;
 
             const scaleX = 1.0;
             const texCoordScale = i === 0 ? 1.0 : 2.0;
@@ -1497,11 +1493,11 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
     const intensity = 250.0 + (350.0 * dist);
     for (let i = 0; i < 6; i++) {
         const whichLenz = i + 2;
-        vec3.scaleAndAdd(pkt.lenzflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
+        vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
 
     project(scratchVec3, pkt.sunPos, globals.camera);
-    pkt.lenzflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
+    pkt.lensflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 
 function wether_move_thunder(globals: dGlobals): void {

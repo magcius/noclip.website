@@ -2,7 +2,7 @@
 import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Camera, divideByW } from "../Camera.js";
-import { Color, TransparentBlack, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { Color, TransparentBlack, White, colorAdd, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8, colorScale, colorScaleAndAdd } from "../Color.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
@@ -100,7 +100,7 @@ export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): 
 
 export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
     if (globals.stageName !== 'Name') {
-        wether_move_sun(globals);
+        wether_move_sun(globals, deltaTimeInFrames);
         wether_move_rain(globals, deltaTimeInFrames);
         wether_move_snow(globals);
     }
@@ -295,7 +295,7 @@ export class dKankyo_sun_Packet {
     private moonTexture0: BTIData;
     private moonTextureA: BTIData;
     private moonTexturePhase: BTIData[] = [];
-    private moonGlowTexture: BTIData;
+    private ballTexture: BTIData;
     private materialHelperSunMoon: GXMaterialHelperGfx;
     private materialHelperMoonShine: GXMaterialHelperGfx;
     public sunPos = vec3.create();
@@ -309,12 +309,15 @@ export class dKankyo_sun_Packet {
     // Lenzflare
     private lensTexture: BTIData;
     private ringTexture: BTIData;
-    private lensBallTexture: BTIData;
 
-    private materialHelperLenzflare: GXMaterialHelperGfx;
-    private materialHelperLenzflareSolid: GXMaterialHelperGfx;
-    public lenzflarePos = nArray(6, () => vec3.create());
-    public lenzflareAngle: number = 0.0;
+    private materialHelperLensflare: GXMaterialHelperGfx;
+    private materialHelperLensflareAdd: GXMaterialHelperGfx;
+    private materialHelperLensflareSolid: GXMaterialHelperGfx;
+    public lensflarePos = nArray(8, () => vec3.create());
+    public lensflareAngle: number = 0.0;
+    public lensflareColor0 = colorNewCopy(White);
+    public lensflareColor1 = colorNewCopy(White);
+    public lensflareAlpha = 0.0;
     public distFalloff: number = 0.0;
     public drawLenzInSky: boolean = false;
 
@@ -337,7 +340,7 @@ export class dKankyo_sun_Packet {
         this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a02.bti`)!);
         this.moonTexturePhase.push(resCtrl.getStageResByName(ResType.Bti, `STG_00`, `f_moon_a_a03.bti`)!);
 
-        this.moonGlowTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
+        this.ballTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x4A);
         this.lensTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x5C);
         this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x57);
 
@@ -358,6 +361,28 @@ export class dKankyo_sun_Packet {
         mb.setUsePnMtxIdx(false);
         this.materialHelperMoonShine = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet moon glow'));
 
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C1, GX.CC.C0, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.A0, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(false, GX.CompareType.LEQUAL, false);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
+        this.materialHelperLensflare = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured'));
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        this.materialHelperLensflareAdd  = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured add'));
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A0);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        this.materialHelperLensflareSolid = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet solid'));
+
         mb.setTevOrder(1, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
@@ -372,17 +397,6 @@ export class dKankyo_sun_Packet {
 
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         this.materialHelperSunMoon = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet'));
-
-        mb.setZMode(false, GX.CompareType.LEQUAL, false);
-        this.materialHelperLenzflare = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured'));
-
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A0);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.materialHelperLenzflareSolid = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet solid'));
     }
 
     private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size1: number, scaleX: number, texCoordScale: number, size2: number = size1): void {
@@ -490,7 +504,7 @@ export class dKankyo_sun_Packet {
                     const renderInst = ddraw.makeRenderInst(renderInstManager);
                     submitScratchRenderInst(renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
                 } else {
-                    this.moonGlowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                    this.ballTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
                     mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * 50 * scaleX);
 
@@ -513,26 +527,15 @@ export class dKankyo_sun_Packet {
         }
     }
 
-    @dfShow()
-    private lensflareColor = colorNewCopy(White);
-    @dfRange(0, 1600, 1)
-    private lensflareBaseSize: number = 960.0;
-    @dfRange(0, 32, 1)
+    private lensflareBaseSize: number = 160.0;
     private lensflareCount: number = 16.0;
-    @dfRange(0.0, MathConstants.TAU, 0.0001)
-    private lensflareAngles: number[] = [uShortTo2PI(0xf80a), uShortTo2PI(0x416b)];
-    @dfRange(0.0, 0.8, 0.0001)
     private lensflareAngleSteps: number[] = [uShortTo2PI(0x1000), uShortTo2PI(0x1C71)];
-    @dfRange(-5, 5)
     private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
-    @dfRange(0, MathConstants.TAU, 0.0001)
-    private lensflareWidth: number = uShortTo2PI(1600.0);
+    private lensflareWidth: number = uShortTo2PI(1000.0);
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
             return;
-
-        const envLight = globals.g_env_light;
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
@@ -542,13 +545,79 @@ export class dKankyo_sun_Packet {
             renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
 
         const invDist = 1.0 - this.distFalloff;
-        const flareViz = (0.6 + (0.8 * this.visibility * sqr(invDist)));
+        const flareViz = (0.6 + (0.4 * this.visibility * invDist ** 2));
         const innerRad = 300 * flareViz;
-        const flareScale = this.lensflareBaseSize * flareViz * (3.0 + invDist);
-        const vizSq = sqr(this.visibility);
+        const vizSq = this.visibility ** 2;
 
-        let angle0 = this.lensflareAngles[0];
-        let angle1 = this.lensflareAngles[1];
+        const colorTable = [
+            colorNewFromRGBA8(0xB4C8FFFF),
+            colorNewFromRGBA8(0xC8C8FF50),
+            colorNewFromRGBA8(0xFF8C785A),
+            colorNewFromRGBA8(0xFFB47864),
+            colorNewFromRGBA8(0xB4B47855),
+            colorNewFromRGBA8(0xB4C8645A),
+            colorNewFromRGBA8(0xDCFFB46E),
+            colorNewFromRGBA8(0xC8DCFF5A),
+        ];
+        const scaleTable = [8000, 10000, 3.2, 1.8, 1.8, 6.2, 1.2, 4.0];
+        for (let i = 7; i >= 0; i--) {
+            if (this.drawLenzInSky && i !== 0)
+                continue;
+
+            if (i === 0) {
+                const alpha = this.lensflareAlpha * vizSq * 0.8 * colorTable[i].a;
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor0, alpha);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.lensflareColor1);
+            } else if (i === 1) {
+                const alpha = this.lensflareAlpha * vizSq * 0.8 * colorTable[i].a;
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor0, alpha);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.lensflareColor1);
+            } else if (i === 2) {
+                const c0 = materialParams.u_Color[ColorKind.C0];
+                c0.r = 0.12 + this.lensflareColor0.r * 0.44;
+                c0.g = 0.12 + this.lensflareColor0.g * 0.44;
+                c0.b = 0.12 + this.lensflareColor0.b * 0.44;
+                c0.a = (1.0 - (1.0 - vizSq * invDist) ** 3) * 140/255;
+                colorScale(materialParams.u_Color[ColorKind.C1], this.lensflareColor1, 0.5);
+            } else {
+                const alpha = invDist * vizSq * 0.235 * this.distFalloff;
+                colorCopy(materialParams.u_Color[ColorKind.C0], colorTable[i], alpha);
+                colorCopy(materialParams.u_Color[ColorKind.C1], colorTable[i]);
+            }
+
+            let size: number;
+            if (i > 2) {
+                size = this.visibility * scaleTable[i] * 60.0 * (1.0 - this.distFalloff ** 3.0);
+            } else if (i === 2) {
+                size = 4000.0;
+            } else {
+                if (i === 0)
+                    size = this.visibility * 3000.0 * 0.2 * invDist ** 2;
+                else
+                    size = this.visibility * scaleTable[i] * 0.2 * invDist ** 2;
+                size = ((0.04 + 0.075 * this.visibility) * scaleTable[i] + size) * 0.85;
+            }
+
+            const basePos = i >= 2 ? this.lensflarePos[i - 2] : this.sunPos;
+
+            const scaleX = 1.0;
+            const texCoordScale = i === 1 ? 2.0 : 1.0;
+            this.drawSquare(ddraw, scratchMatrix, basePos, size, scaleX, texCoordScale);
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+
+            if (i === 1)
+                this.ringTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            else if (i === 2)
+                this.lensTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            else
+                this.ballTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+            const materialHelper = (i >= 2) ? this.materialHelperLensflareAdd : this.materialHelperLensflare;
+            submitScratchRenderInst(renderInstManager, materialHelper, renderInst, viewerInput);
+        }
+
+        let angle0 = uShortTo2PI(globals.counter *  0x00 - 0x07F6);
+        let angle1 = uShortTo2PI(globals.counter * -0x0E + 0x416B);
         for (let i = 0; i < this.lensflareCount; i++) {
             ddraw.begin(GX.Command.DRAW_TRIANGLES);
 
@@ -569,22 +638,20 @@ export class dKankyo_sun_Packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
-            const whichScale = i & 3;
-            let outerRadScale = ((0.6 + (0.4 * flicker)) * flareScale) * (1.5 * this.visibility);
-            if (whichScale !== 0)
-                outerRadScale *= 0.2;
+            let outerRadScale = (0.4 * flicker + 0.6) * innerRad * this.lensflareBaseSize * (invDist + 2.9) * (this.visibility * 1.5);
+            if ((i & 3) !== 0)
+                outerRadScale *= 0.86;
+            if ((i & 2) !== 0)
+                outerRadScale *= 0.246;
 
-            const outerRadScale2: number = this.lensflareSizes[whichScale];
+            const outerRadScale2: number = this.lensflareSizes[i & 3];
 
-            const outerRad = outerRadScale * (this.visibility * (sqr(this.visibility) + outerRadScale2));
+            const outerRad = outerRadScale * (this.visibility * (vizSq + outerRadScale2));
             vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
             ddraw.position3vec3(scratchVec3);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-
-            angle0 += this.lensflareAngleSteps[0];
-            angle1 += this.lensflareAngleSteps[1];
 
             const arcAngle2 = baseAngle - arcSize;
             vec3.set(scratchVec3, innerRad * Math.sin(arcAngle2), innerRad * Math.cos(arcAngle2), 0);
@@ -594,60 +661,15 @@ export class dKankyo_sun_Packet {
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
             ddraw.end();
+
+            angle0 += this.lensflareAngleSteps[0];
+            angle1 += this.lensflareAngleSteps[1];
         }
-        const lensflareAlpha = (80.0 * vizSq ** 3.0) / 0xFF;
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
+        const lensflareAlpha = (this.lensflareAlpha * vizSq ** 3.0) * (15/255);
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor0, lensflareAlpha);
 
         const renderInst = ddraw.makeRenderInst(renderInstManager);
-        submitScratchRenderInst(renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
-
-        mat4.rotateZ(scratchMatrix, scratchMatrix, this.lenzflareAngle);
-
-        const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
-        const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
-        for (let i = 7; i >= 0; i--) {
-            if (this.drawLenzInSky && i !== 0)
-                continue;
-
-            let alpha = vizSq * alphaTable[i] / 0xFF;
-            if (i >= 2)
-                alpha *= this.distFalloff * 0.8;
-
-            let size: number;
-            if (i >= 2) {
-                size = invDist * 0.08 * this.visibility * scaleTable[i];
-            } else {
-                size = (
-                    ((0.04 + (0.075 * this.visibility)) * scaleTable[i]) +
-                    ((0.2 * this.visibility * scaleTable[i]) * sqr(invDist))
-                );
-            }
-
-            let basePos: vec3;
-            if (i >= 2)
-                basePos = this.lenzflarePos[i - 2];
-            else
-                basePos = this.sunPos;
-
-            const scaleX = 1.0;
-            const texCoordScale = i === 0 ? 1.0 : 2.0;
-            this.drawSquare(ddraw, scratchMatrix, basePos, size, scaleX, texCoordScale);
-            const renderInst = ddraw.makeRenderInst(renderInstManager);
-
-            if (i === 0) {
-                // envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-            } else if (i === 1) {
-                this.ringTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-            } else if (i >= 2) {
-                this.lensTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-            }
-
-            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFF1FF);
-            materialParams.u_Color[ColorKind.C0].a *= alpha;
-            colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF91491E);
-
-            submitScratchRenderInst(renderInstManager, this.materialHelperLenzflare, renderInst, viewerInput);
-        }
+        submitScratchRenderInst(renderInstManager, this.materialHelperLensflareSolid, renderInst, viewerInput);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1488,7 +1510,7 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: Readonly
     return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }
 
-function dKyr_sun_move(globals: dGlobals): void {
+function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
@@ -1589,6 +1611,21 @@ function dKyr_sun_move(globals: dGlobals): void {
         }
     }
 
+    if (envLight.curTime >= 255.0)
+        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 0.0, 0.5 * deltaTimeInFrames, 0.1, 0.001);
+    else
+        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 1.0, 0.1 * deltaTimeInFrames, 0.01, 0.0001);
+
+    if (envLight.curTime >= 180.0) {
+        const t = 1.0 - saturate(invlerp(247.5, 270.0, envLight.curTime));
+        colorLerp(pkt.lensflareColor0, colorNewFromRGBA8(0xFFFFFDFF), White, t);
+        colorLerp(pkt.lensflareColor1, colorNewFromRGBA8(0xFE4E00FF), colorNewFromRGBA8(0x9C795CFF), t);
+    } else {
+        const t = saturate(invlerp(90.0, 105.0, envLight.curTime));
+        colorLerp(pkt.lensflareColor0, colorNewFromRGBA8(0xFFFFFDFF), White, t);
+        colorLerp(pkt.lensflareColor1, colorNewFromRGBA8(0xFE6E2BFF), colorNewFromRGBA8(0x9C795CFF), t);
+    }
+
     if (dKyr_moon_arrival_check(envLight)) {
         const diffY = (pkt.sunPos[1] - globals.cameraPosition[1]) / -8000.0;
         const target = Math.min(diffY * diffY * 6.0, 1.0);
@@ -1618,18 +1655,20 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
-    dKy_set_eyevect_calc(globals, scratchVec3, 7200);
+    dKy_set_eyevect_calc(globals, scratchVec3, 4000.0);
     dKyr_get_vectle_calc(scratchVec3, pkt.sunPos, scratchVec3);
 
     const dist = vec3.distance(scratchVec3, globals.cameraFwd);
-    const intensity = 250.0 + (350.0 * dist);
     for (let i = 0; i < 6; i++) {
         const whichLenz = i + 2;
-        vec3.scaleAndAdd(pkt.lenzflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
+        if (whichLenz === 2) {
+            const intensity = 250.0 + (600.0 * dist);
+            vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity);
+        } else {
+            const intensity = (250.0 + (110.0 * dist)) * whichLenz + 4100.0;
+            vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity);
+        }
     }
-
-    project(scratchVec3, pkt.sunPos, globals.camera);
-    pkt.lenzflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 
 function wether_move_thunder(globals: dGlobals): void {
@@ -1642,7 +1681,7 @@ function wether_move_thunder(globals: dGlobals): void {
     }
 }
 
-function wether_move_sun(globals: dGlobals): void {
+function wether_move_sun(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible)
@@ -1651,7 +1690,7 @@ function wether_move_sun(globals: dGlobals): void {
     if (envLight.sunPacket === null)
         envLight.sunPacket = new dKankyo_sun_Packet(globals);
 
-    dKyr_sun_move(globals);
+    dKyr_sun_move(globals, deltaTimeInFrames);
     dKyr_lenzflare_move(globals);
 }
 

@@ -6,9 +6,9 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { scaleMatrix } from "../MathHelpers.js";
+import { invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cM_atan2s } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM_atan2s } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, kUshortTo2PI, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, scratchVec3a, scratchVec3b } from "../WindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -426,7 +426,6 @@ class d_a_vrbox2 extends fopAc_ac_c {
         }
 
         if (envLight.sunPacket !== null) {
-            // sun stuff here
         }
     }
 
@@ -470,6 +469,23 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
 
         if (dStage_stagInfo_GetArg0(globals.dStage_dt.stag) !== 0 && this.sun !== null && envLight.sunPacket !== null) {
+            const rotX = cLib_targetAngleX(globals.cameraPosition, envLight.sunPacket.sunPos);
+            const rotY = cLib_targetAngleY(globals.cameraPosition, envLight.sunPacket.sunPos);
+            MtxTrans(envLight.sunPacket.sunPos, false);
+            mDoMtx_YrotM(calc_mtx, rotY);
+            mDoMtx_XrotM(calc_mtx, 0x7FFF - rotX);
+
+            let scale = 1.0;
+
+            if (envLight.curTime >= 255.0) {
+                scale = saturate(invlerp(240.0, 270.0, envLight.curTime)) * 0.2 + 1.0;
+            } else if (envLight.sunPacket.visibility > 0.0) {
+                scale = envLight.sunPacket.visibility * (1.0 - envLight.sunPacket.distFalloff) ** 2 * 0.4 + 1.0;
+            }
+
+            scaleMatrix(calc_mtx, calc_mtx, scale);
+            mat4.copy(this.sun.modelMatrix, calc_mtx);
+
             mDoExt_modelUpdateDL(globals, this.sun, renderInstManager, viewerInput, globals.dlst.sky);
         }
     }
