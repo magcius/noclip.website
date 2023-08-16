@@ -132,11 +132,11 @@ export class dScnKy_env_light_c {
     // Color palette
     public vrSkyCol = colorNewCopy(White);
     public vrKumoCol = colorNewCopy(White);
-    public unk_vrboxCol1 = colorNewCopy(TransparentBlack); // mUnderCloudColor
-    public unk_vrboxCol2 = colorNewCopy(TransparentBlack); // mUnderCloudShadowColor
-    public unk_vrboxCol3 = colorNewCopy(TransparentBlack); // mCloudInnerHazeColor
+    public vrShitaGumoCol = colorNewCopy(TransparentBlack); // mUnderCloudColor
+    public vrShimoUneiCol = colorNewCopy(TransparentBlack); // mUnderCloudShadowColor
+    public vrOkuKasumiCol = colorNewCopy(TransparentBlack); // mCloudInnerHazeColor
     public vrKumoCenterCol = colorNewCopy(White);
-    public vrKasumiMaeCol = colorNewCopy(White);
+    public vrKasumiCol = colorNewCopy(White);
 
     public actorAmbCol = colorNewCopy(TransparentBlack);
     public bgAmbCol = nArray(4, () => colorNewCopy(TransparentBlack));
@@ -730,33 +730,33 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
         const virt1A = envLight.virt[ret.paleCurrA.virtIdx] || envLight.virt[0];
         const virt1B = envLight.virt[ret.paleCurrB.virtIdx] || envLight.virt[0];
 
-        envLight.vrSkyCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_0.r, virt0B.unkCol_0.r, ret.blendPaleAB, virt1A.unkCol_0.r, virt1B.unkCol_0.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrSoraColRatio * envLight.unk_11c8));
-        envLight.vrSkyCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_0.g, virt0B.unkCol_0.g, ret.blendPaleAB, virt1A.unkCol_0.g, virt1B.unkCol_0.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrSoraColRatio * envLight.unk_11cc));
-        envLight.vrSkyCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_0.b, virt0B.unkCol_0.b, ret.blendPaleAB, virt1A.unkCol_0.b, virt1B.unkCol_0.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrSoraColRatio * envLight.unk_11d0));
+        envLight.vrSkyCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.r, virt0B.skyCol.r, ret.blendPaleAB, virt1A.skyCol.r, virt1B.skyCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrSoraColRatio * envLight.unk_11c8));
+        envLight.vrSkyCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.g, virt0B.skyCol.g, ret.blendPaleAB, virt1A.skyCol.g, virt1B.skyCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrSoraColRatio * envLight.unk_11cc));
+        envLight.vrSkyCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.b, virt0B.skyCol.b, ret.blendPaleAB, virt1A.skyCol.b, virt1B.skyCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrSoraColRatio * envLight.unk_11d0));
         envLight.vrSkyCol.a = 1;
 
-        envLight.vrKumoCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_0.a, virt0B.unkCol_0.a, ret.blendPaleAB, virt1A.unkCol_0.a, virt1B.unkCol_0.a, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
-        envLight.vrKumoCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_4.r, virt0B.unkCol_4.r, ret.blendPaleAB, virt1A.unkCol_4.r, virt1B.unkCol_4.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
-        envLight.vrKumoCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_4.g, virt0B.unkCol_4.g, ret.blendPaleAB, virt1A.unkCol_4.g, virt1B.unkCol_4.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
-        envLight.vrKumoCol.a = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.g, virt0B.kumoCenterCol.g, ret.blendPaleAB, virt1A.kumoCenterCol.g, virt1B.kumoCenterCol.g, envLight.colpatBlend, 0, 1));
+        envLight.vrKumoCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.r, virt0B.kumoCol.r, ret.blendPaleAB, virt1A.kumoCol.r, virt1B.kumoCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
+        envLight.vrKumoCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.g, virt0B.kumoCol.g, ret.blendPaleAB, virt1A.kumoCol.g, virt1B.kumoCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
+        envLight.vrKumoCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.b, virt0B.kumoCol.b, ret.blendPaleAB, virt1A.kumoCol.b, virt1B.kumoCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
+        envLight.vrKumoCol.a = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.a, virt0B.kumoCol.a, ret.blendPaleAB, virt1A.kumoCol.a, virt1B.kumoCol.a, envLight.colpatBlend, 0, 1));
 
-        envLight.unk_vrboxCol1.r = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_4.b, virt0B.unkCol_4.b, ret.blendPaleAB, virt1A.unkCol_4.b, virt1B.unkCol_4.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
-        envLight.unk_vrboxCol1.g = saturate(kankyo_color_ratio_set(envLight, virt0A.unkCol_4.a, virt0B.unkCol_4.a, ret.blendPaleAB, virt1A.unkCol_4.a, virt1B.unkCol_4.a, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
-        envLight.unk_vrboxCol1.b = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.r, virt0B.kumoCol.r, ret.blendPaleAB, virt1A.kumoCol.r, virt1B.kumoCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
+        envLight.vrShitaGumoCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.shitaGumoCol.r, virt0B.shitaGumoCol.r, ret.blendPaleAB, virt1A.shitaGumoCol.r, virt1B.shitaGumoCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
+        envLight.vrShitaGumoCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.shitaGumoCol.g, virt0B.shitaGumoCol.g, ret.blendPaleAB, virt1A.shitaGumoCol.g, virt1B.shitaGumoCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
+        envLight.vrShitaGumoCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.shitaGumoCol.b, virt0B.shitaGumoCol.b, ret.blendPaleAB, virt1A.shitaGumoCol.b, virt1B.shitaGumoCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
 
-        envLight.unk_vrboxCol2.r = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.g, virt0B.kumoCol.g, ret.blendPaleAB, virt1A.kumoCol.g, virt1B.kumoCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
-        envLight.unk_vrboxCol2.g = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCol.b, virt0B.kumoCol.b, ret.blendPaleAB, virt1A.kumoCol.b, virt1B.kumoCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
-        envLight.unk_vrboxCol2.b = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.r, virt0B.kumoCenterCol.r, ret.blendPaleAB, virt1A.kumoCenterCol.r, virt1B.kumoCenterCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
+        envLight.vrShimoUneiCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.shimoUneiCol.r, virt0B.shimoUneiCol.r, ret.blendPaleAB, virt1A.shimoUneiCol.r, virt1B.shimoUneiCol.r, envLight.colpatBlend, envLight.vrboxAddcolSky0.r, envLight.vrKumoColRatio * envLight.unk_11c8));
+        envLight.vrShimoUneiCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.shimoUneiCol.g, virt0B.shimoUneiCol.g, ret.blendPaleAB, virt1A.shimoUneiCol.g, virt1B.shimoUneiCol.g, envLight.colpatBlend, envLight.vrboxAddcolSky0.g, envLight.vrKumoColRatio * envLight.unk_11cc));
+        envLight.vrShimoUneiCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.shimoUneiCol.b, virt0B.shimoUneiCol.b, ret.blendPaleAB, virt1A.shimoUneiCol.b, virt1B.shimoUneiCol.b, envLight.colpatBlend, envLight.vrboxAddcolSky0.b, envLight.vrKumoColRatio * envLight.unk_11d0));
 
-        envLight.vrKasumiMaeCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.kumoCenterCol.b, virt0B.kumoCenterCol.b, ret.blendPaleAB, virt1A.kumoCenterCol.b, virt1B.kumoCenterCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.vrSoraColRatio * envLight.unk_11c8));
-        envLight.vrKasumiMaeCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.r, virt0B.skyCol.r, ret.blendPaleAB, virt1A.skyCol.r, virt1B.skyCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.vrSoraColRatio * envLight.unk_11cc));
-        envLight.vrKasumiMaeCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.g, virt0B.skyCol.g, ret.blendPaleAB, virt1A.skyCol.g, virt1B.skyCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.vrSoraColRatio * envLight.unk_11d0));
-        envLight.vrKasumiMaeCol.a = saturate(kankyo_color_ratio_set(envLight, virt0A.skyCol.b, virt0B.skyCol.b, ret.blendPaleAB, virt1A.skyCol.b, virt1B.skyCol.b, envLight.colpatBlend, 0, 1));
+        envLight.vrKasumiCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiCol.r, virt0B.kasumiCol.r, ret.blendPaleAB, virt1A.kasumiCol.r, virt1B.kasumiCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.vrSoraColRatio * envLight.unk_11c8));
+        envLight.vrKasumiCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiCol.g, virt0B.kasumiCol.g, ret.blendPaleAB, virt1A.kasumiCol.g, virt1B.kasumiCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.vrSoraColRatio * envLight.unk_11cc));
+        envLight.vrKasumiCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiCol.b, virt0B.kasumiCol.b, ret.blendPaleAB, virt1A.kasumiCol.b, virt1B.kasumiCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.vrSoraColRatio * envLight.unk_11d0));
+        envLight.vrKasumiCol.a = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiCol.a, virt0B.kasumiCol.a, ret.blendPaleAB, virt1A.kasumiCol.a, virt1B.kasumiCol.a, envLight.colpatBlend, 0, 1));
 
-        envLight.unk_vrboxCol3.r = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.r, virt0B.kasumiMaeCol.r, ret.blendPaleAB, virt1A.kasumiMaeCol.r, virt1B.kasumiMaeCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.vrSoraColRatio * envLight.unk_11c8));
-        envLight.unk_vrboxCol3.g = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.g, virt0B.kasumiMaeCol.g, ret.blendPaleAB, virt1A.kasumiMaeCol.g, virt1B.kasumiMaeCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.vrSoraColRatio * envLight.unk_11cc));
-        envLight.unk_vrboxCol3.b = saturate(kankyo_color_ratio_set(envLight, virt0A.kasumiMaeCol.b, virt0B.kasumiMaeCol.b, ret.blendPaleAB, virt1A.kasumiMaeCol.b, virt1B.kasumiMaeCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.vrSoraColRatio * envLight.unk_11d0));
-        envLight.unk_vrboxCol3.a = saturate(kankyo_color_ratio_set(envLight, virt0A.unk_14, virt0B.unk_14, ret.blendPaleAB, virt1A.unk_14, virt1B.unk_14, envLight.colpatBlend, 0, 1));
+        envLight.vrOkuKasumiCol.r = saturate(kankyo_color_ratio_set(envLight, virt0A.okuKasumiCol.r, virt0B.okuKasumiCol.r, ret.blendPaleAB, virt1A.okuKasumiCol.r, virt1B.okuKasumiCol.r, envLight.colpatBlend, envLight.vrboxAddcolKasumi.r, envLight.vrSoraColRatio * envLight.unk_11c8));
+        envLight.vrOkuKasumiCol.g = saturate(kankyo_color_ratio_set(envLight, virt0A.okuKasumiCol.g, virt0B.okuKasumiCol.g, ret.blendPaleAB, virt1A.okuKasumiCol.g, virt1B.okuKasumiCol.g, envLight.colpatBlend, envLight.vrboxAddcolKasumi.g, envLight.vrSoraColRatio * envLight.unk_11cc));
+        envLight.vrOkuKasumiCol.b = saturate(kankyo_color_ratio_set(envLight, virt0A.okuKasumiCol.b, virt0B.okuKasumiCol.b, ret.blendPaleAB, virt1A.okuKasumiCol.b, virt1B.okuKasumiCol.b, envLight.colpatBlend, envLight.vrboxAddcolKasumi.b, envLight.vrSoraColRatio * envLight.unk_11d0));
+        envLight.vrOkuKasumiCol.a = saturate(kankyo_color_ratio_set(envLight, virt0A.okuKasumiCol.a, virt0B.okuKasumiCol.a, ret.blendPaleAB, virt1A.okuKasumiCol.a, virt1B.okuKasumiCol.a, envLight.colpatBlend, 0, 1));
     }
 }
 

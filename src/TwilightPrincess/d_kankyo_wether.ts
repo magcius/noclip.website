@@ -839,7 +839,7 @@ export class dKankyo_vrkumo_Packet {
 
                 let x = 0, y = 0, z = 0;
 
-                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.unk_vrboxCol1, kumo.distFalloff);
+                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.vrShitaGumoCol, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
 
                 // Project onto sphere.

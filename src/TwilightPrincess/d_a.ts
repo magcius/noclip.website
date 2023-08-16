@@ -285,7 +285,7 @@ class d_a_vrbox extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiCol.r + envLight.vrKasumiCol.g + envLight.vrKasumiCol.b;
         sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
         sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0) {
@@ -298,7 +298,7 @@ class d_a_vrbox extends fopAc_ac_c {
             colorCopy(m0.colorRegisters[0], envLight.vrSkyCol);
 
             const m1 = this.model.modelMaterialData.materialData![1].material;
-            colorCopy(m1.colorRegisters[0], envLight.unk_vrboxCol3);
+            colorCopy(m1.colorRegisters[0], envLight.vrOkuKasumiCol);
         }
     }
 
@@ -370,7 +370,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         }
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiCol.r + envLight.vrKasumiCol.g + envLight.vrKasumiCol.b;
         sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
         sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0)
@@ -413,16 +413,16 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mtx[12] = (mtx[12] + scrollSpeed0 + scrollSpeed0 * 2.2) % 1.0;
 
         // Overwrite colors.
-        let back_color = colorNewCopy(envLight.unk_vrboxCol1);
+        let back_color = colorNewCopy(envLight.vrShitaGumoCol);
         back_color.a = envLight.vrKumoCol.a;
         this.backCloud.setColorOverride(ColorKind.K0, back_color);
 
-        let back_color_c = colorNewCopy(envLight.unk_vrboxCol2);
+        let back_color_c = colorNewCopy(envLight.vrShimoUneiCol);
         back_color_c.a = envLight.vrKumoCol.a;
         this.backCloud.setColorOverride(ColorKind.C0, back_color_c);
 
         if (this.kasumiMae !== null) {
-            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeCol);
+            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiCol);
         }
 
         if (envLight.sunPacket !== null) {
@@ -443,7 +443,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         dKy_GxFog_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiCol.r + envLight.vrKasumiCol.g + envLight.vrKasumiCol.b;
         sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
         sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0)

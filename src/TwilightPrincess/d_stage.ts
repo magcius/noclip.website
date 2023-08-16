@@ -136,23 +136,22 @@ export class stage_pselect_info_class {
 }
 
 export class stage_vrbox_info_class {
-    public unkCol_0 = colorNewCopy(White);
-    public unkCol_4 = colorNewCopy(White);
-    public kumoCol = colorNewCopy(White);
-    public kumoCenterCol = colorNewCopy(White);
     public skyCol = colorNewCopy(White);
-    public kasumiMaeCol = colorNewCopy(White);
-    public unk_14: number;
+    public kumoCol = colorNewCopy(White);
+    public shitaGumoCol = colorNewCopy(White);
+    public shimoUneiCol = colorNewCopy(White);
+    public kasumiCol = colorNewCopy(White);
+    public okuKasumiCol = colorNewCopy(White);
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
-        colorFromRGBA8(this.unkCol_0, view.getUint32(0x0));
-        colorFromRGBA8(this.unkCol_4, view.getUint32(0x4));
-        colorFromRGB8(this.kumoCol, view.getUint32(0x8));
-        colorFromRGB8(this.kumoCenterCol, view.getUint32(0xB));
-        colorFromRGB8(this.skyCol, view.getUint32(0xE));
-        colorFromRGB8(this.kasumiMaeCol, view.getUint32(0x11));
-        this.unk_14 = view.getUint8(0x14) / 0xFF;
+        colorFromRGB8(this.skyCol, view.getUint32(0x00));
+        colorFromRGB8(this.kumoCol, view.getUint32(0x03));
+        colorFromRGB8(this.shitaGumoCol, view.getUint32(0x06));
+        colorFromRGB8(this.shimoUneiCol, view.getUint32(0x09));
+        this.kumoCol.a = view.getUint8(0x0B) / 0xFF;
+        colorFromRGBA8(this.kasumiCol, view.getUint32(0x0D));
+        colorFromRGBA8(this.okuKasumiCol, view.getUint32(0x11));
         return 0x15;
     }
 }
