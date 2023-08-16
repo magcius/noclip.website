@@ -615,7 +615,7 @@ class d_a_set_bg_obj extends fopAc_ac_c {
 
         // CreateInit
         const l_bg_profName: number[] = [734, 734, 734, 316, 317];
-        fopAcM_create(globals.frameworkGlobals, l_bg_profName[0], this.parameters, this.pos, this.roomNo, this.rot, this.scale, 0xFF, -1);
+        fopAcM_create(globals.frameworkGlobals, l_bg_profName[0], this.parameters, this.pos, this.roomNo, this.rot, this.scale, 0xFF, -1, this.roomLayer);
 
         return cPhs__Status.Next;
     }

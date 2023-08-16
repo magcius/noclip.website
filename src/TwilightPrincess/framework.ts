@@ -627,11 +627,11 @@ export interface fopAcM_prm_class {
     layer: number;
 }
 
-export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, roomNo: number, rot: vec3 | null, scale: vec3 | null, subtype: number, parentPcId: number): number | null {
+export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, roomNo: number, rot: vec3 | null, scale: vec3 | null, subtype: number, parentPcId: number, layer: number = -1): number | null {
     // Create on current layer.
     const prm: fopAcM_prm_class = {
         parameters, pos, roomNo, rot, scale, subtype, parentPcId,
-        enemyNo: -1, gbaName: 0x00, layer: -1,
+        enemyNo: -1, gbaName: 0x00, layer,
     };
 
     return fpcSCtRq_Request(globals, null, pcName, prm);

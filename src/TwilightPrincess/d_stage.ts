@@ -61,6 +61,7 @@ class dStage_dt {
     public colo: stage_pselect_info_class[][] = [];
     public virt: stage_vrbox_info_class[][] = [];
     public envr: stage_envr_info_class[][] = [];
+    public elst: dStage_Elst_c[] = [];
 }
 
 export class stage_palet_info_class__DifAmb {
@@ -162,6 +163,20 @@ export class stage_envr_info_class {
     public parse(buffer: ArrayBufferSlice): number {
         this.pselIdx = buffer.createTypedArray(Uint8Array, 0x00, 0x41);
         return 0x41;
+    }
+}
+
+export class dStage_Elst_c {
+    public layers = new Array(15);
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+
+        for (let i = 0; i < 15; i++) {
+            this.layers[i] = view.getUint8(i);
+        }
+
+        return 0xF;
     }
 }
 
@@ -399,11 +414,11 @@ function dStage_tgscInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBuff
 }
 
 function actorlayerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
-    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTa', 'ACTb'];
-    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOa', 'SCOb'];
-    const doorLayer = ['Doo0', 'Doo1', 'Doo2', 'Doo3', 'Doo4', 'Doo5', 'Doo6', 'Doo7', 'Doo8', 'Doo9', 'Dooa', 'Doob'];
+    const actrLayer = ['ACT0', 'ACT1', 'ACT2', 'ACT3', 'ACT4', 'ACT5', 'ACT6', 'ACT7', 'ACT8', 'ACT9', 'ACTa', 'ACTb', 'ACTc', 'ACTd', 'ACTe'];
+    const scobLayer = ['SCO0', 'SCO1', 'SCO2', 'SCO3', 'SCO4', 'SCO5', 'SCO6', 'SCO7', 'SCO8', 'SCO9', 'SCOa', 'SCOb', 'SCOc', 'SCOd', 'SCOe'];
+    const doorLayer = ['Doo0', 'Doo1', 'Doo2', 'Doo3', 'Doo4', 'Doo5', 'Doo6', 'Doo7', 'Doo8', 'Doo9', 'Dooa', 'Doob', 'Dooc', 'Dood', 'Dooe'];
 
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 15; i++) {
         dStage_dt_decode(globals, dt, dzs, {
             [actrLayer[i]]: dStage_actorInit,
             [scobLayer[i]]: dStage_tgscInfoInit,
@@ -413,13 +428,18 @@ function actorlayerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
 }
 
 function envLayerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
-    const lgtLayer = ['LGT0', 'LGT1', 'LGT2', 'LGT3', 'LGT4', 'LGT5', 'LGT6', 'LGT7', 'LGT8', 'LGT9', 'LGTa', 'LGTb'];
-    const envrLayer = ['Env0', 'Env1', 'Env2', 'Env3', 'Env4', 'Env5', 'Env6', 'Env7', 'Env8', 'Env9', 'Enva', 'Envb'];
-    const colLayer = ['Col0', 'Col1', 'Col2', 'Col3', 'Col4', 'Col5', 'Col6', 'Col7', 'Col8', 'Col9', 'Cola', 'Colb'];
-    const palLayer = ['PAL0', 'PAL1', 'PAL2', 'PAL3', 'PAL4', 'PAL5', 'PAL6', 'PAL7', 'PAL8', 'PAL9', 'PALa', 'PALb'];
-    const vrbLayer = ['VRB0', 'VRB1', 'VRB2', 'VRB3', 'VRB4', 'VRB5', 'VRB6', 'VRB7', 'VRB8', 'VRB9', 'VRBa', 'VRBb'];
+    const lgtLayer = ['LGT0', 'LGT1', 'LGT2', 'LGT3', 'LGT4', 'LGT5', 'LGT6', 'LGT7', 'LGT8', 'LGT9', 'LGTa', 'LGTb', 'LGTc', 'LGTd', 'LGTe'];
+    const envrLayer = ['Env0', 'Env1', 'Env2', 'Env3', 'Env4', 'Env5', 'Env6', 'Env7', 'Env8', 'Env9', 'Enva', 'Envb', 'Envc', 'Envd', 'Enve'];
+    const colLayer = ['Col0', 'Col1', 'Col2', 'Col3', 'Col4', 'Col5', 'Col6', 'Col7', 'Col8', 'Col9', 'Cola', 'Colb', 'Colc', 'Cold', 'Cole'];
+    const palLayer = ['PAL0', 'PAL1', 'PAL2', 'PAL3', 'PAL4', 'PAL5', 'PAL6', 'PAL7', 'PAL8', 'PAL9', 'PALa', 'PALb', 'PALc', 'PALd', 'PALe'];
+    const vrbLayer = ['VRB0', 'VRB1', 'VRB2', 'VRB3', 'VRB4', 'VRB5', 'VRB6', 'VRB7', 'VRB8', 'VRB9', 'VRBa', 'VRBb', 'VRBc', 'VRBd', 'VRBe'];
 
-    for (let i = 0; i < 12; i++) {
+    let max = 1;
+    if (dt.elst.length > 0) {
+        max = 15;
+    }
+
+    for (let i = 0; i < max; i++) {
         dStage_dt_decode(globals, dt, dzs, {
             [lgtLayer[i]]: dStage_lgtvInfoInit,
             [envrLayer[i]]: dStage_envrInfoInit,
@@ -496,6 +516,18 @@ function dStage_envrInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBuff
         const envr = new stage_envr_info_class();
         offs += envr.parse(buffer.slice(offs));
         dt.envr[layer].push(envr);
+    }
+}
+
+function dStage_elstInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    if (count === 0)
+        return;
+
+    let offs = 0;
+    for (let i = 0; i < count; i++) {
+        const elst = new dStage_Elst_c();
+        offs += elst.parse(buffer.slice(offs));
+        dt.elst.push(elst);
     }
 }
 
@@ -586,6 +618,7 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
         'Door': dStage_tgscInfoInit,
         // FLOR
         'TGDR': dStage_stageDrtgInfoInit,
+        'EVLY': dStage_elstInfoInit,
     });
 
     actorlayerLoader(globals, dt, dzs);

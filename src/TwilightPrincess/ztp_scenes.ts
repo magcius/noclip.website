@@ -23,7 +23,7 @@ import { GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRender
 
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
-import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo.js';
+import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create, dKy_reinitLight } from './d_kankyo.js';
 import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
@@ -298,6 +298,10 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
+
+    private scenarioSelect: UI.SingleSelect | null = null;
+    public currentLayer: number = -1;
+
     private bgAmbRatioSlider: UI.Slider;
     private actAmbRatioSlider: UI.Slider;
 
@@ -316,6 +320,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
         
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
+        this.applyCurrentLayer();
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -338,25 +343,52 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         }
     } */
 
+    public setCurrentLayer(index: number): void {
+        if (this.currentLayer === index)
+            return;
+
+        this.currentLayer = index;
+        if (this.scenarioSelect !== null)
+            this.scenarioSelect.setHighlighted(index);
+        this.onstatechanged();
+    }
+
+    private applyCurrentLayer(): void {
+        if (this.currentLayer < 0 || this.currentLayer >= 15)
+            this.currentLayer = 0;
+
+        // set twilight layers
+        if (this.currentLayer === 13 || this.currentLayer === 14)
+            this.globals.world_dark = true;
+        else
+            this.globals.world_dark = false;
+
+        console.log(`Current Layer: ${this.currentLayer}\nTwilight?: ${this.globals.world_dark}`);
+    }
+
     public createPanels(): UI.Panel[] {
         const getScenarioMask = () => {
             let mask: number = 0;
-            for (let i = 0; i < scenarioSelect.getNumItems(); i++)
-                if (scenarioSelect.itemIsOn[i])
-                    mask |= (1 << i);
+            mask |= (1 << this.scenarioSelect!.highlightedIndex);
             return mask;
         };
+
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
-        const scenarioSelect = new UI.MultiSelect();
-        scenarioSelect.onitemchanged = () => {
+    
+        this.scenarioSelect = new UI.SingleSelect();
+        this.scenarioSelect.setStrings(range(0, 15).map((i) => `Layer ${i}`));
+        this.scenarioSelect.onselectionchange = (index: number) => {
             this.setVisibleLayerMask(getScenarioMask());
+            this.setCurrentLayer(index);
+            this.applyCurrentLayer();
+            dKy_reinitLight(this.globals);
         };
-        scenarioSelect.setStrings(range(0, 12).map((i) => `Layer ${i}`));
-        scenarioSelect.setItemsSelected(range(0, 12).map((i) => i === 0));
-        this.setVisibleLayerMask(0x01);
-        scenarioPanel.contents.append(scenarioSelect.elem);
+
+        this.setVisibleLayerMask(1);
+        this.scenarioSelect.selectItem(0);
+        scenarioPanel.contents.append(this.scenarioSelect.elem);
 
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;

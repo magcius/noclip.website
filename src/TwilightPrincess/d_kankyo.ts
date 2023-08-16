@@ -2016,20 +2016,33 @@ export function plight_set(globals: dGlobals, envLight: dScnKy_env_light_c): voi
 function envcolor_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    const layerNo = globals.scnPlay.getLayerNo(0);
+    // not sure where the original does this
+    const layerNo = globals.renderer.currentLayer;
+    const roomNo = globals.mStayNo;
 
-    envLight.pale = globals.dStage_dt.pale[layerNo];
-    if (!envLight.pale || envLight.pale.length === 0)
+    let envIdx = 0;
+    if (globals.dStage_dt.elst.length > 0)
+        envIdx = globals.dStage_dt.elst[roomNo].layers[layerNo];
+
+    envLight.pale = globals.dStage_dt.pale[envIdx];
+    if (!envLight.pale || envLight.pale.length === 0) {
         envLight.pale = dKyd_dmpalet_getp(globals);
-    envLight.colo = globals.dStage_dt.colo[layerNo];
-    if (!envLight.colo || envLight.colo.length === 0)
+    }
+
+    envLight.colo = globals.dStage_dt.colo[envIdx];
+    if (!envLight.colo || envLight.colo.length === 0) {
         envLight.colo = dKyd_dmpselect_getp(globals);
-    envLight.envr = globals.dStage_dt.envr[layerNo];
-    if (!envLight.envr || envLight.envr.length === 0)
+    }
+
+    envLight.envr = globals.dStage_dt.envr[envIdx];
+    if (!envLight.envr || envLight.envr.length === 0) {
         envLight.envr = dKyd_dmenvr_getp(globals);
-    envLight.virt = globals.dStage_dt.virt[layerNo];
-    if (!envLight.virt || envLight.virt.length === 0)
+    }
+
+    envLight.virt = globals.dStage_dt.virt[envIdx];
+    if (!envLight.virt || envLight.virt.length === 0) {
         envLight.virt = dKyd_dmvrbox_getp(globals);
+    }
 
     dKy_actor_addcol_set(envLight, 0, 0, 0, 0);
     dKy_fog_startendz_set(envLight, 0.0, 0.0, 0.0);
@@ -2236,7 +2249,7 @@ export function dKy_bgparts_activelight_cut(envLight: dScnKy_env_light_c, index:
 export function dKy_setLight_nowroom_common(globals: dGlobals, roomNo: number, param_2: number): void {
     const envLight = globals.g_env_light;
 
-    const layerNo = globals.scnPlay.getLayerNo();
+    const layerNo = globals.renderer.currentLayer;
     const lgtv = globals.roomStatus[roomNo].lgtv[layerNo];
     const roomTevStr = globals.roomStatus[roomNo].tevStr;
 
@@ -2428,7 +2441,7 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
                     c1.b = 180 / 255;
                     c1.a = 255 / 255;
 
-                    if (globals.scnPlay.getLayerNo(0) == 1)
+                    if (globals.renderer.currentLayer == 1)
                         c1.a = 0.0;
 
                     materialInstance.setColorOverride(ColorKind.C1, c1);
@@ -2478,6 +2491,21 @@ export function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInsta
     }
 }
 
+// custom for noclip
+export function dKy_reinitLight(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+    envcolor_init(globals);
+    vec3.set(envLight.plightNearPos, 0, 0, 0);
+
+    dKy_setLight_init();
+    dKy_Sound_init(envLight);
+    // dKyw_wind_set(globals);
+    dungeonlight_init(envLight);
+    dKy_setLight_nowroom(globals, globals.mStayNo);
+
+    envLight.nextTime = -1.0;
+}
+
 class d_kankyo extends kankyo_class {
     public static PROCESS_NAME = fpc__ProcessName.d_kankyo;
 
@@ -2500,7 +2528,7 @@ class d_kankyo extends kankyo_class {
 
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         // temporary until some better setup for handling twilight layers is done
-        if (globals.stageName === "D_MN08" || globals.stageName === "D_MN08A" || globals.stageName === "D_MN08B" || globals.stageName === "D_MN08C" || globals.stageName === "D_MN08D") {
+        if (globals.stageName.startsWith("D_MN08")) {
             globals.world_dark = true;
         } else {
             globals.world_dark = false;
