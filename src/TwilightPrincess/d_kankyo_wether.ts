@@ -31,7 +31,7 @@ import { assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_actor_addcol_amb_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg_addcol_amb_set, dKy_darkworld_check, dKy_daynight_check, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_undwater_filter_draw, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
 import { ResType } from "./d_resorce.js";
-import { dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
+import { dStage_FileList_dt_c, dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 import { dGlobals } from "./ztp_scenes.js";
@@ -234,8 +234,12 @@ function dKyr_thunder_init(envLight: dScnKy_env_light_c): void {
     envLight.thunderState = ThunderState.Clear;
 }
 
-function vecPitch(v: vec3): number {
+function vecPitch(v: ReadonlyVec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
+}
+
+function vecAngle(v: ReadonlyVec3): number {
+    return Math.atan2(v[0], v[2]);
 }
 
 export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width: number, height: number, format: GX.TexFormat, wrapS: GX.WrapMode, wrapT: GX.WrapMode, name: string = ''): BTIData {
@@ -301,6 +305,7 @@ export class dKankyo_sun_Packet {
     public sunPos = vec3.create();
     public moonPos = vec3.create();
     public sunAlpha: number = 0.0;
+    public sunMaterialAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
     public visibility: number = 0.0;
 
@@ -828,10 +833,10 @@ export class dKankyo_vrkumo_Packet {
                     }
                 }
 
-                const polarY1 = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + polarOffs;
+                const polarY1 = vecPitch(kumo.position) + polarOffs;
                 const normalPitch = Math.pow(Math.min(polarY1 / 1.9, 1.0), 3);
 
-                const azimuthal = Math.atan2(kumo.position[0], kumo.position[2]) + azimuthalOffs;
+                const azimuthal = vecAngle(kumo.position) + azimuthalOffs;
                 const azimuthalOffsY0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
                 const azimuthalOffsY1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
 
@@ -1460,10 +1465,6 @@ export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: ve
     vec3.normalize(dst, dst);
 }
 
-function sqr(n: number): number {
-    return n * n;
-}
-
 function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec4.set(v4, v[0], v[1], v[2], 1.0);
     vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
@@ -1572,9 +1573,9 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
         const distance = vec3.length(scratchVec3) * 320.0;
 
         const normalizedDist = Math.min(distance / 450.0, 1.0);
-        const distFalloff = sqr(1.0 - normalizedDist);
+        const distFalloff = (1.0 - normalizedDist) ** 2;
         pkt.distFalloff = 1.0 - distFalloff;
-        staringAtSunAmount = sqr(distFalloff);
+        staringAtSunAmount = distFalloff ** 2;
     } else {
         if (globals.stageName === "F_SP200" ||globals.stageName === "D_MN09B") {
             pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.1, 0.05, 0.001);
@@ -2043,11 +2044,19 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     if (dKy_darkworld_check(globals))
         pkt.count = 30;
 
-    if (globals.stageName === 'F_SP200') {
+    if (globals.stageName === 'F_SP200')
         pkt.count = 30;
-    }
 
-    vrkumo_move(globals, deltaTimeInFrames);
+    let windPower = envLight.windPower;
+    if (globals.stageName === 'R_SP127')
+        windPower = 0.3;
+
+    const windDir = dKyw_get_wind_vec(envLight);
+    const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + uShortTo2PI(24575.0);
+    const cosPitch = Math.cos(windPitch);
+    const sinAngle = Math.sin(windAngle), cosAngle = Math.cos(windAngle);
+    pkt.cloudScrollX = (pkt.cloudScrollX + cosPitch * sinAngle * windPower * 0.0014 * deltaTimeInFrames) % 1.0;
+    pkt.cloudScrollY = (pkt.cloudScrollX + cosPitch * cosAngle * windPower * 0.0014 * deltaTimeInFrames) % 1.0;
 }
 
 export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -2061,14 +2070,36 @@ export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRende
         envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
 }
 
+function dStage_FileList_dt_GlobalWindDir(fili: dStage_FileList_dt_c): number {
+    return (fili.param >>> 15) & 0x07;
+}
 
+function dStage_FileList_dt_GlobalWindLevel(fili: dStage_FileList_dt_c): number {
+    return (fili.param >>> 18) & 0x03;
+}
 
 export function dKyw_wind_set(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    const targetWindVecX = Math.cos(envLight.windTactAngleY) * Math.cos(envLight.windTactAngleX);
-    const targetWindVecY = Math.sin(envLight.windTactAngleY);
-    const targetWindVecZ = Math.cos(envLight.windTactAngleY) * Math.sin(envLight.windTactAngleX);
+    const fili = globals.roomStatus[globals.mStayNo].fili;
+    let windDirFlag = 0;
+
+    if (fili !== null)
+        windDirFlag = dStage_FileList_dt_GlobalWindDir(fili);
+
+    // TODO(jstpierre): dStage_lbnkWIND
+
+    let windAngleXZ = 0, windAngleY = 0;
+    if (windDirFlag === 2)
+        windAngleXZ = uShortTo2PI(-0x4000);
+    else if (windDirFlag === 4)
+        windAngleXZ = uShortTo2PI(0x4000);
+    else if (windDirFlag === 5)
+        windAngleXZ = uShortTo2PI(0x7FFF);
+
+    const targetWindVecX = Math.sin(windAngleXZ) * Math.cos(windAngleY);
+    const targetWindVecY = Math.sin(windAngleY);
+    const targetWindVecZ = Math.cos(windAngleXZ) * Math.cos(windAngleY);
     envLight.windVec[0] = cLib_addCalc(envLight.windVec[0], targetWindVecX, 0.1, 2.0, 0.001);
     envLight.windVec[1] = cLib_addCalc(envLight.windVec[1], targetWindVecY, 0.1, 2.0, 0.001);
     envLight.windVec[2] = cLib_addCalc(envLight.windVec[2], targetWindVecZ, 0.1, 2.0, 0.001);
@@ -2078,9 +2109,10 @@ export function dKyw_wind_set(globals: dGlobals): void {
         targetWindPower = envLight.customWindPower;
     } else {
         let windPowerFlag = 0;
-        const fili = globals.roomStatus[globals.mStayNo].fili;
         if (fili !== null)
-            windPowerFlag = (fili.param >>> 18) & 0x03;
+            windPowerFlag = dStage_FileList_dt_GlobalWindLevel(fili);
+
+        // TODO(jstpierre): dStage_lbnkWlevel
 
         if (windPowerFlag === 0)
             targetWindPower = 0.3;
@@ -2131,7 +2163,7 @@ export class d_thunder extends kankyo_class {
         this.scale[2] = 1.0;
 
         const fwd = globals.cameraFwd;
-        const a = Math.atan2(fwd[0], fwd[2]);
+        const a = vecAngle(fwd);
         const theta = (cM_rndFX(1.0) < 0.0) ? a - Math.PI / 2 : a + Math.PI / 2;
         const phi = vecPitch(fwd);
         const sinT = Math.sin(theta), cosT = Math.cos(theta);

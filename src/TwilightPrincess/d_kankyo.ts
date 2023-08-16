@@ -10,7 +10,7 @@ import { Camera } from "../Camera.js";
 import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { dGlobals } from "./ztp_scenes.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete } from "./d_kankyo_wether.js";
+import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { cLib_addCalc, cM_rndF } from "../WindWaker/SComponent.js";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
 import { ViewerRenderInput } from "../viewer.js";
@@ -86,8 +86,6 @@ export class dScnKy_env_light_c {
     public underwater_screen_ef_btk = new mDoExt_btkAnm();
 
     // Wind
-    public windTactAngleX: number = 0;
-    public windTactAngleY: number = 0;
     public windVec = vec3.fromValues(0.0, 0.0, 0.0);
     public windPower = 0.0;
     public customWindPower = 0.0;
@@ -2497,7 +2495,6 @@ export function dKy_reinitLight(globals: dGlobals): void {
 
     dKy_setLight_init();
     dKy_Sound_init(envLight);
-    // dKyw_wind_set(globals);
     dungeonlight_init(envLight);
     dKy_setLight_nowroom(globals, globals.mStayNo);
 
@@ -2516,7 +2513,7 @@ class d_kankyo extends kankyo_class {
 
         dKy_setLight_init();
         dKy_Sound_init(envLight);
-        // dKyw_wind_set(globals);
+        dKyw_wind_set(globals);
         dungeonlight_init(envLight);
         dKy_setLight_nowroom(globals, globals.mStayNo);
 
@@ -2533,7 +2530,7 @@ class d_kankyo extends kankyo_class {
         }
 
         exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
-        // dKyw_wind_set(globals);
+        dKyw_wind_set(globals);
         drawKankyo(globals);
         globals.g_env_light.underwater_screen_ef_btk.play(deltaTimeInFrames);
     }

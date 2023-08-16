@@ -28,6 +28,7 @@ import { PeekZResult, PeekZManager } from "./d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { _T } from "../gfx/platform/GfxPlatformImpl.js";
+import { dStage_FileList_dt_c } from "./d_stage.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -2205,6 +2206,10 @@ export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRende
         envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
 }
 
+function dStage_FileList_dt_GlobalWindLevel(fili: dStage_FileList_dt_c): number {
+    return (fili.param >>> 18) & 0x03;
+}
+
 export function dKyw_wind_set(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
@@ -2222,7 +2227,7 @@ export function dKyw_wind_set(globals: dGlobals): void {
         let windPowerFlag = 0;
         const fili = globals.roomStatus[globals.mStayNo].fili;
         if (fili !== null)
-            windPowerFlag = (fili.param >>> 18) & 0x03;
+            windPowerFlag = dStage_FileList_dt_GlobalWindLevel(fili);
 
         if (windPowerFlag === 0)
             targetWindPower = 0.3;

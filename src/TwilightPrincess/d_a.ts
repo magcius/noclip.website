@@ -377,7 +377,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             return;
 
         const windVec = dKyw_get_wind_vec(envLight);
-        let windPower = dKyw_get_wind_pow(envLight);
+        const windPower = dKyw_get_wind_pow(envLight);
 
         let windX = windVec[0];
         let windZ = windVec[2];
@@ -388,44 +388,52 @@ class d_a_vrbox2 extends fopAc_ac_c {
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         let windScrollSpeed = windPower * ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
-        if (globals.stageName === "R_SP30") {
+        if (globals.stageName === "R_SP30")
             windScrollSpeed += 0.3;
-        }
 
         const scrollSpeed0 = deltaTimeInFrames * this.scrollSpeed * windScrollSpeed;
 
         let mtx: mat4;
         const backMat0 = this.backCloud.materialInstances[0].materialData.material;
-
-        // Even though the original code modifies MTX0, we don't, since the model data sets it to IDENTITY.
-        // mtx = backMat0.texMatrices[0]!.matrix;
-        // mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
+        mtx = backMat0.texMatrices[0]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
 
         mtx = backMat0.texMatrices[1]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed0 * 1.75) % 1.0;
 
         const backMat1 = this.backCloud.materialInstances[1].materialData.material;
-        mtx = backMat1.texMatrices[1]!.matrix;
+        mtx = backMat1.texMatrices[0]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed0 * 4.4) % 1.0;
 
-        /* const backMat2 = this.backCloud.materialInstances[2].materialData.material;
-        mtx = backMat2.texMatrices[1]!.matrix; */
-        mtx[12] = (mtx[12] + scrollSpeed0 + scrollSpeed0 * 2.2) % 1.0;
+        mtx = backMat1.texMatrices[1]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed0 * 2.2) % 1.0;
 
         // Overwrite colors.
-        let back_color = colorNewCopy(envLight.vrShitaGumoCol);
-        back_color.a = envLight.vrKumoCol.a;
-        this.backCloud.setColorOverride(ColorKind.K0, back_color);
+        this.backCloud.setColorOverride(ColorKind.K0, colorNewCopy(envLight.vrShitaGumoCol, envLight.vrKumoCol.a));
+        this.backCloud.setColorOverride(ColorKind.C0, colorNewCopy(envLight.vrShimoUneiCol, envLight.vrKumoCol.a));
 
-        let back_color_c = colorNewCopy(envLight.vrShimoUneiCol);
-        back_color_c.a = envLight.vrKumoCol.a;
-        this.backCloud.setColorOverride(ColorKind.C0, back_color_c);
-
-        if (this.kasumiMae !== null) {
+        if (this.kasumiMae !== null)
             this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiCol);
-        }
 
-        if (envLight.sunPacket !== null) {
+        const sunPacket = envLight.sunPacket;
+        if (sunPacket !== null) {
+            const targetAlpha = (envLight.curTime > 255 || envLight.curTime < 97.5) ? 1.0 : 0.0;
+            sunPacket.sunMaterialAlpha = cLib_addCalc(sunPacket.sunMaterialAlpha, targetAlpha, 0.2 * deltaTimeInFrames, 0.1, 0.0001);
+
+            for (let i = 0; i < this.sun.materialInstances.length; i++) {
+                const materialInstance = this.sun.materialInstances[i];
+
+                let alpha: number;
+                if (i === 1)
+                    alpha = sunPacket.sunAlpha * sunPacket.sunMaterialAlpha;
+                else if (i === 2)
+                    alpha = sunPacket.sunAlpha * (1.0 - sunPacket.sunMaterialAlpha);
+                else
+                    alpha = sunPacket.sunAlpha;
+
+                materialInstance.setColorOverride(ColorKind.C0, colorNewCopy(sunPacket.lensflareColor0, alpha));
+                materialInstance.setColorOverride(ColorKind.K0, colorNewCopy(sunPacket.lensflareColor1, alpha));
+            }
         }
     }
 
