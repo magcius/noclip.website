@@ -269,13 +269,6 @@ function fpcIsObject(n: fpc__ProcessName): boolean {
     return true;
 }
 
-function objectLayerVisible(layerMask: number, layer: number): boolean {
-    if (layer < 0)
-        return true;
-    else
-        return !!(layerMask & (1 << layer));
-}
-
 export class TwilightPrincessRoom {
     public name: string;
 
@@ -311,7 +304,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
-    public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
 
@@ -321,10 +313,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
         this.applyCurrentLayer();
-    }
-
-    private setVisibleLayerMask(m: number): void {
-        this.roomLayerMask = m;
     }
 
     public adjustCameraController(c: CameraController) {
@@ -367,12 +355,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const getScenarioMask = () => {
-            let mask: number = 0;
-            mask |= (1 << this.scenarioSelect!.highlightedIndex);
-            return mask;
-        };
-
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
@@ -380,13 +362,11 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(range(0, 15).map((i) => `Layer ${i}`));
         this.scenarioSelect.onselectionchange = (index: number) => {
-            this.setVisibleLayerMask(getScenarioMask());
             this.setCurrentLayer(index);
             this.applyCurrentLayer();
             dKy_reinitLight(this.globals);
         };
 
-        this.setVisibleLayerMask(1);
         this.scenarioSelect.selectItem(0);
         scenarioPanel.contents.append(this.scenarioSelect.elem);
 
@@ -524,7 +504,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
                 if (ac instanceof fopAc_ac_c) {
-                    ac.roomVisible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    ac.roomVisible = this.getRoomVisible(ac.roomNo) && (ac.roomLayer < 0 || this.currentLayer === ac.roomLayer);
                     if (ac.roomVisible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
                         ac.roomVisible = false;
                 }

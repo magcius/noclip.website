@@ -1730,8 +1730,6 @@ function CalcTevColor(globals: dGlobals, envLight: dScnKy_env_light_c, playerPos
 }
 
 function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
-    const colSetModeGather = envLight.colpatModeGather;
-
     envLight.colpatMode = envLight.colpatModeGather;
 
     if (envLight.colpatModeGather !== 0) {
