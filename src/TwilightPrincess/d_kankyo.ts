@@ -2232,7 +2232,7 @@ export function dKy_Indoor_check(globals: dGlobals): boolean {
 }
 
 export function dKy_bgparts_activelight_set(envLight: dScnKy_env_light_c, index: number): void {
-    if (envLight.eflights[index] !== null) {
+    if (envLight.eflights[index] !== null && envLight.eflights[index] !== undefined) {
         envLight.BGpartsActiveLight[index].copy(envLight.eflights[index]);
         envLight.BGpartsActiveLight[index].index = index + 1;
     }

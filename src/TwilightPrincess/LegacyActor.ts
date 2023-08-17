@@ -22,6 +22,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { cBgS_GndChk } from '../WindWaker/d_bg.js';
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
+import { mDoExt_setupStageTexture, mDoExt_setIndirectTex } from './m_do_ext.js'
 
 const scratchVec3a = vec3.create();
 
@@ -219,69 +220,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     const objName = assertExists(globals.dStage_searchName(actorName));
     const pcName = objName.pcName;
 
-    // Items (Rupees, Heart Pieces, etc)
-    if (actorName === 'item') {
-        const itemId = (actor.parameters & 0x000000FF);
-
-        // Rupee (Green)
-        if (itemId === 0x01) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(0));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Blue)
-        else if (itemId === 0x02) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(1));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Yellow)
-        else if (itemId === 0x03) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(2));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Red)
-        else if (itemId === 0x04) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(3));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Purple)
-        else if (itemId === 0x05) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(4));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Orange)
-        else if (itemId === 0x06) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(5));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-        // Rupee (Silver)
-        else if (itemId === 0x07) fetchArchive(`F_gD_rupy`).then((rarc) => {
-            const m = buildModel(rarc, `bmde/f_gd_rupy.bmd`);
-            m.bindTRK1(parseBRK(rarc, `brk/f_gd_rupy.brk`), animFrame(6));
-            m.lightTevColorType = LightType.UNK_0;
-            scaleMatrix(m.modelMatrix, m.modelMatrix, 1.5);
-            m.modelInstance.modelData.bbox = new AABB(-200, -200, -200, 200, 200, 200);
-        });
-    }
     // Treasure Chest
-    else if (pcName === fpc__ProcessName.d_a_tbox || pcName === fpc__ProcessName.d_a_tbox2) {
+    if (pcName === fpc__ProcessName.d_a_tbox || pcName === fpc__ProcessName.d_a_tbox2) {
         const model_type = ((actor.parameters >> 0x14) & 0xF);
 
         // Small Chest
@@ -1110,6 +1050,14 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const bck = parseBCK(rarc, `bck/fl_wait.bck`);
         m.lightTevColorType = LightType.UNK_0;
 
+        const prm0 = actor.parameters & 0xFF;
+        let scale = 1.5;
+        if (prm0 === 1)
+            scale = 1.3;
+
+        vec3.set(scratchVec3a, scale, scale, scale);
+        m.modelInstance.setBaseScale(scratchVec3a);
+
         m.bindANK1(bck);
     });
     else if (actorName === 'E_fz') fetchArchive(`E_fz`).then((rarc) => {
@@ -1119,10 +1067,13 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'l5icewl') fetchArchive(`l5IceWall`).then((rarc) => {
         const m = buildModel(rarc, `bmde/yicewall_01.bmd`);
         m.lightTevColorType = LightType.UNK_16;
-    });
-    else if (actorName === 'iceblk') fetchArchive(`Y_icecube`).then((rarc) => {
-        const m = buildModel(rarc, `bmde/y_icecubeice.bmd`);
-        m.lightTevColorType = LightType.UNK_16;
+
+        const scale_x = (actor.parameters >> 0x10) & 0x1F;
+        const scale_y = (actor.parameters >> 0x15) & 0x1F;
+        const scale_z = (actor.parameters >> 0x1A) & 0x1F;
+        vec3.set(scratchVec3a, scale_x * 0.1, scale_y * 0.1, scale_z * 0.1);
+
+        m.modelInstance.setBaseScale(scratchVec3a);
     });
     else if (actorName === 'spnGear') fetchArchive(`P_Sswitch`).then((rarc) => {
         const m = buildModel(rarc, `bmdr/p_sswitch_a.bmd`);

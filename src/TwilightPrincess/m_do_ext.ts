@@ -32,8 +32,33 @@ export function mDoExt_setupStageTexture(globals: dGlobals, modelInstance: J3DMo
         if (m.gfxTexture === null) {
             const resname = `${sampler.name.toLowerCase()}.bti`;
             const bti = globals.resCtrl.getStageResByName(ResType.Bti, "STG_00", resname);
-            if (bti !== null)
+            if (bti !== null) {
                 bti.fillTextureMapping(m);
+            }
+        }
+    }
+}
+
+export function mDoExt_setupShareTexture(globals: dGlobals, modelInstanceA: J3DModelInstance, modelInstanceB: J3DModelInstance): void {
+    const samplersA = modelInstanceA.tex1Data.tex1.samplers;
+
+    for (let i = 0; i < samplersA.length; i++) {
+        // Look for any unbound textures
+        const samplerA = samplersA[i];
+        const m = modelInstanceA.materialInstanceState.textureMappings[i];
+        if (m.gfxTexture === null) {
+            const resname = samplerA.name;
+            
+            // Find the necessary texture from the shared model and copy the mapping
+            const samplersB = modelInstanceB.tex1Data.tex1.samplers;
+            for (let j = 0; j < samplersB.length; j++) {
+                const samplerB = samplersB[j];
+
+                if (resname === samplerB.name) {
+                    modelInstanceA.materialInstanceState.textureMappings[i] = modelInstanceB.materialInstanceState.textureMappings[j];
+                    break;
+                }
+            }
         }
     }
 }
