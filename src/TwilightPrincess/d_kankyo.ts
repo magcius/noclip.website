@@ -1728,6 +1728,20 @@ function CalcTevColor(globals: dGlobals, envLight: dScnKy_env_light_c, playerPos
 }
 
 function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+    // Normally, this is done in the player code / settingTevStruct_colget_player.
+    const newEnvrIdxCurr = globals.mStayNo;
+    if (envLight.envrIdxCurr !== newEnvrIdxCurr) {
+        if (envLight.envrIdxPrev === newEnvrIdxCurr) {
+            // Previous room, so resume the old fade.
+            envLight.envrIdxPrev = envLight.envrIdxCurr;
+            envLight.colpatBlend = 1.0 - envLight.colpatBlend;
+            envLight.envrIdxCurr = newEnvrIdxCurr;
+        } else if (envLight.colpatBlend === 1.0 || envLight.colpatBlend === 0.0) {
+            envLight.colpatBlend = 0.0;
+            envLight.envrIdxCurr = newEnvrIdxCurr;
+        }
+    }
+
     envLight.colpatMode = envLight.colpatModeGather;
 
     if (envLight.colpatModeGather !== 0) {
@@ -1800,10 +1814,6 @@ function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInF
     setDaytime(globals, envLight, deltaTimeInFrames);
     // dKyw_wether_proc();
     CalcTevColor(globals, envLight, globals.playerPosition);
-}
-
-export function dKy_setLight(globals: dGlobals): void {
-    const envLight = globals.g_env_light;
 }
 
 export class dKydata_lightsizeInfo_c {

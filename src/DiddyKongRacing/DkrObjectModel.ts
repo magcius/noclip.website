@@ -14,13 +14,15 @@ import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } fr
 
 const SIZE_OF_BATCH_INFO = 12;
 
+interface TransTexDrawCall { drawCall: DkrDrawCall, textureIndex: number };
+
 export class DkrObjectModel {
     private triangleBatches: DkrTriangleBatch[];
     private textureIndices = new Array<number>();
 
     private opaqueTextureDrawCalls: any = {};
     private opaqueTextureDrawCallsKeys: any[];
-    private transTexDrawCalls = Array<any>();
+    private transTexDrawCalls: TransTexDrawCall[] = [];
 
     private verticesOffset = 0;
     private numberOfVertices = 0;
@@ -43,7 +45,7 @@ export class DkrObjectModel {
 
         let texturesOffset = view.getUint32(0x00);
         let numberOfTextures = view.getUint16(0x22);
-        
+
         this.verticesOffset = view.getInt32(0x04);
         let trianglesOffset = view.getInt32(0x08);
         let triangleBatchInfoOffset = view.getInt32(0x38);
@@ -89,10 +91,9 @@ export class DkrObjectModel {
                 this.opaqueTextureDrawCalls[key].destroy(device);
             }
         }
-        if(!!this.transTexDrawCalls) {
-            for(const transDrawCall of this.transTexDrawCalls) {
-                transDrawCall.drawCall.destroy(device);
-            }
+
+        for (const transDrawCall of this.transTexDrawCalls) {
+            transDrawCall.drawCall.destroy(device);
         }
     }
 
@@ -125,10 +126,7 @@ export class DkrObjectModel {
                             let drawCall = new DkrDrawCall(device, cache, texture);
                             drawCall.addTriangleBatch(this.triangleBatches[i]);
                             drawCall.build(this.objectAnimations);
-                            this.transTexDrawCalls.push({
-                                drawCall: drawCall,
-                                textureIndex: textureIndex
-                            });
+                            this.transTexDrawCalls.push({ drawCall, textureIndex });
                         }
                     });
                 } else {
@@ -237,7 +235,7 @@ export class DkrObjectModel {
                 this.opaqueTextureDrawCalls[key].prepareToRender(device, renderInstManager, viewerInput, params);
             }
         }
-        for(let i = 0; i < this.transTexDrawCalls.length; i++) {
+        for (let i = 0; i < this.transTexDrawCalls.length; i++) {
             if(!!this.objectAnimations) {
                 params.objAnim = this.objectAnimations[this.currObjAnimIndex];
                 params.objAnimIndex = this.currObjAnimIndex;

@@ -162,6 +162,7 @@ export class DkrDrawCall {
         if(!this.hasBeenDestroyed) {
             device.destroyBuffer(this.indexBuffer);
             device.destroyBuffer(this.positionBuffer);
+            device.destroyBuffer(this.attribBuffer);
             this.hasBeenDestroyed = true;
         }
     }

@@ -13,7 +13,7 @@ import { DkrSprites } from "./DkrSprites.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
 
 export class DkrLevelObjectMap {
-    private objects: Array<DkrObject>;
+    private objects: DkrObject[] = [];
 
     private instances: any = {};
     private instanceKeys: Array<any>;
@@ -47,7 +47,6 @@ export class DkrLevelObjectMap {
         }
 
         objectCache.preloadObjects(Array.from(objectIds)).then(() => {
-            this.objects = new Array<DkrObject>(objectEntries.length);
             for(let i = 0; i < objectEntries.length; i++) {
                 const objId = objectEntries[i].objectId;
                 this.objects[i] = new DkrObject(
@@ -101,16 +100,8 @@ export class DkrLevelObjectMap {
     }
 
     public destroy(device: GfxDevice): void {
-        if(!!this.objects) {
-            for(let object of this.objects) {
-                if(object.isA3DModel()) {
-                    const model = object.getModel();
-                    if(!!model){
-                        model.destroy(device);
-                    }
-                }
-            }
-        }
+        for (const object of this.objects)
+            object.destroy(device);
     }
 
     public updateObjects(deltaTime: number) {
@@ -121,8 +112,7 @@ export class DkrLevelObjectMap {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, objectMapId: number, 
-    beforeLevelMap: boolean = true) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, objectMapId: number, beforeLevelMap: boolean = true) {
         if(!!this.objects) {
             if(beforeLevelMap) { // Only want to draw one time.
                 for(let object of this.objects) {

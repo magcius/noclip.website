@@ -23,7 +23,7 @@ import { GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRender
 
 import { dRes_control_c, ResType } from './d_resorce.js';
 import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage.js';
-import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create, dKy_reinitLight } from './d_kankyo.js';
+import { dScnKy_env_light_c, dKy_tevstr_init, dKy__RegisterConstructors, dKankyo_create, dKy_reinitLight } from './d_kankyo.js';
 import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
@@ -474,9 +474,6 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         viewerInput.camera.setClipPlanes(nearPlane, farPlane);
 
         this.globals.camera = viewerInput.camera;
-
-        // Not sure exactly where this is ordered...
-        dKy_setLight(this.globals);
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
 

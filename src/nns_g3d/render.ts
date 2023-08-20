@@ -371,7 +371,6 @@ export class MDL0Renderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].destroy(device);
         for (let i = 0; i < this.shapeInstances.length; i++)

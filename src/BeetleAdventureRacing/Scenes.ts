@@ -42,6 +42,7 @@ export class RendererStore implements Destroyable {
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderCache.destroy();
         for (let renderer of this.objToRendererMap.values()) {
             if (renderer.destroy)
                 renderer.destroy(device);

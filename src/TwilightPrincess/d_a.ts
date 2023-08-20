@@ -610,7 +610,7 @@ class d_a_obj_suisya extends fopAc_ac_c {
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
-        this.rot[0] += 25;
+        this.rot[0] += 25 * deltaTimeInFrames;
         MtxTrans(this.pos, false);
         mDoMtx_ZXYrotM(calc_mtx, this.rot);
         mat4.copy(this.model.modelMatrix, calc_mtx);

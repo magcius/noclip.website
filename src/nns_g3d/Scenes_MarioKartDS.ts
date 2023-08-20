@@ -11,7 +11,6 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render.js';
 import { assert, readString, assertExists } from '../util.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { FakeTextureHolder } from '../TextureHolder.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';

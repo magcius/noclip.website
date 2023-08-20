@@ -702,6 +702,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy();
+        device.destroyTexture(this.defaultTexture);
         for (const meshinfo of this.meshes.values()) {
             for (const mesh of meshinfo.meshes) {
                 mesh.destroy(device);

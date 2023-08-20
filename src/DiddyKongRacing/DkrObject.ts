@@ -23,21 +23,21 @@ const textDecoder = new TextDecoder();
 
 const vec4DontShowObject = vec4.fromValues(0.0, 0.0, 0.0, 0.0);
 const objectsWithNormals = ['Rarelogo'];
-  
+
 export class DkrObject {
     private modelMatrix = mat4.create();
     private position = vec3.create();
     private rotation = vec3.create();
     private angularSpeed = vec3.create();
     private distanceToCamera = 0;
-    private models: Array<DkrObjectModel>;
-    private modelIds: Array<number>;
-    private spriteIds: Array<number>;
+    private models: DkrObjectModel[] = [];
+    private modelIds: number[] = [];
+    private spriteIds: number[] = [];
     private spriteAlphaTest = 0.3; // Default alpha test for sprites
     private spriteIsCentered = false; // True if anchor is in the center, else anchor will be on the bottom.
     private spriteColor = vec4.fromValues(1.0, 1.0, 1.0, 1.0);
     private spriteLayer = SPRITE_LAYER_SOLID;
-    private particles = new Array<DkrParticle>();
+    private particles: DkrParticle[] = [];
     private modelIndex = 0;
     private manualScale: number = 1;
     private modelScale: number = 1;
@@ -53,6 +53,7 @@ export class DkrObject {
     private renderBeforeLevelMap: boolean = true;
     private usesNormals = false;
     public dontAnimateObjectTextures = false; // Hack for characters with blinking eyes.
+    private objectIdx = 0;
 
     // Most objects can be instanced, but some like doors/world gates can't because of textures.
     private allowInstances = true;
@@ -69,7 +70,7 @@ export class DkrObject {
             this.name = this.name.substring(0, this.name.indexOf('\0'));
 
             // This is a hack. Not sure how the game determines if normals are used yet.
-            if(objectsWithNormals.includes(this.name)) {
+            if (objectsWithNormals.includes(this.name)) {
                 this.usesNormals = true;
             }
 
@@ -79,16 +80,9 @@ export class DkrObject {
             let numberOfModels = this.headerData[0x55];
             let modelIdsOffset = this.headerDataView.getInt32(0x10);
 
-            if(this.modelType == MODEL_TYPE_3D_MODEL) {
-                this.models = new Array<DkrObjectModel>(numberOfModels);
-                this.modelIds = new Array<number>(numberOfModels);
-            } else {
-                this.spriteIds = new Array<number>(numberOfModels);
-            }
-
             for(let i = 0; i < numberOfModels; i++) {
                 let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
-                if(this.modelType == MODEL_TYPE_3D_MODEL) {
+                if (this.modelType == MODEL_TYPE_3D_MODEL) {
                     this.modelIds[i] = modelId;
                     objectCache.getObjectModel(modelId, (modelData: ArrayBufferSlice) => {
                         this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
@@ -848,5 +842,10 @@ export class DkrObject {
         this.updateModelMatrix();
         
         //if(!this.isDeveloperObject) console.log(this.name);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const model of this.models)
+            model.destroy(device);
     }
 }

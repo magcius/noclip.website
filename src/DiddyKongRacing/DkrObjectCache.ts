@@ -3,8 +3,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DataManager } from "./DataManager.js";
 
 export class DkrObjectCache {
-    private objectHeaders: any = {};
-    private objectModels: any = {};
+    private objectHeaders: { [k: number]: Uint8Array } = {};
+    private objectModels: { [k: number]: ArrayBufferSlice } = {};
 
     constructor(private dataManager: DataManager) {
     }

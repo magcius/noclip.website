@@ -1059,8 +1059,6 @@ export function dKy_setLight(globals: dGlobals): void {
     } else {
         light1.Color.g = 0.0;
     }
-
-    // Light loading is done in setTev
 }
 
 function dKyd_dmpalet_getp(globals: dGlobals): stage_palet_info_class[] {

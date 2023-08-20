@@ -1517,6 +1517,7 @@ class LightmapRenderer {
 
     public destroy(device: GfxDevice) {
         this.modelData.forEach(r => r.destroy(device));
+        this.materialRenderers.forEach(r => r?.destroy(device));
     }
 }
 
@@ -1556,6 +1557,7 @@ class LightmapModelData {
 
     public destroy(device: GfxDevice) {
         device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.lightmapVertexBuffer);
         this.material.free();
     }
 
