@@ -3519,23 +3519,17 @@ export class StudioPanel extends FloatingPanel {
         const bankTrack: KeyframeTrack = new KeyframeTrack();
 
         let time = 0;
-        this.scratchMat[3] = 0;
-        this.scratchMat[7] = 0;
-        this.scratchMat[11] = 0;
-        this.scratchMat[15] = 1;
         for (let i = 0; i < keyframeMats.length; i++) {
-            this.scratchMat[0] = keyframeMats[i][0];
-            this.scratchMat[1] = keyframeMats[i][4];
-            this.scratchMat[2] = keyframeMats[i][8];
-            this.scratchMat[4] = keyframeMats[i][1];
-            this.scratchMat[5] = keyframeMats[i][5];
-            this.scratchMat[6] = keyframeMats[i][9];
-            this.scratchMat[8] = keyframeMats[i][2];
-            this.scratchMat[9] = keyframeMats[i][6];
-            this.scratchMat[10] = keyframeMats[i][10];
-            this.scratchMat[12] = keyframeMats[i][3];
-            this.scratchMat[13] = keyframeMats[i][7];
-            this.scratchMat[14] = keyframeMats[i][11];
+            const km = keyframeMats[i];
+            const m00 = km[0], m10 = km[1], m20 = km[2], m30 = km[3];
+            const m01 = km[4], m11 = km[5], m21 = km[6], m31 = km[7];
+            const m02 = km[8], m12 = km[9], m22 = km[10], m32 = km[11];
+            mat4.set(this.scratchMat,
+                m00, m01, m02, 0,
+                m10, m11, m12, 0,
+                m20, m21, m22, 0,
+                m30, m31, m32, 1,
+            );
 
             const kfSet = this.getkeyFrameSetFromMat4(this.scratchMat, time, InterpolationType.Linear, bankTrack);
 
