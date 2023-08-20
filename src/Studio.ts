@@ -2419,7 +2419,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     public drawWorldHelpers(clipFromWorldMatrix: mat4) {
-        if (this.showPreviewLineCheckbox.checked && this.animationPreviewSteps.length > 1) {
+        if (this.elem.style.display !== 'none' && this.showPreviewLineCheckbox.checked && this.animationPreviewSteps.length > 1) {
             for (let i = 0; i <= this.animationPreviewSteps.length - 2; i++) {
                 drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, this.animationPreviewSteps[i].pos, this.animationPreviewSteps[i + 1].pos, this.previewLineColor);
                 if (i % 30 === 0) {
@@ -3344,6 +3344,7 @@ export class StudioPanel extends FloatingPanel {
         this.hideEditingUI();
         this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
         this.resetHelpText();
+        this.updatePreviewSteps();
     }
 
     private resetHelpText() {
@@ -3494,13 +3495,13 @@ export class StudioPanel extends FloatingPanel {
         const frameRate = obj.comp.frameRate;
         const msPerFrame = MILLISECONDS_IN_SECOND * (1 / frameRate);
         const keyframeMats = obj.layers.find((l: any) => l.type === 'camera').transform.keyframes;
-        const posXTrack: KeyframeTrack = new KeyframeTrack;
-        const posYTrack: KeyframeTrack = new KeyframeTrack;
-        const posZTrack: KeyframeTrack = new KeyframeTrack;
-        const lookAtXTrack: KeyframeTrack = new KeyframeTrack;
-        const lookAtYTrack: KeyframeTrack = new KeyframeTrack;
-        const lookAtZTrack: KeyframeTrack = new KeyframeTrack;
-        const bankTrack: KeyframeTrack = new KeyframeTrack;
+        const posXTrack: KeyframeTrack = new KeyframeTrack();
+        const posYTrack: KeyframeTrack = new KeyframeTrack();
+        const posZTrack: KeyframeTrack = new KeyframeTrack();
+        const lookAtXTrack: KeyframeTrack = new KeyframeTrack();
+        const lookAtYTrack: KeyframeTrack = new KeyframeTrack();
+        const lookAtZTrack: KeyframeTrack = new KeyframeTrack();
+        const bankTrack: KeyframeTrack = new KeyframeTrack();
 
         let time = 0;
         this.scratchMat[3] = 0;
