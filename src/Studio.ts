@@ -37,6 +37,16 @@ export interface Keyframe {
     easeOutCoeff: number;
 }
 
+interface KeyframeSet {
+    posXKf: Keyframe;
+    posYKf: Keyframe;
+    posZKf: Keyframe;
+    lookAtXKf: Keyframe;
+    lookAtYKf: Keyframe;
+    lookAtZKf: Keyframe;
+    bankKf: Keyframe;
+}
+
 const commonKfFieldsEqual = (kf1: Keyframe, kf2: Keyframe): boolean => {
     return kf1.time === kf2.time
         && kf1.interpInType === kf2.interpInType
@@ -3105,52 +3115,7 @@ export class StudioPanel extends FloatingPanel {
         const editingKf = this.timeline.selectedKeyframeIcons.length && this.timeline.playheadIsOnIcon();
         const time = this.timeline.getPlayheadTimeMs();
 
-        mat4.getTranslation(this.scratchVecPos, worldMatrix);
-        getMatrixAxisZ(this.scratchVecZAxis, worldMatrix);
-        vec3.normalize(this.scratchVecZAxis, this.scratchVecZAxis);
-        vec3.scaleAndAdd(this.scratchVecLook, this.scratchVecPos, this.scratchVecZAxis, -100);
-
-        const posXKf: Keyframe = { time, value: this.scratchVecPos[0], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-        const posYKf: Keyframe = { time, value: this.scratchVecPos[1], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-        const posZKf: Keyframe = { time, value: this.scratchVecPos[2], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-        const lookAtXKf: Keyframe = { time, value: this.scratchVecLook[0], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-        const lookAtYKf: Keyframe = { time, value: this.scratchVecLook[1], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-        const lookAtZKf: Keyframe = { time, value: this.scratchVecLook[2], tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
-
-        computeEulerAngleRotationFromSRTMatrix(this.scratchVecPos, worldMatrix);
-        vec3.copy(this.scratchVecLook, Vec3UnitY);
-        vec3.rotateZ(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[2]);
-        vec3.rotateY(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[1]);
-        vec3.rotateX(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[0]);
-        this.scratchVecLook[2] = 0;
-        vec3.normalize(this.scratchVecLook, this.scratchVecLook);
-        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY);
-        if (this.scratchVecLook[0] < 0) {
-            bank *= -1;
-        }
-
-        let prevBankVal = 0;
-        let relativePrevBankVal = 0;
-        let halfRotations = 0;
-        if (this.animation.bankTrack.keyframes.length > 0) {
-            let prevIndex = this.animation.bankTrack.getNextKeyframeIndexAtTime(time);
-            if (prevIndex === -1)
-                prevIndex = this.animation.bankTrack.keyframes.length - 1;
-            else
-                prevIndex -= 1;
-
-            prevBankVal = this.animation.bankTrack.keyframes[prevIndex].value;
-            halfRotations = (prevBankVal / Math.PI) | 0;
-            relativePrevBankVal = prevBankVal % MathConstants.TAU;
-            if (prevBankVal > 0 && bank < relativePrevBankVal - Math.PI )
-                bank += MathConstants.TAU;
-            else if (prevBankVal <= 0 && bank > relativePrevBankVal + Math.PI )
-                bank -= MathConstants.TAU;
-
-            bank += ((halfRotations / 2) | 0) * MathConstants.TAU;
-        }
-
-        const bankKf: Keyframe = { time, value: bank, tangentIn: 0, tangentOut: 0, interpInType: InterpolationType.Ease, interpOutType: InterpolationType.Ease, easeInCoeff: 1, easeOutCoeff: 1 };
+        let keyframeSet = this.getkeyFrameSetFromMat4(worldMatrix, time, InterpolationType.Ease, this.animation.bankTrack);
 
         if (editingKf) {
             for (const kfIcon of this.timeline.selectedKeyframeIcons) {
@@ -3158,21 +3123,21 @@ export class StudioPanel extends FloatingPanel {
                     continue;
                 
                 if (kfIcon.type === KeyframeIconType.Start || kfIcon.type === KeyframeIconType.Loop_End) {
-                    this.animation.posXTrack.keyframes[0].value = posXKf.value;
-                    this.animation.posYTrack.keyframes[0].value = posYKf.value;
-                    this.animation.posZTrack.keyframes[0].value = posZKf.value;
-                    this.animation.lookAtXTrack.keyframes[0].value = lookAtXKf.value;
-                    this.animation.lookAtYTrack.keyframes[0].value = lookAtYKf.value;
-                    this.animation.lookAtZTrack.keyframes[0].value = lookAtZKf.value;
-                    this.animation.bankTrack.keyframes[0].value = bankKf.value;
+                    this.animation.posXTrack.keyframes[0].value = keyframeSet.posXKf.value;
+                    this.animation.posYTrack.keyframes[0].value = keyframeSet.posYKf.value;
+                    this.animation.posZTrack.keyframes[0].value = keyframeSet.posZKf.value;
+                    this.animation.lookAtXTrack.keyframes[0].value = keyframeSet.lookAtXKf.value;
+                    this.animation.lookAtYTrack.keyframes[0].value = keyframeSet.lookAtYKf.value;
+                    this.animation.lookAtZTrack.keyframes[0].value = keyframeSet.lookAtZKf.value;
+                    this.animation.bankTrack.keyframes[0].value = keyframeSet.bankKf.value;
                     if (this.animation.loop) {
-                        this.animation.posXTrack.keyframes[this.animation.posXTrack.keyframes.length - 1].value = posXKf.value;
-                        this.animation.posYTrack.keyframes[this.animation.posYTrack.keyframes.length - 1].value = posYKf.value;
-                        this.animation.posZTrack.keyframes[this.animation.posZTrack.keyframes.length - 1].value = posZKf.value;
-                        this.animation.lookAtXTrack.keyframes[this.animation.lookAtXTrack.keyframes.length - 1].value = lookAtXKf.value;
-                        this.animation.lookAtYTrack.keyframes[this.animation.lookAtYTrack.keyframes.length - 1].value = lookAtYKf.value;
-                        this.animation.lookAtZTrack.keyframes[this.animation.lookAtZTrack.keyframes.length - 1].value = lookAtZKf.value;
-                        this.animation.bankTrack.keyframes[this.animation.bankTrack.keyframes.length - 1].value = bankKf.value;
+                        this.animation.posXTrack.keyframes[this.animation.posXTrack.keyframes.length - 1].value = keyframeSet.posXKf.value;
+                        this.animation.posYTrack.keyframes[this.animation.posYTrack.keyframes.length - 1].value = keyframeSet.posYKf.value;
+                        this.animation.posZTrack.keyframes[this.animation.posZTrack.keyframes.length - 1].value = keyframeSet.posZKf.value;
+                        this.animation.lookAtXTrack.keyframes[this.animation.lookAtXTrack.keyframes.length - 1].value = keyframeSet.lookAtXKf.value;
+                        this.animation.lookAtYTrack.keyframes[this.animation.lookAtYTrack.keyframes.length - 1].value = keyframeSet.lookAtYKf.value;
+                        this.animation.lookAtZTrack.keyframes[this.animation.lookAtZTrack.keyframes.length - 1].value = keyframeSet.lookAtZKf.value;
+                        this.animation.bankTrack.keyframes[this.animation.bankTrack.keyframes.length - 1].value = keyframeSet.bankKf.value;
                     }
                     tracks = 0;
                     break;
@@ -3183,19 +3148,19 @@ export class StudioPanel extends FloatingPanel {
                         return;
                     tracks ^= track;
                     if (track === KeyframeTrackType.posXTrack)
-                        kf.value = posXKf.value;
+                        kf.value = keyframeSet.posXKf.value;
                     else if (track === KeyframeTrackType.posYTrack)
-                        kf.value = posYKf.value;
+                        kf.value = keyframeSet.posYKf.value;
                     else if (track === KeyframeTrackType.posZTrack)
-                        kf.value = posZKf.value;
+                        kf.value = keyframeSet.posZKf.value;
                     else if (track === KeyframeTrackType.lookAtXTrack)
-                        kf.value = lookAtXKf.value;
+                        kf.value = keyframeSet.lookAtXKf.value;
                     else if (track === KeyframeTrackType.lookAtYTrack)
-                        kf.value = lookAtYKf.value;
+                        kf.value = keyframeSet.lookAtYKf.value;
                     else if (track === KeyframeTrackType.lookAtZTrack)
-                        kf.value = lookAtZKf.value;
+                        kf.value = keyframeSet.lookAtZKf.value;
                     else if (track === KeyframeTrackType.bankTrack)
-                        kf.value = bankKf.value;
+                        kf.value = keyframeSet.bankKf.value;
                 });
             }
 
@@ -3211,19 +3176,19 @@ export class StudioPanel extends FloatingPanel {
         }
 
         if (tracks & KeyframeTrackType.posXTrack)
-            this.animation.posXTrack.addKeyframe(posXKf);
+            this.animation.posXTrack.addKeyframe(keyframeSet.posXKf);
         if (tracks & KeyframeTrackType.posYTrack)
-            this.animation.posYTrack.addKeyframe(posYKf);
+            this.animation.posYTrack.addKeyframe(keyframeSet.posYKf);
         if (tracks & KeyframeTrackType.posZTrack)
-            this.animation.posZTrack.addKeyframe(posZKf);
+            this.animation.posZTrack.addKeyframe(keyframeSet.posZKf);
         if (tracks & KeyframeTrackType.lookAtXTrack)
-            this.animation.lookAtXTrack.addKeyframe(lookAtXKf);
+            this.animation.lookAtXTrack.addKeyframe(keyframeSet.lookAtXKf);
         if (tracks & KeyframeTrackType.lookAtYTrack)
-            this.animation.lookAtYTrack.addKeyframe(lookAtYKf);
+            this.animation.lookAtYTrack.addKeyframe(keyframeSet.lookAtYKf);
         if (tracks & KeyframeTrackType.lookAtZTrack)
-            this.animation.lookAtZTrack.addKeyframe(lookAtZKf);
+            this.animation.lookAtZTrack.addKeyframe(keyframeSet.lookAtZKf);
         if (tracks & KeyframeTrackType.bankTrack)
-            this.animation.bankTrack.addKeyframe(bankKf);
+            this.animation.bankTrack.addKeyframe(keyframeSet.bankKf);
 
         // If we're past the time of the last keyframe, advance.
         const advancePlayhead = time > this.timeline.getLastKeyframeTimeMs();
@@ -3246,42 +3211,42 @@ export class StudioPanel extends FloatingPanel {
                 [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack,
                     KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack,
                     KeyframeTrackType.bankTrack],
-                [posXKf, posYKf, posZKf, lookAtXKf, lookAtYKf, lookAtZKf, bankKf],
+                [keyframeSet.posXKf, keyframeSet.posYKf, keyframeSet.posZKf, keyframeSet.lookAtXKf, keyframeSet.lookAtYKf, keyframeSet.lookAtZKf, keyframeSet.bankKf],
                 Timeline.KEYFRAME_ICONS_BASE_Y_POS);
         } else if (this.timelineMode === TimelineMode.Position_LookAt_Bank) {
             // In Pos/LookAt/Bank, the selection of posX or lookAtX implies the others.
             if (tracks & KeyframeTrackType.posXTrack) {
                 addKeyframeIcon(
                     [KeyframeTrackType.posXTrack, KeyframeTrackType.posYTrack, KeyframeTrackType.posZTrack],
-                    [posXKf, posYKf, posZKf],
+                    [keyframeSet.posXKf, keyframeSet.posYKf, keyframeSet.posZKf],
                     Timeline.KEYFRAME_ICONS_BASE_Y_POS
                 );
             }
             if (tracks & KeyframeTrackType.lookAtXTrack) {
                 addKeyframeIcon(
                     [KeyframeTrackType.lookAtXTrack, KeyframeTrackType.lookAtYTrack, KeyframeTrackType.lookAtZTrack],
-                    [lookAtXKf, lookAtYKf, lookAtZKf],
+                    [keyframeSet.lookAtXKf, keyframeSet.lookAtYKf, keyframeSet.lookAtZKf],
                     Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT
                 );
             }
             if (tracks & KeyframeTrackType.bankTrack) {
-                addKeyframeIcon([KeyframeTrackType.bankTrack], [bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+                addKeyframeIcon([KeyframeTrackType.bankTrack], [keyframeSet.bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
             }
         } else if (this.timelineMode === TimelineMode.Full) {
             if (tracks & KeyframeTrackType.posXTrack)
-                addKeyframeIcon([KeyframeTrackType.posXTrack], [posXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS);
+                addKeyframeIcon([KeyframeTrackType.posXTrack], [keyframeSet.posXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS);
             if (tracks & KeyframeTrackType.posYTrack)
-                addKeyframeIcon([KeyframeTrackType.posYTrack], [posYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
+                addKeyframeIcon([KeyframeTrackType.posYTrack], [keyframeSet.posYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + Timeline.TRACK_HEIGHT);
             if (tracks & KeyframeTrackType.posZTrack)
-                addKeyframeIcon([KeyframeTrackType.posZTrack], [posZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
+                addKeyframeIcon([KeyframeTrackType.posZTrack], [keyframeSet.posZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 2));
             if (tracks & KeyframeTrackType.lookAtXTrack)
-                addKeyframeIcon([KeyframeTrackType.lookAtXTrack], [lookAtXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 3));
+                addKeyframeIcon([KeyframeTrackType.lookAtXTrack], [keyframeSet.lookAtXKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 3));
             if (tracks & KeyframeTrackType.lookAtYTrack)
-                addKeyframeIcon([KeyframeTrackType.lookAtYTrack], [lookAtYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 4));
+                addKeyframeIcon([KeyframeTrackType.lookAtYTrack], [keyframeSet.lookAtYKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 4));
             if (tracks & KeyframeTrackType.lookAtZTrack)
-                addKeyframeIcon([KeyframeTrackType.lookAtZTrack], [lookAtZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5));
+                addKeyframeIcon([KeyframeTrackType.lookAtZTrack], [keyframeSet.lookAtZKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 5));
             if (tracks & KeyframeTrackType.bankTrack)
-                addKeyframeIcon([KeyframeTrackType.bankTrack], [bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
+                addKeyframeIcon([KeyframeTrackType.bankTrack], [keyframeSet.bankKf], Timeline.KEYFRAME_ICONS_BASE_Y_POS + (Timeline.TRACK_HEIGHT * 6));
         } else {
             throw "Bad timelineMode";
         }
@@ -3433,34 +3398,6 @@ export class StudioPanel extends FloatingPanel {
         }
     }
 
-    private isValidAnimationObj(obj: any): boolean {
-        if (!obj || !obj.version)
-            return false;
-
-        const isValidTrack = (t: any) => {
-            return t && Array.isArray(t.keyframes) && t.keyframes.length >= 1;
-        };
-
-        const isValidAnimObj = (a: any) => {
-            return a &&
-                isValidTrack(a.posXTrack) &&
-                isValidTrack(a.posYTrack) &&
-                isValidTrack(a.posZTrack) &&
-                isValidTrack(a.lookAtXTrack) &&
-                isValidTrack(a.lookAtYTrack) &&
-                isValidTrack(a.lookAtZTrack) &&
-                isValidTrack(a.bankTrack);
-        };
-
-        if (obj.version === 2 && obj.studioState && isValidAnimObj(obj.studioState.animation)) {
-            obj.animation = obj.studioState.animation;
-            return true;
-        } else if (obj.version === 3 && isValidAnimObj(obj.animation)) {
-            return true;
-        }
-        return false;
-    }
-
     private serializeAnimation(): string {
         const dataObj = { version: 3, animation: this.animation };
         return JSON.stringify(dataObj);
@@ -3493,19 +3430,179 @@ export class StudioPanel extends FloatingPanel {
             try {
                 const fileContents = await this.loadFile(input.files.item(0) as File);
                 const obj = JSON.parse(fileContents);
-                if (this.isValidAnimationObj(obj)) {
-                    this.loadState(this.createInitStudioState(obj.animation));
-                    this.displayMessage('Successfully loaded animation from file.');
-                    this.saveState();
+                let animation;
+                if (this.isValidAnimationObj(obj.animation)) {
+                    animation = obj.animation;
+                } else if (this.isBlenderCameraData(obj)) {
+                    animation = this.parseBlenderCameraData(obj);
                 } else {
                     throw new Error('File is not a valid animation.');
                 }
+                this.loadState(this.createInitStudioState(animation));
+                this.displayMessage('Successfully loaded animation from file.');
+                this.saveState();
             } catch (e) {
                 console.error('Failed to load animation from JSON file.', e);
                 this.displayError('Failed to load file. See console for details.');
             }
         }
         input.click();
+    }
+
+    private isValidAnimationObj(obj: any): boolean {
+        if (!obj || !obj.version)
+            return false;
+
+        const isValidTrack = (t: any) => {
+            return t && Array.isArray(t.keyframes) && t.keyframes.length >= 1;
+        };
+
+        const isValidAnimObj = (a: any) => {
+            return a &&
+                isValidTrack(a.posXTrack) &&
+                isValidTrack(a.posYTrack) &&
+                isValidTrack(a.posZTrack) &&
+                isValidTrack(a.lookAtXTrack) &&
+                isValidTrack(a.lookAtYTrack) &&
+                isValidTrack(a.lookAtZTrack) &&
+                isValidTrack(a.bankTrack);
+        };
+
+        if (obj.version === 2 && obj.studioState && isValidAnimObj(obj.studioState.animation)) {
+            obj.animation = obj.studioState.animation;
+            return true;
+        } else if (obj.version === 3 && isValidAnimObj(obj.animation)) {
+            return true;
+        }
+        return false;
+    }
+
+    // Functions for detecting and parsing data as exported by https://github.com/adroitwhiz/after-effects-to-blender-export.
+    // Implementation is very naive; we will import the first camera layer we find and ignore everything else.
+    private isBlenderCameraData(obj: any): boolean {
+        if (!obj || !Array.isArray(obj.layers) || !obj.comp || !obj.comp.frameRate)
+            return false;
+
+        const camera = obj.layers.find((l: any) => l.type === 'camera');
+        if (camera && camera.transform && camera.transform.keyframes && Array.isArray(camera.transform.keyframes))
+            return true;
+        else
+            return false;
+    }
+
+    private parseBlenderCameraData(obj: any): CameraAnimation {
+        const frameRate = obj.comp.frameRate;
+        const msPerFrame = MILLISECONDS_IN_SECOND * (1 / frameRate);
+        const keyframeMats = obj.layers.find((l: any) => l.type === 'camera').transform.keyframes;
+        const posXTrack: KeyframeTrack = new KeyframeTrack;
+        const posYTrack: KeyframeTrack = new KeyframeTrack;
+        const posZTrack: KeyframeTrack = new KeyframeTrack;
+        const lookAtXTrack: KeyframeTrack = new KeyframeTrack;
+        const lookAtYTrack: KeyframeTrack = new KeyframeTrack;
+        const lookAtZTrack: KeyframeTrack = new KeyframeTrack;
+        const bankTrack: KeyframeTrack = new KeyframeTrack;
+
+        let time = 0;
+        this.scratchMat[3] = 0;
+        this.scratchMat[7] = 0;
+        this.scratchMat[11] = 0;
+        this.scratchMat[15] = 1;
+        for (let i = 0; i < keyframeMats.length; i++) {
+            this.scratchMat[0] = keyframeMats[i][0];
+            this.scratchMat[1] = keyframeMats[i][4];
+            this.scratchMat[2] = keyframeMats[i][8];
+            this.scratchMat[4] = keyframeMats[i][1];
+            this.scratchMat[5] = keyframeMats[i][5];
+            this.scratchMat[6] = keyframeMats[i][9];
+            this.scratchMat[8] = keyframeMats[i][2];
+            this.scratchMat[9] = keyframeMats[i][6];
+            this.scratchMat[10] = keyframeMats[i][10];
+            this.scratchMat[12] = keyframeMats[i][3];
+            this.scratchMat[13] = keyframeMats[i][7];
+            this.scratchMat[14] = keyframeMats[i][11];
+
+            const kfSet = this.getkeyFrameSetFromMat4(this.scratchMat, time, InterpolationType.Linear, bankTrack);
+
+            posXTrack.addKeyframe(kfSet.posXKf);
+            posYTrack.addKeyframe(kfSet.posYKf);
+            posZTrack.addKeyframe(kfSet.posZKf);
+            lookAtXTrack.addKeyframe(kfSet.lookAtXKf);
+            lookAtYTrack.addKeyframe(kfSet.lookAtYKf);
+            lookAtZTrack.addKeyframe(kfSet.lookAtZKf);
+            bankTrack.addKeyframe(kfSet.bankKf);
+
+            time += msPerFrame;
+        }
+
+        return {
+            posXTrack,
+            posYTrack,
+            posZTrack,
+            lookAtXTrack,
+            lookAtYTrack,
+            lookAtZTrack,
+            bankTrack,
+            loop: false
+        };
+    }
+
+    private getkeyFrameSetFromMat4(mat: ReadonlyMat4, t: number, interpType: InterpolationType, bankTrack: KeyframeTrack): KeyframeSet {
+        mat4.getTranslation(this.scratchVecPos, mat);
+        getMatrixAxisZ(this.scratchVecZAxis, mat);
+        vec3.normalize(this.scratchVecZAxis, this.scratchVecZAxis);
+        vec3.scaleAndAdd(this.scratchVecLook, this.scratchVecPos, this.scratchVecZAxis, -100);
+
+        const posXKf: Keyframe = { time: t, value: this.scratchVecPos[0], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+        const posYKf: Keyframe = { time: t, value: this.scratchVecPos[1], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+        const posZKf: Keyframe = { time: t, value: this.scratchVecPos[2], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+        const lookAtXKf: Keyframe = { time: t, value: this.scratchVecLook[0], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+        const lookAtYKf: Keyframe = { time: t, value: this.scratchVecLook[1], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+        const lookAtZKf: Keyframe = { time: t, value: this.scratchVecLook[2], tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+
+        computeEulerAngleRotationFromSRTMatrix(this.scratchVecPos, mat);
+        vec3.copy(this.scratchVecLook, Vec3UnitY);
+        vec3.rotateZ(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[2]);
+        vec3.rotateY(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[1]);
+        vec3.rotateX(this.scratchVecLook, this.scratchVecLook, Vec3Zero, -this.scratchVecPos[0]);
+        this.scratchVecLook[2] = 0;
+        vec3.normalize(this.scratchVecLook, this.scratchVecLook);
+        let bank = vec3.angle(this.scratchVecLook, Vec3UnitY);
+        if (this.scratchVecLook[0] < 0) {
+            bank *= -1;
+        }
+
+        let prevBankVal = 0;
+        let relativePrevBankVal = 0;
+        let halfRotations = 0;
+        if (bankTrack.keyframes.length > 0) {
+            let prevIndex = bankTrack.getNextKeyframeIndexAtTime(t);
+            if (prevIndex === -1)
+                prevIndex = bankTrack.keyframes.length - 1;
+            else
+                prevIndex -= 1;
+
+            prevBankVal = bankTrack.keyframes[prevIndex].value;
+            halfRotations = (prevBankVal / Math.PI) | 0;
+            relativePrevBankVal = prevBankVal % MathConstants.TAU;
+            if (prevBankVal > 0 && bank < relativePrevBankVal - Math.PI )
+                bank += MathConstants.TAU;
+            else if (prevBankVal <= 0 && bank > relativePrevBankVal + Math.PI )
+                bank -= MathConstants.TAU;
+
+            bank += ((halfRotations / 2) | 0) * MathConstants.TAU;
+        }
+
+        const bankKf: Keyframe = { time: t, value: bank, tangentIn: 0, tangentOut: 0, interpInType: interpType, interpOutType: interpType, easeInCoeff: 1, easeOutCoeff: 1 };
+
+        return {
+            posXKf: posXKf,
+            posYKf: posYKf,
+            posZKf: posZKf,
+            lookAtXKf: lookAtXKf,
+            lookAtYKf: lookAtYKf,
+            lookAtZKf: lookAtZKf,
+            bankKf: bankKf
+        };
     }
 
     private createInitStudioState(anim: CameraAnimation): StudioState {
