@@ -993,12 +993,22 @@ class Timeline {
         return false;
     }
 
-    public getSelectedIconForTrack(trackType: KeyframeTrackType): KeyframeIcon {
+    public getSelectedKeyframesForTrack(trackType: KeyframeTrackType): Keyframe[] {
+        const selectedKeyframesForTrack: Keyframe[] = [];
         for (const kfIcon of this.selectedKeyframeIcons) {
             if (kfIcon.keyframesMap.has(trackType))
-                return kfIcon;
+                selectedKeyframesForTrack.push(kfIcon.keyframesMap.get(trackType)!);
+
+            let linkedKfIcon;
+            if (kfIcon.type === KeyframeIconType.Loop_End)
+                linkedKfIcon = this.keyframeIcons.find((icon: KeyframeIcon) => icon.type === KeyframeIconType.Start && icon.keyframesMap.has(trackType));
+            else if (kfIcon.type === KeyframeIconType.Start)
+                linkedKfIcon = this.keyframeIcons.find((icon: KeyframeIcon) => icon.type === KeyframeIconType.Loop_End && icon.keyframesMap.has(trackType));
+
+            if (linkedKfIcon && !selectedKeyframesForTrack.includes(linkedKfIcon.keyframesMap.get(trackType)!))
+                selectedKeyframesForTrack.push(linkedKfIcon.keyframesMap.get(trackType)!);
         }
-        throw 'Attempted to get icon of non-selected track';
+        return selectedKeyframesForTrack;
     }
     
     public getLoopEndKeyframeForTrack(trackType: KeyframeTrackType): Keyframe {
@@ -2747,21 +2757,19 @@ export class StudioPanel extends FloatingPanel {
             let val = parseInt(input.value);
             if (!Number.isNaN(val)) {
                 const trackType = parseInt(input.dataset.track!, 10);
-                const kfIcon = this.timeline.getSelectedIconForTrack(trackType);
-                const kf = kfIcon.keyframesMap.get(trackType)!;
-                
-                let linkedKf = undefined;
-                if (this.animation.loop) {
-                    if (kfIcon.type === KeyframeIconType.Loop_End)
-                        linkedKf = this.timeline.getStartKeyframeForTrack(trackType);
-                    else if (kfIcon.type === KeyframeIconType.Start)
-                        linkedKf = this.timeline.getLoopEndKeyframeForTrack(trackType);
+                const kfs = this.timeline.getSelectedKeyframesForTrack(trackType);
+
+                if (input.dataset.aggregateOpMode) {
+                    val -= parseInt(input.dataset.prevValue!);
                 }
-                
+
                 if (trackType === KeyframeTrackType.bankTrack) {
                     val *= MathConstants.DEG_TO_RAD;
                 } else if (this.lockPerspective) {
-                    const diff = val - parseInt(input.dataset.prevValue!);
+                    let diff = val;
+                    if (!input.dataset.aggregateOpMode) {
+                        diff -= parseInt(input.dataset.prevValue!);
+                    }
                     if (trackType === KeyframeTrackType.posXTrack
                         && this.lookAtXValueInputContainer.style.visibility !== 'hidden') {
                         const corVal = parseInt(this.lookAtXValueInput.value) + diff;
@@ -2780,16 +2788,19 @@ export class StudioPanel extends FloatingPanel {
                     }
                 }
 
-                this.getTrackByType(this.animation, trackType).setValue(kf, val);
-                if (linkedKf)
-                    this.getTrackByType(this.animation, trackType).setValue(linkedKf, val);
-                
-                if (trackType === KeyframeTrackType.bankTrack) {
-                    const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
-                    let prevBank: number | undefined = undefined;
-                    if (prevIndex > -1)
-                        prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
-                    this.drawBankRotationWheel(-val, prevBank);
+                for (const kf of kfs) {
+                    if (input.dataset.aggregateOpMode)
+                        this.getTrackByType(this.animation, trackType).setValue(kf, kf.value + val);
+                    else
+                        this.getTrackByType(this.animation, trackType).setValue(kf, val);
+
+                    if (trackType === KeyframeTrackType.bankTrack) {
+                        const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
+                        let prevBank: number | undefined = undefined;
+                        if (prevIndex > -1)
+                            prevBank = this.animation.bankTrack.keyframes[prevIndex].value;
+                        this.drawBankRotationWheel(-val, prevBank);
+                    }
                 }
                 
                 this.updatePreviewSteps();
@@ -2865,7 +2876,7 @@ export class StudioPanel extends FloatingPanel {
     }
 
     private onKeyframeIconSelected() {
-        const icon = this.timeline.selectedKeyframeIcons[0];
+        const firstSelectedIcon = this.timeline.selectedKeyframeIcons[0];
         let keyframeTracks = 0;
         let commonEaseInVal = 1;
         let commonEaseOutVal = 1;
@@ -2874,9 +2885,20 @@ export class StudioPanel extends FloatingPanel {
         let prevBank: number | undefined = undefined;
 
         const updateValueInputs = (kf: Keyframe, trackType: KeyframeTrackType) => {
-            keyframeTracks |= trackType;
             const input = this.getValueInput(trackType);
-            if (trackType === KeyframeTrackType.bankTrack) {
+
+            // If the currently selected keyframes already include this track, set its input into aggregate mode.
+            if (keyframeTracks & trackType)
+                input.dataset.aggregateOpMode = 'true';
+            else
+                input.dataset.aggregateOpMode = '';
+
+            keyframeTracks |= trackType;
+            if (input.dataset.aggregateOpMode) {
+                input.value = '0';
+                input.dataset.prevValue = '0';
+                return;
+            } else if (trackType === KeyframeTrackType.bankTrack) {
                 input.value = (kf.value * MathConstants.RAD_TO_DEG).toFixed(0).toString();
                 const prevIndex = this.animation.bankTrack.keyframes.indexOf(kf) - 1;
                 if (prevIndex > -1)
@@ -2887,7 +2909,7 @@ export class StudioPanel extends FloatingPanel {
             input.dataset.prevValue = input.value;
         };
 
-        icon.keyframesMap.forEach((kf, trackType) => {
+        firstSelectedIcon.keyframesMap.forEach((kf, trackType) => {
             updateValueInputs(kf, trackType);
             commonEaseInVal = kf.easeInCoeff;
             commonEaseOutVal = kf.easeOutCoeff;
@@ -2898,12 +2920,7 @@ export class StudioPanel extends FloatingPanel {
         for (let i = 1; i < this.timeline.selectedKeyframeIcons.length; i++) {
             const kfIcon = this.timeline.selectedKeyframeIcons[i];
             kfIcon.keyframesMap.forEach((kf, trackType) => {
-                if (keyframeTracks !== 0) {
-                    if (keyframeTracks & trackType)
-                        keyframeTracks = 0;
-                    else
-                        updateValueInputs(kf, trackType);
-                }
+                updateValueInputs(kf, trackType);
 
                 if (commonEaseInVal !== -1 && kf.easeInCoeff !== commonEaseInVal)
                     commonEaseInVal = -1;
@@ -2931,29 +2948,27 @@ export class StudioPanel extends FloatingPanel {
         this.lockPerspectiveBracket.style.visibility = 'hidden';
         this.lockPerspectiveDiv.style.visibility = 'hidden';
 
-        if (keyframeTracks !== 0) {
-            if (keyframeTracks & KeyframeTrackType.posXTrack)
-                this.posXValueInputContainer.style.visibility = '';
-                
-            if (keyframeTracks & KeyframeTrackType.posYTrack)
-                this.posYValueInputContainer.style.visibility = '';
-                
-            if (keyframeTracks & KeyframeTrackType.posZTrack)
-                this.posZValueInputContainer.style.visibility = '';
-                
-            if (keyframeTracks & KeyframeTrackType.lookAtXTrack)
-                this.lookAtXValueInputContainer.style.visibility = '';
-                
-            if (keyframeTracks & KeyframeTrackType.lookAtYTrack)
-                this.lookAtYValueInputContainer.style.visibility = '';
-                
-            if (keyframeTracks & KeyframeTrackType.lookAtZTrack)
-                this.lookAtZValueInputContainer.style.visibility = '';
-                
-            if ((keyframeTracks & KeyframeTrackType.bankTrack)) {
-                this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD, prevBank);
-                this.bankValueInputContainer.style.visibility = '';
-            }
+        if (keyframeTracks & KeyframeTrackType.posXTrack)
+            this.posXValueInputContainer.style.visibility = '';
+
+        if (keyframeTracks & KeyframeTrackType.posYTrack)
+            this.posYValueInputContainer.style.visibility = '';
+
+        if (keyframeTracks & KeyframeTrackType.posZTrack)
+            this.posZValueInputContainer.style.visibility = '';
+
+        if (keyframeTracks & KeyframeTrackType.lookAtXTrack)
+            this.lookAtXValueInputContainer.style.visibility = '';
+
+        if (keyframeTracks & KeyframeTrackType.lookAtYTrack)
+            this.lookAtYValueInputContainer.style.visibility = '';
+
+        if (keyframeTracks & KeyframeTrackType.lookAtZTrack)
+            this.lookAtZValueInputContainer.style.visibility = '';
+
+        if ((keyframeTracks & KeyframeTrackType.bankTrack)) {
+            this.drawBankRotationWheel(-parseInt(this.bankValueInput.value) * MathConstants.DEG_TO_RAD, prevBank);
+            this.bankValueInputContainer.style.visibility = '';
         }
             
         if (((keyframeTracks & KeyframeTrackType.posXTrack) && (keyframeTracks & KeyframeTrackType.lookAtXTrack))
