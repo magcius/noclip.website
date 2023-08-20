@@ -63,4 +63,8 @@ export class DkrParticle {
             this.drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
         }
     }
+
+    public destroy(device: GfxDevice): void {
+        this.drawCall.destroy(device);
+    }
 }

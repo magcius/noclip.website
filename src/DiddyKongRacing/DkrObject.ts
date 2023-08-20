@@ -53,7 +53,6 @@ export class DkrObject {
     private renderBeforeLevelMap: boolean = true;
     private usesNormals = false;
     public dontAnimateObjectTextures = false; // Hack for characters with blinking eyes.
-    private objectIdx = 0;
 
     // Most objects can be instanced, but some like doors/world gates can't because of textures.
     private allowInstances = true;
@@ -840,12 +839,12 @@ export class DkrObject {
                 break;
         }
         this.updateModelMatrix();
-        
-        //if(!this.isDeveloperObject) console.log(this.name);
     }
 
     public destroy(device: GfxDevice): void {
         for (const model of this.models)
             model.destroy(device);
+        for (const particle of this.particles)
+            particle.destroy(device);
     }
 }

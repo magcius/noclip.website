@@ -665,6 +665,10 @@ export class DkrAnimationTrack {
             this.actor.prepareToRender(device, renderInstManager, viewerInput);
         }
     }
+
+    public destroy(device: GfxDevice): void {
+        this.actor.destroy(device);
+    }
 }
 
 interface ActorTrack {
@@ -690,8 +694,7 @@ export class DkrAnimationTracksChannel {
         this.actorTracks[actorIndex].addAnimationNode(node);
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, 
-    objectCache: DkrObjectCache, textureCache: DkrTextureCache): Promise<void> {
+    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager,  objectCache: DkrObjectCache, textureCache: DkrTextureCache): Promise<void> {
         this.actorTrackKeys = Object.keys(this.actorTracks);
         return new Promise<void>((resolve) => {
             const promises = [];
@@ -770,6 +773,11 @@ export class DkrAnimationTracksChannel {
             }
         }
     }
+
+    public destroy(device: GfxDevice): void {
+        for (const key of this.actorTrackKeys)
+            this.actorTracks[key].destroy(device);
+    }
 }
 
 interface Channels {
@@ -778,7 +786,7 @@ interface Channels {
 export class DkrAnimationTracks {
     private hasBeenCompiled = false;
     private channels: Channels = {};
-    private channelKeys: Array<string>;
+    private channelKeys: string[] = [];
     private numberOfObjectMaps = 0;
 
     constructor() {
@@ -908,5 +916,10 @@ export class DkrAnimationTracks {
                 this.channels[key].prepareToRender(device, renderInstManager, viewerInput);
             }
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const key of this.channelKeys)
+            this.channels[key].destroy(device);
     }
 }

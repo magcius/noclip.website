@@ -25,7 +25,7 @@ export let CURRENT_LEVEL_ID = -1;
 export class DkrLevel {
     private headerData: Uint8Array;
     private model: DkrLevelModel;
-    private skydome: DkrObject | null;
+    private skydome: DkrObject | null = null;
     private clearColor = colorNewFromRGBA(0, 0, 0);
 
     private animationTracks = new DkrAnimationTracks();
@@ -106,18 +106,15 @@ export class DkrLevel {
         this.textureCache.destroy(device);
         this.sprites.destroy(device);
         this.model.destroy(device);
-        if(!!this.objectMap1) {
+
+        if (this.objectMap1)
             this.objectMap1.destroy(device);
-        }
-        if(!!this.objectMap2) {
+        if (this.objectMap2)
             this.objectMap2.destroy(device);
-        }
-        if(!!this.skydome) {
-            const skydomeModel = this.skydome!.getModel();
-            if(!!skydomeModel) {
-                skydomeModel.destroy(device);
-            }
-        }
+
+        if (this.skydome !== null)
+            this.skydome.destroy(device);
+        this.animationTracks.destroy(device);
     }
 
     private animationNodesReady(): void {
