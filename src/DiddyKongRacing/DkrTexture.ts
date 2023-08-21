@@ -106,13 +106,13 @@ export class DkrTexture {
 
         let isOpaque = true;
 
-        for(let y = 0; y < this.height; y++) {
+        for (let y = 0; y < this.height; y++) {
             for(let x = 0; x < this.width; x++) {
                 let index = (y * this.width + x) * 4;
                 let alpha = this.pixels[index + 3];
-                if(alpha > 0 && alpha < 255) {
+                if (alpha > 0 && alpha < 255) {
                     return GfxRendererLayer.TRANSLUCENT;
-                } else if(isOpaque && alpha == 0) {
+                } else if (isOpaque && alpha == 0) {
                     isOpaque = false;
                 }
             }

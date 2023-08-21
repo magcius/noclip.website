@@ -12,8 +12,6 @@ import { COOL_BLUE_COLOR, Checkbox, Panel, SingleSelect, Slider } from '../ui.js
 import { DataManager } from './DataManager.js';
 import { DkrControlGlobals } from './DkrControlGlobals.js';
 import { DkrLevel } from './DkrLevel.js';
-import { IMG_LOADING_ASSETS } from './DkrLoadingMessage.js';
-import { DkrObjectCache } from './DkrObjectCache.js';
 import { DkrSprites } from './DkrSprites.js';
 import { DkrTextureCache } from './DkrTextureCache.js';
 import { trackParams } from './scenes_TrackParams.js';
@@ -180,34 +178,11 @@ class DKRSceneDesc implements Viewer.SceneDesc {
     private dataManager: DataManager;
     private renderer: DKRRenderer;
     private textureCache: DkrTextureCache;
-    private objectCache: DkrObjectCache;
     private sprites: DkrSprites;
-    private loadingImage: HTMLElement;
 
     constructor(public id: string, public name: string, public trackParams : any | null) {
     }
 
-    // Creates the "Assets are loading. Please wait." message
-    private createLoadingMessage(): HTMLElement {
-        let elem = document.createElement('img');
-        elem.src = IMG_LOADING_ASSETS;
-        this.loadingImage = elem;
-        elem.onload = (event) => {
-            elem.style.cssText = 'position:absolute;top:10px;left:calc(50% - ' + (elem.width / 2) + 'px)';
-            const waitingFunc = () => {
-                if(this.dataManager.doneFlagSet() && !this.dataManager.isLoading()) {
-                    // Remove the message when loading has completed.
-                    this.loadingImage.remove();
-                } else {
-                    // Keep recursing till loading is complete
-                    setTimeout(waitingFunc, 500);
-                }
-            }
-            setTimeout(waitingFunc, 500);
-        }
-        return elem;
-    }
-    
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         if(this.trackParams.animTracks !== null) {
             DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions = this.trackParams.animTracks;
@@ -224,13 +199,10 @@ class DKRSceneDesc implements Viewer.SceneDesc {
             this.dataManager = dataManager;
             const renderCache = this.renderer.renderHelper.renderCache;
             this.textureCache = new DkrTextureCache(device, renderCache, this.dataManager);
-            this.objectCache = new DkrObjectCache(this.dataManager);
             this.sprites = new DkrSprites(device, renderCache, this.dataManager);
-            new DkrLevel(device, this.renderer.renderHelper, this.textureCache, this.objectCache, this.id, 
-                this.dataManager, this.sprites, (level: DkrLevel) => {
-                this.renderer.setLevel(level);
-                context.uiContainer.append(this.createLoadingMessage());
-            });
+
+            const level = new DkrLevel(device, this.renderer.renderHelper, this.textureCache, this.id, this.dataManager, this.sprites);
+            this.renderer.setLevel(level);
         });
         
         return this.renderer;

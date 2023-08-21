@@ -8,77 +8,65 @@ import { SceneContext } from "../SceneBase.js";
 import { assert, assertExists, decodeString, nullify } from "../util.js";
 import { decompressZipFileEntry, parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile.js";
 
+interface Assets {
+    ['@revision']: number;
+    assets: { folder: string, filenames: string[], type: 'Textures' | 'LevelHeaders' | 'LevelObjectMap' | 'LevelModels' | 'ObjectHeaders' | 'ObjectModels' | 'ObjectAnimations' }[];
+}
+
 export class DataManager {
     private path: string;
-    private assets: any;
+    private assets: Assets;
 
-    private doneFlag = false;
     private zipFile: ZipFile;
 
     // Used to translate an id in a object map into an actual object id.
-    public levelObjectTranslateTable: number[];
+    public levelObjectTranslateTable: number[] = [];
 
     // Contains the IDs of the animations used by objects.
-    public objectAnimationIds: Array<number[] | null>;
+    public objectAnimationIds: (number[] | null)[] = [];
 
     constructor(private context: SceneContext, private pathBase: string, private version: string, callback: Function) {
         this.path = pathBase + '/' + version + '/';
 
         this.ensureAndFetchFile('data.zip').then((dataZipBinary) => {
             this.zipFile = parseZipFile(dataZipBinary);
-            this.getFileFromZip('assets.json').then((assetsJsonBinary) => {
-                this.assets = JSON.parse(decodeString(assetsJsonBinary));
-                this.parseAssets().then(() => {
-                    callback(this);
-                });
-            });
+            const assetsJsonBinary = this.getFileFromZip('assets.json');
+            this.assets = JSON.parse(decodeString(assetsJsonBinary));
+            this.parseAssets();
+            callback(this);
         });
     }
 
-    private parseAssets(): Promise<void> {
+    private parseAssets(): void {
         assert(this.assets['@revision'] === 1);
-        //console.log(this.assets);
-        return new Promise<void>((resolve) => {
-            let lvlObjTransTablePath = this.assets.assets[35].folder + '/' + this.assets.assets[35].filenames[0];
-            let objAnimationIds = this.assets.assets[30].folder + '/' + this.assets.assets[30].filenames[0];
 
-            let promises = [
-                this.getFileFromZip(lvlObjTransTablePath),
-                this.getFileFromZip(objAnimationIds),
-            ]
+        const lvlObjTransTablePath = this.assets.assets[35].folder + '/' + this.assets.assets[35].filenames[0];
+        const objAnimationIds = this.assets.assets[30].folder + '/' + this.assets.assets[30].filenames[0];
 
-            Promise.all(promises).then((out) => {
-                // Level Object To Object ID translation table
-                let buffer = out[0].createTypedArray(Uint8Array);
-                let dataView = new DataView(buffer.buffer);
-                this.levelObjectTranslateTable = new Array<number>(buffer.length / 2);
-                for(let i = 0; i < this.levelObjectTranslateTable.length; i++) {
-                    this.levelObjectTranslateTable[i] = dataView.getUint16(i * 2);
-                }
-                // Animation IDs table
-                buffer = out[1].createTypedArray(Uint8Array);
-                dataView = new DataView(buffer.buffer);
-                this.objectAnimationIds = new Array<Array<number>|null>(buffer.length / 2);
-                for(let i = 0; i < this.objectAnimationIds.length; i++) {
-                    const index = dataView.getUint16(i * 2);
-                    const nextIndex = dataView.getUint16((i + 1) * 2);
-                    const numberOfAnimations = nextIndex - index;
-                    if(numberOfAnimations < 0) {
-                        break;
-                    }
-                    if(numberOfAnimations == 0) {
-                        this.objectAnimationIds[i] = null;
-                    } else {
-                        const idArray = new Array<number>(numberOfAnimations);
-                        for(let j = 0; j < numberOfAnimations; j++) {
-                            idArray[j] = index + j;
-                        }
-                        this.objectAnimationIds[i] = idArray;
-                    }
-                }
-                resolve();
-            });
-        });
+        // Level Object To Object ID translation table
+        let buffer = this.getFileFromZip(lvlObjTransTablePath);
+        let dataView = buffer.createDataView();
+        for (let i = 0; i < buffer.byteLength / 2; i++)
+            this.levelObjectTranslateTable[i] = dataView.getUint16(i * 2);
+        // Animation IDs table
+        buffer = this.getFileFromZip(objAnimationIds);
+        dataView = buffer.createDataView();
+        for (let i = 0; i < buffer.byteLength / 2; i++) {
+            const index = dataView.getUint16(i * 2);
+            const nextIndex = dataView.getUint16((i + 1) * 2);
+            const numberOfAnimations = nextIndex - index;
+            if (numberOfAnimations < 0)
+                break;
+
+            if (numberOfAnimations === 0) {
+                this.objectAnimationIds[i] = null;
+            } else {
+                const idArray = [];
+                for (let j = 0; j < numberOfAnimations; j++)
+                    idArray[j] = index + j;
+                this.objectAnimationIds[i] = idArray;
+            }
+        }
     }
 
     private ensureAndFetchFile(filepath: string): Promise<NamedArrayBufferSlice> {
@@ -91,24 +79,16 @@ export class DataManager {
         return nullify(this.zipFile.find((entry) => entry.filename === filename));
     }
 
-    private async getFileFromZip(filename: string): Promise<ArrayBufferSlice> {
+    private getFileFromZip(filename: string): ArrayBufferSlice {
         const zipEntry = this.getZipEntry(filename);
         if (zipEntry === null)
             throw new Error(`Could not find zip entry for filename: ${filename}`);
 
         return decompressZipFileEntry(zipEntry);
     }
-    
-    public signalDoneFlag(): void {
-        this.doneFlag = true;
-    }
-
-    public doneFlagSet(): boolean {
-        return this.doneFlag;
-    }
 
     public isLoading(): boolean {
-        const meter: any = this.context.dataFetcher.progressMeter;
+        const meter = this.context.dataFetcher.progressMeter;
         return meter.loadProgress < 1.0;
     }
 
@@ -164,56 +144,56 @@ export class DataManager {
         return this.loadTextureFromZip(this.getFilename(4, index));
     }
 
-    public get3dTextureHeader(index: number): Promise<ArrayBufferSlice> {
+    public get3dTextureHeader(index: number): ArrayBufferSlice {
         assert(this.assets.assets[2].type === 'Textures');
         assert(this.assets.assets[2].folder === 'textures/3d');
         assert(!!this.assets.assets[2].filenames[index]);
         return this.getFileFromZip(this.getFilename(2, index) + '.header');
     }
 
-    public get2dTextureHeader(index: number): Promise<ArrayBufferSlice> {
+    public get2dTextureHeader(index: number): ArrayBufferSlice {
         assert(this.assets.assets[4].type === 'Textures');
         assert(this.assets.assets[4].folder === 'textures/2d');
         assert(!!this.assets.assets[4].filenames[index]);
         return this.getFileFromZip(this.getFilename(4, index) + '.header');
     }
 
-    public getLevelObjectMap(index: number): Promise<ArrayBufferSlice> {
+    public getLevelObjectMap(index: number): ArrayBufferSlice {
         assert(this.assets.assets[21].type === 'LevelObjectMap');
         assert(this.assets.assets[21].folder === 'levels/objectMaps');
         assert(!!this.assets.assets[21].filenames[index]);
         return this.getFileFromZip(this.getFilename(21, index));
     }
 
-    public getLevelHeader(index: number): Promise<ArrayBufferSlice> {
+    public getLevelHeader(index: number): ArrayBufferSlice {
         assert(this.assets.assets[23].type === 'LevelHeaders');
         assert(this.assets.assets[23].folder === 'levels/headers');
         assert(!!this.assets.assets[23].filenames[index]);
         return this.getFileFromZip(this.getFilename(23, index));
     }
 
-    public getLevelModel(index: number): Promise<ArrayBufferSlice> {
+    public getLevelModel(index: number): ArrayBufferSlice {
         assert(this.assets.assets[27].type === 'LevelModels');
         assert(this.assets.assets[27].folder === 'levels/models');
         assert(!!this.assets.assets[27].filenames[index]);
         return this.getFileFromZip(this.getFilename(27, index));
     }
 
-    public getObjectModel(index: number): Promise<ArrayBufferSlice> {
+    public getObjectModel(index: number): ArrayBufferSlice {
         assert(this.assets.assets[29].type === 'ObjectModels');
         assert(this.assets.assets[29].folder === 'objects/models');
         assert(!!this.assets.assets[29].filenames[index]);
         return this.getFileFromZip(this.getFilename(29, index));
     }
 
-    public getObjectAnimation(index: number): Promise<ArrayBufferSlice> {
+    public getObjectAnimation(index: number): ArrayBufferSlice {
         assert(this.assets.assets[32].type === 'ObjectAnimations');
         assert(this.assets.assets[32].folder === 'objects/animations');
         assert(!!this.assets.assets[32].filenames[index]);
         return this.getFileFromZip(this.getFilename(32, index));
     }
 
-    public getObjectHeader(index: number): Promise<ArrayBufferSlice> {
+    public getObjectHeader(index: number): ArrayBufferSlice {
         assert(this.assets.assets[34].type === 'ObjectHeaders');
         assert(this.assets.assets[34].folder === 'objects/headers');
         assert(!!this.assets.assets[34].filenames[index]);
@@ -221,10 +201,8 @@ export class DataManager {
     }
 
     public async getSpriteSheet(): Promise<[any, ImageData]> {
-        const [spritesJsonBinary, spritesPngBinary] = await Promise.all([
-            this.getFileFromZip('dkr_sprites.json'),
-            this.getFileFromZip('dkr_sprites.png'),
-        ]);
+        const spritesJsonBinary = this.getFileFromZip('dkr_sprites.json');
+        const spritesPngBinary = this.getFileFromZip('dkr_sprites.png');
 
         const spritesData = JSON.parse(decodeString(spritesJsonBinary));
         const imageData = await this.loadPNGData(spritesPngBinary);

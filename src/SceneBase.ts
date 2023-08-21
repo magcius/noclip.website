@@ -8,6 +8,7 @@ import InputManager from "./InputManager.js";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;
+    loadProgress: number;
 }
 
 export interface Destroyable {

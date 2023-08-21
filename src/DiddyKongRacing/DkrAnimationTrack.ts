@@ -11,7 +11,6 @@ import { DataManager } from "./DataManager.js";
 import { DkrControlGlobals } from "./DkrControlGlobals.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { DkrObject } from './DkrObject.js';
-import { DkrObjectCache } from "./DkrObjectCache.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
 import { updateCameraViewMatrix } from "./DkrUtil.js";
 
@@ -262,38 +261,31 @@ export class DkrAnimationTrack {
         return this.doesLoop;
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, 
-    objectCache: DkrObjectCache, textureCache: DkrTextureCache): Promise<void> {
-        return new Promise<void>((resolve) => {
-            this.nodes.sort((a: DkrObject, b: DkrObject) => a.getProperties().order - b.getProperties().order);
-            let spawnActorId = this.nodes[0].getProperties().objectToSpawn;
-            assert(spawnActorId >= 0);
-            const lastProperties = this.nodes[this.nodes.length - 1].getProperties();
-            if (lastProperties.gotoNode == 0x00) {
-                this.doesLoop = true;
-                this.isLoopConnected = true;
-            } else if (lastProperties.pauseFrameCount >= 0) {
-                // I think this only happens in the Bluey (Walrus Boss) flyby animation.
-                this.doesLoop = true;
-            }
+    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
+        this.nodes.sort((a: DkrObject, b: DkrObject) => a.getProperties().order - b.getProperties().order);
+        let spawnActorId = this.nodes[0].getProperties().objectToSpawn;
+        assert(spawnActorId >= 0);
+        const lastProperties = this.nodes[this.nodes.length - 1].getProperties();
+        if (lastProperties.gotoNode == 0x00) {
+            this.doesLoop = true;
+            this.isLoopConnected = true;
+        } else if (lastProperties.pauseFrameCount >= 0) {
+            // I think this only happens in the Bluey (Walrus Boss) flyby animation.
+            this.doesLoop = true;
+        }
 
-            new DkrObject(dataManager.levelObjectTranslateTable[spawnActorId], device, level, renderHelper, 
-            dataManager, objectCache, textureCache, (obj: DkrObject) => {
-                this.actor = obj;
-                this.actorName = this.actor.getName();
-                this.hasBeenCompiled = true;
+        this.actor = new DkrObject(dataManager.levelObjectTranslateTable[spawnActorId], device, level, renderHelper, dataManager, textureCache);
+        this.actorName = this.actor.getName();
+        this.hasBeenCompiled = true;
 
-                if(this.actorName === 'Whale' || this.actorName === 'PigRocketeer') {
-                    this.actor.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
-                } else if(this.actorName === 'Asteroid') {
-                    this.actor.setUseVertexNormals(); // Hack
-                }
+        if(this.actorName === 'Whale' || this.actorName === 'PigRocketeer') {
+            this.actor.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
+        } else if(this.actorName === 'Asteroid') {
+            this.actor.setUseVertexNormals(); // Hack
+        }
 
-                this.calculatePoints();
-                this.setObjectToPoint(0.0);
-                resolve();
-            });
-        });
+        this.calculatePoints();
+        this.setObjectToPoint(0.0);
     }
 
     private calculatePoints(): void {
@@ -373,7 +365,7 @@ export class DkrAnimationTrack {
                 speeds.objSpeed = 0.01;
             }
             const data = this.calculatePoint(curNodeIndex, curT, curPos, speeds, SAMPLES_DELTA_TIME);
-            const point: AnimTrackPoint = data[0];
+            const point: AnimTrackPoint = data[0]!;
             curNodeIndex = data[1];
             curT = data[2];
             const stopNode = this.doesLoop ? this.nodes.length : this.nodes.length - 1;
@@ -497,7 +489,7 @@ export class DkrAnimationTrack {
         speeds.nodeSpeed = lerp(curNodeSpeedByte / 10, nextNodeSpeedByte / 10, t);
     }
 
-    private calculatePoint(curNodeIndex: number, t: number, curPos: vec3, speeds: SplineSpeeds, dt: number): any {
+    private calculatePoint(curNodeIndex: number, t: number, curPos: vec3, speeds: SplineSpeeds, dt: number): [AnimTrackPoint | null, number, number] {
         assert(curNodeIndex < this.nodes.length);
         const speedMult = dt * (DKR_FPS / 1000) * 2.0;
         let deltaX = 0, deltaY = 0, deltaZ = 0;
@@ -694,25 +686,16 @@ export class DkrAnimationTracksChannel {
         this.actorTracks[actorIndex].addAnimationNode(node);
     }
 
-    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager,  objectCache: DkrObjectCache, textureCache: DkrTextureCache): Promise<void> {
+    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
         this.actorTrackKeys = Object.keys(this.actorTracks);
-        return new Promise<void>((resolve) => {
-            const promises = [];
-            for(const key of this.actorTrackKeys) {
-                promises.push(this.actorTracks[key].compile(device, level, renderHelper, dataManager, 
-                objectCache, textureCache));
+        for (const key of this.actorTrackKeys) {
+            this.actorTracks[key].compile(device, level, renderHelper, dataManager, textureCache);
+            if(this.actorTracks[key].getActorName() === 'AnimCamera') {
+                this.animCameraKey = key;
             }
-            Promise.all(promises).then(() => {
-                for(const key of this.actorTrackKeys) {
-                    if(this.actorTracks[key].getActorName() === 'AnimCamera') {
-                        this.animCameraKey = key;
-                    }
-                    this.maxDuration = Math.max(this.maxDuration, this.actorTracks[key].getDuration());
-                }
-                this.hasBeenCompiled = true;
-                resolve();
-            });
-        });
+            this.maxDuration = Math.max(this.maxDuration, this.actorTracks[key].getDuration());
+        }
+        this.hasBeenCompiled = true;
     }
 
     public isCompiled(): boolean {
@@ -787,7 +770,6 @@ export class DkrAnimationTracks {
     private hasBeenCompiled = false;
     private channels: Channels = {};
     private channelKeys: string[] = [];
-    private numberOfObjectMaps = 0;
 
     constructor() {
     }
@@ -802,36 +784,19 @@ export class DkrAnimationTracks {
         this.channels[channel].addAnimationNode(node);
     }
 
-    public addAnimationNodes(nodes: Array<DkrObject>, device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, 
-    dataManager: DataManager, objectCache: DkrObjectCache, textureCache: DkrTextureCache, compiledCallback: Function) {
-        for(const node of nodes) {
-            if(node.getName() === 'Animation') {
+    public addAnimationNodes(nodes: Array<DkrObject>, device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache) {
+        for(const node of nodes)
+            if (node.getName() === 'Animation')
                 this.addAnimationNode(node);
-            }
-        }
-        this.numberOfObjectMaps++;
-        if(this.numberOfObjectMaps == 2) {
-            this.compile(device, level, renderHelper, dataManager, objectCache, textureCache).then(() => {
-                compiledCallback(); // Tell DkrLevel that the animations have been compiled.
-            });
-        }
     }
 
-    private compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, 
-    objectCache: DkrObjectCache, textureCache: DkrTextureCache): Promise<void> {
+    public compile(device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache): void {
         this.channelKeys = Object.keys(this.channels);
-        return new Promise<void>((resolve) => {
-            const promises = [];
-            for(const key of this.channelKeys) {
-                promises.push(this.channels[key].compile(device, level, renderHelper, dataManager, 
-                objectCache, textureCache));
-            }
-            Promise.all(promises).then(() => {
-                this.getCameraChannels();
-                this.hasBeenCompiled = true;
-                resolve();
-            });
-        });
+
+        for(const key of this.channelKeys)
+            this.channels[key].compile(device, level, renderHelper, dataManager, textureCache);
+        this.getCameraChannels();
+        this.hasBeenCompiled = true;
     }
 
     private getCameraChannels(): void {

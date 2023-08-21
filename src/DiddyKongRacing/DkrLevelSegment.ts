@@ -5,7 +5,7 @@ import { IDENTITY_MATRIX } from "./DkrUtil.js";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch.js";
 import { DkrTexture } from "./DkrTexture.js";
 import { DkrDrawCall } from "./DkrDrawCall.js";
-import { CURRENT_LEVEL_ID, DkrLevel } from "./DkrLevel.js";
+import { DkrLevel } from "./DkrLevel.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -25,7 +25,7 @@ export class DkrLevelSegment {
         let numberOfTriangles = view.getInt16(offset + 0x1E);
         let triangleBatchInfoOffset = view.getInt32(offset + 0x0C);
         let numberOfTriangleBatches = view.getInt16(offset + 0x20);
-        
+
         this.triangleBatches = new Array(numberOfTriangleBatches);
 
         const cache = renderHelper.renderCache;
@@ -52,7 +52,7 @@ export class DkrLevelSegment {
                             drawCall.addTriangleBatch(this.triangleBatches[i]);
                             drawCall.build();
                             this.transTexDrawCalls.push(drawCall);
-                            if(CURRENT_LEVEL_ID === 10 && textureIndex === 317) {
+                            if (level.id === 10 && textureIndex === 317) {
                                 // Hack to properly scroll the waterfalls in Crescent Island
                                 level.addDrawCallScrollerForCrescentIsland(drawCall, i);
                             }
@@ -103,7 +103,7 @@ export class DkrLevelSegment {
             this.transTexDrawCalls[i].destroy(device);
         }
     }
-    
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const params = {
             modelMatrices: [IDENTITY_MATRIX],

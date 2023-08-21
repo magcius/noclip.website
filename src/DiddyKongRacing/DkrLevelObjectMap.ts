@@ -8,7 +8,6 @@ import { DataManager } from "./DataManager.js";
 import { DkrControlGlobals } from "./DkrControlGlobals.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { DkrObject, MODEL_TYPE_3D_MODEL } from "./DkrObject.js";
-import { DkrObjectCache } from "./DkrObjectCache.js";
 import { DkrSprites } from "./DkrSprites.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
 
@@ -18,8 +17,7 @@ export class DkrLevelObjectMap {
     private instances: any = {};
     private instanceKeys: Array<any>;
 
-    constructor(objectMap: ArrayBufferSlice, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, 
-        objectCache: DkrObjectCache, textureCache: DkrTextureCache, sprites: DkrSprites, objectsLoadedCallback: Function) {
+    constructor(objectMap: ArrayBufferSlice, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache, sprites: DkrSprites) {
         let objectIds = new Set<number>(); // Set ensures each item is unqiue
         let objectEntries: Array<any> = [];
 
@@ -46,57 +44,54 @@ export class DkrLevelObjectMap {
             currentOffset += length;
         }
 
-        objectCache.preloadObjects(Array.from(objectIds)).then(() => {
-            for(let i = 0; i < objectEntries.length; i++) {
-                const objId = objectEntries[i].objectId;
-                this.objects[i] = new DkrObject(
-                    objId, 
-                    device, 
-                    level,
-                    renderHelper, 
-                    dataManager, 
-                    objectCache, 
-                    textureCache
-                );
-                this.objects[i].parseObjectProperties(objectEntries[i].data);
-                if(this.objects[i].canBeInstanced()) {
-                    if(!this.instances[objId]) {
-                        this.instances[objId] = new Array<any>();
+        for(let i = 0; i < objectEntries.length; i++) {
+            const objId = objectEntries[i].objectId;
+            this.objects[i] = new DkrObject(
+                objId, 
+                device, 
+                level,
+                renderHelper, 
+                dataManager, 
+                textureCache
+            );
+            this.objects[i].parseObjectProperties(objectEntries[i].data);
+            if (this.objects[i].canBeInstanced()) {
+                if(!this.instances[objId]) {
+                    this.instances[objId] = new Array<any>();
+                }
+                let foundIndex = -1;
+                let thisModelIndex = this.objects[i].getModelIndex();
+                for(let i = 0; i < this.instances[objId].length; i++) {
+                    if(thisModelIndex === this.instances[objId][i].modelIndex){
+                        foundIndex = i;
+                        break;
                     }
-                    let foundIndex = -1;
-                    let thisModelIndex = this.objects[i].getModelIndex();
-                    for(let i = 0; i < this.instances[objId].length; i++) {
-                        if(thisModelIndex === this.instances[objId][i].modelIndex){
-                            foundIndex = i;
-                            break;
-                        }
-                    }
-                    if(foundIndex === -1) {
-                        this.instances[objId].push({
-                            object: this.objects[i],
-                            modelIndex: this.objects[i].getModelIndex(),
-                            modelMatrices: [ this.objects[i].getModelMatrix() ],
-                            overrideAlpha: this.objects[i].getOverrideAlpha(),
-                        });
-                    } else {
-                        this.instances[objId][foundIndex].modelMatrices.push(this.objects[i].getModelMatrix());
-                    }
-                } else {
-                    if(!this.instances[objId]) {
-                        this.instances[objId] = new Array<any>();
-                    }
+                }
+                if(foundIndex === -1) {
                     this.instances[objId].push({
                         object: this.objects[i],
                         modelIndex: this.objects[i].getModelIndex(),
                         modelMatrices: [ this.objects[i].getModelMatrix() ],
                         overrideAlpha: this.objects[i].getOverrideAlpha(),
                     });
+                } else {
+                    this.instances[objId][foundIndex].modelMatrices.push(this.objects[i].getModelMatrix());
                 }
+            } else {
+                if(!this.instances[objId]) {
+                    this.instances[objId] = new Array<any>();
+                }
+                this.instances[objId].push({
+                    object: this.objects[i],
+                    modelIndex: this.objects[i].getModelIndex(),
+                    modelMatrices: [ this.objects[i].getModelMatrix() ],
+                    overrideAlpha: this.objects[i].getOverrideAlpha(),
+                });
             }
-            sprites.addInstances(this.objects);
-            this.instanceKeys = Object.keys(this.instances);
-            objectsLoadedCallback();
-        });
+        }
+
+        sprites.addInstances(this.objects);
+        this.instanceKeys = Object.keys(this.instances);
     }
 
     public destroy(device: GfxDevice): void {

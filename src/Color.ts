@@ -187,6 +187,6 @@ export const Magenta          = colorNewFromRGBA(1, 0, 1, 1);
 export const Yellow           = colorNewFromRGBA(1, 1, 0, 1);
 export const Cyan             = colorNewFromRGBA(0, 1, 1, 1);
 
-export function objIsColor(v: any): boolean {
+export function objIsColor(v: unknown): v is Color {
     return typeof v === 'object' && v !== null && 'r' in v && 'g' in v && 'b' in v && 'a' in v;
 }

@@ -477,7 +477,7 @@ function isPoint(data: RailData): data is vec3 {
     return !("kind" in data);
 }
 
-export function buildRails(nodes: Array<RailNode | undefined>): Rail[] {
+export function buildRails(nodes: (RailNode | undefined)[]): Rail[] {
     const allRails: Rail[] = [];
     const childNodes = new Set<number>();
     const usedNodes = new Set<number>();

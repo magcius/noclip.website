@@ -1,12 +1,11 @@
 import { mat4, vec3, quat, vec4, ReadonlyVec3 } from 'gl-matrix';
 import { DkrObjectModel } from './DkrObjectModel.js';
-import { DkrObjectCache } from './DkrObjectCache.js';
 import { DataManager } from './DataManager.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { ViewerRenderInput } from '../viewer.js';
 import { DkrTextureCache } from './DkrTextureCache.js';
 import { DkrLevel } from './DkrLevel.js';
-import { assert } from '../util.js';
+import { assert, decodeString } from '../util.js';
 import { SPRITE_LAYER_SOLID, SPRITE_LAYER_TRANSPARENT } from './DkrSprites.js';
 import { DkrControlGlobals } from './DkrControlGlobals.js';
 import { DkrParticle } from './DkrParticle.js';
@@ -18,8 +17,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 export const MODEL_TYPE_3D_MODEL = 0;
 export const MODEL_TYPE_2D_BILLBOARD = 1;
 export const MODEL_TYPE_VEHICLE_PART = 2;
-
-const textDecoder = new TextDecoder();
 
 const vec4DontShowObject = vec4.fromValues(0.0, 0.0, 0.0, 0.0);
 const objectsWithNormals = ['Rarelogo'];
@@ -42,7 +39,7 @@ export class DkrObject {
     private manualScale: number = 1;
     private modelScale: number = 1;
     private modelType: number;
-    private headerData: Uint8Array;
+    private headerData: ArrayBufferSlice;
     private headerDataView: DataView;
     private name: string;
     private propertiesIndex: number;
@@ -57,44 +54,38 @@ export class DkrObject {
     // Most objects can be instanced, but some like doors/world gates can't because of textures.
     private allowInstances = true;
 
-    constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, objectCache: DkrObjectCache, private textureCache: DkrTextureCache, objectLoadedCallback: Function | null = null) {
-        objectCache.getObjectHeader(objectId, (outHeaderData: Uint8Array) => {
-            mat4.identity(this.modelMatrix);
-            this.headerData = outHeaderData;
-            this.headerDataView = new DataView(this.headerData.buffer);
+    constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, private textureCache: DkrTextureCache) {
+        this.headerData = dataManager.getObjectHeader(objectId);
+        mat4.identity(this.modelMatrix);
+        this.headerDataView = this.headerData.createDataView();
 
-            this.modelScale = this.headerDataView.getFloat32(0x0C);
+        this.modelScale = this.headerDataView.getFloat32(0x0C);
 
-            this.name = textDecoder.decode(this.headerData.slice(0x60, 0x70));
-            this.name = this.name.substring(0, this.name.indexOf('\0'));
+        this.name = decodeString(this.headerData, 0x60, 0x10);
+        this.name = this.name.substring(0, this.name.indexOf('\0'));
 
-            // This is a hack. Not sure how the game determines if normals are used yet.
-            if (objectsWithNormals.includes(this.name)) {
-                this.usesNormals = true;
+        // This is a hack. Not sure how the game determines if normals are used yet.
+        if (objectsWithNormals.includes(this.name)) {
+            this.usesNormals = true;
+        }
+
+        this.modelType = this.headerDataView.getUint8(0x53);
+        this.propertiesIndex = this.headerDataView.getUint8(0x54);
+
+        let numberOfModels = this.headerDataView.getUint8(0x55);
+        let modelIdsOffset = this.headerDataView.getInt32(0x10);
+
+        for(let i = 0; i < numberOfModels; i++) {
+            let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
+            if (this.modelType == MODEL_TYPE_3D_MODEL) {
+                this.modelIds[i] = modelId;
+                const modelData = dataManager.getObjectModel(modelId);
+                this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
+            } else {
+                this.spriteIds[i] = modelId;
             }
-
-            this.modelType = this.headerData[0x53];
-            this.propertiesIndex = this.headerData[0x54];
-
-            let numberOfModels = this.headerData[0x55];
-            let modelIdsOffset = this.headerDataView.getInt32(0x10);
-
-            for(let i = 0; i < numberOfModels; i++) {
-                let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
-                if (this.modelType == MODEL_TYPE_3D_MODEL) {
-                    this.modelIds[i] = modelId;
-                    objectCache.getObjectModel(modelId, (modelData: ArrayBufferSlice) => {
-                        this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
-                    });
-                } else {
-                    this.spriteIds[i] = modelId;
-                }
-            }
-            this.updateModelMatrix();
-            if(objectLoadedCallback !== null) {
-                objectLoadedCallback(this);
-            }
-        });
+        }
+        this.updateModelMatrix();
     }
 
     public getTexFrameOverride(): any | null {

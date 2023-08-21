@@ -8,7 +8,6 @@ import { ViewerRenderInput } from "../viewer.js";
 import { DataManager } from "./DataManager.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
 import { DkrObject } from "./DkrObject.js";
-import { DkrObjectCache } from "./DkrObjectCache.js";
 import { DkrLevelObjectMap } from "./DkrLevelObjectMap.js";
 import { DkrSprites, SPRITE_LAYER_SOLID, SPRITE_LAYER_TRANSPARENT } from "./DkrSprites.js";
 import { DkrControlGlobals } from "./DkrControlGlobals.js";
@@ -19,8 +18,6 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { Panel, Slider } from "../ui.js";
 import { F3DDKR_Program } from "./F3DDKR_Program.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
-
-export let CURRENT_LEVEL_ID = -1;
 
 export class DkrLevel {
     private headerData: Uint8Array;
@@ -36,69 +33,51 @@ export class DkrLevel {
     private cameraInMirrorMode = false;
 
     // Remove when the Animator object is properly implemented.
+    public id: number = -1;
     private hackCresIslandTexScrollers = new Array<any>();
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, objectCache: DkrObjectCache, id: string, private dataManager: DataManager, private sprites: DkrSprites, callback: Function) {
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, id: string, private dataManager: DataManager, private sprites: DkrSprites) {
         if (id.startsWith('model:')) {
-            CURRENT_LEVEL_ID = -1;
             // Level model data only.
-            dataManager.getLevelModel(parseInt(id.substr(6))).then((modelDataBuffer) => {
-                this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
-                dataManager.signalDoneFlag();
-                callback(this);
-            })
+            const modelId = parseInt(id.slice(6));
+            const modelDataBuffer = dataManager.getLevelModel(modelId);
+
+            this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
         } else {
-            CURRENT_LEVEL_ID = parseInt(id);
-            dataManager.getLevelHeader(CURRENT_LEVEL_ID).then((headerDataBuffer) => {
-                this.headerData = headerDataBuffer.createTypedArray(Uint8Array);
+            this.id = parseInt(id);
+            const headerDataBuffer = dataManager.getLevelHeader(this.id);
+            this.headerData = headerDataBuffer.createTypedArray(Uint8Array);
 
-                const dataView = new DataView(this.headerData.buffer);
+            const dataView = new DataView(this.headerData.buffer);
 
-                let modelId = dataView.getUint16(0x34);
-                let objectMap1Id = dataView.getUint16(0x36);
-                let objectMap2Id = dataView.getUint16(0xBA);
-                let skydomeId = dataView.getUint16(0x38);
+            let modelId = dataView.getUint16(0x34);
+            let objectMap1Id = dataView.getUint16(0x36);
+            let objectMap2Id = dataView.getUint16(0xBA);
+            let skydomeId = dataView.getUint16(0x38);
 
-                this.clearColor = colorNewFromRGBA(
-                    this.headerData[0x9D] / 255,
-                    this.headerData[0x9E] / 255,
-                    this.headerData[0x9F] / 255
-                );
+            this.clearColor = colorNewFromRGBA(
+                this.headerData[0x9D] / 255,
+                this.headerData[0x9E] / 255,
+                this.headerData[0x9F] / 255
+            );
 
-                let promises = [
-                    dataManager.getLevelModel(modelId),
-                    dataManager.getLevelObjectMap(objectMap1Id),
-                    dataManager.getLevelObjectMap(objectMap2Id)
-                ];
+            const modelDataBuffer = dataManager.getLevelModel(modelId);
+            const objectMap1Buffer = dataManager.getLevelObjectMap(objectMap1Id);
+            const objectMap2Buffer = dataManager.getLevelObjectMap(objectMap2Id);
 
-                Promise.all(promises).then((out) => {
-                    const modelDataBuffer = out[0];
-                    const objectMap1Buffer = out[1];
-                    const objectMap2Buffer = out[2];
-                    if(skydomeId !== 0xFFFF) {
-                        this.skydome = new DkrObject(skydomeId, device, this, renderHelper, dataManager, objectCache, textureCache);
-                        this.skydome.setManualScale(100.0); 
-                        // ^ This is a hack that seems to work okay. I'm not sure how the skydomes are scaled/drawn yet.
-                    }
-                    this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
+            if (skydomeId !== 0xFFFF) {
+                this.skydome = new DkrObject(skydomeId, device, this, renderHelper, dataManager, textureCache);
+                this.skydome.setManualScale(100.0); 
+                // ^ This is a hack that seems to work okay. I'm not sure how the skydomes are scaled/drawn yet.
+            }
+            this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
 
-                    const animNodesCallback = () => { this.animationNodesReady(); }
-
-                    this.objectMap1 = new DkrLevelObjectMap(objectMap1Buffer, this, 
-                    device, renderHelper, dataManager, objectCache, textureCache, sprites, () => {
-                        this.animationTracks.addAnimationNodes(this.objectMap1.getObjects(), device, this, renderHelper, 
-                            dataManager, objectCache, textureCache, animNodesCallback);
-                    });
-                    this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, 
-                    device, renderHelper, dataManager, objectCache, textureCache, sprites, () => {
-                        this.animationTracks.addAnimationNodes(this.objectMap2.getObjects(), device, this, renderHelper, 
-                            dataManager, objectCache, textureCache, animNodesCallback);
-                    });
-
-                    dataManager.signalDoneFlag();
-                    callback(this);
-                })
-            });
+            this.objectMap1 = new DkrLevelObjectMap(objectMap1Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
+            this.animationTracks.addAnimationNodes(this.objectMap1.getObjects(), device, this, renderHelper, dataManager, textureCache);
+            this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
+            this.animationTracks.addAnimationNodes(this.objectMap2.getObjects(), device, this, renderHelper, dataManager, textureCache);
+            this.animationTracks.compile(device, this, renderHelper, dataManager, textureCache);
+            this.animationNodesReady();
         }
     }
 
@@ -203,14 +182,13 @@ export class DkrLevel {
             this.skydome!.prepareToRender(device, renderInstManager, viewerInput);
         }
         if(DkrControlGlobals.SHOW_ALL_OBJECTS.on) {
-            
             if(!!this.objectMap1) {
                 this.objectMap1.prepareToRender(device, renderInstManager, viewerInput, 0, true);
             }
             if(!!this.objectMap2) {
                 this.objectMap2.prepareToRender(device, renderInstManager, viewerInput, 1, true);
             }
-            
+
             // NOTE: This is a workaround! For some reason, the solid sprites flicker when assets are loading.
             if(!this.dataManager.isLoading()) {
                 this.sprites.prepareToRender(device, renderInstManager, viewerInput, SPRITE_LAYER_SOLID);

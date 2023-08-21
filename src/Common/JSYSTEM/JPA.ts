@@ -1348,7 +1348,7 @@ export class JPABaseEmitter {
     public colorPrm: Color = colorNewCopy(White);
     @dfShow()
     public colorEnv: Color = colorNewCopy(White);
-    public userData: any = null;
+    public userData: unknown = null;
 
     // Internal state.
     private emitCount: number;

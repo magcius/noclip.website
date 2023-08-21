@@ -18,7 +18,7 @@ interface TransTexDrawCall { drawCall: DkrDrawCall, textureIndex: number };
 
 export class DkrObjectModel {
     private triangleBatches: DkrTriangleBatch[];
-    private textureIndices = new Array<number>();
+    private textureIndices: number[] = [];
 
     private opaqueTextureDrawCalls: any = {};
     private opaqueTextureDrawCallsKeys: any[];
@@ -32,8 +32,8 @@ export class DkrObjectModel {
     // Used for object animations.
     private numberOfAnimatedVertices = 0;
     private animatedVerticesOffset = 0;
-    private animatedVerticesIndices = Array<number>();
-    private objectAnimations: DkrObjectAnimation[] | null = null;
+    private animatedVerticesIndices: number[] = [];
+    private objectAnimations: DkrObjectAnimation[] = [];
     private currObjAnimIndex = 0;
 
     private modelDataView: DataView;
@@ -60,29 +60,19 @@ export class DkrObjectModel {
         let animationIds = dataManager.objectAnimationIds[modelId];
 
         if(!!animationIds) {
-            let promises = [];
-            for(let i = 0; i < animationIds.length; i++) {
-                promises.push(dataManager.getObjectAnimation(animationIds[i]));
+            for(let i = 0; i < animationIds!.length; i++) {
+                const animationDataBinary = dataManager.getObjectAnimation(animationIds[i]).createTypedArray(Uint8Array);
+                this.objectAnimations.push(new DkrObjectAnimation(
+                    animationIds![i],
+                    animationDataBinary,
+                    this.getVertices(), 
+                    this.animatedVerticesIndices, 
+                    this.numberOfAnimatedVertices
+                ));
             }
-            Promise.all(promises).then((out) => {
-                this.objectAnimations = new Array<DkrObjectAnimation>();
-                const vertices = this.getVertices();
-                for(let i = 0; i < animationIds!.length; i++) {
-                    this.objectAnimations.push(new DkrObjectAnimation(
-                        animationIds![i],
-                        out[i].createTypedArray(Uint8Array),
-                        vertices, 
-                        this.animatedVerticesIndices, 
-                        this.numberOfAnimatedVertices
-                    ));
-                }
-                this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, 
-                texturesOffset, triangleBatchInfoOffset, trianglesOffset);
-            });
-        } else {
-            this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, 
-            texturesOffset, triangleBatchInfoOffset, trianglesOffset);
         }
+
+        this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, texturesOffset, triangleBatchInfoOffset, trianglesOffset);
     }
 
     public destroy(device: GfxDevice): void { 
@@ -179,10 +169,9 @@ export class DkrObjectModel {
     }
 
     // Currently only used as a reference for Object Animations.
-    private getVertices(): Array<DkrVertex> {
-        let vertices = new Array<DkrVertex>();
-
-        for(let i = 0; i < this.numberOfVertices; i++) {
+    private getVertices(): DkrVertex[] {
+        const vertices: DkrVertex[] = [];
+        for (let i = 0; i < this.numberOfVertices; i++) {
             const voff = this.verticesOffset + (i * SIZE_OF_VERTEX);
             vertices.push({
                 x: this.modelDataView.getInt16(voff + 0),
@@ -194,7 +183,6 @@ export class DkrObjectModel {
                 a: this.modelDataView.getUint8(voff + 9),
             });
         }
-
         return vertices;
     }
 

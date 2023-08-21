@@ -155,11 +155,11 @@ export class DkrSprites {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
     }
 
-    public addInstances(instances: Array<DkrObject>): void {
+    public addInstances(instances: DkrObject[]): void {
         for(let i = 0; i < instances.length; i++) {
-            if(instances[i].getModelType() != MODEL_TYPE_2D_BILLBOARD) {
+            if (instances[i].getModelType() !== MODEL_TYPE_2D_BILLBOARD)
                 continue;
-            }
+
             const layer = instances[i].getSpriteLayer();
             this.spriteInstances[layer].push(instances[i]);
         }

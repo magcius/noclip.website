@@ -3,34 +3,29 @@ import { DkrTexture } from './DkrTexture.js';
 import { DataManager } from "./DataManager.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 export class DkrTextureCache {
     private textures3d: { [k: string]: DkrTexture } = {};
     private textures2d: { [k: string]: DkrTexture } = {};
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private dataManager: DataManager) {
-
     }
 
     // Speed up level loading by preloading all the level textures in advance.
-    public preload3dTextures(indices: Array<number>, callback: Function): void {
-        //console.log(indices);
-        let promises = new Array<Promise<any>>(indices.length*2);
-        for(let i = 0; i < indices.length; i++) {
-            //console.log(indices[i]);
-            promises[i*2+0] = this.dataManager.get3dTextureHeader(indices[i]);
-            promises[i*2+1] = this.dataManager.get3dTexture(indices[i]);
+    public async preload3dTextures(indices: Array<number>, callback: Function) {
+        const imageDatas = await Promise.all(indices.map((index) => {
+            return this.dataManager.get3dTexture(index);
+        }));
+
+        for (let i = 0; i < indices.length; i++) {
+            const index = indices[i];
+            const header = this.dataManager.get3dTextureHeader(index).createTypedArray(Uint8Array);
+            const imageData = imageDatas[i];
+            this.textures3d[index] = new DkrTexture(this.device, this.cache, imageData.data, header);
         }
-        Promise.all(promises).then((out) => {
-            for (let index = 0; index < out.length/2; index++) {
-                if(!this.textures3d[indices[index]]) {
-                    let headerData = out[index*2+0].createTypedArray(Uint8Array);;
-                    let tex = out[index*2+1];
-                    this.textures3d[indices[index]] = new DkrTexture(this.device, this.cache, tex.data, headerData);
-                }
-            }
-            callback();
-        });
+
+        callback();
     }
 
     // 3D texture = texture used mainly in 3d geometry.
@@ -40,15 +35,12 @@ export class DkrTextureCache {
             callback(this.textures3d[index]);
         } else {
             // Texture was not found, so it needs to be loaded.
-            let headerPromise = this.dataManager.get3dTextureHeader(index);
-            let texPromise = this.dataManager.get3dTexture(index);
-            Promise.all([headerPromise, texPromise]).then((values) => {
-                if(!!this.textures3d[index]) {
+            this.dataManager.get3dTexture(index).then((tex) => {
+                if (!!this.textures3d[index]) {
                     // Texture has already been loaded, so just return it.
                     callback(this.textures3d[index]);
                 } else {
-                    let headerData = values[0].createTypedArray(Uint8Array);;
-                    let tex = values[1];
+                    const headerData = this.dataManager.get3dTextureHeader(index).createTypedArray(Uint8Array);
                     this.textures3d[index] = new DkrTexture(this.device, this.cache, tex.data, headerData);
                     callback(this.textures3d[index]);
                 }
@@ -56,7 +48,6 @@ export class DkrTextureCache {
         }
     }
 
-    
     // 2D texture = texture used mainly in sprites & particles.
     public get2dTexture(index: number, callback: Function): void {
         if(!!this.textures2d[index]) {
@@ -64,15 +55,12 @@ export class DkrTextureCache {
             callback(this.textures2d[index]);
         } else {
             // Texture was not found, so it needs to be loaded.
-            let headerPromise = this.dataManager.get2dTextureHeader(index);
-            let texPromise = this.dataManager.get2dTexture(index);
-            Promise.all([headerPromise, texPromise]).then((values) => {
-                if(!!this.textures2d[index]) {
+            this.dataManager.get2dTexture(index).then((tex) => {
+                if (!!this.textures2d[index]) {
                     // Texture has already been loaded, so just return it.
                     callback(this.textures2d[index]);
                 } else {
-                    let headerData = values[0].createTypedArray(Uint8Array);;
-                    let tex = values[1];
+                    const headerData = this.dataManager.get2dTextureHeader(index).createTypedArray(Uint8Array);
                     this.textures2d[index] = new DkrTexture(this.device, this.cache, tex.data, headerData);
                     callback(this.textures2d[index]);
                 }

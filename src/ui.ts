@@ -925,11 +925,11 @@ class SceneSelect extends Panel {
     private selectedSceneGroup: SceneGroup;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
-    private loadProgress: number;
     private forceVisible: boolean = IS_DEVELOPMENT;
 
     private currentSearchTokens: RegExp[] = [];
 
+    public loadProgress: number;
     public onscenedescselected: (sceneGroup: SceneGroup, sceneDesc: SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
