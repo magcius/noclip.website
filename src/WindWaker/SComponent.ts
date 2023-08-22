@@ -59,6 +59,38 @@ export function cLib_addCalcAngleS(src: number, target: number, speed: number, m
         return src + vel;
 }
 
+export function cLib_addCalcAngleS_(src: number, target: number, scale: number, maxVel: number, minVel: number): number {
+    let diff = (target - src) % 0xFFFF;
+    if (src !== target) {
+        let step = (diff / scale) % 0xFFFF;
+        if (step > minVel || step < -minVel) {
+            if (step > maxVel)
+                step = maxVel;
+
+            if (step < -maxVel)
+                step = -maxVel;
+
+            src += step;
+        }
+    } else {
+        if (0 <= diff) {
+            src += minVel;
+            diff = target - src;
+
+            if (0 >= diff)
+                src = target;
+        } else {
+            src -= minVel;
+            diff = target - src;
+
+            if (0 <= diff)
+                src = target;
+        }
+    }
+
+    return src;
+}
+
 export function cLib_addCalcAngleS2(src: number, target: number, speedRatio: number, maxVel: number): number {
     if (speedRatio === 0.0)
         return src;
@@ -91,6 +123,10 @@ export function cM__Short2Rad(v: number): number {
 
 export function cM__Rad2Short(v: number): number {
     return v * (0x8000 / Math.PI);
+}
+
+export function cM__Deg2Short(v: number): number {
+    return v * 182.04445;
 }
 
 export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
@@ -142,13 +178,12 @@ export function cLib_chaseF(dst: number, target: number, step: number): number {
 
         if (step * (dst - target) >= 0) {
             dst = target;
-            return 1;
         }
     } else if (dst === target) {
-        return 1;
+        return dst;
     }
 
-    return 0;
+    return dst;
 }
 
 export function cLib_distanceSqXZ(p0: ReadonlyVec3, p1: ReadonlyVec3): number {

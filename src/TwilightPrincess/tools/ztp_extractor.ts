@@ -335,6 +335,7 @@ function extractProfiles(binaries: Binary[]) {
         let pcName = view.getUint16(0x08);
         if (pcNameOverride !== -1) {
             pcName = pcNameOverride;
+            view.setUint16(0x08, pcNameOverride);
         }
 
         datas[pcName] = data;
