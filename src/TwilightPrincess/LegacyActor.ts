@@ -22,8 +22,8 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { cBgS_GndChk } from '../WindWaker/d_bg.js';
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
-import { mDoExt_setupStageTexture, mDoExt_setIndirectTex } from './m_do_ext.js'
-import { calc_mtx, MtxTrans, kUshortTo2PI, mDoMtx_ZXYrotM, mDoMtx_YrotM, scratchMat4a } from '../WindWaker/m_do_mtx.js';
+import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../WindWaker/m_do_mtx.js';
+import { cM__Short2Rad } from '../WindWaker/SComponent.js';
 
 const scratchVec3a = vec3.create();
 
@@ -913,7 +913,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         } else if (type >= 2) {
             const child = buildChildModel(rarc, `bmdr/rd_bow.bmd`);
             child.setParentJoint(m, `yubiL`);
-            mat4.rotateX(child.modelMatrix, child.modelMatrix, 0x4000 * kUshortTo2PI);
+            mat4.rotateX(child.modelMatrix, child.modelMatrix, cM__Short2Rad(0x4000));
         }
 
         m.bindANK1(parseBCK(rarc, `bck/rd_wait01.bck`));

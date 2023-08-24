@@ -6,9 +6,9 @@ import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
+import { MathConstants, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM__Deg2Short, cM_atan2s } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -28,6 +28,7 @@ import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoE
 import { dGlobals } from "./ztp_scenes.js";
 import { ItemNo } from "./d_item_data.js";
 
+const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
@@ -1059,6 +1060,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorK = (l_colorKR[this.type] << 24) | (l_colorKG[this.type] << 16) | (l_colorKB[this.type] << 8) | 0xFF;
 
         const color_k = colorNewFromRGBA8(l_colorK);
+        this.model.materialInstances[0].setColorOverride(ColorKind.K1, color_k);
 
         const l_colorCR = [0x96, 0xFF, 0xFF, 0x00];
         const l_colorCG = [0x96, 0x64, 0xFF, 0x96];
@@ -1066,10 +1068,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorC = (l_colorCR[this.type] << 24) | (l_colorCG[this.type] << 16) | (l_colorCB[this.type] << 8) | 0xFF;
 
         const color_c = colorNewFromRGBA8(l_colorC);
-
-        const m0 = this.model.modelMaterialData.materialData![0].material;
-        colorCopy(m0.colorConstants[1], color_k);
-        colorCopy(m0.colorRegisters[1], color_c);
+        this.model.materialInstances[0].setColorOverride(ColorKind.C1, color_c);
 
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
     }
@@ -2588,13 +2587,6 @@ class d_a_obj_carry extends fopAc_ac_c {
         this.model.setBaseScale(this.scale);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
-        const envLight = globals.g_env_light;
-
-        this.setBaseMtx();
-    }
-
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         settingTevStruct(globals, LightType.UNK_8, this.pos, this.tevStr);
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
@@ -2627,7 +2619,7 @@ class d_a_obj_firewood2 extends fopAc_ac_c {
             unk_6fa = 0;
 
         if (unk_6fa === 0) {
-            if ((this.parameters & 0xFF) === 0xFF) {
+            if ((this.parameters & 0xFF) !== 0xFF) {
                 this.active = true;
                 this.setLight(globals.g_env_light);
             }
@@ -2794,8 +2786,8 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
     private brk: mDoExt_brkAnm | null = null;
     private btk: mDoExt_btkAnm | null = null
     private type: number;
-    private unk_62c: number;
-    private unk_630: number;
+    private scaleX: number;
+    private scaleZ: number;
     private rotTarget: number = -0x8000;
     private shakeRot = vec3.create();
     private movePos = vec3.create();
@@ -2859,17 +2851,17 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
             this.rot[1] += -0x8000;
 
         if (prm2 === 0 || prm2 === 0xFF)
-            this.unk_62c = 1.0;
+            this.scaleX = 1.0;
         else
-            this.unk_62c = prm2 * 0.5;
+            this.scaleX = prm2 * 0.5;
 
         const prm3 = (this.parameters >> 0x10) & 0xFF;
         if (prm3 === 0 || prm3 === 0xFF)
-            this.unk_630 = 1.0;
+            this.scaleZ = 1.0;
         else if (prm2 === 0 || prm2 === 0xFF)
-            this.unk_630 = 1.0;
+            this.scaleZ = 1.0;
         else
-            this.unk_630 = prm3 * 0.5;
+            this.scaleZ = prm3 * 0.5;
 
         this.setBaseMtx();
 
@@ -2908,9 +2900,9 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
     }
 
     private setBaseMtx(): void {
-        this.scale[0] = this.unk_62c;
+        this.scale[0] = this.scaleX;
         this.scale[1] = 1.0;
-        this.scale[2] = this.unk_630;
+        this.scale[2] = this.scaleZ;
 
         MtxTrans(this.pos, false);
         mDoMtx_ZXYrotM(calc_mtx, this.rot);
@@ -2959,11 +2951,11 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
             break;
         }
 
-        this.shakeRot[2] = this.shakeStrength * Math.cos(this.counter * cM__Deg2Short(this.shakeAmpY) * kUshortTo2PI);
+        this.shakeRot[2] = this.shakeStrength * Math.cos(this.counter * MathConstants.DEG_TO_RAD * this.shakeAmpY);
         this.shakeStrength = cLib_addCalc(this.shakeStrength, 0.0, this.shakeDecay, this.maxShakeDecay, this.minShakeDecay);
 
-        this.movePos[0] = this.moveStrength * Math.cos(this.counter * cM__Deg2Short(this.moveAmpX) * kUshortTo2PI);
-        this.movePos[1] = this.moveStrength * Math.sin(this.counter * cM__Deg2Short(this.moveAmpZ) * kUshortTo2PI);
+        this.movePos[0] = this.moveStrength * Math.cos(this.counter * MathConstants.DEG_TO_RAD * this.moveAmpX);
+        this.movePos[1] = this.moveStrength * Math.sin(this.counter * MathConstants.DEG_TO_RAD * this.moveAmpZ);
         this.moveStrength = cLib_addCalc(this.moveStrength, 0.0, this.moveDecay, this.maxMoveDecay, this.minMoveDecay);
 
         this.counter += 1.0;
