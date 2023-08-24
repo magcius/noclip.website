@@ -1,14 +1,14 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { OpaqueBlack, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
+import { MathConstants, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM__Deg2Short, cM_atan2s } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { LIGHT_INFLUENCE, LightType, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
+import { LIGHT_INFLUENCE, LightType, dKy_plight_set, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
@@ -28,6 +28,7 @@ import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoE
 import { dGlobals } from "./ztp_scenes.js";
 import { ItemNo } from "./d_item_data.js";
 
+const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
@@ -990,6 +991,8 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
     private model: J3DModelInstance;
     private brk = new mDoExt_brkAnm();
     private btk = new mDoExt_btkAnm();
+    private emitter1: JPABaseEmitter | null = null;
+    private emitter2: JPABaseEmitter | null = null;
     private type: number;
 
     public override subload(globals: dGlobals): cPhs__Status {
@@ -1035,8 +1038,8 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const colorEnv0 = colorNewFromRGBA8(l_colorEnv[0]);
         const colorEnv1 = colorNewFromRGBA8(l_colorEnv[1]);
 
-        globals.particleCtrl.set(globals, 0, 0x874F, this.pos, null, null, 0.5, null, -1, colorPrm, colorEnv0);
-        globals.particleCtrl.set(globals, 0, 0x8750, this.pos, null, null, 0.5, null, -1, colorPrm, colorEnv1);
+        this.emitter1 = globals.particleCtrl.set(globals, 0, 0x874F, this.pos, null, null, 0.2, null, -1, colorPrm, colorEnv0);
+        this.emitter2 = globals.particleCtrl.set(globals, 0, 0x8750, this.pos, null, null, 0.2, null, -1, colorPrm, colorEnv1);
 
         MtxTrans(this.pos, false);
         mat4.copy(this.model.modelMatrix, calc_mtx);
@@ -1057,7 +1060,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorK = (l_colorKR[this.type] << 24) | (l_colorKG[this.type] << 16) | (l_colorKB[this.type] << 8) | 0xFF;
 
         const color_k = colorNewFromRGBA8(l_colorK);
-        this.model.materialInstances[0].setColorOverride(ColorKind.AMB1, color_k);
+        this.model.materialInstances[0].setColorOverride(ColorKind.K1, color_k);
 
         const l_colorCR = [0x96, 0xFF, 0xFF, 0x00];
         const l_colorCG = [0x96, 0x64, 0xFF, 0x96];
@@ -1065,7 +1068,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const l_colorC = (l_colorCR[this.type] << 24) | (l_colorCG[this.type] << 16) | (l_colorCB[this.type] << 8) | 0xFF;
 
         const color_c = colorNewFromRGBA8(l_colorC);
-        this.model.materialInstances[0].setColorOverride(ColorKind.C0, color_c);
+        this.model.materialInstances[0].setColorOverride(ColorKind.C1, color_c);
 
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
     }
@@ -2513,6 +2516,481 @@ class d_a_obj_life extends daItemBase {
     }
 }
 
+class d_a_obj_carry extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_carry;
+    private type: number;
+    private model: J3DModelInstance;
+
+    private initialized: boolean = false;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        if (!this.initialized) {
+            this.type = (this.rot[2] >> 1) & 0x1F;
+    
+            this.rot[0] = 0;
+            this.rot[2] = 0;
+            this.initialized = true;
+        }
+
+        const arcNames = ['J_tubo_00', 'J_tubo_01', 'Kkiba_00', 'Y_ironbal', 'J_taru00', 'J_doku00', 'Obj_bkl',
+                          'K_tubo02', 'Obj_ballS', 'Obj_ballS', 'D_aotubo0', 'Obj_tama', 'O_tuboS', 'O_tuboB'];
+
+        const bmdIDs = [3, 3, 4, 3, 3, 3, 8,
+                        3, 3, 3, 3, 3, 3, 3];
+        
+        const arcName = arcNames[this.type];
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        const mdl_data = resCtrl.getObjectRes(ResType.Model, arcName, bmdIDs[this.type]);
+        this.model = new J3DModelInstance(mdl_data);
+
+        this.Create(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    private Create(globals: dGlobals): void {
+        switch (this.type) {
+        case 2:
+            vec3.set(this.scale, 0.5, 0.5, 0.5);
+            break;
+        case 6:
+            vec3.set(this.scale, 0.6, 0.6, 0.6);
+            break;
+        default:
+            vec3.set(this.scale, 1, 1, 1);
+            break;
+        }
+
+        this.cullMtx = this.model.modelMatrix;
+
+        const cull_y = [28, 48, 28, 0, 48, 28, 48, 28, 0, 0, 48, 0, 28, 48];
+        const radius = this.model.modelData.bbox.boundingSphereRadius();
+
+        this.cullSizeSphere = vec4.create();
+        this.setCullSizeSphere(0, cull_y[this.type], 0, radius);
+
+        this.initBaseMtx();
+    }
+
+    private initBaseMtx(): void {
+        this.setBaseMtx();
+    }
+
+    private setBaseMtx(): void {
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+        this.model.setBaseScale(this.scale);
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.UNK_8, this.pos, this.tevStr);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+class d_a_obj_firewood2 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_firewood2;
+
+    private light: LIGHT_INFLUENCE = new LIGHT_INFLUENCE();
+    private light_pos = vec3.create();
+    private active: boolean = false;
+    private emitter1: JPABaseEmitter | null = null;
+    private emitter2: JPABaseEmitter | null = null;
+    private emitter3: JPABaseEmitter | null = null;
+    private remove: boolean = false;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        vec3.set(this.light_pos, this.pos[0], this.pos[1] + 15.0, this.pos[2]);
+
+        this.setCullSizeBox(-50 * this.scale[0], 0, -50 * this.scale[0], 50 * this.scale[0], 100 * this.scale[1], 100 * this.scale[1]);
+        this.lightInit();
+
+        let unk_6fa = (this.parameters >> 8) & 0xFF;
+        if (unk_6fa === 0xFF)
+            unk_6fa = 0;
+
+        if (unk_6fa === 0) {
+            if ((this.parameters & 0xFF) !== 0xFF) {
+                this.active = true;
+                this.setLight(globals.g_env_light);
+            }
+        } else if ((this.parameters & 0xFF) === 0xFF) {
+            this.active = true;
+            this.setLight(globals.g_env_light);
+        }
+
+        return cPhs__Status.Next;
+    }
+
+    private lightInit(): void {
+        vec3.set(this.light.pos, this.light_pos[0], this.light_pos[0] + 10.0, this.light_pos[2]);
+        this.light.color = colorNewFromRGBA8(0xBC664200);
+        this.light.power = 500.0;
+        this.light.fluctuation = 1.0;
+    }
+
+    private setLight(envLight: dScnKy_env_light_c): void {
+        dKy_plight_set(envLight, this.light);
+    }
+
+    private setBaseMtx(): void {
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+        const envLight = globals.g_env_light;
+
+        const particleCtrl = globals.particleCtrl;
+
+        // custom noclip handling to enable/disable fire effect based on current time
+        if (globals.stageName === "F_SP109") {
+            if (!dKy_daynight_check(globals))
+                this.active = false;
+            else
+                this.active = true;
+        }
+
+        if (this.active && this.visible) {
+            if (this.emitter1 === null)
+                this.emitter1 = particleCtrl.set(globals, 0, 0x3AD, this.light_pos, null);
+
+            if (this.emitter2 === null)
+                this.emitter2 = particleCtrl.set(globals, 0, 0x83A6, this.light_pos, null);
+
+            if (this.emitter3 === null)
+                this.emitter3 = particleCtrl.set(globals, 0, 0x3AE, this.light_pos, null);
+        } else {
+            if (this.emitter1 !== null) {
+                this.emitter1.becomeInvalidEmitter();
+                this.emitter1 = null;
+            }
+
+            if (this.emitter2 !== null) {
+                this.emitter2.becomeInvalidEmitter();
+                this.emitter2 = null;
+            }
+
+            if (this.emitter3 !== null) {
+                this.emitter3.becomeInvalidEmitter();
+                this.emitter3 = null;
+            }
+        }
+
+        this.setBaseMtx();
+
+        if (this.remove) {
+            dKy_plight_cut(envLight, this.light);
+            this.remove = false;
+        }
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.remove = true;
+    }
+}
+
+class d_a_obj_onsen extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_onsen;
+
+    private model: J3DModelInstance;
+    private modelIndirect: J3DModelInstance;
+    private btk = new mDoExt_btkAnm();
+    private type: number;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        this.type = this.parameters & 0xFF;
+
+        const l_arc_names = ["H_Onsen", "H_KaOnsen"];
+
+        const status = dComIfG_resLoad(globals, l_arc_names[this.type]);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        const modelData = resCtrl.getObjectRes(ResType.Model, l_arc_names[this.type], 5);
+        this.model = new J3DModelInstance(modelData);
+
+        const ind_modelData = resCtrl.getObjectRes(ResType.Model, l_arc_names[this.type], 6);
+        const ind_model = new J3DModelInstance(ind_modelData);
+        mDoExt_setIndirectTex(globals, ind_model);
+        mDoExt_setupStageTexture(globals, ind_model);
+        this.modelIndirect = ind_model;
+
+        const btk_anm = resCtrl.getObjectRes(ResType.Btk, l_arc_names[this.type], 9);
+        this.btk.init(ind_modelData, btk_anm, true, LoopMode.Repeat);
+
+        this.initBaseMtx();
+        this.cullMtx = this.model.modelMatrix;
+
+        const bbox = this.model.modelData.bmd.jnt1.joints[0].bbox;
+        this.setCullSizeBox(this.scale[0] * bbox.minX, this.scale[1] * bbox.minY, this.scale[2] * bbox.minZ,
+                            this.scale[0] * bbox.maxX, this.scale[1] * bbox.maxY, this.scale[2] * bbox.maxZ);
+
+        return cPhs__Status.Next;
+    }
+
+    private initBaseMtx(): void {
+        this.model.setBaseScale(this.scale);
+        this.modelIndirect.setBaseScale(this.scale);
+        this.setBaseMtx();
+    }
+
+    private setBaseMtx(): void {
+        MtxTrans(this.pos, false);
+        mDoMtx_YrotM(calc_mtx, this.rot[1]);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+        mat4.copy(this.modelIndirect.modelMatrix, calc_mtx);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+        
+        this.btk.play(deltaTimeInFrames);
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
+        setLightTevColorType_MAJI(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
+        dKy_bg_MAxx_proc(globals, this.model);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+
+        this.btk.entry(this.modelIndirect);
+        dKy_bg_MAxx_proc(globals, this.modelIndirect);
+
+        mDoExt_modelUpdateDL(globals, this.modelIndirect, renderInstManager, viewerInput, globals.dlst.indirect);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+class d_a_obj_magLiftRot extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_magLiftRot;
+
+    private model: J3DModelInstance;
+    private brk: mDoExt_brkAnm | null = null;
+    private btk: mDoExt_btkAnm | null = null
+    private type: number;
+    private scaleX: number;
+    private scaleZ: number;
+    private rotTarget: number = -0x8000;
+    private shakeRot = vec3.create();
+    private movePos = vec3.create();
+
+    private counter: number = 0;
+    private shakeStrength: number = 0;
+    private shakeAmpY: number = 0;
+    private shakeDecay: number = 0;
+    private maxShakeDecay: number = 0;
+    private minShakeDecay: number = 0;
+    private moveStrength: number = 0;
+    private moveAmpX: number = 0;
+    private moveAmpZ: number = 0;
+    private moveDecay: number = 0;
+    private maxMoveDecay: number = 0;
+    private minMoveDecay: number = 0;
+    private speedF: number = 0;
+
+    private mode: number;
+    private timer: number = 0;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        this.type = 0;
+
+        const prm2 = (this.parameters >> 8) & 0xFF;
+        if (prm2 === 0 || prm2 === 0xFF)
+            this.type = (this.parameters >> 0x10) & 0xFF;
+
+        const l_arc_names = ["MagLiftS", "MagLiftM", "MagLiftL"];
+        const bmd_ids = [4, 4, 6];
+        const btk_ids = [-1, -1, 12];
+        const brk_ids = [-1, -1, 9];
+
+        const status = dComIfG_resLoad(globals, l_arc_names[this.type]);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        const modelData = resCtrl.getObjectRes(ResType.Model, l_arc_names[this.type], bmd_ids[this.type]);
+        this.model = new J3DModelInstance(modelData);
+
+        if (btk_ids[this.type] !== -1) {
+            const btk_anm = resCtrl.getObjectRes(ResType.Btk, l_arc_names[this.type], btk_ids[this.type]);
+            this.btk = new mDoExt_btkAnm();
+            this.btk.init(modelData, btk_anm, true, LoopMode.Repeat);
+        }
+
+        if (brk_ids[this.type] !== -1) {
+            const brk_anm = resCtrl.getObjectRes(ResType.Brk, l_arc_names[this.type], brk_ids[this.type]);
+            this.brk = new mDoExt_brkAnm();
+            this.brk.init(modelData, brk_anm, true, LoopMode.Repeat);
+        }
+
+        this.cullMtx = this.model.modelMatrix;
+
+        const bbox = this.model.modelData.bmd.jnt1.joints[0].bbox;
+        this.setCullSizeBox(this.scale[0] * bbox.minX, this.scale[1] * bbox.minY, this.scale[2] * bbox.minZ,
+                            this.scale[0] * bbox.maxX, this.scale[1] * bbox.maxY, this.scale[2] * bbox.maxZ);
+
+        if ((this.parameters & 0xFF) === 0)
+            this.rot[1] += -0x8000;
+
+        if (prm2 === 0 || prm2 === 0xFF)
+            this.scaleX = 1.0;
+        else
+            this.scaleX = prm2 * 0.5;
+
+        const prm3 = (this.parameters >> 0x10) & 0xFF;
+        if (prm3 === 0 || prm3 === 0xFF)
+            this.scaleZ = 1.0;
+        else if (prm2 === 0 || prm2 === 0xFF)
+            this.scaleZ = 1.0;
+        else
+            this.scaleZ = prm3 * 0.5;
+
+        this.setBaseMtx();
+
+        if (((this.parameters >> 0x18) & 0xFF) === 0xFF)
+            this.init_modeWait();
+        else
+            this.init_modeMoveWait();
+
+        return cPhs__Status.Next;
+    }
+
+    private init_modeMove(): void {
+        this.speedF = 0.0;
+        this.mode = 0;
+    }
+
+    private init_modeMoveWait(): void {
+        this.mode = 2;
+    }
+
+    private init_modeWait(): void {
+        this.timer = 60;
+        this.shakeStrength = 200;
+        this.shakeAmpY = 45;
+        this.shakeDecay = 0.1;
+        this.maxShakeDecay = 10;
+        this.minShakeDecay = 1.0;
+        this.moveStrength = 7.0;
+        this.moveAmpX = 60;
+        this.moveAmpZ = 30;
+        this.moveDecay = 0.3;
+        this.maxMoveDecay = 30;
+        this.minMoveDecay = 1.0;
+
+        this.mode = 1;
+    }
+
+    private setBaseMtx(): void {
+        this.scale[0] = this.scaleX;
+        this.scale[1] = 1.0;
+        this.scale[2] = this.scaleZ;
+
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mDoMtx_ZXYrotM(calc_mtx, this.shakeRot);
+        MtxTrans(this.movePos, true);
+        mat4.scale(calc_mtx, calc_mtx, this.scale);
+
+        this.model.setBaseScale(vec3.set(scratchVec3a, 1, 1, 1));
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+    }
+
+    private modeWait(deltaTimeInFrames: number): void {
+        if (this.timer <= 0)
+            this.init_modeMove();
+        else
+            this.timer -= deltaTimeInFrames;
+    }
+
+    private modeMoveWait(): void {
+        this.timer = 15;
+        this.init_modeWait();
+    }
+
+    private modeMove(deltaTimeInFrames: number): void {
+        this.speedF = cLib_chaseF(this.speedF, 8.0, 0.05 * deltaTimeInFrames);
+
+        const speed = cM__Deg2Short(this.speedF);
+        this.rot[2] = cLib_addCalcAngleS_(this.rot[2], this.rotTarget, 1, speed * deltaTimeInFrames, 1);
+
+        if ((this.rotTarget - this.rot[2]) === 0) {
+            this.rotTarget = (this.rotTarget - 0x8000);
+            this.init_modeWait();
+        }
+    }
+
+    private moveLift(deltaTimeInFrames: number): void {
+        switch (this.mode) {
+        case 0:
+            this.modeMove(deltaTimeInFrames);
+            break;
+        case 1:
+            this.modeWait(deltaTimeInFrames);
+            break;
+        case 2:
+            this.modeMoveWait();
+            break;
+        }
+
+        this.shakeRot[2] = this.shakeStrength * Math.cos(this.counter * MathConstants.DEG_TO_RAD * this.shakeAmpY);
+        this.shakeStrength = cLib_addCalc(this.shakeStrength, 0.0, this.shakeDecay, this.maxShakeDecay, this.minShakeDecay);
+
+        this.movePos[0] = this.moveStrength * Math.cos(this.counter * MathConstants.DEG_TO_RAD * this.moveAmpX);
+        this.movePos[1] = this.moveStrength * Math.sin(this.counter * MathConstants.DEG_TO_RAD * this.moveAmpZ);
+        this.moveStrength = cLib_addCalc(this.moveStrength, 0.0, this.moveDecay, this.maxMoveDecay, this.minMoveDecay);
+
+        this.counter += 1.0;
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+        this.moveLift(deltaTimeInFrames);
+        
+        if (this.btk !== null)
+            this.btk.play(deltaTimeInFrames);
+
+        if (this.brk !== null)
+            this.brk.play(deltaTimeInFrames);
+
+        this.setBaseMtx();
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.UNK_64, this.pos, this.tevStr);
+        setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
+
+        if (this.btk !== null)
+            this.btk.entry(this.model);
+
+        if (this.brk !== null)
+            this.brk.entry(this.model);
+
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 // Imp Poe
 class d_a_e_hp extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_e_hp;
@@ -2665,6 +3143,10 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_item);
     R(d_a_obj_life);
     R(d_a_obj_iceblk);
+    R(d_a_obj_carry);
+    R(d_a_obj_firewood2);
+    R(d_a_obj_onsen);
+    R(d_a_obj_magLiftRot);
     R(kytag10_class);
     R(kytag17_class);
     R(kytag06_class);

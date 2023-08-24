@@ -559,6 +559,16 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
         currPselIdx = 0;
     }
 
+    if (prevPselIdx > envLight.colo.length) {
+        console.log(`setLight_palno_get: prevPselIdx (${prevPselIdx}) out of bounds! Colo entry num: ${envLight.colo.length}`);
+        prevPselIdx = 0;
+    }
+
+    if (currPselIdx > envLight.colo.length) {
+        console.log(`setLight_palno_get: currPselIdx (${currPselIdx}) out of bounds! Colo entry num: ${envLight.colo.length}`);
+        currPselIdx = 0;
+    }
+
     const pselPrev = envLight.colo[prevPselIdx], pselCurr = envLight.colo[currPselIdx];
 
     // Look up the correct time from the schedule.
@@ -2027,8 +2037,12 @@ function envcolor_init(globals: dGlobals): void {
     const roomNo = globals.mStayNo;
 
     let envIdx = 0;
-    if (globals.dStage_dt.elst.length > 0)
-        envIdx = globals.dStage_dt.elst[roomNo].layers[layerNo];
+    if (globals.dStage_dt.elst.length > 0) {
+        if (roomNo > globals.dStage_dt.elst.length - 1)
+            console.log(`envcolor_init: roomNo (${roomNo}) out of bounds! ELST entry num: ${globals.dStage_dt.elst.length}`);
+        else
+            envIdx = globals.dStage_dt.elst[roomNo].layers[layerNo];
+    }
 
     envLight.pale = globals.dStage_dt.pale[envIdx];
     if (!envLight.pale || envLight.pale.length === 0) {
