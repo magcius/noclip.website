@@ -643,16 +643,11 @@ export class DkrAnimationTrack {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if(!!this.actor) {
-            if(this.actorName === 'AnimCamera') {
+        if (this.actor !== null) {
+            if (this.actorName === 'AnimCamera') {
                 this.actor.setOverrideAlpha(1.0);
-                if(DkrControlGlobals.ENABLE_ANIM_CAMERA.on) {
-                    if(this.channel === DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel) {
-                        if(!DkrControlGlobals.ANIM_THIRD_PERSON.on) {
-                            this.actor.setOverrideAlpha(0.0);
-                        }
-                    }
-                }
+                if (DkrControlGlobals.ENABLE_ANIM_CAMERA.on && this.channel === DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel && !DkrControlGlobals.ANIM_THIRD_PERSON.on)
+                    this.actor.setOverrideAlpha(0.0);
             }
             this.actor.prepareToRender(device, renderInstManager, viewerInput);
         }
@@ -668,7 +663,7 @@ interface ActorTrack {
 } 
 export class DkrAnimationTracksChannel {
     private actorTracks: ActorTrack = {};
-    private actorTrackKeys: Array<string>;
+    private actorTrackKeys: string[] = [];
     private animCameraKey: string | null = null;
     private hasBeenCompiled = false;
     private maxDuration = 0;
@@ -690,9 +685,8 @@ export class DkrAnimationTracksChannel {
         this.actorTrackKeys = Object.keys(this.actorTracks);
         for (const key of this.actorTrackKeys) {
             this.actorTracks[key].compile(device, level, renderHelper, dataManager, textureCache);
-            if(this.actorTracks[key].getActorName() === 'AnimCamera') {
+            if (this.actorTracks[key].getActorName() === 'AnimCamera')
                 this.animCameraKey = key;
-            }
             this.maxDuration = Math.max(this.maxDuration, this.actorTracks[key].getDuration());
         }
         this.hasBeenCompiled = true;

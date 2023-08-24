@@ -28,10 +28,15 @@ import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
-import { calc_mtx, scratchMat4a, scratchVec3a, scratchVec3b, scratchVec3c, kUshortTo2PI, mDoMtx_XrotS, mDoMtx_XrotM, mDoMtx_YrotS, mDoMtx_YrotM, mDoMtx_ZrotS, mDoMtx_ZrotM, mDoMtx_ZXYrotM, mDoMtx_XYZrotM, MtxTrans, MtxPosition, quatM } from "./m_do_mtx.js"
 
 // Framework'd actors
+
+const scratchMat4a = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_grass;
@@ -1104,7 +1109,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         if (vec3.length(scratchVec3b) >= 0.00000001) {
             vec3.normalize(scratchVec3b, scratchVec3b);
-            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * (0x600 * kUshortTo2PI));
+            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * cM__Short2Rad(0x600));
         } else {
             quat.identity(this.baseQuatTarget);
         }
@@ -1113,10 +1118,10 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         for (let i = 0; i < 2; i++) {
             const animDirTarget = Math.min(windPow * 0x180, 0x100);
-            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], animDirTarget * kUshortTo2PI, 0x04 * kUshortTo2PI, 0x20 * kUshortTo2PI);
+            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM__Short2Rad(animDirTarget), cM__Short2Rad(0x04), cM__Short2Rad(0x20));
 
             // Rock back and forth.
-            this.animWave[i] += ((windPow * 0x800) + cM_rndFX(0x80)) * kUshortTo2PI * deltaTimeInFrames;
+            this.animWave[i] += cM__Short2Rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeInFrames;
             const wave = Math.sin(this.animWave[i]);
 
             vec3.set(scratchVec3a, wave, 0, wave);
@@ -2127,7 +2132,7 @@ class dCloth_packet_c {
 
                 vec3.normalize(dst, dst);
 
-                const theta = (kUshortTo2PI * this.rotateY) * Math.sin((this.wave + this.ripple * (fly + hoist)) * kUshortTo2PI);
+                const theta = cM__Short2Rad(this.rotateY) * Math.sin(cM__Short2Rad((this.wave + this.ripple * (fly + hoist))));
                 computeModelMatrixR(scratchMat4a, 0, theta, 0);
                 transformVec3Mat4w0(dst, scratchMat4a, dst);
             }
@@ -2173,7 +2178,7 @@ class dCloth_packet_c {
 
     public cloth_move(deltaTimeInFrames: number): void {
         // Compute global wind vector.
-        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(this.wave * kUshortTo2PI));
+        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(cM__Short2Rad(this.wave)));
 
         const distFly = (this.flyLength / (this.flyGridSize - 1)) * this.flyFlex;
         const distHoist = (this.hoistLength / (this.hoistGridSize - 1)) * this.hoistFlex;
@@ -2837,7 +2842,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
 
     private majuu_flag_move(globals: dGlobals, deltaTimeInFrames: number): void {
         this.wave += this.waveSpeed * deltaTimeInFrames;
-        const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(this.wave * kUshortTo2PI) * 0.5 + 0.5);
+        const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(cM__Short2Rad(this.wave)) * 0.5 + 0.5);
 
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
         vec3.set(scratchVec3a, 0, 0, windSpeed * windpow * 2.0);

@@ -1,7 +1,7 @@
 
 import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo.js";
 import { dGlobals } from "./zww_scenes.js";
-import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent.js";
+import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad, cM__Short2Rad } from "./SComponent.js";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color.js";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";
@@ -22,7 +22,6 @@ import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../g
 import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { nArray, assertExists, assert } from "../util.js";
-import { uShortTo2PI } from "./Grass.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -417,13 +416,13 @@ export class dKankyo_sun_Packet {
     @dfRange(0, 32, 1)
     private lensflareCount: number = 16.0;
     @dfRange(0.0, MathConstants.TAU, 0.0001)
-    private lensflareAngles: number[] = [uShortTo2PI(0xf80a), uShortTo2PI(0x416b)];
+    private lensflareAngles: number[] = [cM__Short2Rad(0xf80a), cM__Short2Rad(0x416b)];
     @dfRange(0.0, 0.8, 0.0001)
-    private lensflareAngleSteps: number[] = [uShortTo2PI(0x1000), uShortTo2PI(0x1C71)];
+    private lensflareAngleSteps: number[] = [cM__Short2Rad(0x1000), cM__Short2Rad(0x1C71)];
     @dfRange(-5, 5)
     private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
     @dfRange(0, MathConstants.TAU, 0.0001)
-    private lensflareWidth: number = uShortTo2PI(1600.0);
+    private lensflareWidth: number = cM__Short2Rad(1600.0);
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
@@ -1247,7 +1246,7 @@ export class dKankyo_star_Packet {
                 scratchVec3a[2] = radiusXZ * 300.0 * Math.cos(angle);
 
                 angle += angleIncr;
-                angleIncr += uShortTo2PI(0x09C4);
+                angleIncr += cM__Short2Rad(0x09C4);
 
                 radius += (1.0 + 3.0 * (radius / 200.0 ** 3.0));
                 if (radius > 200.0)
@@ -1543,14 +1542,14 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
 
     if (hasCustomWindPower) {
         count = 9;
-        swerveAnimAmount = uShortTo2PI(8.0);
+        swerveAnimAmount = cM__Short2Rad(8.0);
         swerveMagnitudeScale = 200.0;
         swerveSize = 8.0;
         randomPosScale = 160.0;
         offsetRandom = 160.0;
     } else {
         count = pkt.count;
-        swerveAnimAmount = uShortTo2PI(800.0);
+        swerveAnimAmount = cM__Short2Rad(800.0);
         swerveMagnitudeScale = 250.0;
         swerveSize = 80.0;
         randomPosScale = 2000.0;
@@ -1621,7 +1620,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
 
             eff.swerveAnimCounter += swerveAnimAmount;
 
-            const swerveAnimMag = uShortTo2PI((swerveMagnitudeScale - ((0.2 * swerveMagnitudeScale) * (1.0 - windPow))));
+            const swerveAnimMag = cM__Short2Rad((swerveMagnitudeScale - ((0.2 * swerveMagnitudeScale) * (1.0 - windPow))));
             const swerveAngleChange = deltaTimeInFrames * swerveAnimMag * Math.sin(eff.swerveAnimCounter);
             eff.swerveAngleY += swerveAngleChange;
             eff.swerveAngleXZ += (swerveAngleChange * ((i & 1) ? 1 : -1));
@@ -1629,15 +1628,15 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
             if (eff.stateTimer <= 0.5 || !eff.doLoopDeLoop) {
                 const angleXZTarget = Math.atan2(windVec[0], windVec[2]);
                 const angleYTarget = Math.atan2(windVec[1], Math.hypot(windVec[0], windVec[2]));
-                eff.swerveAngleXZ = cLib_addCalcAngleRad(eff.swerveAngleXZ, angleXZTarget, 10, uShortTo2PI(1000), uShortTo2PI(1));
-                eff.swerveAngleY = cLib_addCalcAngleRad(eff.swerveAngleY, angleYTarget, 10, uShortTo2PI(1000), uShortTo2PI(1));
+                eff.swerveAngleXZ = cLib_addCalcAngleRad(eff.swerveAngleXZ, angleXZTarget, 10, cM__Short2Rad(1000), cM__Short2Rad(1));
+                eff.swerveAngleY = cLib_addCalcAngleRad(eff.swerveAngleY, angleYTarget, 10, cM__Short2Rad(1000), cM__Short2Rad(1));
             } else {
                 // noclip modification: Make the loop a bit bigger.
-                const loopDeLoopAngle = uShortTo2PI(0x0E10) / 1.8;
+                const loopDeLoopAngle = cM__Short2Rad(0x0E10) / 1.8;
                 eff.loopDeLoopCounter += loopDeLoopAngle;
                 eff.swerveAngleY += loopDeLoopAngle;
 
-                if (eff.loopDeLoopCounter > uShortTo2PI(0xEC77)) {
+                if (eff.loopDeLoopCounter > cM__Short2Rad(0xEC77)) {
                     eff.doLoopDeLoop = false;
                 }
             }

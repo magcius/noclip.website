@@ -2,19 +2,18 @@
 import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Camera, divideByW } from "../Camera.js";
-import { Color, TransparentBlack, White, colorAdd, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8, colorScale, colorScaleAndAdd } from "../Color.js";
+import { Color, TransparentBlack, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8, colorScale } from "../Color.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
-import { dfRange, dfShow } from "../DebugFloaters.js";
 import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { cLib_addCalc, cM_rndF, cM_rndFX } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cM__Short2Rad, cM_rndF, cM_rndFX } from "../WindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ.js";
-import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM, uShortTo2PI } from "../WindWaker/m_do_mtx.js";
+import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -534,9 +533,9 @@ export class dKankyo_sun_Packet {
 
     private lensflareBaseSize: number = 160.0;
     private lensflareCount: number = 16.0;
-    private lensflareAngleSteps: number[] = [uShortTo2PI(0x1000), uShortTo2PI(0x1C71)];
+    private lensflareAngleSteps: number[] = [cM__Short2Rad(0x1000), cM__Short2Rad(0x1C71)];
     private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
-    private lensflareWidth: number = uShortTo2PI(1000.0);
+    private lensflareWidth: number = cM__Short2Rad(1000.0);
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
@@ -621,8 +620,8 @@ export class dKankyo_sun_Packet {
             submitScratchRenderInst(renderInstManager, materialHelper, renderInst, viewerInput);
         }
 
-        let angle0 = uShortTo2PI(globals.counter *  0x00 - 0x07F6);
-        let angle1 = uShortTo2PI(globals.counter * -0x0E + 0x416B);
+        let angle0 = cM__Short2Rad(globals.counter *  0x00 - 0x07F6);
+        let angle1 = cM__Short2Rad(globals.counter * -0x0E + 0x416B);
         for (let i = 0; i < this.lensflareCount; i++) {
             ddraw.begin(GX.Command.DRAW_TRIANGLES);
 
@@ -1394,7 +1393,7 @@ export class dKankyo_star_Packet {
                 scratchVec3a[2] = radiusXZ * 300.0 * Math.cos(angle);
 
                 angle += angleIncr;
-                angleIncr += uShortTo2PI(0x09C4);
+                angleIncr += cM__Short2Rad(0x09C4);
 
                 radius += (1.0 + 3.0 * (radius / 200.0 ** 3.0));
                 if (radius > 200.0)
@@ -2052,7 +2051,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
         windPower = 0.3;
 
     const windDir = dKyw_get_wind_vec(envLight);
-    const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + uShortTo2PI(24575.0);
+    const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + cM__Short2Rad(24575.0);
     const cosPitch = Math.cos(windPitch);
     const sinAngle = Math.sin(windAngle), cosAngle = Math.cos(windAngle);
     pkt.cloudScrollX = (pkt.cloudScrollX + cosPitch * sinAngle * windPower * 0.0014 * deltaTimeInFrames) % 1.0;
@@ -2091,11 +2090,11 @@ export function dKyw_wind_set(globals: dGlobals): void {
 
     let windAngleXZ = 0, windAngleY = 0;
     if (windDirFlag === 2)
-        windAngleXZ = uShortTo2PI(-0x4000);
+        windAngleXZ = cM__Short2Rad(-0x4000);
     else if (windDirFlag === 4)
-        windAngleXZ = uShortTo2PI(0x4000);
+        windAngleXZ = cM__Short2Rad(0x4000);
     else if (windDirFlag === 5)
-        windAngleXZ = uShortTo2PI(0x7FFF);
+        windAngleXZ = cM__Short2Rad(0x7FFF);
 
     const targetWindVecX = Math.sin(windAngleXZ) * Math.cos(windAngleY);
     const targetWindVecY = Math.sin(windAngleY);
