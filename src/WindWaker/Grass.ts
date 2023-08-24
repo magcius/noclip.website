@@ -21,6 +21,7 @@ import { colorCopy, colorFromRGBA } from '../Color.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
 import { cBgS_GndChk } from './d_bg.js';
 import { getMatrixTranslation } from '../MathHelpers.js';
+import { cM__Short2Rad } from './SComponent.js';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     // Patch material.
@@ -108,13 +109,6 @@ const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
 const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
-
-// The game uses unsigned shorts to index into cos/sin tables.
-// The max short value (2^16-1 = 65535) corresponds to 2PI
-const kUshortTo2PI = Math.PI / 0x7FFF;
-export function uShortTo2PI(x: number) {
-    return x * kUshortTo2PI;
-}
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
 
@@ -344,8 +338,8 @@ export class FlowerPacket {
     public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            const theta = Math.cos(uShortTo2PI(1000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].rotationX = uShortTo2PI(1000.0 + 1000.0 * theta);
+            const theta = Math.cos(cM__Short2Rad(1000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].rotationX = cM__Short2Rad(1000.0 + 1000.0 * theta);
         }
 
         // @TODO: Hit checks
@@ -660,11 +654,11 @@ export class TreePacket {
     public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(uShortTo2PI(4000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].topRotationY = uShortTo2PI(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
+            let theta = Math.cos(cM__Short2Rad(4000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].topRotationY = cM__Short2Rad(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
 
-            theta = Math.cos(uShortTo2PI(1000.0 * (frameCount + 0xfa * i)));
-            this.anims[i].topRotationX = uShortTo2PI(100 + 100 * theta);
+            theta = Math.cos(cM__Short2Rad(1000.0 * (frameCount + 0xfa * i)));
+            this.anims[i].topRotationX = cM__Short2Rad(100 + 100 * theta);
         }
 
         // @TODO: Hit checks
@@ -717,7 +711,7 @@ export class TreePacket {
 
             mat4.fromYRotation(anim.trunkMtx, anim.trunkFallYaw);
             mat4.rotateX(anim.trunkMtx, anim.trunkMtx, anim.trunkRotationX);
-            mat4.rotateY(anim.trunkMtx, anim.trunkMtx, uShortTo2PI(anim.initialRotationShort) - anim.trunkFallYaw);
+            mat4.rotateY(anim.trunkMtx, anim.trunkMtx, cM__Short2Rad(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
         // Update grass packets
@@ -937,7 +931,7 @@ export class GrassPacket {
         for (let i = 0; i < 8; i++) {
             this.anims[i] = {
                 active: true,
-                rotationY: uShortTo2PI(0x2000 * i),
+                rotationY: cM__Short2Rad(0x2000 * i),
                 rotationX: 0,
                 modelMtx: mat4.create(),
             }
@@ -969,8 +963,8 @@ export class GrassPacket {
 
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(uShortTo2PI(windPower * (frameCount + 0xfa * i)));
-            this.anims[i].rotationX = uShortTo2PI(windPower + windPower * theta);
+            let theta = Math.cos(cM__Short2Rad(windPower * (frameCount + 0xfa * i)));
+            this.anims[i].rotationX = cM__Short2Rad(windPower + windPower * theta);
         }
 
         // @TODO: Hit checks

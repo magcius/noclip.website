@@ -8,9 +8,9 @@ import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
-import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Rad2Short, cM__Deg2Short, cM_atan2s, cLib_addCalcAngleS, cLib_addCalcAngleS_ } from "../WindWaker/SComponent.js";
+import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s } from "../WindWaker/SComponent.js";
 import { dBgW } from "../WindWaker/d_bg.js";
-import { MtxPosition, MtxTrans, calc_mtx, kUshortTo2PI, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, scratchMat4a, scratchVec3a, scratchVec3b, scratchVec3c } from "../WindWaker/m_do_mtx.js";
+import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -26,7 +26,10 @@ import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupStageTexture, mDoExt_setupShareTexture } from "./m_do_ext.js";
 import { dGlobals } from "./ztp_scenes.js";
-import { ItemNo, dItem_fieldItemResource } from "./d_item_data.js";
+import { ItemNo } from "./d_item_data.js";
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 
 // Framework'd actors
 
@@ -3047,7 +3050,7 @@ class d_a_e_hp extends fopAc_ac_c {
     public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
         super.execute(globals, deltaTimeInFrames);
 
-        this.height = 170.0 + Math.sin(this.counter * 1000 * kUshortTo2PI) * 20;
+        this.height = 170.0 + Math.sin(cM__Short2Rad(this.counter * 1000)) * 20;
 
         this.mtx_set();
 
@@ -3124,8 +3127,8 @@ class d_a_e_hp extends fopAc_ac_c {
             swing = 6000.0
 
         this.swingRate = cLib_addCalc2(this.swingRate, swing, 0.1, swing * 0.1);
-        this.swingAngle[0] = cLib_addCalcAngleS2(this.swingAngle[0], this.swingRate * Math.sin(this.counter * 2000 * kUshortTo2PI), 8, 0x400);
-        this.swingAngle[2] = this.swingRate * Math.sin(this.counter * 2500.0 * kUshortTo2PI);
+        this.swingAngle[0] = cLib_addCalcAngleS2(this.swingAngle[0], this.swingRate * Math.sin(cM__Short2Rad(this.counter * 2000)), 8, 0x400);
+        this.swingAngle[2] = this.swingRate * Math.sin(cM__Short2Rad(this.counter * 2500.0));
     }
 }
 
