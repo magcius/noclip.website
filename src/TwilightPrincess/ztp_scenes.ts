@@ -770,8 +770,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`STG_00`);
 
-        modelCache.fetchFileData(`extra.crg1_arc`, 8);
-        modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
+        modelCache.fetchFileData(`extra.crg1_arc`);
+        modelCache.fetchFileData(`f_pc_profiles.crg1_arc`, 1);
 
         const particleArchives = [
             `res/Particle/common.jpc`,
