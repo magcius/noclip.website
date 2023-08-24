@@ -590,7 +590,6 @@ export class ModelCache {
 
     public resCtrl = new dRes_control_c();
     public currentStage: string;
-    public onloadedcallback: (() => void) | null = null;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher) {
         this.cache = new GfxRenderCache(device);
@@ -620,8 +619,6 @@ export class ModelCache {
         } else {
             return this.fetchFile(path, cacheBust).then((data) => {
                 this.fileDataCache.set(path, data);
-                if (this.onloadedcallback !== null)
-                    this.onloadedcallback();
                 return data;
             });
         }
@@ -764,7 +761,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             return new ModelCache(context.device, context.dataFetcher);
         });
 
-        modelCache.onloadedcallback = null;
         modelCache.setCurrentStage(this.stageDir);
 
         modelCache.fetchObjectData(`Always`);
@@ -848,10 +844,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         const renderer = new TwilightPrincessRenderer(device, globals);
         context.destroyablePool.push(renderer);
         globals.renderer = renderer;
-
-        modelCache.onloadedcallback = () => {
-            fpcCt_Handler(globals.frameworkGlobals, globals);
-        };
 
         const pcId = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
         assert(pcId !== null);

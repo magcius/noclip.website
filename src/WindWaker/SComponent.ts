@@ -126,7 +126,7 @@ export function cM__Rad2Short(v: number): number {
 }
 
 export function cM__Deg2Short(v: number): number {
-    return v * 182.04445;
+    return cM__Rad2Short(v * MathConstants.DEG_TO_RAD);
 }
 
 export function cLib_targetAngleX(p0: ReadonlyVec3, p1: ReadonlyVec3): number {
