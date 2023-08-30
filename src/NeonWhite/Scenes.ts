@@ -96,7 +96,7 @@ class TempMaterial extends UnityMaterialInstance {
     }
 }
 
-class AShortHikeMaterialFactory extends UnityMaterialFactory {
+class NeonWhiteMaterialFactory extends UnityMaterialFactory {
     public createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance {
         return new TempMaterial(runtime, materialData);
     }
@@ -173,7 +173,7 @@ class NeonWhiteSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const runtime = await createUnityRuntime(context, `NeonWhite`);
-        runtime.materialFactory = new AShortHikeMaterialFactory();
+        runtime.materialFactory = new NeonWhiteMaterialFactory();
         await runtime.loadLevel(this.id);
 
         const renderer = new UnityRenderer(runtime);
