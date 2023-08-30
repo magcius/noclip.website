@@ -242,3 +242,27 @@ impl Deserialize for f32 {
         reader.read_f32()
     }
 }
+
+impl Deserialize for u16 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<u16> {
+        reader.read_u16()
+    }
+}
+
+impl Deserialize for u32 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<u32> {
+        reader.read_u32()
+    }
+}
+
+impl Deserialize for i16 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<i16> {
+        reader.read_i16()
+    }
+}
+
+impl Deserialize for i32 {
+    fn deserialize(reader: &mut AssetReader, _asset: &AssetInfo) -> ReaderResult<i32> {
+        reader.read_i32()
+    }
+}

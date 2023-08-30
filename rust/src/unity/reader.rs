@@ -51,7 +51,6 @@ pub trait Deserialize {
         for _ in 0..n {
             result.push(Self::deserialize(reader, asset)?);
         }
-        // do we need to align the reader here?
         reader.align()?;
         Ok(result)
     }
@@ -124,6 +123,10 @@ impl AssetReader {
             Endianness::Big => Ok(self.data.read_u16::<BigEndian>()?),
             Endianness::Little => Ok(self.data.read_u16::<LittleEndian>()?),
         }
+    }
+
+    pub fn read_i8(&mut self) -> Result<i8> {
+        Ok(self.data.read_i8()?)
     }
 
     pub fn read_i16(&mut self) -> Result<i16> {
