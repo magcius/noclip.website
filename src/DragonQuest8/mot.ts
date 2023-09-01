@@ -58,14 +58,14 @@ export enum EDatatype {
 
 export class Motion {
     public name: string;
-    public jointIDToKeyframedJoint: Map<number, KeyframedJoint> = new Map<number, KeyframedJoint>();
+    public jointIDToKeyframedJoint = new Map<number, KeyframedJoint>();
     public frameCount: number;
     public speedFactor: number;
 }
 
 export class MOT {
     public name: string;
-    public motionNameToMotion: Map<string, Motion> = new Map<string, Motion>();
+    public motionNameToMotion = new Map<string, Motion>();
 }
 
 function getAnimFrame(motion: Motion, frame: number) {
@@ -239,10 +239,10 @@ export function parse(buffer: ArrayBufferSlice, name: string, motionInfo: Motion
     const jointTrackOffset = view.getUint32(0x20, true);
 
     let offs = jointTrackOffset;
-    const jointIDToRotFrameMap: Map<number, Map<number, KeyframedVec4Value>> = new Map<number, Map<number, KeyframedVec4Value>>();
-    const jointIDToPosFrameMap: Map<number, Map<number, KeyframedVec4Value>> = new Map<number, Map<number, KeyframedVec4Value>>();
-    const jointIDToScaleFrameMap: Map<number, Map<number, KeyframedVec4Value>> = new Map<number, Map<number, KeyframedVec4Value>>();
-    const jointIDToJointVisValues: Map<number, KeyframedBooleanValue[]> = new Map<number, KeyframedBooleanValue[]>();
+    const jointIDToRotFrameMap = new Map<number, Map<number, KeyframedVec4Value>>();
+    const jointIDToPosFrameMap = new Map<number, Map<number, KeyframedVec4Value>>();
+    const jointIDToScaleFrameMap = new Map<number, Map<number, KeyframedVec4Value>>();
+    const jointIDToJointVisValues = new Map<number, KeyframedBooleanValue[]>();
 
     for (let i = 0; i < jointTrackCount; i++) {
         const offsetToNextTrack = view.getUint32(offs, true);

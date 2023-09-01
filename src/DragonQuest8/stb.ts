@@ -643,7 +643,7 @@ export class STB {
     private firstExec = true;
     public currentEntry: number = -1;
     public secondSectionOffset: number;
-    public entries: Map<number, STBEntry> = new Map<number, STBEntry>();
+    public entries = new Map<number, STBEntry>();
     public buffer: ArrayBufferSlice;
     public npcID: number;
 
@@ -986,7 +986,7 @@ function func0x35(argvPtr: number, argc: number, stack: number[], stackInfo: STB
 
 function func0x36(buffer: ArrayBufferSlice, stb: STB, argvPtr: number, stack: number[], mdsInstance: MDSInstance) {
     const motionNamePtr = stack[argvPtr + 3];
-    const animName = readString(buffer, motionNamePtr, -1, true, "Shift_JIS");
+    const animName = readString(buffer, motionNamePtr, -1, true, "sjis");
     if (mdsInstance.mot !== null) {
         if (mdsInstance.mot.motionNameToMotion.has(animName)) {
             mdsInstance.bindMotion(mdsInstance.mot.motionNameToMotion.get(animName) as MOT.Motion);
@@ -996,7 +996,7 @@ function func0x36(buffer: ArrayBufferSlice, stb: STB, argvPtr: number, stack: nu
 
 function func0x37(buffer: ArrayBufferSlice, stb: STB, argvPtr: number, stack: number[], mdsInstance: MDSInstance) {
     const eyeAnimeNamePtr = stack[argvPtr + 3];
-    const eyeAnimeName = readString(buffer, eyeAnimeNamePtr, -1, true, "Shift_JIS");
+    const eyeAnimeName = readString(buffer, eyeAnimeNamePtr, -1, true, "sjis");
     if (mdsInstance.img !== null) {
         if (mdsInstance.img.texAnimNameToTexAnim.has(eyeAnimeName)) {
             //slot 0 picked for facial eye anims.

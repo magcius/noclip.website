@@ -32,7 +32,7 @@ export class MDS {
     public mot: MOT.MOT | null = null;
     public currentMotion: MOT.Motion | null = null;
     //Used by sky joints mainly (cloud rotation etc)
-    public rotJointIdToAngVels: Map<number, number> = new Map<number, number>; //index to velocity
+    public rotJointIdToAngVels = new Map<number, number>; //index to velocity
 }
 
 export interface Joint {
@@ -278,7 +278,7 @@ function parseMaterials(mds: MDS, buffer: ArrayBufferSlice, nameBuffer: ArrayBuf
             texName += "5";
         else if (texName === "gnami")
             texName += "b";
-        mds.materials.push({ name: matName, texName: texName, bIsTransparent: bIsTransparent, bIsAlphaBlend: bIsAlphaBlend, bIsAlphaTest: bIsAlphaTest, bIsAdditive: bIsAdditive, bPolyOffset: polyOffset > 0 });
+        mds.materials.push({ name: matName, texName, bIsTransparent, bIsAlphaBlend, bIsAlphaTest, bIsAdditive, bPolyOffset: polyOffset > 0 });
     }
 }
 

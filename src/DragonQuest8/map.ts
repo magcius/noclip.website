@@ -67,7 +67,7 @@ class SKY {
     public bmds: MDS.MDS | null = null;
     public sunMds: MDS.MDS | null = null
     public bgMds: MDS.MDS | null = null;
-    public textureDataMap: Map<string, IMG.TextureData> = new Map<string, IMG.TextureData>();
+    public textureDataMap = new Map<string, IMG.TextureData>();
 }
 
 function getTimeFlags(start: number, end: number): number {
@@ -91,7 +91,7 @@ export function parseSkyCfg(cache: GfxRenderCache, buffer: ArrayBufferSlice): SK
     const rNameToInfo = BUNDLE.parseBundle(buffer);
     if (!rNameToInfo.has("info.cfg"))
         throw "Sky bundle has no cfg file";
-    const lines = decodeString(buffer, 0, buffer.byteLength, "Shift_JIS").split('\n');
+    const lines = decodeString(buffer, 0, buffer.byteLength, "sjis").split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (!line.split(" ").length)
@@ -166,12 +166,12 @@ export function parseSkyCfg(cache: GfxRenderCache, buffer: ArrayBufferSlice): SK
 export class MAP {
     public name: string;
     public mapInfo: MapInfo;
-    public textureDataMap: Map<string, IMG.TextureData> = new Map<string, IMG.TextureData>();
+    public textureDataMap = new Map<string, IMG.TextureData>();
     public modelMap: Map<string, MDS.MDS>;
     public modelNames: string[] = [];
     public modelTransforms: mat4[];
     public modelPeriodFlags: (number | null)[];
-    public fireEffectIndices: Map<number, boolean> = new Map<number, boolean>();
+    public fireEffectIndices = new Map<number, boolean>();
     public chrs: CHR.CHR[] = [];
     public chrTransforms: mat4[] = [];
     public chrDayPeriodFlags: number[] = [];
@@ -182,11 +182,11 @@ export class MAP {
 }
 
 function parseCfg(buffer: ArrayBufferSlice): MapInfo {
-    const lines = decodeString(buffer, 0, buffer.byteLength, "Shift_JIS").split('\n');
+    const lines = decodeString(buffer, 0, buffer.byteLength, "sjis").split('\n');
     let imgFileName = "";
     let bHasImgFileNameBeenSet = false; //temp workaround for several img packages.
     let pcpFileName = "";
-    const parts: Map<string, Parts> = new Map<string, Parts>;
+    const parts = new Map<string, Parts>;
     const mapParts: MapParts[] = [];
     const lightSets: LightSet[] = [];
     let lightSetCount: number = 0;
@@ -333,7 +333,7 @@ function parseCfg(buffer: ArrayBufferSlice): MapInfo {
             bLightGroup = true;
         }
     }
-    return { pcpFileName: pcpFileName, imgFileName: imgFileName, parts: parts, mapParts: mapParts, lightSets: lightSets, lightSetCount: lightSetCount };
+    return { pcpFileName, imgFileName, parts, mapParts, lightSets, lightSetCount };
 }
 
 export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dataFetcher: DataFetcher, name: string = ''): Promise<MAP> {
@@ -375,8 +375,8 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
     if (!mpkInfo.has(map.mapInfo.pcpFileName))
         throw "pcp file not found";
     const pcpInfo = BUNDLE.parseBundle(buffers[1].slice(mpkInfo.get(map.mapInfo.pcpFileName)!.offset), mpkInfo.get(map.mapInfo.pcpFileName)!.offset);
-    const processedMDS: Map<string, string> = new Map<string, string>();
-    const processedCHRS: Map<string, CHR.CHR> = new Map<string, CHR.CHR>();
+    const processedMDS = new Map<string, string>();
+    const processedCHRS = new Map<string, CHR.CHR>();
     let bFireEffectLoaded: boolean = false;
     map.modelMap = new Map<string, MDS.MDS>();
     map.modelTransforms = [];

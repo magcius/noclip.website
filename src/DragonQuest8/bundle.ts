@@ -11,7 +11,7 @@ export function parseBundle(buffer: ArrayBufferSlice, globalOffset: number = 0):
     const view = buffer.createDataView();
     let offs = 0;
     let offsetToNext = 1;
-    const rNameToInfo: Map<String, BundleResourceInfo> = new Map<String, BundleResourceInfo>();
+    const rNameToInfo = new Map<String, BundleResourceInfo>();
 
     while (offsetToNext > 0) {
         const rName: String = readString(buffer, offs);

@@ -9,6 +9,7 @@ import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from '../gfx/platfo
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import * as SINFO from "./sceneInfo.js";
 import * as UI from '../ui.js';
 import * as Viewer from '../viewer.js';
 import * as BUNDLE from "./bundle.js";
@@ -17,7 +18,6 @@ import * as IMG from './img.js';
 import * as MAP from './map.js';
 import * as MDS from './mds.js';
 import { CHRRenderer, DQ8Program, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate, textureToCanvas } from './render.js';
-import * as SINFO from "./sceneInfo.js";
 import * as STB from "./stb.js";
 
 
@@ -37,7 +37,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         const program = new DQ8Program();
         program.defines.set("SKINNING_MATRIX_COUNT", MDS.MDS.maxJointCount.toString());
         this.program = this.renderHelper.renderCache.createProgram(program);
-        SINFO.InitSceneInfo();
+        SINFO.gDQ8SINFO.reset();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -49,50 +49,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        //Sky based on camera
-        // const bgHeight = 7000;
-        // const camPos = mat4.getTranslation(vec3.create(), viewerInput.camera.worldMatrix);
-        // const camZ = vec3.fromValues(viewerInput.camera.worldMatrix[8], viewerInput.camera.worldMatrix[9], viewerInput.camera.worldMatrix[10]);
-        // const vect0 = vec3.scale(vec3.create(), camZ, -1);
-        // vec3.normalize(vect0, vect0);
-        // vec3.scale(vect0, vect0, 13200);
-        // const vect1 = vec3.fromValues(vect0[2], 0, -vect0[0]);
-        // vec3.normalize(vect1, vect1);
-        // vec3.scale(vect1, vect1, 132000);
-        // const vect2 = vec3.add(vec3.create(), camPos, vect0);
-        // const vect3 = vec3.sub(vec3.create(), vect2, vect1);
-        // const vect4 = vec3.add(vec3.create(), vect2, vect1);
-        // const vect5 = vec3.copy(vec3.create(), vect3)
-        // vect5[1]+=bgHeight;
-        // const vect6 = vec3.copy(vec3.create(), vect4)
-        // vect6[1]+=bgHeight;
-        // const ctx = getDebugOverlayCanvas2D()
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect3, vect4, Yellow);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect5, vect6, Yellow);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect3, vect5, Yellow);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect4, vect6, Yellow);
-
-        // const vect7 = vec3.copy(vec3.create(), vect3)
-        // vect7[1]+=10;
-        // const vect8 = vec3.copy(vec3.create(), vect4)
-        // vect8[1]+=10;
-        // const vect9 = vec3.copy(vec3.create(), vect3)
-        // vect9[1]-=bgHeight;
-        // const vect10 = vec3.copy(vec3.create(), vect4)
-        // vect10[1]-=bgHeight;
-
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect7, vect8, Red);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect9, vect10, Red);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect7, vect9, Red);
-        // drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, vect8, vect10, Red);
-        // this.renderHelper.renderInstManager.popTemplateRenderInst();
-
-        //Print current hour
-        // const ctx = getDebugOverlayCanvas2D()
-        // let dayNPCPeriod = SINFO.gDQ8SINFO.currentNPCDayPeriod === SINFO.ENPCDayPeriod.DAY ? "Day" : "Early Night";
-        // dayNPCPeriod = SINFO.gDQ8SINFO.currentNPCDayPeriod === SINFO.ENPCDayPeriod.LATENIGHT ? "Late night" : dayNPCPeriod;
-        // drawScreenSpaceText(ctx, 400,200, SINFO.gDQ8SINFO.currentHour.toFixed(2).toString(), colorNewFromRGBA(1,1,0,1));
-        // drawScreenSpaceText(ctx, 400,250, dayNPCPeriod, colorNewFromRGBA(1,1,0,1));
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -138,7 +94,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        viewerInput.camera.fovY = 0.9;
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
@@ -223,11 +178,11 @@ class SceneDesc implements Viewer.SceneDesc {
         const viewerTextures: Viewer.Texture[] = [];
         const dataFetcher = context.dataFetcher;
         const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-        const texNameToTextureData: Map<string, IMG.TextureData> = new Map<string, IMG.TextureData>;
+        const texNameToTextureData = new Map<string, IMG.TextureData>();
         const renderer = new DQ8Renderer(gfxDevice, fakeTextureHolder, this, texNameToTextureData);
         const cache = renderer.getRenderCache();
-        const canvasTexMap: Map<string, boolean> = new Map<string, boolean>;
-        const chrMap: Map<string, CHR.CHR> = new Map<string, CHR.CHR>();
+        const canvasTexMap = new Map<string, boolean>();
+        const chrMap = new Map<string, CHR.CHR>();
         const chrs: CHR.CHR[] = [];
         const stbs: (STB.STB | null)[] = [];
         const chrTransforms: mat4[] = [];
@@ -236,65 +191,32 @@ class SceneDesc implements Viewer.SceneDesc {
         const chrDayPeriodFlags: (number | null)[] = [];
         const chrProgressFlags: (number | null)[] = [];
 
-        const skelModelMap: Map<string, boolean> = new Map<string, boolean>([ //model matrices used instead of local ones for joints
-            ["b600a.chr", true],
-            ["c004_skin2.chr", true],
-            ["cp002.chr", true],
-            ["en041a.chr", true],
-            ["en042a.chr", true],
-            ["en063a.chr", true],
-            ["en070a.chr", true],
-            ["en091a.chr", true],
-            ["en092a.chr", true],
-            ["en116a.chr", true],
-            ["en117a.chr", true],
-            ["jinmenju.chr", true],
-            ["k_shitai.chr", true],
-            ["mp006a.chr", true],
-            ["p024d.chr", true],
-            ["p024c.chr", true],
-            ["p024d.chr", true],
-            ["p024e.chr", true],
-            ["p073a.chr", true],
-            ["p073a_iro.chr", true],
-            ["sp001.chr", true],
+        const skelModelSet = new Set<string>([ //model matrices used instead of local ones for joints
+            "b600a.chr",
+            "c004_skin2.chr",
+            "cp002.chr",
+            "en041a.chr",
+            "en042a.chr",
+            "en063a.chr",
+            "en070a.chr",
+            "en091a.chr",
+            "en092a.chr",
+            "en116a.chr",
+            "en117a.chr",
+            "jinmenju.chr", 
+            "k_shitai.chr", 
+            "mp006a.chr", 
+            "p024d.chr", 
+            "p024c.chr", 
+            "p024d.chr", 
+            "p024e.chr", 
+            "p073a.chr", 
+            "p073a_iro.chr",
+            "sp001.chr", 
         ]);
 
-
-        //Used for debugging
-        // if (this.bChrViewer) {
-        //     const chrBuffer = await dataFetcher.fetchData("dq8/chara/" + this.mID + ".chr", { allow404: true });
-        //     if (chrBuffer.byteLength) {
-        //         chrs.push(CHR.parse(cache, chrBuffer, chrBuffer.name, true, null, skelModelMap.has(this.mID+".chr")));
-        //         chrTransforms.push(mat4.create());
-        //         chrEulerRotations.push(vec3.create());
-        //         chrNPCDayPeriods.push(null);
-        //         chrDayPeriodFlags.push(null);
-        //     }
-        //     if (chrs[0].img !== null) {
-        //         for (let i = 0; i < chrs[0].img.textures.length; i++) {
-        //             viewerTextures.push(textureToCanvas(chrs[0].img.textures[i]));
-        //         }
-        //     }
-        //     renderer.CHRRenderers.push(new CHRRenderer(cache, chrs, chrTransforms, chrEulerRotations,chrNPCDayPeriods, chrDayPeriodFlags, null, chrProgressFlags));
-        //     return renderer;
-        // }
-        // else if (this.bIsSky)
-        // {
-        //     const skyBuffer = await dataFetcher.fetchData("dq8/map/" + this.mID.split("i")[0] + "/" + this.mID + ".sky", { allow404: true });
-        //     const skies = MAP.parseSkyCfg(cache, skyBuffer);
-        //     if (skies[0].img !== null) {
-        //         for (let i = 0; i < skies[0].img.textures.length; i++) {
-        //             viewerTextures.push(textureToCanvas(skies[0].img.textures[i]));
-        //         }
-        //     }
-        //     renderer.MDSRenderers.push(new MDSInstance(cache, new MDSData(cache, skies[0].mds!), mat4.create(), vec3.create(), skies[0].img!, null, "sky"));
-        //     renderer.MDSRenderers[0].bIsSkybox = true;
-        //     return renderer;
-        // }
-
-        const dispoBuffer = await dataFetcher.fetchData("dq8/event/villager/disposition/" + this.mID + ".cfg", { allow404: true });
-        const vScriptBuffer = await dataFetcher.fetchData("dq8/event/villager/script/" + this.mID.split("i")[0].split("_")[0] + ".pac", { allow404: true });
+        const dispoBuffer = await dataFetcher.fetchData("DragonQuest8/event/villager/disposition/" + this.mID + ".cfg", { allow404: true });
+        const vScriptBuffer = await dataFetcher.fetchData("DragonQuest8/event/villager/script/" + this.mID.split("i")[0].split("_")[0] + ".pac", { allow404: true });
         if (dispoBuffer.byteLength) {
             let vScriptInfo = null;
             if (vScriptBuffer.byteLength) {
@@ -310,25 +232,25 @@ class SceneDesc implements Viewer.SceneDesc {
                     for (let j = 0; j < nPCInfo.length; j++) {
                         const npcInfo = nPCInfo[j];
                         if (!chrMap.has(npcInfo.npcFileName)) {
-                            const chrBuffer = await dataFetcher.fetchData("dq8/" + npcInfo.npcFileName);
-                            chrs.push(CHR.parse(cache, chrBuffer, chrBuffer.name, true, null, skelModelMap.has(npcInfo.npcFileName.split("/")[1])));
+                            const chrBuffer = await dataFetcher.fetchData("DragonQuest8/" + npcInfo.npcFileName);
+                            chrs.push(CHR.parse(cache, chrBuffer, chrBuffer.name, true, null, skelModelSet.has(npcInfo.npcFileName.split("/")[1])));
                             //Party members extra resources, see Purgatory island. Keeping these split if skin/mapping changes later
                             if (npcInfo.npcFileName.split("/")[1] === "c002_skin1.chr") { //Yangus
-                                const extraResBuffer = await dataFetcher.fetchData("dq8/" + "chara/c002_base1.chr");
+                                const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/" + "chara/c002_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
                             else if (npcInfo.npcFileName.split("/")[1] === "c003_skin1.chr") { //Angelo
-                                const extraResBuffer = await dataFetcher.fetchData("dq8/" + "chara/c003_base1.chr");
+                                const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/" + "chara/c003_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
                             else if (npcInfo.npcFileName.split("/")[1] === "c004_skin2.chr") { //Jessica
-                                const extraResBuffer = await dataFetcher.fetchData("dq8/" + "chara/c004_base1.chr");
+                                const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/" + "chara/c004_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
                             chrMap.set(npcInfo.npcFileName, chrs[chrs.length - 1]);
                             //External resources
                             if (npcInfo.npcExtraResPath !== "") {
-                                const extraResBuffer = await dataFetcher.fetchData("dq8/" + npcInfo.npcExtraResPath);
+                                const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/" + npcInfo.npcExtraResPath);
                                 if (!npcInfo.npcExtraResPath.endsWith(".chr"))
                                     throw "Extra resource is not a .chr file";
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
@@ -364,7 +286,8 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const mapBuffer = await dataFetcher.fetchData("dq8/map/" + this.mID.split("i")[0].split("_")[0] + "/" + this.mID + ".map", { allow404: true });
+        const mapDir = this.mID.split('i')[0].split('_')[0];
+        const mapBuffer = await dataFetcher.fetchData(`DragonQuest8/map/${mapDir}/${this.mID}.map`);   
         if (mapBuffer.byteLength) {
             const map = await MAP.parse(cache, mapBuffer, dataFetcher, mapBuffer.name);
             for (let i = 0; i < map.chrs.length; i++) {
@@ -377,9 +300,10 @@ class SceneDesc implements Viewer.SceneDesc {
             }
             if (map.img !== null) {
                 for (let i = 0; i < map.img.textures.length; i++) {
-                    if (!canvasTexMap.has(map.img.textures[i].name)) {
-                        canvasTexMap.set(map.img.textures[i].name, true);
-                        viewerTextures.push(textureToCanvas(map.img.textures[i]));
+                    const imgTex = map.img.textures[i];
+                    if (!canvasTexMap.has(imgTex.name)) {
+                        canvasTexMap.set(imgTex.name, true);
+                        viewerTextures.push(textureToCanvas(imgTex));
                     }
                 }
             }
@@ -392,9 +316,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 const sky = map.skies[j];
                 if (sky.img !== null) {
                     for (let i = 0; i < sky.img.textures.length; i++) {
-                        if (!canvasTexMap.has(sky.img.textures[i].name)) {
-                            canvasTexMap.set(sky.img.textures[i].name, true);
-                            viewerTextures.push(textureToCanvas(sky.img.textures[i]));
+                        const imgTex = sky.img.textures[i];
+                        if (!canvasTexMap.has(imgTex.name)) {
+                            canvasTexMap.set(imgTex.name, true);
+                            viewerTextures.push(textureToCanvas(imgTex));
                         }
                     }
                 }
@@ -411,12 +336,13 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         for (let j = 0; j < chrs.length; j++) {
-            const temp = chrs[j].img;
-            if (temp !== null) {
-                for (let i = 0; i < temp.textures.length; i++) {
-                    if (!canvasTexMap.has(temp.textures[i].name)) {
-                        canvasTexMap.set(temp.textures[i].name, true);
-                        viewerTextures.push(textureToCanvas(temp.textures[i]));
+            const chrImg = chrs[j].img;
+            if (chrImg !== null) {
+                for (let i = 0; i < chrImg.textures.length; i++) {
+                    const imgTex = chrImg.textures[i];
+                    if (!canvasTexMap.has(imgTex.name)) {
+                        canvasTexMap.set(imgTex.name, true);
+                        viewerTextures.push(textureToCanvas(imgTex));
                     }
                 }
             }
@@ -429,26 +355,7 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const dq8Paths = [
-    //"dq8/test/ap002/ap002.mds",
-    //"dq8/test/ap002.chr",
-    //"dq8/test/c001_skin1.chr",
-    //"dq8/test/b400a.chr",
-    //"dq8/test/b1600a.chr"
-    //"dq8/test/m01i04/m01i04.map"
-    //"dq8/map/m01/m01i01.map"
-    //"m01i01"
-];
-
 const sceneDescs = [
-    // "Debug",
-    // new SceneDesc("DQ8", "Valentina", "ap002", true),
-    // new SceneDesc("DQ8", "Rich elder", "p028a", true),
-    // new SceneDesc("DQ8", "Merchant", "p023a", true),
-    // new SceneDesc("DQ8", "Crowd", "ap003", true),
-    // new SceneDesc("DQ8", "Water", "mizusibuki_s", true),
-    // new SceneDesc("DQ8", "Enemy dark ruins", "en065a", true),
-    // new SceneDesc("DQ8", "Sky", "m01", false, true),
     "Alexandria",
     new SceneDesc("DQ8", "Alexandria", "m02"),
     new SceneDesc("DQ8", "Alexandria: Inn", "m02i01"),

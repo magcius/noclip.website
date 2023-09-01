@@ -14,33 +14,34 @@ export enum ENPCDayPeriod {
     LATENIGHT = 0x2 //1->6
 }
 
-//Gross but I implemented this too late to have a cleaner implementation not relying on globals
-export class gDQ8SINFO {
+export class SceneInfo {
     //Lighting
-    static currentLightSet: MAP.LightSet | null;
-    static lightSets: MAP.LightSet[];
+    public currentLightSet: MAP.LightSet | null;
+    public lightSets: MAP.LightSet[];
     //Day periods 
-    static currentDayPeriodFlags: number;
-    static currentNPCDayPeriod: ENPCDayPeriod;
+    public currentDayPeriodFlags: number;
+    public currentNPCDayPeriod: ENPCDayPeriod;
     //Game hour
-    static currentHour: number;
+    public currentHour: number;
     //User hour
-    static currentUserHour: number;
+    public currentUserHour: number;
     //Progress
-    static currentGameProgress: number;
+    public currentGameProgress: number;
     //Vcol
-    static bUseVColors: boolean;
+    public bUseVColors: boolean;
+
+    public reset() {
+        this.currentLightSet = null;
+        this.lightSets = [];
+        this.currentDayPeriodFlags = 1;
+        this.currentNPCDayPeriod = ENPCDayPeriod.DAY;
+        this.currentHour = 6.5;
+        this.currentGameProgress = 0;
+        this.bUseVColors = true;
+    }
 }
 
-export function InitSceneInfo() {
-    gDQ8SINFO.currentLightSet = null;
-    gDQ8SINFO.lightSets = [];
-    gDQ8SINFO.currentDayPeriodFlags = 1;
-    gDQ8SINFO.currentNPCDayPeriod = ENPCDayPeriod.DAY;
-    gDQ8SINFO.currentHour = 6.5;
-    gDQ8SINFO.currentGameProgress = 0;
-    gDQ8SINFO.bUseVColors = true;
-}
+export const gDQ8SINFO = new SceneInfo();
 
 function getDayPeriodFlags(h: number): number {
     if (6 < h && h < 9)

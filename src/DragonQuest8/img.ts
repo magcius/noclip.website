@@ -39,8 +39,8 @@ export interface TextureData {
 export class IMG {
     public name: string;
     public textures: Texture[] = [];
-    public texnameToAnimTexture: Map<string, Texture> = new Map<string, Texture>();
-    public texAnimNameToTexAnim: Map<string, TexAnim> = new Map<string, TexAnim>();
+    public texnameToAnimTexture = new Map<string, Texture>();
+    public texAnimNameToTexAnim = new Map<string, TexAnim>();
 
 }
 
@@ -60,11 +60,11 @@ function Unswizzle8(pixelData: Uint8Array, width: number, height: number) {
 }
 
 function processTexAnimeData(img: IMG, buffer: ArrayBufferSlice, animatedTexNames: string[]) {
-    const lines = decodeString(buffer, 0, buffer.byteLength, "Shift_JIS").split('\n');
+    const lines = decodeString(buffer, 0, buffer.byteLength, "sjis").split('\n');
     let bTexAnimeParse = false;
     let bTexAnimeDataParse = false;
     const texAnims = [];
-    const nameSeen: Map<string, boolean> = new Map<string, boolean>();
+    const nameSeen = new Map<string, boolean>();
     let texAnimDataLength = -1;
 
     for (let i = 0; i < lines.length; i++) {
@@ -167,7 +167,7 @@ function processTIM2Texture(img: IMG, buffer: ArrayBufferSlice, name: string, bI
         for (let i = 0; i < pixelData.length; i++) {
             finalPixelData[i] = 0;
         }
-        img.textures.push({ name: name, width: width, height: height, pixels: finalPixelData });
+        img.textures.push({ name, width, height, pixels: finalPixelData });
         return;
     }
 
@@ -218,7 +218,7 @@ function processTIM2Texture(img: IMG, buffer: ArrayBufferSlice, name: string, bI
     }
     else
         throw "Unimplemented format";
-    img.textures.push({ name: name, width: width, height: height, pixels: finalPixelData });
+    img.textures.push({ name, width, height, pixels: finalPixelData });
 }
 
 function getTextureAnimFrame(frameCount: number, frame: number) {
@@ -307,8 +307,9 @@ export function parse(buffer: ArrayBufferSlice, name: string): IMG {
     for (let i = 0; i < animatedTexNames.length; i++) {
         const name = animatedTexNames[i];
         for (let j = 0; j < img.textures.length; j++) {
-            if (name === img.textures[j].name)
-                img.texnameToAnimTexture.set(name, img.textures[j]);
+            const imgTex = img.textures[j]
+            if (name === imgTex.name)
+                img.texnameToAnimTexture.set(name, imgTex);
         }
     }
 

@@ -15,7 +15,7 @@ import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, Gfx
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { nArray } from '../util.js';
+import { fallbackUndefined, nArray } from '../util.js';
 import * as Viewer from '../viewer.js';
 import * as CHR from './chr.js';
 import * as IMG from './img.js';
@@ -342,13 +342,13 @@ export class MDSInstance {
     public bIsSkybox: boolean = false;
     public mdtSubmeshInstances: MDTSubmeshInstance[] = [];
     public debugJoints: boolean = false;
-    public IsRigidJointIDVisible: Map<number, boolean> = new Map<number, boolean>;
+    public IsRigidJointIDVisible = new Map<number, boolean>;
     public jointMatrices: mat4[] = [];
     public motion: MOT.Motion | null = null;
     public texAnims: (IMG.TexAnim | null)[] = [];
     public script: STB.STB | null = null;
     public lastTick: number = 0;
-    public tickRateMs: number = 1 / 30 * 1000
+    public tickRateMs: number = 1 / 30 * 1000;
 
     constructor(public cache: GfxRenderCache, public mdsData: MDSData, public modelMatrix = scratchIDMatrix, public eulerRot: vec3 = scratchIDVec3, public img: IMG.IMG | null = null, public mot: MOT.MOT | null = null, public name: string = '', public NPCDayPeriod: SINFO.ENPCDayPeriod | null = null, public DayPeriodFlags: number | null = null, public ProgressFlags: number | null = null) {
         for (let i = 0; i < this.mdsData.mdtData.length; i++) {
@@ -440,6 +440,12 @@ export class MDSInstance {
         computeViewMatrix(dst, viewerInput.camera);
     }
 
+    public getMotion(motionName: string): MOT.Motion | null {
+        if (this.mot === null)
+            return null;
+        return fallbackUndefined(this.mot.motionNameToMotion.get(motionName), null);
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.bIsVisible || (this.ProgressFlags !== null && this.ProgressFlags !== SINFO.gDQ8SINFO.currentGameProgress) || (this.NPCDayPeriod !== null && !((this.NPCDayPeriod) & (1 << SINFO.gDQ8SINFO.currentNPCDayPeriod))) || (this.DayPeriodFlags !== null && !(this.DayPeriodFlags & SINFO.gDQ8SINFO.currentDayPeriodFlags)))
             return;
@@ -475,18 +481,20 @@ export class MDSInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
         for (let i = 0; i < this.mdtSubmeshInstances.length; i++) {
-            if (this.mdtSubmeshInstances[i].bNeverVisible)
-                this.mdtSubmeshInstances[i].bIsVisible = false;
-            else
-                this.mdtSubmeshInstances[i].bIsVisible = this.IsRigidJointIDVisible.get(this.mdtSubmeshInstances[i].rigidJointId) as boolean;
+            const submesh = this.mdtSubmeshInstances[i];
+            if (submesh.bNeverVisible)
+                continue;
+            const jointVisible = this.IsRigidJointIDVisible.get(submesh.rigidJointId)!;
+            if (!jointVisible)
+                continue;
             let bIsSkyHalfSphere = this.bIsSkybox;
             if (bIsSkyHalfSphere)
-                bIsSkyHalfSphere = this.mdsData.mds.joints[this.mdtSubmeshInstances[i].rigidJointId].name.startsWith("back");
-            this.mdtSubmeshInstances[i].prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, this.modelMatrix, bIsSkyHalfSphere);
+                bIsSkyHalfSphere = this.mdsData.mds.joints[submesh.rigidJointId].name.startsWith("back");
+            submesh.prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, this.modelMatrix, bIsSkyHalfSphere);
             if (bIsSkyHalfSphere) {
                 mat4.rotateX(scratchMatrix, this.modelMatrix, 1.57);
                 mat4.translate(scratchMatrix, scratchMatrix, vec3.fromValues(0, -50, 0)); //Make sure there's no hole
-                this.mdtSubmeshInstances[i].prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, scratchMatrix, bIsSkyHalfSphere);
+                submesh.prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, scratchMatrix, bIsSkyHalfSphere);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -571,24 +579,33 @@ export class CHRRenderer {
             const chr = chrs[i];
             this.motNameToMotionMaps.push(chr.mot !== null ? chr.mot.motionNameToMotion : null);
             if (chr.model !== null) {
-                this.MDSRenderers.push(new MDSInstance(cache, new MDSData(cache, chr.model), transforms[i], eulerRotations[i], chr.img, chr.mot, chr.model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]));
+                const mdsData = new MDSData(cache, chr.model);
+                const mdsRenderer = new MDSInstance(cache, mdsData, transforms[i], eulerRotations[i], chr.img, chr.mot, chr.model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]);
+                
                 //default blinking anim for characters
                 if (chr.img !== null && chr.img.texAnimNameToTexAnim.has("デフォルト目パチ"))
                     //slot 0 picked for facial eye anims.
-                    this.MDSRenderers[i].bindTexAnim(this.MDSRenderers[i].img!.texAnimNameToTexAnim.get("デフォルト目パチ") as IMG.TexAnim, 0);
+                    mdsRenderer.bindTexAnim(mdsRenderer.img!.texAnimNameToTexAnim.get("デフォルト目パチ") as IMG.TexAnim, 0);
                 //Some NPCs have no script attached but are still animated. Needs more investigation, for now default to idle.
-                if (this.MDSRenderers[i].mot !== null && this.MDSRenderers[i].mot?.motionNameToMotion.has("立ち"))
-                    this.MDSRenderers[i].bindMotion(this.MDSRenderers[i].mot!.motionNameToMotion.get("立ち") as MOT.Motion);
-                else if (this.MDSRenderers[i].mot !== null && this.MDSRenderers[i].mot?.motionNameToMotion.has("馬立ち")) //Medea in Farebury
-                    this.MDSRenderers[i].bindMotion(this.MDSRenderers[i].mot!.motionNameToMotion.get("馬立ち") as MOT.Motion);
-                if (stbs !== null) {
-                    this.MDSRenderers[i].bindScript(stbs[i]);
-                    this.MDSRenderers[i].executeScript();
+                let mot = mdsRenderer.getMotion("立ち");
+                if (mot !== null)
+                    mdsRenderer.bindMotion(mot);
+                else {
+                    mot = mdsRenderer.getMotion("馬立ち"); //Medea in Farebury
+                    if (mot !== null)
+                        mdsRenderer.bindMotion(mot);
                 }
                 //mizusibuki
-                if (this.MDSRenderers[i].mot?.motionNameToMotion.has("水しぶき（小）"))
-                    this.MDSRenderers[i].bindMotion(this.MDSRenderers[i].mot!.motionNameToMotion.get("水しぶき（小）") as MOT.Motion);
+                mot = mdsRenderer.getMotion("水しぶき（小）");
+                if (mot !== null)
+                    mdsRenderer.bindMotion(mot);
 
+                if (stbs !== null) {
+                    mdsRenderer.bindScript(stbs[i]);
+                    mdsRenderer.executeScript();
+                }
+                
+                this.MDSRenderers.push(mdsRenderer);
             }
         }
     }
@@ -678,6 +695,6 @@ export function textureToCanvas(texture: IMG.Texture): Viewer.Texture {
     canvas.title = name;
 
     const surfaces = [canvas];
-    return { name: name, surfaces };
+    return { name, surfaces };
 }
 
