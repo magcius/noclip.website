@@ -10,7 +10,7 @@ import { GfxCullMode, GfxDevice, GfxFrontFaceMode } from "../../gfx/platform/Gfx
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray } from "../../util.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData, createUnityAssetSystem } from "./AssetManager.js";
+import { AssetFile, AssetLocation, AssetObjectData, UnityAssetResourceType, UnityAssetSystem, UnityChannel, UnityMaterialData, UnityMeshData, createUnityAssetSystem } from "./AssetManager.js";
 import { rust } from "../../rustlib.js";
 
 interface WasmBindgenArray<T> {
@@ -28,10 +28,10 @@ function loadWasmBindgenArray<T>(wasmArr: WasmBindgenArray<T>): T[] {
 }
 
 export abstract class UnityComponent {
-    public async load(runtime: UnityRuntime): Promise<void> {
+    public async load(level: UnityLevel): Promise<void> {
     }
 
-    public spawn(runtime: UnityRuntime): void {
+    public spawn(level: UnityLevel): void {
     }
 
     public destroy(device: GfxDevice): void {
@@ -62,18 +62,18 @@ export class Transform extends UnityComponent {
 
     public modelMatrix = mat4.create();
 
-    constructor(runtime: UnityRuntime, public gameObject: GameObject, private wasmObj: wasm.Transform) {
+    constructor(level: UnityLevel, public gameObject: GameObject, private wasmObj: wasm.Transform) {
         super();
         vec3FromVec3f(this.localPosition, wasmObj.local_position);
         quatFromQuaternion(this.localRotation, wasmObj.local_rotation);
         vec3FromVec3f(this.localScale, wasmObj.local_scale);
     }
 
-    public override spawn(runtime: UnityRuntime): void {
-        super.spawn(runtime);
-        this.parent = runtime.findComponentByPPtr(this.wasmObj.parent);
+    public override spawn(level: UnityLevel): void {
+        super.spawn(level);
+        this.parent = level.findComponentByPPtr(this.wasmObj.parent);
         this.children = loadWasmBindgenArray(this.wasmObj.get_children()).map((pptr) => {
-            return assertExists(runtime.findComponentByPPtr<Transform>(pptr));
+            return assertExists(level.findComponentByPPtr<Transform>(pptr));
         });
         this.wasmObj.free();
         this.wasmObj = null!;
@@ -105,13 +105,14 @@ export class Transform extends UnityComponent {
 export class MeshFilter extends UnityComponent {
     public meshData: UnityMeshData | null = null;
 
-    constructor(runtime: UnityRuntime, public gameObject: GameObject, wasmObj: wasm.MeshFilter) {
+    constructor(level: UnityLevel, public gameObject: GameObject, wasmObj: wasm.MeshFilter) {
         super();
-        this.loadMeshData(runtime, wasmObj);
+        this.loadMeshData(level, wasmObj);
     }
 
-    private async loadMeshData(runtime: UnityRuntime, wasmObj: wasm.MeshFilter) {
-        this.meshData = await runtime.assetSystem.fetchResource(UnityAssetResourceType.Mesh, this.gameObject.location, wasmObj.mesh_ptr);
+    private async loadMeshData(level: UnityLevel, wasmObj: wasm.MeshFilter) {
+        const assetSystem = level.runtime.assetSystem;
+        this.meshData = await assetSystem.fetchResource(UnityAssetResourceType.Mesh, this.gameObject.location, wasmObj.mesh_ptr);
         wasmObj.free();
     }
 }
@@ -168,26 +169,27 @@ export class MeshRenderer extends UnityComponent {
     private modelMatrix = mat4.create();
     private materials: (UnityMaterialInstance | null)[];
 
-    constructor(runtime: UnityRuntime, public gameObject: GameObject, private header: wasm.MeshRenderer) {
+    constructor(level: UnityLevel, public gameObject: GameObject, private header: wasm.MeshRenderer) {
         super();
         this.visible = header.enabled;
         this.staticBatchSubmeshStart = header.static_batch_info.first_submesh;
         this.staticBatchSubmeshCount = header.static_batch_info.submesh_count;
     }
 
-    public override async load(runtime: UnityRuntime) {
+    public override async load(level: UnityLevel) {
         const materials = this.header.get_materials();
         this.materials = nArray(materials.length, () => null);
         for (let i = 0; i < materials.length; i++) {
             const materialPPtr = materials.get(i)!;
             // Don't wait on materials, we can render them as they load in...
-            this.fetchMaterial(runtime, i, materialPPtr);
+            this.fetchMaterial(level, i, materialPPtr);
             materialPPtr.free();
         }
         materials.free();
     }
 
-    private async fetchMaterial(runtime: UnityRuntime, i: number, pptr: wasm.PPtr) {
+    private async fetchMaterial(level: UnityLevel, i: number, pptr: wasm.PPtr) {
+        const runtime = level.runtime;
         const materialData = await runtime.assetSystem.fetchResource(UnityAssetResourceType.Material, this.gameObject.location, pptr);
         if (materialData === null)
             return;
@@ -264,12 +266,12 @@ export class GameObject {
         this.name = this.header.name;
     }
 
-    public async load(runtime: UnityRuntime) {
+    public async load(level: UnityLevel) {
         const components = loadWasmBindgenArray(this.header.get_components());
         await Promise.all(components.map(async (pptr) => {
-            const data = await runtime.assetSystem.fetchPPtr(this.location, pptr);
+            const data = await level.runtime.assetSystem.fetchPPtr(this.location, pptr);
             pptr.free();
-            const loadPromise = runtime.loadComponent(this, data);
+            const loadPromise = level.loadComponent(this, data);
             if (loadPromise !== null)
                 await loadPromise;
         }));
@@ -298,20 +300,19 @@ interface WasmFromBytes<T> {
 }
 
 interface ComponentConstructor<CompT, WasmT> {
-    new(runtime: UnityRuntime, gameObject: GameObject, wasm: WasmT): CompT;
+    new(level: UnityLevel, gameObject: GameObject, wasm: WasmT): CompT;
 }
 
 export abstract class UnityMaterialFactory {
     public abstract createMaterialInstance(runtime: UnityRuntime, materialData: UnityMaterialData): UnityMaterialInstance;
 }
 
-export class UnityRuntime {
+class UnityLevel {
     public gameObjects: GameObject[] = [];
     public components = new Map<number, UnityComponent>();
     public rootGameObjects: GameObject[] = [];
-    public materialFactory: UnityMaterialFactory;
 
-    constructor(public context: SceneContext, public assetSystem: UnityAssetSystem) {
+    constructor(public runtime: UnityRuntime) {
     }
 
     public findGameObjectByPPtr(pptr: wasm.PPtr): GameObject | null {
@@ -351,9 +352,8 @@ export class UnityRuntime {
         }
     }
 
-    public async loadLevel(filename: string) {
-        const assetFile = this.assetSystem.fetchAssetFile(filename, false);
-        await assetFile.waitForHeader();
+    public async loadLevel(assetFile: AssetFile) {
+        const assetSystem = this.runtime.assetSystem;
 
         // Instantiate all the GameObjects.
         const loadGameObject = async (unityObject: UnityObject) => {
@@ -376,14 +376,14 @@ export class UnityRuntime {
             promises.push(loadGameObject(unityObject));
         }
 
-        await this.assetSystem.waitForLoad();
+        await assetSystem.waitForLoad();
         await Promise.all(promises);
 
         // Spawn all the components.
         for (const component of this.components.values())
             component.spawn(this);
 
-        await this.assetSystem.waitForLoad();
+        await assetSystem.waitForLoad();
 
         this.rootGameObjects = this.gameObjects.filter((obj) => {
             const transform = assertExists(obj.getComponent(Transform));
@@ -395,19 +395,48 @@ export class UnityRuntime {
     }
 
     public getComponents<T extends UnityComponent>(constructor: ComponentConstructor<T, any>): T[] {
-        return this.gameObjects.map((gameObject) => {
+        return this.gameObjects.flatMap((gameObject) => {
             return gameObject.components.filter((comp) => comp instanceof constructor) as T[];
-        }).flat();
-    }
-
-    public update(): void {
-        this.assetSystem.update();
+        });
     }
 
     public destroy(device: GfxDevice): void {
         this.components.clear();
         for (let i = 0; i < this.gameObjects.length; i++)
             this.gameObjects[i].destroy(device);
+    }
+}
+
+export class UnityRuntime {
+    public levels: UnityLevel[] = [];
+    public materialFactory: UnityMaterialFactory;
+
+    constructor(public context: SceneContext, public assetSystem: UnityAssetSystem) {
+    }
+
+    public async loadLevel(filename: string) {
+        const assetFile = this.assetSystem.fetchAssetFile(filename, false);
+        await assetFile.waitForHeader();
+
+        const level = new UnityLevel(this);
+        await level.loadLevel(assetFile);
+
+        this.levels.push(level);
+    }
+
+    public update(): void {
+        this.assetSystem.update();
+    }
+
+    public getComponents<T extends UnityComponent>(constructor: ComponentConstructor<T, any>): T[] {
+        return this.levels.flatMap((level) => {
+            return level.getComponents(constructor);
+        });
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.levels.length; i++)
+            this.levels[i].destroy(device);
     }
 }
 

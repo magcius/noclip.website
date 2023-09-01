@@ -141,7 +141,7 @@ type ResType<T extends UnityAssetResourceType> =
 
 type CreateFunc<T> = (assetSystem: UnityAssetSystem, objData: AssetObjectData) => Promise<T | null>;
 
-class AssetFile {
+export class AssetFile {
     public unityObject: UnityObject[] = [];
     public unityObjectByPathID = new Map<number, UnityObject>();
     public assetInfo: AssetInfo;
