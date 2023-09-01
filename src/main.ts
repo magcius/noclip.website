@@ -88,6 +88,7 @@ import * as Scenes_Halo1 from './Halo1/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
+import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js'
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -159,6 +160,7 @@ const sceneGroups = [
     Scenes_PokemonSnap.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     "PlayStation 2",
+    Scenes_DragonQuest8.sceneGroup,
     Scenes_FFX.sceneGroup,
     Scenes_GTA.sceneGroup.iii,
     Scenes_KatamariDamacy.sceneGroup,
