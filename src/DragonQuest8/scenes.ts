@@ -287,9 +287,10 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         const mapDir = this.mID.split('i')[0].split('_')[0];
-        const mapBuffer = await dataFetcher.fetchData(`DragonQuest8/map/${mapDir}/${this.mID}.map`);   
+        const mapBasename = `DragonQuest8/map/${mapDir}/${this.mID}`;
+        const mapBuffer = await dataFetcher.fetchData(`${mapBasename}.map`);
         if (mapBuffer.byteLength) {
-            const map = await MAP.parse(cache, mapBuffer, dataFetcher, mapBuffer.name);
+            const map = await MAP.parse(cache, mapBuffer, dataFetcher, this.mID, mapBasename);
             for (let i = 0; i < map.chrs.length; i++) {
                 chrs.push(map.chrs[i]);
                 chrTransforms.push(map.chrTransforms[i]);
@@ -327,8 +328,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     texNameToTextureData.set(k, v);
             }
             renderer.MAPRenderers.push(new MAPRenderer(cache, [map]));
-
-
 
             for (let i = 0; i < map.mapInfo.lightSetCount; i++) {
                 SINFO.gDQ8SINFO.lightSets.push(map.mapInfo.lightSets[i]);

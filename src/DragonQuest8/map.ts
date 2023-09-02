@@ -336,22 +336,22 @@ function parseCfg(buffer: ArrayBufferSlice): MapInfo {
     return { pcpFileName, imgFileName, parts, mapParts, lightSets, lightSetCount };
 }
 
-export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dataFetcher: DataFetcher, name: string = ''): Promise<MAP> {
+export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dataFetcher: DataFetcher, mapName: string, basePath: string): Promise<MAP> {
     const device = cache.device;
     const map = new MAP();
-    map.name = name.split('/').pop()!;
+    map.name = mapName;
     map.mapInfo = parseCfg(buffer);
 
-    const ipkFilename: string = name.split(".")[0] + ".ipk";
-    const mpkFilename: string = name.split(".")[0] + ".mpk";
-    const skyFilename: string = name.split(".")[0] + ".sky";
-    const paths = [ipkFilename.replace("/data/", ""), mpkFilename.replace("/data/", "")];
-    const buffers = await Promise.all(paths.map((path) => dataFetcher.fetchData(path)));
+    const [ipkBuffer, mpkBuffer, skyBuffer] = await Promise.all([
+        dataFetcher.fetchData(`${basePath}.ipk`),
+        dataFetcher.fetchData(`${basePath}.mpk`),
+        dataFetcher.fetchData(`${basePath}.sky`),
+    ]);
 
-    const ipkInfo = BUNDLE.parseBundle(buffers[0]);
+    const ipkInfo = BUNDLE.parseBundle(ipkBuffer);
     if (!ipkInfo.has(map.mapInfo.imgFileName))
         throw "img file not found";
-    map.img = IMG.parse(buffers[0].slice(ipkInfo.get(map.mapInfo.imgFileName)!.offset, ipkInfo.get(map.mapInfo.imgFileName)!.offset + ipkInfo.get(map.mapInfo.imgFileName)!.size), map.mapInfo.imgFileName);
+    map.img = IMG.parse(ipkBuffer.slice(ipkInfo.get(map.mapInfo.imgFileName)!.offset, ipkInfo.get(map.mapInfo.imgFileName)!.offset + ipkInfo.get(map.mapInfo.imgFileName)!.size), map.mapInfo.imgFileName);
     for (let i = 0; i < map.img.textures.length; i++) {
         const texture = map.img.textures[i];
         if(map.textureDataMap.has(texture.name))
@@ -371,10 +371,10 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
         map.textureDataMap.set(map.img.textures[i].name, { texture: gfxTex, sampler: gfxSampler });
     }
 
-    const mpkInfo = BUNDLE.parseBundle(buffers[1]);
+    const mpkInfo = BUNDLE.parseBundle(mpkBuffer);
     if (!mpkInfo.has(map.mapInfo.pcpFileName))
         throw "pcp file not found";
-    const pcpInfo = BUNDLE.parseBundle(buffers[1].slice(mpkInfo.get(map.mapInfo.pcpFileName)!.offset), mpkInfo.get(map.mapInfo.pcpFileName)!.offset);
+    const pcpInfo = BUNDLE.parseBundle(mpkBuffer.slice(mpkInfo.get(map.mapInfo.pcpFileName)!.offset), mpkInfo.get(map.mapInfo.pcpFileName)!.offset);
     const processedMDS = new Map<string, string>();
     const processedCHRS = new Map<string, CHR.CHR>();
     let bFireEffectLoaded: boolean = false;
@@ -398,7 +398,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
                 if (processedCHRS.has(piece.mdsName))
                     map.chrs.push(processedCHRS.get(piece.mdsName) as CHR.CHR);
                 else {
-                    map.chrs.push(CHR.parse(cache, buffers[1].slice(pcpInfo.get(piece.mdsName)!.offset, pcpInfo.get(piece.mdsName)!.offset + pcpInfo.get(piece.mdsName)!.size), piece.mdsName, true, map.img));
+                    map.chrs.push(CHR.parse(cache, mpkBuffer.slice(pcpInfo.get(piece.mdsName)!.offset, pcpInfo.get(piece.mdsName)!.offset + pcpInfo.get(piece.mdsName)!.size), piece.mdsName, true, map.img));
                     processedCHRS.set(piece.mdsName, map.chrs[map.chrs.length - 1]);
                 }
                 map.chrTransforms.push(mat4.mul(mat4.create(), mapPartTransform, pieceTransform));
@@ -408,7 +408,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
             if (processedMDS.has(piece.mdsName))
                 map.modelMap.set(piece.name, map.modelMap.get(processedMDS.get(piece.mdsName) as string) as MDS.MDS);
             else {
-                map.modelMap.set(piece.name, MDS.parse(buffers[1].slice(pcpInfo.get(piece.mdsName)!.offset, pcpInfo.get(piece.mdsName)!.offset + pcpInfo.get(piece.mdsName)!.size), piece.mdsName, map.textureDataMap));
+                map.modelMap.set(piece.name, MDS.parse(mpkBuffer.slice(pcpInfo.get(piece.mdsName)!.offset, pcpInfo.get(piece.mdsName)!.offset + pcpInfo.get(piece.mdsName)!.size), piece.mdsName, map.textureDataMap));
                 processedMDS.set(piece.mdsName, piece.name);
             }
             map.modelNames.push(piece.name);
@@ -420,8 +420,8 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
             const func = parts!.funcs[j];
             if (func.type === "fire") { //Torches
                 if (!bFireEffectLoaded) {
-                    const fireImgBuffer = await dataFetcher.fetchData("dq8/effect/taimatu.img");
-                    map.fireImg = IMG.parse(fireImgBuffer, "dq8/effect/taimatu.img");
+                    const fireImgBuffer = await dataFetcher.fetchData("DragonQuest8/effect/taimatu.img");
+                    map.fireImg = IMG.parse(fireImgBuffer, "DragonQuest8/effect/taimatu.img");
                     for (let i = 0; i < map.fireImg.textures.length; i++) {
                         const texture = map.fireImg.textures[i];
                         if(map.textureDataMap.has(texture.name))
@@ -458,7 +458,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
                 const funcTransform = mat4.create();
                 computeModelMatrixSRT(funcTransform, 20, 20, 20, func.rotation[0], func.rotation[1], func.rotation[2], func.position[0], func.position[1], func.position[2]);
                 if (!processedCHRS.has(func.type)) {
-                    const treeBuffer = await dataFetcher.fetchData("dq8/map/tree_a.chr");
+                    const treeBuffer = await dataFetcher.fetchData("DragonQuest8/map/tree_a.chr");
                     map.chrs.push(CHR.parse(cache, treeBuffer.slice(0x75e0, 0x1d5a0), func.name, true, map.img)); //Only grab tree 0
                     processedCHRS.set(func.type, map.chrs[map.chrs.length - 1]);
                 }
@@ -472,7 +472,6 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
         }
     }
 
-    const skyBuffer = await dataFetcher.fetchData(skyFilename.replace("/data/", ""), { allow404: true });
     if (skyBuffer.byteLength) {
         map.skies = parseSkyCfg(cache, skyBuffer);
         for (let j = 0; j < map.skies.length; j++) {
