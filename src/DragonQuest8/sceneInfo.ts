@@ -69,37 +69,27 @@ function getNPCDayPeriod(h: number): ENPCDayPeriod {
     return ENPCDayPeriod.EARLYNIGHT;
 }
 
-export function UpdateSceneInfo(viewerInput: Viewer.ViewerRenderInput, bNeedNPCPeriodUpdate: boolean, bNeedDayPeriodUpdate: boolean) {
+export function UpdateSceneInfo(sceneInfo: SceneInfo, deltaTime: number): void {
     //Time update
-    if (gDQ8SINFO.currentUserHour < 0) {
-        gDQ8SINFO.currentHour += viewerInput.deltaTime / 2000;
-        while (gDQ8SINFO.currentHour > 24)
-            gDQ8SINFO.currentHour -= 24;
-    }
-    else {
-        gDQ8SINFO.currentHour = gDQ8SINFO.currentUserHour;
+    if (sceneInfo.currentUserHour < 0) {
+        sceneInfo.currentHour += deltaTime / 2000;
+        while (sceneInfo.currentHour > 24)
+            sceneInfo.currentHour -= 24;
+    } else {
+        sceneInfo.currentHour = sceneInfo.currentUserHour;
     }
 
     //Light set update    
-    if (gDQ8SINFO.lightSets.length) {
-        let hour = gDQ8SINFO.currentHour - 9; //Not a hack, done like this ingame. Matches the day period approach too.
+    if (sceneInfo.lightSets.length) {
+        let hour = sceneInfo.currentHour - 9; //Not a hack, done like this ingame. Matches the day period approach too.
         if (hour < 0)
             hour += 24;
-        gDQ8SINFO.currentLightSet = gDQ8SINFO.lightSets[Math.floor(hour / (24 / gDQ8SINFO.lightSets.length)) % gDQ8SINFO.lightSets.length];
+        sceneInfo.currentLightSet = sceneInfo.lightSets[Math.floor(hour / (24 / sceneInfo.lightSets.length)) % sceneInfo.lightSets.length];
     }
 
     //Day schedule update
-    const nextDayPeriod = getDayPeriodFlags(gDQ8SINFO.currentHour);
-    if (nextDayPeriod !== gDQ8SINFO.currentDayPeriodFlags) {
-        gDQ8SINFO.currentDayPeriodFlags = nextDayPeriod;
-        bNeedDayPeriodUpdate = true;
-    }
+    sceneInfo.currentDayPeriodFlags = getDayPeriodFlags(sceneInfo.currentHour);
 
     //NPC schedule update
-    const nextNPCDayPeriod = getNPCDayPeriod(gDQ8SINFO.currentHour);
-    if (nextNPCDayPeriod !== gDQ8SINFO.currentNPCDayPeriod) {
-        gDQ8SINFO.currentNPCDayPeriod = nextNPCDayPeriod;
-        bNeedNPCPeriodUpdate = true;
-    }
-
+    sceneInfo.currentNPCDayPeriod = getNPCDayPeriod(sceneInfo.currentHour);
 }

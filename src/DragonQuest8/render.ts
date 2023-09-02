@@ -15,7 +15,7 @@ import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, Gfx
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { assertExists, fallbackUndefined, nArray } from '../util.js';
+import { assert, assertExists, fallbackUndefined, nArray } from '../util.js';
 import * as Viewer from '../viewer.js';
 import * as CHR from './chr.js';
 import * as IMG from './img.js';
@@ -46,7 +46,7 @@ layout(std140) uniform ub_MDTSubmeshParams {
     Mat4x4 u_RigidTrans;
     Mat4x3 u_JointMatrix[SKINNING_MATRIX_COUNT];
     vec4 u_BGColor;
-    vec4 u_BGColor2; 
+    vec4 u_BGColor2;
     vec4 u_Misc;
 };
 uniform sampler2D u_Texture;
@@ -104,16 +104,14 @@ void mainPS() {
         c *= v_col;
     if (u_bIsSkybox > 0.0)
         gl_FragColor = v_col;
-    else    
+    else
         gl_FragColor = c;
     if(u_bAlphaTest > 0.0 && gl_FragColor.a < 0.6)
-        discard;   
+        discard;
 }
 #endif
 `;
 }
-
-const MAX_TEX_ANIM = 2; //Eyes area, mouth area.
 
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
@@ -122,7 +120,6 @@ const scratchQuat = quat.create();
 const scratchViewMatrix = mat4.create();
 const scratchIDMatrix = mat4.create();
 const scratchIDVec3 = vec3.create();
-
 
 class MDTSubmeshData {
     constructor(public mdtSubmeshes: MDS.MDTSubmesh, public indexBufferOffset: number) {
@@ -314,6 +311,7 @@ export class MDTSubmeshInstance {
                 }
                 offs += fillMatrix4x3(smParamsMapped, offs, scratchMatrix);
             }
+
             offs += fillColor(smParamsMapped, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor : colorNewFromRGBA(1, 0, 0, 1));
             offs += fillColor(smParamsMapped, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor2 : colorNewFromRGBA(0, 0, 1, 1));
             offs += fillVec4(smParamsMapped, offs, jointPerVertCount, this.mdtData.mdt.parentMDS.materials[submesh.materialIdx].bIsAlphaTest ? 1 : 0, (bIsSkybox) ? 1 : 0, (SINFO.gDQ8SINFO.bUseVColors ? 1 : 0));
@@ -342,10 +340,10 @@ export class MDSInstance {
     public bIsSkybox: boolean = false;
     public mdtSubmeshInstances: MDTSubmeshInstance[] = [];
     public debugJoints: boolean = false;
-    public IsRigidJointIDVisible = new Map<number, boolean>;
+    public IsRigidJointIDVisible = new Map<number, boolean>();
     public jointMatrices: mat4[] = [];
     public motion: MOT.Motion | null = null;
-    public texAnims: (IMG.TexAnim | null)[] = [];
+    public texAnims: (IMG.TexAnim | null)[] = nArray(2, () => null);
     public script: STB.STB | null = null;
     public lastTick: number = 0;
     public tickRateMs: number = 1 / 30 * 1000;
@@ -355,29 +353,21 @@ export class MDSInstance {
             this.mdtSubmeshInstances.push(new MDTSubmeshInstance(this.mdsData.mdtData[i], this.mdsData.mds.rigidTransformJointIds[i]));
             this.IsRigidJointIDVisible.set(this.mdsData.mds.rigidTransformJointIds[i], true);
         }
+
         this.jointMatrices = nArray(this.mdsData.mds.joints.length, () => mat4.create());
         this.updateJointMatrices();
-        for (let i = 0; i < MAX_TEX_ANIM; i++)
-            this.texAnims.push(null);
+
         //Manual hiding of unrendered meshes
-        if (name === "m02g02_01-m") //Weird unneeded black planes around Alexandria, ugly Z fighting, skip for now
-        {
+        if (name === "m02g02_01-m") { //Weird unneeded black planes around Alexandria, ugly Z fighting, skip for now
             this.mdtSubmeshInstances[5].bNeverVisible = true;
             this.mdtSubmeshInstances[6].bNeverVisible = true;
             this.mdtSubmeshInstances[9].bNeverVisible = true;
             this.mdtSubmeshInstances[11].bNeverVisible = true;
         }
+
         if (name === "t02_01-m") {
             this.mdtSubmeshInstances[5].bNeverVisible = true;
             this.mdtSubmeshInstances[7].bNeverVisible = true;
-        }
-        if (name === "m01i07_09-m") //Crystal ball
-        {
-            this.mdtSubmeshInstances[1].bNeverVisible = true;
-        }
-        if (name === "s3602-m1" || name === "s3602-m_1")//Rydon's planes
-        {
-            this.mdtSubmeshInstances[2].bNeverVisible = true;
         }
         if (name === "t03f01_01-m") {
             this.mdtSubmeshInstances[0].bNeverVisible = true;
@@ -386,14 +376,17 @@ export class MDSInstance {
             this.mdtSubmeshInstances[7].bNeverVisible = true;
             this.mdtSubmeshInstances[9].bNeverVisible = true;
         }
-        if (name === "x01i07_01-m0") {
-            this.mdtSubmeshInstances[30].bNeverVisible = true;
-        }
         if (name === "s09_01-m1") {
             this.mdtSubmeshInstances[14].bNeverVisible = true;
             this.mdtSubmeshInstances[15].bNeverVisible = true;
             this.mdtSubmeshInstances[16].bNeverVisible = true;
         }
+        if (name === "m01i07_09-m") //Crystal ball
+            this.mdtSubmeshInstances[1].bNeverVisible = true;
+        if (name === "s3602-m1" || name === "s3602-m_1") //Rydon's planes
+            this.mdtSubmeshInstances[2].bNeverVisible = true;
+        if (name === "x01i07_01-m0")
+            this.mdtSubmeshInstances[30].bNeverVisible = true;
     }
 
     private updateJointMatrices(viewerInput: Viewer.ViewerRenderInput | null = null): void {
@@ -426,7 +419,6 @@ export class MDSInstance {
                 }
             }
         }
-
     }
 
     private updateTextureAnims(): void {
@@ -464,7 +456,8 @@ export class MDSInstance {
                 // if (joint.bIsBillboard)
                 //     drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.jointMatrices[joint.id],5,5);
 
-                if (joint.parentId < 0) continue;
+                if (joint.parentId < 0)
+                    continue;
 
                 vec3.set(scratchVec3a, 0, 0, 0);
                 vec3.transformMat4(scratchVec3a, scratchVec3a, this.jointMatrices[joint.parentId]);
@@ -479,7 +472,6 @@ export class MDSInstance {
             }
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
         for (let i = 0; i < this.mdtSubmeshInstances.length; i++) {
             const submesh = this.mdtSubmeshInstances[i];
             if (submesh.bNeverVisible)
@@ -497,7 +489,6 @@ export class MDSInstance {
                 submesh.prepareToRender(device, renderInstManager, this.jointMatrices, scratchViewMatrix, this.mdsData.inverseBindPoseMatrices, scratchMatrix, bIsSkyHalfSphere);
             }
         }
-        renderInstManager.popTemplateRenderInst();
     }
 
     public setVisible(visible: boolean): void {
@@ -525,8 +516,7 @@ export class MDSInstance {
     }
 
     public bindTexAnim(texAnim: IMG.TexAnim, index: number): void {
-        if (index >= MAX_TEX_ANIM)
-            throw "tex anim id overflow";
+        assert(index < this.texAnims.length);
         this.texAnims[index] = texAnim;
     }
 }
@@ -578,36 +568,36 @@ export class CHRRenderer {
         for (let i = 0; i < chrs.length; i++) {
             const chr = chrs[i];
             this.motNameToMotionMaps.push(chr.mot !== null ? chr.mot.motionNameToMotion : null);
-                const model = assertExists(chr.model);
-                const mdsData = new MDSData(cache, model);
-                const mdsRenderer = new MDSInstance(cache, mdsData, transforms[i], eulerRotations[i], chr.img, chr.mot, model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]);
-                
-                //default blinking anim for characters
-                if (chr.img !== null && chr.img.texAnimNameToTexAnim.has("デフォルト目パチ"))
-                    //slot 0 picked for facial eye anims.
-                    mdsRenderer.bindTexAnim(mdsRenderer.img!.texAnimNameToTexAnim.get("デフォルト目パチ") as IMG.TexAnim, 0);
-                //Some NPCs have no script attached but are still animated. Needs more investigation, for now default to idle.
-                let mot = mdsRenderer.getMotion("立ち");
-                if (mot !== null)
-                    mdsRenderer.bindMotion(mot);
-                else {
-                    mot = mdsRenderer.getMotion("馬立ち"); //Medea in Farebury
-                    if (mot !== null)
-                        mdsRenderer.bindMotion(mot);
-                }
-                //mizusibuki
-                mot = mdsRenderer.getMotion("水しぶき（小）");
-                if (mot !== null)
-                    mdsRenderer.bindMotion(mot);
+            const model = assertExists(chr.model);
+            const mdsData = new MDSData(cache, model);
+            const mdsRenderer = new MDSInstance(cache, mdsData, transforms[i], eulerRotations[i], chr.img, chr.mot, model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]);
 
-                if (stbs !== null) {
-                    mdsRenderer.bindScript(stbs[i]);
-                    mdsRenderer.executeScript();
-                }
-                
-                this.MDSRenderers.push(mdsRenderer);
+            //default blinking anim for characters
+            if (chr.img !== null && chr.img.texAnimNameToTexAnim.has("デフォルト目パチ"))
+                //slot 0 picked for facial eye anims.
+                mdsRenderer.bindTexAnim(mdsRenderer.img!.texAnimNameToTexAnim.get("デフォルト目パチ") as IMG.TexAnim, 0);
+            //Some NPCs have no script attached but are still animated. Needs more investigation, for now default to idle.
+            let mot = mdsRenderer.getMotion("立ち");
+            if (mot !== null)
+                mdsRenderer.bindMotion(mot);
+            else {
+                mot = mdsRenderer.getMotion("馬立ち"); //Medea in Farebury
+                if (mot !== null)
+                    mdsRenderer.bindMotion(mot);
             }
+            //mizusibuki
+            mot = mdsRenderer.getMotion("水しぶき（小）");
+            if (mot !== null)
+                mdsRenderer.bindMotion(mot);
+
+            if (stbs !== null) {
+                mdsRenderer.bindScript(stbs[i]);
+                mdsRenderer.executeScript();
+            }
+
+            this.MDSRenderers.push(mdsRenderer);
         }
+    }
 
     public setVisible(v: boolean) {
         this.bIsVisible = v;
@@ -653,7 +643,7 @@ export class MAPRenderer {
                 const modelName: string = map.modelNames[j];
                 if (map.fireEffectIndices.has(j)) {
                     this.MDSRenderers.push(new MDSInstance(cache, new MDSData(cache, map.modelMap.get(modelName) as MDS.MDS), map.modelTransforms[j], scratchIDVec3, map.fireImg, null, modelName, null, map.modelPeriodFlags[j]));
-                    //default fire anim for fire effects                    
+                    //default fire anim for fire effects
                     if (map.fireImg !== null && map.fireImg.texAnimNameToTexAnim.has("taimatu"))
                         //slot 0 picked for fire anims.
                         this.MDSRenderers[j].bindTexAnim(this.MDSRenderers[j].img!.texAnimNameToTexAnim.get("taimatu") as IMG.TexAnim, 0);

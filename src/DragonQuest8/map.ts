@@ -345,7 +345,7 @@ export async function parse(cache: GfxRenderCache, buffer: ArrayBufferSlice, dat
     const [ipkBuffer, mpkBuffer, skyBuffer] = await Promise.all([
         dataFetcher.fetchData(`${basePath}.ipk`),
         dataFetcher.fetchData(`${basePath}.mpk`),
-        dataFetcher.fetchData(`${basePath}.sky`),
+        dataFetcher.fetchData(`${basePath}.sky`, { allow404: true }),
     ]);
 
     const ipkInfo = BUNDLE.parseBundle(ipkBuffer);

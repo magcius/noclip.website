@@ -20,7 +20,6 @@ import * as MDS from './mds.js';
 import { CHRRenderer, DQ8Program, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate, textureToCanvas } from './render.js';
 import * as STB from "./stb.js";
 
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 }, // ub_SceneParams, ub_SubmeshParams
 ];
@@ -71,9 +70,8 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         let clearColor = colorNewFromRGBA(1, 0, 0);
-        let bNeedNPCPeriodUpdate: boolean = false;
-        let bNeedDayPeriodUpdate: boolean = false;
-        SINFO.UpdateSceneInfo(viewerInput, bNeedNPCPeriodUpdate, bNeedDayPeriodUpdate);
+
+        SINFO.UpdateSceneInfo(SINFO.gDQ8SINFO, viewerInput.deltaTime);
 
         if (SINFO.gDQ8SINFO.currentLightSet)
             clearColor = SINFO.gDQ8SINFO.currentLightSet!.bgcolor;
@@ -191,7 +189,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const chrDayPeriodFlags: (number | null)[] = [];
         const chrProgressFlags: (number | null)[] = [];
 
-        const skelModelSet = new Set<string>([ //model matrices used instead of local ones for joints
+        const skelModelSet = new Set<string>([ // model matrices used instead of local ones for joints
             "b600a.chr",
             "c004_skin2.chr",
             "cp002.chr",
@@ -203,16 +201,16 @@ class SceneDesc implements Viewer.SceneDesc {
             "en092a.chr",
             "en116a.chr",
             "en117a.chr",
-            "jinmenju.chr", 
-            "k_shitai.chr", 
-            "mp006a.chr", 
-            "p024d.chr", 
-            "p024c.chr", 
-            "p024d.chr", 
-            "p024e.chr", 
-            "p073a.chr", 
+            "jinmenju.chr",
+            "k_shitai.chr",
+            "mp006a.chr",
+            "p024d.chr",
+            "p024c.chr",
+            "p024d.chr",
+            "p024e.chr",
+            "p073a.chr",
             "p073a_iro.chr",
-            "sp001.chr", 
+            "sp001.chr",
         ]);
 
         const dispoBuffer = await dataFetcher.fetchData(`DragonQuest8/event/villager/disposition/${this.mID}.cfg`, { allow404: true });
@@ -309,8 +307,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                 }
             }
-            for (const [k, v] of map.textureDataMap){
-                if(texNameToTextureData.has(k))
+            for (const [k, v] of map.textureDataMap) {
+                if (texNameToTextureData.has(k))
                     throw "already there";
                 texNameToTextureData.set(k, v);
             }
@@ -409,7 +407,7 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Ascantha Castle: Rooftop", "c02i10"),
     new SceneDesc("DQ8", "Ascantha: Basement Level 1", "c02i11"),
     new SceneDesc("DQ8", "Ascantha: Escape Tunnel", "c02i12"),
-    new SceneDesc("DQ8", "Ascantha: Well", "c02i13"),  
+    new SceneDesc("DQ8", "Ascantha: Well", "c02i13"),
     "Baccarat",
     new SceneDesc("DQ8", "Baccarat", "m05"),
     new SceneDesc("DQ8", "Baccarat: Hotel", "m05i01"),
@@ -424,7 +422,7 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Baccarat: House 4 Level 1", "m05i10"),
     new SceneDesc("DQ8", "Baccarat: House 4 Level 2", "m05i11"),
     new SceneDesc("DQ8", "Baccarat: Hotel Basement", "m05i12"),
-    new SceneDesc("DQ8", "Baccarat: Well", "m05i13"), 
+    new SceneDesc("DQ8", "Baccarat: Well", "m05i13"),
     "Black Citadel",
     new SceneDesc("DQ8", "Black Citadel", "x05"),
     new SceneDesc("DQ8", "Black Citadel: Lord of Darkness's Hall", "x05i01"),
@@ -442,7 +440,7 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Castle Trodain: Wing", "c01i05"),
     new SceneDesc("DQ8", "Castle Trodain: Library", "c01i06"),
     new SceneDesc("DQ8", "Castle Trodain: Keep Level 4 (Flashback)", "c01i08"),
-    new SceneDesc("DQ8", "Castle Trodain: Keep L3 (Flashback)", "c01i09"),   
+    new SceneDesc("DQ8", "Castle Trodain: Keep L3 (Flashback)", "c01i09"),
     "Castle Trodain (restored)",
     new SceneDesc("DQ8", "Castle Trodain", "c05"),
     new SceneDesc("DQ8", "Castle Trodain: Keep L1 (Restored)", "c05i01"),
@@ -565,7 +563,7 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Maella Courtyard", "x02i07"),
     "Marta's Cottage",
     new SceneDesc("DQ8", "Marta's Cottage (Outside)", "s14"),
-    new SceneDesc("DQ8", "Marta's Cottage (Inside)", "s14i01"),    
+    new SceneDesc("DQ8", "Marta's Cottage (Inside)", "s14i01"),
     "Moonshadow Land ",
     new SceneDesc("DQ8", "Moonshadow Land (Outside)", "s04"),
     new SceneDesc("DQ8", "Moonshadow Land (Inside)", "s04i01"),
@@ -620,7 +618,7 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Port Prospect: Inside Ferry", "m03i07"),
     "Princess Minnie's Castle",
     new SceneDesc("DQ8", "Princess Minnie's Castle (Outside)", "c04"),
-    new SceneDesc("DQ8", "Princess Minnie's Castle (Inside)", "c04i01"),    
+    new SceneDesc("DQ8", "Princess Minnie's Castle (Inside)", "c04i01"),
     "Purgatory Island",
     new SceneDesc("DQ8", "Purgatory Island (Outside)", "s19"),
     new SceneDesc("DQ8", "Purgatory Island (Inside)", "s19i01"),
@@ -645,20 +643,20 @@ const sceneDescs = [
     new SceneDesc("DQ8", "Simpleton", "m06"),
     new SceneDesc("DQ8", "Simpleton: Pub", "m06i01"),
     new SceneDesc("DQ8", "Simpleton: Inn", "m06i02"),
-    new SceneDesc("DQ8", "Simpleton: Church", "m06i03"), 
+    new SceneDesc("DQ8", "Simpleton: Church", "m06i03"),
     "Tower of Alexandra",
     new SceneDesc("DQ8", "Tower of Alexandra", "t01"),
     new SceneDesc("DQ8", "Tower of Alexandra: Level 1", "t01i01"),
     new SceneDesc("DQ8", "Tower of Alexandra: Levels 3_6", "t01i03"),
     new SceneDesc("DQ8", "Tower of Alexandra: Level 7", "t01i07"),
-    new SceneDesc("DQ8", "Tower of Alexandra (Turret)", "t01i08"),  
+    new SceneDesc("DQ8", "Tower of Alexandra (Turret)", "t01i08"),
     "Tryan Gully",
     new SceneDesc("DQ8", "Tryan Gully", "m10"),
     new SceneDesc("DQ8", "Tryan Gully: Raya's Room", "m10i01"),
     new SceneDesc("DQ8", "Tryan Gully: Church", "m10i02"),
     new SceneDesc("DQ8", "Tryan Gully: Facilities", "m10i03"),
-    new SceneDesc("DQ8", "Tryan Gully: Storeroom", "m10i04"),   
-    
+    new SceneDesc("DQ8", "Tryan Gully: Storeroom", "m10i04"),
+
     "Misc",
     new SceneDesc("DQ8", "Trolls' Maze", "r01"),
     new SceneDesc("DQ8", "Le Club Puff-Puff ", "r02i01"),
