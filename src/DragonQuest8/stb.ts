@@ -4,12 +4,8 @@ import { computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } fro
 import { assert, readString } from "../util.js";
 import * as IMG from './img.js';
 import * as MOT from './mot.js';
+import * as SINFO from './sceneInfo.js'
 import { MDSInstance } from './render.js';
-
-//Misc, hardcoded for now
-const MAIN_PROGRESS_ID = 0x1;
-const SUB_PROGRESS_ID = 0x0;
-const EVENT_FLAGS = 0x0;
 
 //Stack sizes
 const STACK_SIZE = 0x280;
@@ -832,7 +828,7 @@ function func0x15(argvPtr: number, argc: number, stack: number[]) {
     if (argc === 2) {
         if (stack[argvPtr + 1] === 0 && stack[argvPtr + 2] === 3) {
             const outPtr = stack[argvPtr + 3];
-            stack[outPtr + 1] = MAIN_PROGRESS_ID;
+            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbMainProgress;
             return;
         }
         else
@@ -842,13 +838,13 @@ function func0x15(argvPtr: number, argc: number, stack: number[]) {
         if (stack[argvPtr + 1] === 1 && stack[argvPtr + 4] === 3) //block not completely accurate for convenience, should be enough for now
         {
             const outPtr = stack[argvPtr + 5];
-            stack[outPtr + 1] = SUB_PROGRESS_ID;
+            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbSubProgress;
             return;
         }
         else if (stack[argvPtr + 1] === 2 && stack[argvPtr + 4] === 3) //same here
         {
             const outPtr = stack[argvPtr + 5];
-            stack[outPtr + 1] = EVENT_FLAGS & (1 << (stack[argvPtr + 3] & 0x1F));
+            stack[outPtr + 1] = SINFO.gDQ8SINFO.stbEventFlags & (1 << (stack[argvPtr + 3] & 0x1F));
             return;
         }
     }

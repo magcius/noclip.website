@@ -15,7 +15,7 @@ import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, Gfx
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { fallbackUndefined, nArray } from '../util.js';
+import { assertExists, fallbackUndefined, nArray } from '../util.js';
 import * as Viewer from '../viewer.js';
 import * as CHR from './chr.js';
 import * as IMG from './img.js';
@@ -578,9 +578,9 @@ export class CHRRenderer {
         for (let i = 0; i < chrs.length; i++) {
             const chr = chrs[i];
             this.motNameToMotionMaps.push(chr.mot !== null ? chr.mot.motionNameToMotion : null);
-            if (chr.model !== null) {
-                const mdsData = new MDSData(cache, chr.model);
-                const mdsRenderer = new MDSInstance(cache, mdsData, transforms[i], eulerRotations[i], chr.img, chr.mot, chr.model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]);
+                const model = assertExists(chr.model);
+                const mdsData = new MDSData(cache, model);
+                const mdsRenderer = new MDSInstance(cache, mdsData, transforms[i], eulerRotations[i], chr.img, chr.mot, model.name, chrNPCDayPeriods[i], chrDayPeriodFlags[i], chrProgressFlags[i]);
                 
                 //default blinking anim for characters
                 if (chr.img !== null && chr.img.texAnimNameToTexAnim.has("デフォルト目パチ"))
@@ -608,7 +608,6 @@ export class CHRRenderer {
                 this.MDSRenderers.push(mdsRenderer);
             }
         }
-    }
 
     public setVisible(v: boolean) {
         this.bIsVisible = v;
