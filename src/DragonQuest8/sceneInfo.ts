@@ -30,6 +30,11 @@ export class SceneInfo {
     //Vcol
     public bUseVColors: boolean;
 
+    //Game progress breakdown (used by the scripts)
+    public stbMainProgress: number;
+    public stbSubProgress: number;
+    public stbEventFlags: number;
+
     public reset() {
         this.currentLightSet = null;
         this.lightSets = [];
@@ -38,7 +43,10 @@ export class SceneInfo {
         this.currentHour = 6.5;
         this.currentGameProgress = 0;
         this.bUseVColors = true;
-    }
+        this.stbMainProgress = 0x1;
+        this.stbSubProgress = 0x0;
+        this.stbEventFlags = 0x0;
+   }
 }
 
 export const gDQ8SINFO = new SceneInfo();
