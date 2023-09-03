@@ -19,6 +19,7 @@ import * as MAP from './map.js';
 import * as MDS from './mds.js';
 import { CHRRenderer, DQ8Program, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate, textureToCanvas } from './render.js';
 import * as STB from "./stb.js";
+import { assert } from "../util.js";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 }, // ub_SceneParams, ub_SubmeshParams
@@ -232,26 +233,26 @@ class SceneDesc implements Viewer.SceneDesc {
                         const npcInfo = nPCInfo[j];
                         if (!chrMap.has(npcInfo.npcFileName)) {
                             const chrBuffer = await dataFetcher.fetchData(`DragonQuest8/${npcInfo.npcFileName}`);
-                            chrs.push(CHR.parse(cache, chrBuffer, chrBuffer.name, true, null, skelModelSet.has(npcInfo.npcFileName.split("/")[1])));
+                            const baseName = npcInfo.npcFileName.split("/")[1];
+                            chrs.push(CHR.parse(cache, chrBuffer, chrBuffer.name, true, null, skelModelSet.has(baseName)));
                             //Party members extra resources, see Purgatory island. Keeping these split if skin/mapping changes later
-                            if (npcInfo.npcFileName.split("/")[1] === "c002_skin1.chr") { //Yangus
+                            if (baseName === "c002_skin1.chr") { //Yangus
                                 const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/chara/c002_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
-                            else if (npcInfo.npcFileName.split("/")[1] === "c003_skin1.chr") { //Angelo
+                            else if (baseName === "c003_skin1.chr") { //Angelo
                                 const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/chara/c003_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
-                            else if (npcInfo.npcFileName.split("/")[1] === "c004_skin2.chr") { //Jessica
+                            else if (baseName === "c004_skin2.chr") { //Jessica
                                 const extraResBuffer = await dataFetcher.fetchData("DragonQuest8/chara/c004_base1.chr");
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
                             chrMap.set(npcInfo.npcFileName, chrs[chrs.length - 1]);
                             //External resources
                             if (npcInfo.npcExtraResPath !== "") {
-                                const extraResBuffer = await dataFetcher.fetchData(`DragonQuest8/${npcInfo.npcExtraResPath}`);
-                                if (!npcInfo.npcExtraResPath.endsWith(".chr"))
-                                    throw "Extra resource is not a .chr file";
+                                const extraResBuffer = await dataFetcher.fetchData(`DragonQuest8/${npcInfo.npcExtraResPath.toLowerCase()}`);
+                                assert(npcInfo.npcExtraResPath.endsWith('.chr'));
                                 CHR.updateChrWithChr(chrs[chrs.length - 1], CHR.parse(cache, extraResBuffer, extraResBuffer.name));
                             }
                         }
