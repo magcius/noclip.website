@@ -443,8 +443,8 @@ export function compileLoadedVertexLayout(vcd: GX_VtxDesc[], useNBT: boolean = f
         case VertexAttributeInput.POS:
             return GfxFormat.F32_RGBA; // Also can include PNMTXIDX if the material requests it; assume it does.
         case VertexAttributeInput.NRM:
-        case VertexAttributeInput.TANGENT:
         case VertexAttributeInput.BINRM:
+        case VertexAttributeInput.TANGENT:
             return GfxFormat.F32_RGB;
         case VertexAttributeInput.CLR0:
         case VertexAttributeInput.CLR1:

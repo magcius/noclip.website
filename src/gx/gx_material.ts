@@ -666,9 +666,9 @@ ${this.generateLightAttnFn(chan, lightName)}
         assert(texCoordGen.type >= GX.TexGenType.BUMP0 && texCoordGen.type <= GX.TexGenType.BUMP7);
         const lightIdx = (texCoordGen.type - GX.TexGenType.BUMP0);
         const lightDir = `normalize(u_LightParams[${lightIdx}].Position.xyz - v_Position.xyz)`;
-        const b = this.generateMulNrm(`a_Binormal`);
-        const t = this.generateMulNrm(`a_Tangent`);
-        return `${src}.xyz + vec3(dot(${lightDir}, ${b}.xyz), dot(${lightDir}, ${t}.xyz), 0.0)`;
+        const t = this.generateMulNrm(`a_Tangent`, false);
+        const b = this.generateMulNrm(`a_Binormal`, false);
+        return `${src}.xyz + vec3(dot(${lightDir}, ${t}.xyz), dot(${lightDir}, ${b}.xyz), 0.0)`;
     }
 
     // Output is a vec3, src is a vec4.
@@ -1393,12 +1393,12 @@ ${this.generateFogAdj(`t_FogBase`)}
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateMulNrm(attr: string): string {
+    private generateMulNrm(attr: string, normalize: boolean): string {
         const src = `vec4(${attr}.xyz, 0.0)`;
-        if (materialUsePnMtxIdx(this.material))
-            return `normalize(${this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`)})`;
-        else
-            return `normalize(${this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`)})`;
+        const gen = materialUsePnMtxIdx(this.material) ?
+            this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`) :
+            this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);
+        return normalize ? `normalize(${gen})` : gen;
     }
 
     private generateShaders(): void {
@@ -1444,7 +1444,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(`a_Normal`) : `vec3(0.0)`};
+    vec3 t_Normal = ${this.usesNormal() ? this.generateMulNrm(`a_Normal`, true) : `vec3(0.0)`};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
