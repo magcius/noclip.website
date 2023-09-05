@@ -823,12 +823,6 @@ function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
             const source: GX.TexGenSrc = view.getUint8(texCoordIdx + 0x01);
             const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordIdx + 0x02);
             assert(view.getUint8(texCoordIdx + 0x03) === 0xFF);
-            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
-            const postTexCoordIdx = view.getInt16(materialEntryIdx + 0x24 + j * 0x02);
-            if (postTexCoordOffs > 0 && postTexCoordIdx >= 0) {
-                postMatrix = view.getUint8(postTexCoordOffs + texCoordIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexCoordOffs + postTexCoordIdx * 0x04 + 0x03) === 0xFF);
-            }
 
             // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
             // For this reason, we always assign a texture matrix.
@@ -844,6 +838,7 @@ function readMAT2Chunk(buffer: ArrayBufferSlice): MAT3 {
             }
 
             const normalize = false;
+            const postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
             const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
             texGens[j] = texGen;
         }
@@ -1158,12 +1153,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const source: GX.TexGenSrc = view.getUint8(texCoordIdx + 0x01);
             const texGenMatrix: GX.TexGenMatrix = view.getUint8(texCoordIdx + 0x02);
             assert(view.getUint8(texCoordIdx + 0x03) === 0xFF);
-            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
-            const postTexCoordIdx = view.getInt16(materialEntryIdx + 0x24 + j * 0x02);
-            if (postTexCoordOffs > 0 && postTexCoordIdx >= 0) {
-                postMatrix = view.getUint8(postTexCoordOffs + texCoordIndex * 0x04 + 0x02);
-                assert(view.getUint8(postTexCoordOffs + postTexCoordIdx * 0x04 + 0x03) === 0xFF);
-            }
 
             // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
             // For this reason, we always assign a texture matrix.
@@ -1179,6 +1168,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             }
 
             const normalize = false;
+            const postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
             const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
             texGens[j] = texGen;
         }
