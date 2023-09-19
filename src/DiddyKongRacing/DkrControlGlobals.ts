@@ -129,7 +129,7 @@ export class DkrControlGlobals {
         selectedIndex: -1,
         elem: null!,
         selectedIndexUpdated: () => {
-            if (DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex !== -1)
+            if (DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex === -1)
                 DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = -1;
             else
                 DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels![DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex];
