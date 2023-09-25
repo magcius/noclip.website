@@ -226,8 +226,8 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
         if (caps.initConnectToSceneType === InitConnectToSceneType.Npc)
             connectToSceneNpc(sceneObjHolder, this);
-        /*else if (caps.initConnectToSceneType === InitConnectToSceneType.NpcMovement)
-            connectToSceneNpcMovement(sceneObjHolder, this);*/
+        else if (caps.initConnectToSceneType === InitConnectToSceneType.NpcMovement)
+            connectToSceneNpcMovement(sceneObjHolder, this);
         else if (caps.initConnectToSceneType === InitConnectToSceneType.IndirectNpc)
             connectToSceneIndirectNpc(sceneObjHolder, this);
 

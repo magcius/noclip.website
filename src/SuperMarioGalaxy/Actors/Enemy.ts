@@ -1905,6 +1905,16 @@ class WalkerStateStagger extends ActorStateBaseInterface<WalkerStateStaggerNrv> 
                 this.kill();
         }
     }
+
+    public isUpsideDown(): boolean {
+        if (this.isDead)
+            return false;
+
+        if (this.isNerve(WalkerStateStaggerNrv.StaggerEnd))
+            return isGreaterEqualStep(this, 15);
+
+        return true;
+    }
 }
 
 function updateActorState(sceneObjHolder: SceneObjHolder, actor: LiveActor, state: ActorStateBaseInterface, deltaTimeFrames: number): boolean {
@@ -2217,13 +2227,13 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     }
 
     private isEnableDead(): boolean {
-        // Stagger, BindStarPointer, NonActive, AttackSuccess
-        return this.isNerve(KuriboNrv.Wander) || this.isNerve(KuriboNrv.FindPlayer) || this.isNerve(KuriboNrv.Chase);
+        // BindStarPointer, NonActive, AttackSuccess
+        return this.isNerve(KuriboNrv.Stagger) || this.isNerve(KuriboNrv.Wander) || this.isNerve(KuriboNrv.FindPlayer) || this.isNerve(KuriboNrv.Chase);
     }
 
     private isUpsideDown(): boolean {
-        // if (this.isNerve(KuriboNrv.Stagger))
-        //     return this.stateStagger.isUpsideDown();
+        if (this.isNerve(KuriboNrv.Stagger))
+            return this.stateStagger.isUpsideDown();
         return false;
     }
 
@@ -5713,7 +5723,7 @@ function isNearVec3(a: LiveActor, b: ReadonlyVec3, threshold: number): boolean {
     return vec3.squaredDistance(a.translation, b) >= (threshold ** 2);
 }
 
-const enum GessoNrv { Wait, Search, WalkCharge, Walk, Sink, ComeFromBox, ComeBack, LostPlayer, Attack, PunchDown }
+const enum GessoNrv { Wait, Search, WalkCharge, Walk, Sink, ComeFromBox, ComeBack, LostPlayer, Attack, PunchDown, Rotate }
 export class Gesso extends LiveActor<GessoNrv> {
     private origTranslation = vec3.create();
     private axisY = vec3.create();
@@ -5799,6 +5809,9 @@ export class Gesso extends LiveActor<GessoNrv> {
             }
 
             return false;
+        } else if (messageType === MessageType.StarPieceAttack) {
+            this.setNerve(GessoNrv.Rotate);
+            return true;
         } else {
             return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
         }
@@ -6082,6 +6095,14 @@ export class Gesso extends LiveActor<GessoNrv> {
             turnDirectionToPlayerDegree(this.axisZ, sceneObjHolder, this, 1.5 * deltaTimeFrames);
             if (isGreaterEqualStep(this, 20) || isBinded(this))
                 this.kill(sceneObjHolder);
+        } else if (currentNerve === GessoNrv.Rotate) {
+            if (isFirstStep(this)) {
+                startAction(this, "StarPiece");
+                vec3.zero(this.velocity);
+            }
+
+            if (isBckStopped(this))
+                this.setNerve(GessoNrv.Wait);
         }
     }
 }
