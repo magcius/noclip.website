@@ -9089,7 +9089,7 @@ class ActiveActorList<T extends LiveActor> {
     }
 }
 
-const enum KameckNrv { Wait, AttackWait, Attack, MoveHide, Move, Appear }
+const enum KameckNrv { Wait, AttackWait, Attack, MoveHide, Move, Appear, Guard }
 export class Kameck extends LiveActor<KameckNrv> {
     private beamKind: KameckBeamKind;
     private nonActiveDistance: number;
@@ -9271,6 +9271,15 @@ export class Kameck extends LiveActor<KameckNrv> {
 
                 this.setNerve(KameckNrv.Wait);
             }
+        } else if (currentNerve === KameckNrv.Guard) {
+            if (isFirstStep(this))
+                startBck(this, "Guard");
+
+            if (this.tryPointBind(sceneObjHolder))
+                return;
+
+            if (isGreaterEqualStep(this, 50))
+                this.setNerve(KameckNrv.MoveHide);
         }
     }
 
@@ -9294,6 +9303,37 @@ export class Kameck extends LiveActor<KameckNrv> {
         }
 
         return false;
+    }
+
+    private isEnableGurad(): boolean {
+        return this.isNerve(KameckNrv.Wait) || this.isNerve(KameckNrv.Appear) || this.isNerve(KameckNrv.AttackWait) || this.isNerve(KameckNrv.Attack) || this.isNerve(KameckNrv.Guard) || this.isNerve(KameckNrv.MoveHide);
+    }
+
+    private resetBeam(sceneObjHolder: SceneObjHolder): void {
+        if (this.beamTemp !== null) {
+            this.beamTemp.makeActorDead(sceneObjHolder);
+            this.beamTemp = null;
+        }
+    }
+
+    private requestGuard(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (!this.isEnableGurad())
+            return false;
+
+        vecKillElement(scratchVec3a, this.velocity, this.gravityVector);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        this.resetBeam(sceneObjHolder);
+        this.setNerve(KameckNrv.Guard);
+        return true;
+    }
+
+    public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.StarPieceReflect) {
+            return this.requestGuard(sceneObjHolder, otherSensor, thisSensor);
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
     }
 
     public static override requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
