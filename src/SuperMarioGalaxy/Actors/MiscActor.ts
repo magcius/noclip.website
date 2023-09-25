@@ -24,7 +24,7 @@ import { TextureMapping } from '../../TextureHolder.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
 import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneIndirectMapObjStrongLight, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getAreaObj, getBckFrame, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getGroupFromArray, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isExistCollisionResource, isHiddenModel, isInDeath, isLoopRail, isOnSwitchA, isOnSwitchAppear, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisCrossPlane, makeAxisFrontUp, makeAxisUpSide, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatGetAxisX, quatGetAxisZ, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil.js';
-import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision.js';
+import { calcMapGround, CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, getGroundNormal, invalidateCollisionParts, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, validateCollisionParts } from '../Collision.js';
 import { TDDraw, TSDraw } from '../DDraw.js';
 import { isDemoLastStep, registerDemoActionNerve, tryRegisterDemoCast } from '../Demo.js';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, isEffectValid, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem.js';
@@ -410,14 +410,21 @@ export class BlackHole extends LiveActor<BlackHoleNrv> {
     }
 }
 
-const enum HatchWaterPlanetNrv { Wait, Open }
+const enum HatchWaterPlanetNrv { Wait, Open, WaitAfterOpen }
 export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
+    private collisionPartsAfter: CollisionParts;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'HatchWaterPlanet');
         connectToScenePlanet(sceneObjHolder, this);
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, 'HatchWaterPlanetBefore', bodySensor);
+        this.collisionPartsAfter = createCollisionPartsFromLiveActor(sceneObjHolder, this, 'HatchWaterPlanetAfter', bodySensor, null, CollisionScaleType.AutoScale);
+        invalidateCollisionParts(sceneObjHolder, this.collisionPartsAfter);
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.initNerve(HatchWaterPlanetNrv.Wait);
@@ -433,6 +440,14 @@ export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
             if (isFirstStep(this)) {
                 startBck(this, 'HatchWaterPlanet');
                 startBtk(this, 'HatchWaterPlanet');
+            }
+
+            if (isBckStopped(this))
+                this.setNerve(HatchWaterPlanetNrv.WaitAfterOpen);
+        } else if (currentNerve === HatchWaterPlanetNrv.WaitAfterOpen) {
+            if (isFirstStep(this)) {
+                invalidateCollisionPartsForActor(sceneObjHolder, this);
+                validateCollisionParts(sceneObjHolder, this.collisionPartsAfter);
             }
         }
     }
@@ -8454,12 +8469,12 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         // arg0 = force jump
 
-        this.initNerve(ScrewSwitchReverseNrv.Wait);
-        this.makeActorAppeared(sceneObjHolder);
-
         vec3.set(scratchVec3, 0, 100, 0);
         const buttonSensor = addHitSensor(sceneObjHolder, this, 'button', HitSensorType.MapObj, 0, 120.0, scratchVec3)
         this.button = new Button(zoneAndLayer, sceneObjHolder, buttonSensor, 5000.0);
+
+        this.initNerve(ScrewSwitchReverseNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     public override receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
@@ -8515,9 +8530,9 @@ export class SpinLeverSwitch extends LiveActor<SpinLeverSwitchNrv> {
             this.initNerve(SpinLeverSwitchNrv.End);
         }
 
-        this.makeActorAppeared(sceneObjHolder);
-
         this.button = new Button(zoneAndLayer, sceneObjHolder, spinSensor, 5000.0);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     public override initAfterPlacement(sceneObjHolder: SceneObjHolder): void {

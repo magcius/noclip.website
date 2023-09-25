@@ -1227,7 +1227,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         connectToSceneNpc(sceneObjHolder, this);
         this.initHitSensor();
         addHitSensorNpc(sceneObjHolder, this, 'body', 8, 50.0, vec3.fromValues(0, 50.0, 0));
-        this.hitSensorKeeper!.validateBySystem();
         initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         initShadowFromCSV(sceneObjHolder, this);
