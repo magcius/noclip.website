@@ -207,6 +207,8 @@ export class DkrLevel {
         }
 
         renderInstManager.popTemplateRenderInst();
+
+        this.sprites.advanceTime(viewerInput);
     }
 
     public getClearColor(): Color {

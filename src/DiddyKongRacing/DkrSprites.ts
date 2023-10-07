@@ -190,6 +190,11 @@ export class DkrSprites {
         this.spriteInstances[layer].sort((a, b) => (a.getDistanceToCamera() < b.getDistanceToCamera()) ? 1 : -1);
     }
 
+    public advanceTime(viewerInput: ViewerRenderInput): void {
+        if (viewerInput.deltaTime > 0.0)
+            this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, layer: number) {
         if (!this.spritesInfo || !this.spriteInstances || !DkrControlGlobals.ENABLE_TEXTURES.on)
             return;
@@ -213,8 +218,6 @@ export class DkrSprites {
                 blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             }));
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            if (viewerInput.deltaTime > 0.0)
-                this.currentFrame += 0.1 * ((1000 / 30) / viewerInput.deltaTime);
         }
 
         if (this.gfxProgram === null)
