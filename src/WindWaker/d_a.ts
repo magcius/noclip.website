@@ -32,6 +32,7 @@ import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_Y
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
 import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { drawWorldSpaceLine, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 // Framework'd actors
 
@@ -4458,9 +4459,9 @@ export class d_a_ff extends fopAc_ac_c {
     private peekZResult = new PeekZResult();
     private state = 0;
     private isVisibleZ = false;
-    private glowSize = 0.0;
-    private glowSizeY = 1.0;
-    private flickerVisible = 1.0;
+    private glowScale = 0.0;
+    private glowScaleY = 1.0;
+    private flyScale = 1.0;
     private flickerTimer = 0;
     private flickerTimerTimer = 0;
     private scatterTimer = 0;
@@ -4519,7 +4520,7 @@ export class d_a_ff extends fopAc_ac_c {
         }
 
         this.noFollowGround = !!((this.parameters >>> 8) & 0xFF);
-        this.liveTimer = cM_rndF(0x7FFF);
+        this.liveTimer = cM_rndF(0x8000);
         this.flickerTimerTimer = cM_rndF(100.0);
         this.cullMtx = this.model[0].modelMatrix;
         vec3.copy(this.homePos, this.pos);
@@ -4560,7 +4561,7 @@ export class d_a_ff extends fopAc_ac_c {
         this.scatterTimer -= deltaTimeInFrames;
 
         this.z_check(globals);
-        this.glowSize = cLib_addCalc2(this.glowSize, this.isVisibleZ ? 1.0 : 0.0, 1.0 * deltaTimeInFrames, 0.333);
+        this.glowScale = cLib_addCalc2(this.glowScale, this.isVisibleZ ? 1.0 : 0.0, 1.0 * deltaTimeInFrames, 0.333);
         this.brkAnm[0].play(deltaTimeInFrames);
         this.brkAnm[1].play(deltaTimeInFrames);
         this.liveTimer += deltaTimeInFrames;
@@ -4570,8 +4571,8 @@ export class d_a_ff extends fopAc_ac_c {
             this.flickerTimerTimer = 200.0 + cM_rndF(100.0);
         }
 
-        const flickerVisibleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM__Short2Rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
-        this.flickerVisible = cLib_addCalc2(this.flickerVisible, flickerVisibleTarget, 0.1 * deltaTimeInFrames, 0.05);
+        const scaleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM__Short2Rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
+        this.flyScale = cLib_addCalc2(this.flyScale, scaleTarget, 0.1 * deltaTimeInFrames, 0.05);
 
         let motion = false;
 
@@ -4648,29 +4649,36 @@ export class d_a_ff extends fopAc_ac_c {
         }
 
         if (this.pos[1] >= this.groundY + 12.5) {
-            this.glowSizeY = cLib_addCalc2(this.glowSizeY, 1.0, 0.2 * deltaTimeInFrames, 0.1);
+            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 1.0, 0.2 * deltaTimeInFrames, 0.1);
         } else {
             if (this.pos[1] < this.groundY)
                 this.pos[1] = this.groundY;
-            this.glowSizeY = cLib_addCalc2(this.glowSizeY, 0.5, 0.2 * deltaTimeInFrames, 0.1);
+            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 0.5, 0.2 * deltaTimeInFrames, 0.1);
         }
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(globals, renderInstManager, viewerInput);
 
-        if (this.flickerVisible > 0.01) {
+        if (this.flyScale > 0.01) {
             MtxTrans(this.pos, false);
+            scaleMatrix(calc_mtx, calc_mtx, this.flyScale);
             mat4.copy(this.model[0].modelMatrix, calc_mtx);
             mDoExt_modelUpdateDL(globals, this.model[0], renderInstManager, viewerInput, globals.dlst.effect);
 
-            if (this.glowSize > 0.01) {
+            if (this.glowScale > 0.01) {
                 mDoMtx_YrotM(calc_mtx, this.liveTimer * 0x0100);
-                scaleMatrix(calc_mtx, calc_mtx, this.glowSize, this.glowSize * this.glowSizeY);
+                scaleMatrix(calc_mtx, calc_mtx, this.glowScale, this.glowScale * this.glowScaleY, this.glowScale);
                 mat4.copy(this.model[1].modelMatrix, calc_mtx);
                 mDoExt_modelUpdateDL(globals, this.model[1], renderInstManager, viewerInput, globals.dlst.effect);
             }
         }
+
+        // vec3.copy(scratchVec3a, this.pos);
+        // scratchVec3a[1] = this.groundY;
+        // drawWorldSpaceLine(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, scratchVec3a);
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a, (this.pos[1] - this.groundY).toFixed(2));
+        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a, `${this.glowScale.toFixed(2)} ${this.glowScaleY.toFixed(2)}`, 20);
     }
 }
 
