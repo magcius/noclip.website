@@ -465,15 +465,14 @@ export class dKankyo_sun_Packet {
             if (envLight.baseLight.color.r === 0.0 && stType !== 2) {
                 vec3.copy(moonPos, this.sunPos);
             } else {
-                // Mirror the sun position
-                vec3.sub(moonPos, this.sunPos, globals.cameraPosition);
-                vec3.scaleAndAdd(moonPos, globals.cameraPosition, moonPos, -1.0);
+                vec3.copy(moonPos, envLight.moonPos);
             }
 
             const scaleX = dayOfWeek < 4 ? -1 : 1;
             const textureIdx = dayOfWeek < 4 ? dayOfWeek : 7 - dayOfWeek;
 
-            const moonPitch = vecPitch(moonPos);
+            vec3.sub(scratchVec3a, moonPos, globals.cameraPosition);
+            const moonPitch = vecPitch(scratchVec3a);
 
             for (let i = 1; i >= 0; i--) {
                 let moonSize = 8000.0;

@@ -325,8 +325,14 @@ class NodeInstance {
             // The game will actually adjust the projection matrix based on the child index, if the decal flag
             // is set. This happens in _mapDispMapObj.
             //
-            //      proj[5] = proj[5] * (1.0 + (indexBias * -2.0 * pCam->far * pCam->near) /
-            //                          (1.0 * (pCam->far + pCam->near) * (1.0 + indexBias)));
+            // proj = proj[5] * (1.0 + (indexBias * -2.0 * f * n) / ((f + n) * (1.0 + indexBias)));
+            //
+            // Reminder that the clip space near in GX is -1.0, and the far is 0.0; aka a typical projection matrix
+            // maps z to (-w, 0).
+            //
+            // proj[5] = (-(f * n) / (f - n));
+            //
+            // proj[5] = (-(f * n) / (f - n)) * (1.0 + (indexBias * -2.0 * f * n) / ((f + n) * (1.0 + indexBias)));
 
             const indexBias = this.childIndex * 0.01;
             const camera = viewerInput.camera, far = camera.far, near = camera.near;

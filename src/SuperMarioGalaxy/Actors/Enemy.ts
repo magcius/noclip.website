@@ -5256,6 +5256,9 @@ export class Kanina extends LiveActor<KaninaNrv> {
             if (!otherSensor!.isType(HitSensorType.CocoNut))
                 this.setNerve(KaninaNrv.ReboundEach);
             return true;
+        } else if (messageType === MessageType.StarPieceReflect) {
+            this.setNerve(KaninaNrv.Guard);
+            return true;
         } else {
             return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
         }

@@ -71,8 +71,6 @@ export class dScnKy_env_light_c {
     public lightInfluence = nArray(30, () => new LIGHT_INFLUENCE());
     public plights: LIGHT_INFLUENCE[] = [];
     public eflights: LIGHT_INFLUENCE[] = [];
-    public unk_72c = nArray(5, () => new LIGHT_INFLUENCE());
-    public unk_740 = new LIGHT_INFLUENCE();
     public BGpartsActiveLight = nArray(2, () => new LIGHT_INFLUENCE());
     public pntWind = nArray(30, () => new WIND_INFLUENCE());
     public windInfEntity = nArray(5, () => new WIND_INF_ENTITY());
