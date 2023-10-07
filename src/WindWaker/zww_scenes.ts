@@ -309,7 +309,7 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
     public alphaModel = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Forwards);
-    public peekZ = new PeekZManager();
+    public peekZ = new PeekZManager(128);
     public alphaModel0: dDlst_alphaModel_c;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, symbolMap: SymbolMap) {

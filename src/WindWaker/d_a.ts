@@ -4532,7 +4532,10 @@ export class d_a_ff extends fopAc_ac_c {
         const dst = this.peekZResult;
 
         mDoLib_project(scratchVec3a, this.pos, globals.camera);
-        if (!peekZ.newData(dst, scratchVec3a[0], scratchVec3a[1]))
+        if (globals.camera.clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+            scratchVec3a[2] = scratchVec3a[2] * 0.5 + 0.5;
+
+        if (!peekZ.newData(dst, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]))
             return;
 
         if (dst.triviallyCulled) {
@@ -4545,9 +4548,7 @@ export class d_a_ff extends fopAc_ac_c {
             return;
         }
 
-        let projectedZ = scratchVec3a[2];
-        if (globals.modelCache.device.queryVendorInfo().clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
-            projectedZ = projectedZ * 0.5 + 0.5;
+        let projectedZ = dst.userData as number;
 
         // Point is visible if our projected Z is in front of the depth buffer.
         this.isVisibleZ = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);

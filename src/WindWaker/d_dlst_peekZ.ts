@@ -11,21 +11,23 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 // TODO(jstpierre): Port the PeekZ system to occlusion queries?
 export class PeekZResult {
-    public normalizedX: number;
-    public normalizedY: number;
-    public attachmentX: number;
-    public attachmentY: number;
     public triviallyCulled: boolean = false;
     public value: number | null = null;
+    public userData: unknown = null!;
 }
 
 class PeekZFrame {
-    public entries: PeekZResult[] = [];
+    public results: PeekZResult[] = [];
     public readback: GfxReadback;
+    public entryX: Float32Array;
+    public entryY: Float32Array;
+    public entryUserData: unknown[] = [];
 
     constructor(device: GfxDevice, maxCount: number) {
         const byteCount = maxCount * 0x04;
         this.readback = device.createReadback(byteCount);
+        this.entryX = new Float32Array(maxCount);
+        this.entryY = new Float32Array(maxCount);
     }
 
     public destroy(device: GfxDevice): void {
@@ -51,11 +53,11 @@ export class PeekZManager {
     }
 
     private returnFrame(frame: PeekZFrame): void {
-        frame.entries.length = 0;
+        frame.results.length = 0;
         this.framePool.push(frame);
     }
 
-    public newData(dst: PeekZResult, x: number, y: number): boolean {
+    public newData(dst: PeekZResult, x: number, y: number, userData: unknown = null!): boolean {
         const frame = assertExists(this.currentFrame);
 
         // Check for trivial result.
@@ -66,12 +68,13 @@ export class PeekZManager {
 
         dst.triviallyCulled = false;
 
-        if (frame.entries.length >= this.maxCount)
+        if (frame.results.length >= this.maxCount)
             return false;
 
-        dst.normalizedX = x;
-        dst.normalizedY = y;
-        frame.entries.push(dst);
+        const idx = frame.results.push(dst) - 1;
+        frame.entryX[idx] = x;
+        frame.entryY[idx] = y;
+        frame.entryUserData[idx] = userData;
         return true;
     }
 
@@ -136,7 +139,7 @@ void main() {
             return null;
         }
 
-        if (frame.entries.length === 0) {
+        if (frame.results.length === 0) {
             // No need to copy if we aren't trying to read.
             this.returnFrame(frame);
             return null;
@@ -147,14 +150,11 @@ void main() {
 
     private submitFramePost(device: GfxDevice, frame: PeekZFrame, depthColorTexture: GfxTexture, width: number, height: number): void {
         // Now go through and start submitting readbacks on our texture.
-        for (let i = 0; i < frame.entries.length; i++) {
-            const entry = frame.entries[i];
-
+        for (let i = 0; i < frame.results.length; i++) {
             // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
-            entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width) | 0;
-            entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height) | 0;
-
-            device.readPixelFromTexture(frame.readback, i, depthColorTexture, entry.attachmentX, entry.attachmentY);
+            const attachmentX = (((frame.entryX[i] * 0.5) + 0.5) * width) | 0;
+            const attachmentY = (((frame.entryX[i] * 0.5) + 0.5) * height) | 0;
+            device.readPixelFromTexture(frame.readback, i, depthColorTexture, attachmentX, attachmentY);
         }
 
         device.submitReadback(frame.readback);
@@ -214,8 +214,12 @@ void main() {
             if (device.queryReadbackFinished(this.resultBuffer, 0, frame.readback)) {
                 this.submittedFrames.splice(i, 1);
                 // Copy results to clients.
-                for (let j = 0; j < frame.entries.length; j++)
-                    frame.entries[j].value = this.resultBuffer[j] / 0xFFFFFFFF;
+                for (let j = 0; j < frame.results.length; j++) {
+                    const result = frame.results[j];
+                    result.value = this.resultBuffer[j] / 0xFFFFFFFF;
+                    result.userData = frame.entryUserData[j];
+                }
+
                 this.returnFrame(frame);
                 break;
             }
