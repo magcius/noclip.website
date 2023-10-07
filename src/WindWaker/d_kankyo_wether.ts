@@ -1,33 +1,31 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo.js";
-import { dGlobals } from "./zww_scenes.js";
-import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad, cM__Short2Rad } from "./SComponent.js";
-import { vec3, mat4, vec4, vec2, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color.js";
-import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers.js";
-import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework.js";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
-import { ResType } from "./d_resorce.js";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./m_do_mtx.js";
-import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
-import { Camera, divideByW } from "../Camera.js";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
-import * as GX from '../gx/gx_enum.js';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { GXMaterialHelperGfx, MaterialParams, DrawParams, ColorKind } from "../gx/gx_render.js";
-import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../gfx/platform/GfxPlatform.js";
+import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { nArray, assertExists, assert } from "../util.js";
+import { Color, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
-import { PeekZResult, PeekZManager } from "./d_dlst_peekZ.js";
-import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
-import { _T } from "../gfx/platform/GfxPlatformImpl.js";
+import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import * as GX from '../gx/gx_enum.js';
+import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
+import { assert, assertExists, nArray } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { cLib_addCalc, cLib_addCalcAngleRad, cM__Short2Rad, cM_rndF, cM_rndFX } from "./SComponent.js";
+import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
+import { dKy_GxFog_sea_set, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_checkEventNightStop, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_get_seacolor, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
+import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c } from "./d_stage.js";
+import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
+import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
+import { dGlobals } from "./zww_scenes.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -194,7 +192,6 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
-const scratchVec4 = vec4.create();
 
 export class dKankyo_sun_Packet {
     // Shared
@@ -1224,7 +1221,7 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
         // Projected moon position.
-        mDoLib_project(scratchVec3e, envLight.moonPos, viewerInput);
+        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
 
         let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
@@ -1255,7 +1252,7 @@ export class dKankyo_star_Packet {
 
             vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
 
-            mDoLib_project(scratchVec3, scratchVec3a, viewerInput);
+            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput);
             const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
             if (distToMoon < 80.0)
                 continue;
@@ -1315,21 +1312,6 @@ export class dKankyo_star_Packet {
 export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
-}
-
-function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
-    vec4.set(v4, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
-    divideByW(v4, v4);
-    vec3.set(dst, v4[0], v4[1], v4[2]);
-}
-
-function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
-    project(dst, v, viewerInput.camera);
-    // Put in viewport framebuffer space.
-    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
-    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
-    dst[2] = 0.0;
 }
 
 const enum SunPeekZResult {
@@ -1398,7 +1380,7 @@ function dKyr_sun_move(globals: dGlobals): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            project(scratchVec3, pkt.sunPos, globals.camera);
+            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
 
             const peekZ = globals.dlst.peekZ;
 
@@ -1496,7 +1478,7 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
         vec3.scaleAndAdd(pkt.lensflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
 
-    project(scratchVec3, pkt.sunPos, globals.camera);
+    mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
     pkt.lensflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 

@@ -1573,14 +1573,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Ojtree') fetchArchive(`Ojtree`).then((rarc) => buildModel(rarc, `bdl/ojtree.bdl`));
     else if (actorName === 'Olift') fetchArchive(`Olift`).then((rarc) => buildModel(rarc, `bdl/olift.bdl`));
     else if (actorName === 'itemDek') fetchArchive(`Deku`).then((rarc) => buildModel(rarc, `bdlm/vlfdm.bdl`));
-    else if (actorName === 'ho') fetchArchive(`Ff`).then((rarc) => {
-        const fireflyModel = buildModel(rarc, `bmd/ho.bmd`);
-        fireflyModel.bindTRK1(parseBRK(rarc, `brk/ho.brk`));
-        const glowModel = buildChildModel(rarc, `bmd/hop.bmd`);
-        glowModel.setParentJoint(fireflyModel, `ho_B`);
-        glowModel.bindTRK1(parseBRK(rarc, `brk/hop.brk`));
-        mat4.translate(fireflyModel.modelMatrix, fireflyModel.modelMatrix, [0, 50, 0]);
-    });
     else if (actorName === 'jbaba') fetchArchive(`Jbo`).then((rarc) => buildModel(rarc, `bmdm/jh.bmd`));
     else if (actorName === 'VigaH') fetchArchive(`VigaH`).then((rarc) => buildModel(rarc, `bdl/vigah.bdl`));
     else if (actorName === 'Ss') fetchArchive(`Ss`).then((rarc) => buildModel(rarc, `bdl/sw.bdl`));

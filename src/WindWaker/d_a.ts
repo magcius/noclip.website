@@ -9,7 +9,7 @@ import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTra
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { Endianness } from "../endian.js";
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
@@ -20,16 +20,18 @@ import { assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
-import { cBgW_Flags, dBgW } from "./d_bg.js";
+import { cBgS_GndChk, cBgW_Flags, dBgW } from "./d_bg.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c } from "./d_stage.js";
-import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
-import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL } from "./m_do_ext.js";
+import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
+import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
+import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 
 // Framework'd actors
 
@@ -4447,6 +4449,230 @@ class d_a_obj_flame extends fopAc_ac_c {
     }
 }
 
+const chk = new cBgS_GndChk();
+
+export class d_a_ff extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_ff;
+    private model: J3DModelInstance[] = [];
+    private brkAnm: mDoExt_brkAnm[] = [];
+    private peekZResult = new PeekZResult();
+    private state = 0;
+    private isVisibleZ = false;
+    private glowSize = 0.0;
+    private glowSizeY = 1.0;
+    private flickerVisible = 1.0;
+    private flickerTimer = 0;
+    private flickerTimerTimer = 0;
+    private scatterTimer = 0;
+    private scatterMoveTimer = 0;
+    private liveTimer = 0;
+    private noFollowGround = false;
+    private groundY = 0.0;
+    private homePos = vec3.create();
+    private scatterPos = vec3.create();
+    private speed = vec3.create();
+    private speedFwd = 0.0;
+    private speedFwdTarget = 0.0;
+    private speedRotMax = 0.0;
+    private rotTargetX = 0;
+    private rotTargetY = 0;
+
+    public override subload(globals: dGlobals): cPhs__Status {
+        const arcName = `Ff`;
+
+        const status = dComIfG_resLoad(globals, arcName);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const ho_bmd = [0x05, 0x06];
+        const ho_brk = [0x0C, 0x0D];
+        for (let i = 0; i < 2; i++) {
+            const modelData = globals.resCtrl.getObjectRes(ResType.Model, arcName, ho_bmd[i]);
+            this.model.push(new J3DModelInstance(modelData));
+
+            const brkAnm = new mDoExt_brkAnm();
+            const anm = globals.resCtrl.getObjectRes(ResType.Brk, arcName, ho_brk[i]);
+            brkAnm.init(modelData, anm, true, LoopMode.Repeat);
+            this.brkAnm.push(brkAnm);
+        }
+
+        const count = this.parameters & 0x00FF;
+        for (let i = 0; i < count; i++) {
+            const pos = vec3.clone(this.pos);
+            pos[0] += cM_rndFX(500);
+            pos[2] += cM_rndFX(500);
+
+            const prm: fopAcM_prm_class = {
+                parameters: this.parameters & 0xFF00,
+                roomNo: this.roomNo,
+                pos,
+                rot: Vec3Zero,
+                enemyNo: -1,
+                scale: Vec3One,
+                subtype: 0,
+                gbaName: 0,
+                parentPcId: 0xFFFFFFFF,
+                layer: this.roomLayer,
+            };
+
+            fpcSCtRq_Request(globals.frameworkGlobals, null, fpc__ProcessName.d_a_ff, prm);
+        }
+
+        this.noFollowGround = !!((this.parameters >>> 8) & 0xFF);
+        this.liveTimer = cM_rndF(0x7FFF);
+        this.flickerTimerTimer = cM_rndF(100.0);
+        this.cullMtx = this.model[0].modelMatrix;
+        vec3.copy(this.homePos, this.pos);
+
+        return cPhs__Status.Next;
+    }
+
+    private z_check(globals: dGlobals): void {
+        const peekZ = globals.dlst.peekZ;
+        const dst = this.peekZResult;
+
+        mDoLib_project(scratchVec3a, this.pos, globals.camera);
+        if (!peekZ.newData(dst, scratchVec3a[0], scratchVec3a[1]))
+            return;
+
+        if (dst.triviallyCulled) {
+            this.isVisibleZ = false;
+            return;
+        }
+
+        if (dst.value === null) {
+            this.isVisibleZ = false;
+            return;
+        }
+
+        let projectedZ = scratchVec3a[2];
+        if (globals.modelCache.device.queryVendorInfo().clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne)
+            projectedZ = projectedZ * 0.5 + 0.5;
+
+        // Point is visible if our projected Z is in front of the depth buffer.
+        this.isVisibleZ = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
+    }
+
+    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.flickerTimer -= deltaTimeInFrames;
+        this.flickerTimerTimer -= deltaTimeInFrames;
+        this.scatterTimer -= deltaTimeInFrames;
+
+        this.z_check(globals);
+        this.glowSize = cLib_addCalc2(this.glowSize, this.isVisibleZ ? 1.0 : 0.0, 1.0 * deltaTimeInFrames, 0.333);
+        this.brkAnm[0].play(deltaTimeInFrames);
+        this.brkAnm[1].play(deltaTimeInFrames);
+        this.liveTimer += deltaTimeInFrames;
+
+        if (this.flickerTimerTimer <= 0.0) {
+            this.flickerTimer = 40.0 + cM_rndF(50.0);
+            this.flickerTimerTimer = 200.0 + cM_rndF(100.0);
+        }
+
+        const flickerVisibleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM__Short2Rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
+        this.flickerVisible = cLib_addCalc2(this.flickerVisible, flickerVisibleTarget, 0.1 * deltaTimeInFrames, 0.05);
+
+        let motion = false;
+
+        if (this.state === 0) {
+            chk.Reset();
+            vec3.scaleAndAdd(chk.pos, this.pos, Vec3UnitY, 250.0);
+            this.groundY = globals.scnPlay.bgS.GroundCross(chk) + 12.5;
+            if (!this.noFollowGround)
+                this.pos[1] = this.groundY;
+            vec3.copy(this.homePos, this.pos);
+            this.state = 1;
+        }
+
+        if (this.state === 0 || this.state === 1) {
+            this.pos[0] = cLib_addCalc2(this.pos[0], this.homePos[0], 0.1 * deltaTimeInFrames, this.speed[0]);
+            this.pos[1] = cLib_addCalc2(this.pos[1], this.homePos[1], 0.1 * deltaTimeInFrames, this.speed[1]);
+            this.pos[2] = cLib_addCalc2(this.pos[2], this.homePos[2], 0.1 * deltaTimeInFrames, this.speed[2]);
+
+            if (vec3.squaredDistance(this.pos, globals.playerPosition) < 250.0 ** 2) {
+                this.state = 2;
+                this.scatterMoveTimer = 1000.0 + cM_rndF(100.0);
+                this.rot[0] = -0x3000;
+                this.speedFwd = 10.0;
+            }
+        }
+
+        if (this.state === 2) {
+            motion = true;
+
+            if (this.scatterTimer <= 0.0) {
+                this.scatterPos[0] = this.pos[0] + cM_rndFX(750.0);
+                this.scatterPos[1] = this.pos[1] + cM_rndFX(750.0) + 137.5;
+                this.scatterPos[2] = this.pos[2] + cM_rndFX(750.0);
+
+                this.speedRotMax = 0.0;
+                this.speedFwdTarget = 10.0 + cM_rndF(20.0);
+
+                const time = vec3.distance(this.scatterPos, this.pos) / this.speedFwdTarget;
+                this.scatterTimer = time;
+                this.rotTargetY = cLib_targetAngleY(this.scatterPos, this.pos);
+                this.rotTargetX = -cLib_targetAngleX(this.scatterPos, this.pos);
+            }
+
+            if (this.scatterMoveTimer <= 0.0) {
+                this.state = 3;
+                vec3.copy(this.scatterPos, this.homePos);
+                this.speedRotMax = 0.0;
+            }
+        }
+
+        if (this.state === 3) {
+            motion = true;
+
+            this.rotTargetY = cLib_targetAngleY(this.scatterPos, this.pos);
+            this.rotTargetX = -cLib_targetAngleX(this.scatterPos, this.pos);
+
+            if (vec3.squaredDistance(this.scatterPos, this.homePos) < 2500.0)
+                this.state = 1;
+
+            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 10.0, 1.0 * deltaTimeInFrames, 0.15);
+        }
+
+        if (motion) {
+            this.rot[0] = cLib_addCalcAngleS2(this.rot[0], this.rotTargetX, 10.0 * deltaTimeInFrames, this.speedRotMax * 500.0);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], this.rotTargetY, 10.0 * deltaTimeInFrames, this.speedRotMax * 500.0);
+            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 1.0, deltaTimeInFrames, 0.1);
+            this.speedFwd = cLib_addCalc2(this.speedFwd, this.speedFwdTarget, 1.0 * deltaTimeInFrames, 3.0);
+
+            vec3.set(scratchVec3a, 0, 0, this.speedFwd * 0.25);
+            mDoMtx_YrotS(calc_mtx, this.rot[1]);
+            mDoMtx_XrotM(calc_mtx, this.rot[0]);
+            MtxPosition(this.speed, scratchVec3a);
+            vec3.add(this.pos, this.pos, this.speed);
+        }
+
+        if (this.pos[1] >= this.groundY + 12.5) {
+            this.glowSizeY = cLib_addCalc2(this.glowSizeY, 1.0, 0.2 * deltaTimeInFrames, 0.1);
+        } else {
+            if (this.pos[1] < this.groundY)
+                this.pos[1] = this.groundY;
+            this.glowSizeY = cLib_addCalc2(this.glowSizeY, 0.5, 0.2 * deltaTimeInFrames, 0.1);
+        }
+    }
+
+    public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(globals, renderInstManager, viewerInput);
+
+        if (this.flickerVisible > 0.01) {
+            MtxTrans(this.pos, false);
+            mat4.copy(this.model[0].modelMatrix, calc_mtx);
+            mDoExt_modelUpdateDL(globals, this.model[0], renderInstManager, viewerInput, globals.dlst.effect);
+
+            if (this.glowSize > 0.01) {
+                mDoMtx_YrotM(calc_mtx, this.liveTimer * 0x0100);
+                scaleMatrix(calc_mtx, calc_mtx, this.glowSize, this.glowSize * this.glowSizeY);
+                mat4.copy(this.model[1].modelMatrix, calc_mtx);
+                mDoExt_modelUpdateDL(globals, this.model[1], renderInstManager, viewerInput, globals.dlst.effect);
+            }
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -4476,4 +4702,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_ikada);
     R(d_a_oship);
     R(d_a_obj_flame);
+    R(d_a_ff);
 }

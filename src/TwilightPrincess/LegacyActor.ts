@@ -19,7 +19,6 @@ import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals,
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { cBgS_GndChk } from '../WindWaker/d_bg.js';
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
 import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../WindWaker/m_do_mtx.js';
@@ -40,8 +39,6 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
         0, rotationY, 0,
         actor.pos![0], actor.pos![1], actor.pos![2]);
 }
-
-const chk = new cBgS_GndChk();
 
 // "Legacy actor" for noclip
 class d_a_noclip_legacy extends fopAc_ac_c {
@@ -142,30 +139,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         setModelMatrix(objectRenderer.modelMatrix);
         legacy.objectRenderers.push(objectRenderer);
         return objectRenderer;
-    }
-
-    function buildModelRes(modelData: J3DModelData): BMDObjectRenderer {
-        const objectRenderer = buildChildModelRes(modelData);
-        setModelMatrix(objectRenderer.modelMatrix);
-        legacy.objectRenderers.push(objectRenderer);
-        return objectRenderer;
-    }
-
-    function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
-        const objectRenderer = buildModel(rarc, modelPath);
-        objectRenderer.modelInstance.setModelMaterialData(getResData(ResType.Bmt, rarc, bmtPath));
-       //  renderer.extraTextures.fillExtraTextures(objectRenderer.modelInstance);
-        return objectRenderer;
-    }
-
-    function setToNearestFloor(dstMatrix: mat4, localModelMatrix: mat4): void {
-        chk.Reset();
-        mat4.getTranslation(chk.pos, localModelMatrix);
-        chk.pos[1] += 10.0;
-        const y = globals.scnPlay.bgS.GroundCross(chk);
-        // if (y === -Infinity)
-        //     debugger;
-        dstMatrix[13] = y;
     }
 
     function parseBCK(rarc: RARC.JKRArchive, path: string) {

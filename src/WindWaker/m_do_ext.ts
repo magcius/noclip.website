@@ -5,7 +5,8 @@ import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } f
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dGlobals, dDlst_list_Set } from "./zww_scenes.js";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
+import { Camera, divideByW } from "../Camera.js";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -230,4 +231,20 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
         mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
+}
+
+const scratchVec4 = vec4.create();
+export function mDoLib_project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
+    vec4.set(v4, v[0], v[1], v[2], 1.0);
+    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
+    divideByW(v4, v4);
+    vec3.set(dst, v4[0], v4[1], v4[2]);
+}
+
+export function mDoLib_projectFB(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
+    mDoLib_project(dst, v, viewerInput.camera);
+    // Put in viewport framebuffer space.
+    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
+    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
+    dst[2] = 0.0;
 }

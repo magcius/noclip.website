@@ -255,7 +255,6 @@ function mtxHasNonTransDifference(a: mat4, b: mat4): boolean {
     );
 }
 
-const scratchVec3 = vec3.create();
 class cBgW {
     public flags: cBgW_Flags = 0;
     public modelMtxPtr: mat4 | null;

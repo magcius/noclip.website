@@ -1,7 +1,6 @@
 
 import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { Camera, divideByW } from "../Camera.js";
 import { Color, TransparentBlack, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8, colorScale } from "../Color.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
@@ -13,6 +12,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { cLib_addCalc, cM__Short2Rad, cM_rndF, cM_rndFX } from "../WindWaker/SComponent.js";
 import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ.js";
+import { mDoLib_project, mDoLib_projectFB } from "../WindWaker/m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -269,17 +269,6 @@ function submitScratchRenderInst(renderInstManager: GfxRenderInstManager, materi
     renderInstManager.submitRenderInst(renderInst);
 }
 
-export class dKankyo__CommonTextures {
-    public snowTexture: BTIData;
-
-    constructor(globals: dGlobals) {
-        const resCtrl = globals.resCtrl;
-    }
-
-    public destroy(device: GfxDevice): void {
-    }
-}
-
 const scratchMatrix = mat4.create();
 
 const scratchVec3 = vec3.create();
@@ -288,7 +277,6 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
-const scratchVec4 = vec4.create();
 
 export class dKankyo_sun_Packet {
     // Shared
@@ -1370,7 +1358,7 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
         // Projected moon position.
-        mDoLib_project(scratchVec3e, envLight.moonPos, viewerInput);
+        mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
 
         let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
@@ -1401,7 +1389,7 @@ export class dKankyo_star_Packet {
 
             vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
 
-            mDoLib_project(scratchVec3, scratchVec3a, viewerInput);
+            mDoLib_projectFB(scratchVec3, scratchVec3a, viewerInput);
             const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
             if (distToMoon < 80.0)
                 continue;
@@ -1461,21 +1449,6 @@ export class dKankyo_star_Packet {
 export function dKyr_get_vectle_calc(p0: ReadonlyVec3, p1: ReadonlyVec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
-}
-
-function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
-    vec4.set(v4, v[0], v[1], v[2], 1.0);
-    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
-    divideByW(v4, v4);
-    vec3.set(dst, v4[0], v4[1], v4[2]);
-}
-
-function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
-    project(dst, v, viewerInput.camera);
-    // Put in viewport framebuffer space.
-    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.backbufferWidth;
-    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.backbufferHeight;
-    dst[2] = 0.0;
 }
 
 const enum SunPeekZResult {
@@ -1544,7 +1517,7 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
         if (sunCanGlare) {
             // Original game projects the vector into viewport space, and gets distance to 320, 240.
-            project(scratchVec3, pkt.sunPos, globals.camera);
+            mDoLib_project(scratchVec3, pkt.sunPos, globals.camera);
 
             const peekZ = globals.dlst.peekZ;
 

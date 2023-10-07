@@ -300,7 +300,7 @@ export class dDlst_list_c {
     public wetherEffectSet: dDlst_list_Set = [
         this.wetherEffect, this.wetherEffect,
     ]
-    public effect: GfxRenderInstList[] = [
+    public effect: dDlst_list_Set = [
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];

@@ -1,7 +1,7 @@
 
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { ReadonlyVec3, mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assertExists, nArray, arrayRemove, assert } from "../util.js";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo.js";
@@ -24,6 +24,7 @@ export const enum fpc__ProcessName {
     d_a_sie_flag        = 0x00B1,
     d_a_oship           = 0x00B4,
     d_a_ep              = 0x00BA,
+    d_a_ff              = 0x00BC,
     d_a_kamome          = 0x00C3,
     d_a_obj_flame       = 0x010D,
     d_a_tbox            = 0x0126,
@@ -614,10 +615,10 @@ export class fopAc_ac_c extends leafdraw_class {
 
 export interface fopAcM_prm_class {
     parameters: number;
-    pos: vec3 | null;
-    rot: vec3 | null;
+    pos: ReadonlyVec3 | null;
+    rot: ReadonlyVec3 | null;
     enemyNo: number;
-    scale: vec3 | null;
+    scale: ReadonlyVec3 | null;
     gbaName: number;
     parentPcId: number;
     subtype: number;
@@ -627,7 +628,7 @@ export interface fopAcM_prm_class {
     layer: number;
 }
 
-export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, roomNo: number, rot: vec3 | null, scale: vec3 | null, subtype: number, parentPcId: number): number | null {
+export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: ReadonlyVec3 | null, roomNo: number, rot: ReadonlyVec3 | null, scale: ReadonlyVec3 | null, subtype: number, parentPcId: number): number | null {
     // Create on current layer.
     const prm: fopAcM_prm_class = {
         parameters, pos, roomNo, rot, scale, subtype, parentPcId,
