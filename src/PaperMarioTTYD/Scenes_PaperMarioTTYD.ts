@@ -482,5 +482,5 @@ const sceneDescs = [
 ];
 
 const id = 'ttyd';
-const name = 'Paper Mario: The Thousand Year Door';
+const name = 'Paper Mario: The Thousand-Year Door';
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
