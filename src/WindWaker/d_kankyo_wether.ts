@@ -26,6 +26,7 @@ import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, 
 import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
 import { dGlobals } from "./zww_scenes.js";
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -43,7 +44,7 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
 export const enum ThunderMode {
     Off     = 0,
     On      = 1,
-    Two     = 2,
+    TagActivated = 2,
     FarOnly = 10,
 }
 
@@ -387,7 +388,7 @@ export class dKankyo_sun_Packet {
                 let sunSize = sunSizeBase;
                 if (i === 1)
                     sunSize *= 1.6;
-    
+
                 if (i === 0) {
                     this.sunTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
                 } else {
@@ -891,7 +892,7 @@ export class dKankyo_rain_Packet {
         const sibukiCount = envLight.rainCount >>> 1;
         if (sibukiCount < 1)
             return;
-    
+
         const alphaTarget = this.sibukiHidden ? 0.0 : 200/255;
         this.sibukiAlpha = cLib_addCalc(this.sibukiAlpha, alphaTarget, 0.2, 3.0, 0.001);
 
@@ -1096,14 +1097,14 @@ export class dKankyo_wave_Packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, txc1, 0);
-    
+
             vec3.set(scratchVec3,  x, 0.0, 0.0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, scratchVec3a);
             ddraw.position3vec3(scratchVec3);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, txc1, txc1);
-    
+
             vec3.set(scratchVec3, -x, 0.0, 0.0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, scratchVec3a);
@@ -1151,7 +1152,7 @@ export class dKankyo_star_Packet {
         vec3.fromValues(-9179, 21300, 14300),
         vec3.fromValues(-10300, 22000, 21000),
         vec3.fromValues(-16000, 25500, 20000),
-        vec3.fromValues(0, 30000, 19000),        
+        vec3.fromValues(0, 30000, 19000),
     ];
 
     private star_col: Color[] = [
@@ -1306,6 +1307,122 @@ export class dKankyo_star_Packet {
 
     public destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
+    }
+}
+
+class HOUSI_EFF {
+    public initialized = false;
+    public basePos = vec3.create();
+    public pos = vec3.create();
+    public pntwindVel = vec3.create();
+    public wave = vec3.create();
+    public alpha = 0.0;
+    public speed = 0.0;
+    public resetTimer = 0;
+    public alphaTimer = 0;
+}
+
+export class dKankyo_housi_Packet {
+    public instances = nArray(300, () => new HOUSI_EFF());
+    public alpha: number = 0.0;
+    public count: number = 0.0;
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    private texData: BTIData;
+
+    constructor(globals: dGlobals) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+
+        const mb = new GXMaterialBuilder();
+        mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C1, GX.CC.C0, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_housi_Packet'));
+
+        const resCtrl = globals.resCtrl;
+        this.texData = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x6D);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.count === 0)
+            return;
+
+        const ddraw = this.ddraw;
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
+
+        for (let i = 0; i < this.count; i++) {
+            const housi = this.instances[i];
+
+            vec3.add(scratchVec3a, housi.basePos, housi.pos);
+
+            const alpha = housi.alpha * 0xFF;
+
+            const sx = Math.sin(housi.wave[0] * 10.0) * 0.22;
+            const sy = Math.sin(housi.wave[1] * 10.0) * 0.22;
+            const baseSize = 3.0;
+
+            vec3.set(scratchVec3, baseSize - sx, baseSize - sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            vec3.set(scratchVec3, -baseSize + sx, baseSize + sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 0);
+
+            vec3.set(scratchVec3, -baseSize - sx, -baseSize + sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 2);
+
+            vec3.set(scratchVec3, baseSize + sx, -baseSize - sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 2);
+        }
+
+        ddraw.end();
+        ddraw.endDraw(renderInstManager);
+
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            this.texData.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xE5FFC8FF);
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x43D2CAFF);
+
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.texData.destroy(device);
     }
 }
 
@@ -1654,7 +1771,6 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                     eff.alpha = cLib_addCalc(eff.alpha, 1.0, 0.5, 0.05, 0.001);
             } else {
                 // Modification for noclip: Increase the max hangtime by a lot.
-                // const speed = 0.4;
                 const speed = 0.4;
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
@@ -1862,7 +1978,82 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
 function wether_move_poison(globals: dGlobals): void {
 }
 
-function wether_move_housi(globals: dGlobals): void {
+function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.housiPacket === null && envLight.housiCount !== 0)
+        envLight.housiPacket = new dKankyo_housi_Packet(globals);
+    else if (envLight.housiPacket === null)
+        return;
+
+    const pkt = envLight.housiPacket;
+    if (envLight.housiCount !== 0 || pkt.alpha <= 0)
+        pkt.count = envLight.housiCount;
+
+    pkt.alpha = cLib_addCalc(pkt.alpha, envLight.housiCount > 0.0 ? 1.0 : 0.0, 0.2 * deltaTimeInFrames, 0.05, 0.01);
+
+    if (pkt.count === 0)
+        return;
+
+    dKyw_get_wind_vecpow(scratchVec3b, envLight);
+    dKy_set_eyevect_calc2(globals, scratchVec3a, 800.0);
+    for (let i = 0; i < pkt.count; i++) {
+        const eff = pkt.instances[i];
+        if (!eff.initialized) {
+            eff.alphaTimer = cM_rndFX(0x10000);
+            eff.speed = 0.2 + cM_rndF(1.5);
+
+            vec3.copy(eff.basePos, scratchVec3a);
+            vec3.set(eff.pos, cM_rndFX(1000.0), 1000.0, cM_rndFX(1000.0));
+            eff.alpha = 0.0;
+
+            eff.wave[0] = cM_rndF(MathConstants.TAU);
+            eff.wave[1] = cM_rndF(MathConstants.TAU);
+            eff.wave[2] = cM_rndF(MathConstants.TAU);
+
+            const posY = eff.pos[1] + eff.basePos[1];
+            if (posY < -100149.9)
+                eff.pos[1] = (-99999.9 - posY) + 10.0;
+
+            eff.initialized = true;
+        } else {
+            vec3.scaleAndAdd(eff.pos, eff.pos, scratchVec3b, 5.0 * eff.speed * deltaTimeInFrames);
+            eff.pos[1] -= 0.6 * eff.speed * deltaTimeInFrames;
+
+            eff.pos[0] += Math.sin(eff.wave[0]) * eff.speed * deltaTimeInFrames;
+            eff.pos[1] += Math.sin(eff.wave[1]) * eff.speed * 0.5 * deltaTimeInFrames;
+            eff.pos[2] += Math.sin(eff.wave[2]) * eff.speed * deltaTimeInFrames;
+
+            eff.wave[0] += 0.03 * deltaTimeInFrames;
+            eff.wave[1] += 0.02 * deltaTimeInFrames;
+            eff.wave[2] += 0.01 * deltaTimeInFrames;
+
+            vec3.add(scratchVec3c, eff.basePos, eff.pos);
+            // pntwind
+
+            if (eff.resetTimer === 0) {
+                if (vec3.distance(scratchVec3c, scratchVec3a) > 1000.0 || scratchVec3c[1] < -99980.0) {
+                    eff.resetTimer = 10;
+
+                    vec3.copy(eff.basePos, scratchVec3a);
+                    if (vec3.distance(scratchVec3c, scratchVec3a) > 1050.0) {
+                        vec3.set(eff.pos, cM_rndFX(1000.0), cM_rndFX(1000.0), cM_rndFX(1000.0));
+                    } else {
+                        dKyr_get_vectle_calc(scratchVec3c, scratchVec3a, scratchVec3d);
+                        vec3.scale(eff.pos, scratchVec3d, 1000.0 * cM_rndFX(50.0));
+                    }
+                }
+            } else {
+                eff.resetTimer--;
+            }
+
+            eff.alphaTimer += 600 * deltaTimeInFrames;
+            eff.alphaTimer = eff.alphaTimer % 0x10000;
+
+            const alpha = eff.alphaTimer >= 30000 ? 0.0 : pkt.alpha;
+            eff.alpha = cLib_addCalc(eff.alpha, alpha, 0.5 * deltaTimeInFrames, 0.02, 0.00001);
+        }
+    }
 }
 
 function wether_move_moya(globals: dGlobals): void {
@@ -1982,7 +2173,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
             const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
             wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
         }
- 
+
         // Sea flat fade.
         if (envLight.waveFlatInter > 0.0) {
             const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);
@@ -2012,7 +2203,7 @@ export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: numb
     wether_move_star(globals, deltaTimeInFrames);
     if (globals.stageName !== 'Name') {
         wether_move_poison(globals);
-        wether_move_housi(globals);
+        wether_move_housi(globals, deltaTimeInFrames);
         wether_move_moya(globals);
         wether_move_wave(globals, deltaTimeInFrames);
     }
@@ -2164,9 +2355,6 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     if (globals.stageName !== 'Name') {
         if (envLight.wavePacket !== null)
             envLight.wavePacket.draw(globals, renderInstManager, viewerInput);
-    }
-
-    if (globals.stageName !== 'Name') {
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
     }
@@ -2177,6 +2365,8 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     if (globals.stageName !== 'Name') {
         if (envLight.rainPacket !== null)
             envLight.rainPacket.draw(globals, renderInstManager, viewerInput);
+        if (envLight.housiPacket !== null)
+            envLight.housiPacket.draw(globals, renderInstManager, viewerInput);
     }
 }
 

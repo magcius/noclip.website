@@ -895,17 +895,19 @@ class d_a_kytag00 extends fopAc_ac_c {
 
             if (this.effectMode === Kytag00EffectMode.Rain) {
                 this.raincnt_set(globals, target);
+            } else if (this.effectMode === Kytag00EffectMode.Housi) {
+                envLight.housiCount = target * 300.0;
             } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = 2;
+                    envLight.thunderMode = ThunderMode.TagActivated;
             } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = 2;
+                    envLight.thunderMode = ThunderMode.TagActivated;
                 this.raincnt_set(globals, target);
             } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                 // TODO(jstpierre): moya
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = 2;
+                    envLight.thunderMode = ThunderMode.TagActivated;
                 this.raincnt_set(globals, target);
             } else {
                 // TODO(jstpierre): The rest of the modes.
@@ -924,16 +926,18 @@ class d_a_kytag00 extends fopAc_ac_c {
 
                 if (this.effectMode === Kytag00EffectMode.Rain) {
                     this.raincnt_cut(globals);
+                } else if (this.effectMode === Kytag00EffectMode.Housi) {
+                    envLight.housiCount = 0;
                 } else if (this.effectMode === Kytag00EffectMode.Thunder) {
-                    if (envLight.thunderMode === 2)
+                    if (envLight.thunderMode === ThunderMode.TagActivated)
                         envLight.thunderMode = ThunderMode.Off;
                 } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
-                    if (envLight.thunderMode === 2)
+                    if (envLight.thunderMode === ThunderMode.TagActivated)
                         envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                     // TODO(jstpierre): moya
-                    if (envLight.thunderMode === 2)
+                    if (envLight.thunderMode === ThunderMode.TagActivated)
                         envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
                 }
@@ -4643,7 +4647,7 @@ export class d_a_ff extends fopAc_ac_c {
             mDoMtx_YrotS(calc_mtx, this.rot[1]);
             mDoMtx_XrotM(calc_mtx, this.rot[0]);
             MtxPosition(this.speed, scratchVec3a);
-            vec3.add(this.pos, this.pos, this.speed);
+            vec3.scaleAndAdd(this.pos, this.pos, this.speed, deltaTimeInFrames);
         }
 
         if (this.pos[1] >= this.groundY + 12.5) {

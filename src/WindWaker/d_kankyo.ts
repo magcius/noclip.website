@@ -12,7 +12,7 @@ import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cM_rndF } from "./SComponent.js";
-import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_housi_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { stage_envr_info_class, stage_palet_info_class, stage_palet_info_class__DifAmb, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { dGlobals } from "./zww_scenes.js";
@@ -107,17 +107,6 @@ export class dScnKy_env_light_c {
 
     // Weather.
     public colpatWeather = 0;
-
-    // Wind
-    public windTactAngleX: number = 0;
-    public windTactAngleY: number = 0;
-    public windVec = vec3.fromValues(0.0, 0.0, 0.0);
-    public windPower = 0.0;
-    public customWindPower = 0.0;
-
-    // TODO(jstpierre): Move these weather states to their own structs?
-
-    // Dice weather system
     public diceWeatherStop: boolean = false;
     public diceWeatherMode: DiceWeatherMode = DiceWeatherMode.Sunny;
     public diceWeatherChangeTime: number;
@@ -125,6 +114,13 @@ export class dScnKy_env_light_c {
     public diceWeatherCurrPattern: number = 0;
     public diceWeatherCounter: number = 0;
     public diceWeatherTime: number = 0.0;
+
+    // Wind
+    public windTactAngleX: number = 0;
+    public windTactAngleY: number = 0;
+    public windVec = vec3.fromValues(0.0, 0.0, 0.0);
+    public windPower = 0.0;
+    public customWindPower = 0.0;
 
     // Rain.
     public rainCount: number = 0;
@@ -153,6 +149,9 @@ export class dScnKy_env_light_c {
     public waveScaleBottom = 0.0;
     public waveReset = false;
 
+    // Housi.
+    public housiCount = 0;
+
     // Wether packets
     public wetherCommonTextures: dKankyo__CommonTextures;
     public sunPacket: dKankyo_sun_Packet | null = null;
@@ -161,6 +160,7 @@ export class dScnKy_env_light_c {
     public windline: dKankyo__Windline | null = null;
     public wavePacket: dKankyo_wave_Packet | null = null;
     public starPacket: dKankyo_star_Packet | null = null;
+    public housiPacket: dKankyo_housi_Packet | null = null;
 
     public eventNightStop: boolean = false;
     public forceTimePass: boolean = false;
@@ -1384,6 +1384,8 @@ class d_kyeff extends kankyo_class {
             envLight.wavePacket.destroy(device);
         if (envLight.starPacket !== null)
             envLight.starPacket.destroy(device);
+        if (envLight.housiPacket !== null)
+            envLight.housiPacket.destroy(device);
     }
 }
 

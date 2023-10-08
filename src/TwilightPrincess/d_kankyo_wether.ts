@@ -113,7 +113,7 @@ export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: numb
 }
 
 export function dKyw_wether_init2(globals: dGlobals): void {
-    
+
 }
 
 export function dKyw_wether_delete2(globals: dGlobals): void {
@@ -954,7 +954,7 @@ export class dKankyo_housi_Packet {
         const mb = new GXMaterialBuilder();
         // noclip modification: Use VTX instead of separate draw calls for the color.
         //mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(0, GX.CC.C1, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
@@ -1025,7 +1025,7 @@ export class dKankyo_housi_Packet {
 
         if (envLight.housiCount === 0)
             return;
-        
+
         this.ddraw.beginDraw(globals.modelCache.cache);
         this.drawHousi(globals, renderInstManager, viewerInput);
         this.ddraw.endDraw(renderInstManager);
@@ -1177,7 +1177,7 @@ export class dKankyo_rain_Packet {
         const sibukiCount = envLight.rainCount >>> 1;
         if (sibukiCount < 1)
             return;
-    
+
         const alphaTarget = this.sibukiHidden ? 0.0 : 200/255;
         this.sibukiAlpha = cLib_addCalc(this.sibukiAlpha, alphaTarget, 0.2, 3.0, 0.001);
 
@@ -1781,7 +1781,7 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
     let starAmount = 1.0;
 
     const curTime = envLight.curTime;
-    
+
     if (curTime >= 330.0 && curTime < 45.0)
         starAmount = 1.0;
     else if (curTime >= 75.0 && curTime < 285.0)
@@ -1877,7 +1877,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
     let skyboxOffsY: number;
     skyboxOffsY = 1000.0 + pkt.strength * -500.0;
-    
+
 
     {
         const fili = globals.roomStatus[globals.mStayNo].fili;
@@ -1904,7 +1904,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
                 if (rnd_1 > 15000.0) {
                     rnd_1 = cM_rndF(1000.0) + 14000;
                 }
-                
+
                 let x = Math.sin(rnd_0);
                 if (Math.abs(rnd_1 * x) != 0.0) {
                     if (x <= 0.0) {
@@ -1925,7 +1925,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
                 kumo.position[0] = x;
                 kumo.position[1] = 0;
-                kumo.position[2] = z;                
+                kumo.position[2] = z;
 
                 distFromCenterXZ = Math.hypot(kumo.position[0], kumo.position[2]);
             }
@@ -1953,7 +1953,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
         let alphaTarget: number;
         let alphaMaxVel = 1.0;
-        
+
         if (i < pkt.count) {
             alphaMaxVel = 0.1;
             if (kumo.distFalloff >= 0.05 && kumo.distFalloff < 0.2)
