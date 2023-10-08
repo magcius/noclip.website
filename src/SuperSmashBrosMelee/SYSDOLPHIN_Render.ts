@@ -219,8 +219,8 @@ export class HSD_AObj_Instance {
         }
     }
 
-    public calcAnim<T>(deltaTimeInFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
-        this.currFrame += this.framerate * deltaTimeInFrames;
+    public calcAnim<T>(deltaTimeFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        this.currFrame += this.framerate * deltaTimeFrames;
 
         if (!!(this.flags & HSD_AObjFlags.ANIM_LOOP)) {
             while (this.currFrame >= this.aobj.endFrame) {
@@ -345,9 +345,9 @@ export class HSD_TObj_Instance {
         }
     }
 
-    public calcAnim(deltaTimeInFrames: number): void {
+    public calcAnim(deltaTimeFrames: number): void {
         if (this.aobj !== null)
-            this.aobj.calcAnim(deltaTimeInFrames, HSD_TObj_Instance.updateAnim, this);
+            this.aobj.calcAnim(deltaTimeFrames, HSD_TObj_Instance.updateAnim, this);
     }
 
     private makeColorGenTExp(list: HSD_TExpList, tobjIdx: number, params: HSD_MakeTExp): void {
@@ -768,12 +768,12 @@ class HSD_MObj_Instance {
         }
     }
 
-    public calcAnim(deltaTimeInFrames: number): void {
+    public calcAnim(deltaTimeFrames: number): void {
         if (this.aobj !== null)
-            this.aobj.calcAnim(deltaTimeInFrames, HSD_MObj_Instance.updateAnim, this);
+            this.aobj.calcAnim(deltaTimeFrames, HSD_MObj_Instance.updateAnim, this);
 
         for (let i = 0; i < this.tobj.length; i++)
-            this.tobj[i].calcAnim(deltaTimeInFrames);
+            this.tobj[i].calcAnim(deltaTimeFrames);
     }
 
     public calcMtx(): void {
@@ -1102,9 +1102,9 @@ class HSD_DObj_Instance {
             this.mobj.addAnim(matAnim);
     }
 
-    public calcAnim(deltaTimeInFrames: number): void {
+    public calcAnim(deltaTimeFrames: number): void {
         if (this.mobj !== null)
-            this.mobj.calcAnim(deltaTimeInFrames);
+            this.mobj.calcAnim(deltaTimeFrames);
     }
 
     public calcMtx(): void {
@@ -1297,15 +1297,15 @@ class HSD_JObj_Instance {
         }
     }
 
-    public calcAnim(deltaTimeInFrames: number): void {
+    public calcAnim(deltaTimeFrames: number): void {
         if (this.aobj !== null)
-            this.aobj.calcAnim(deltaTimeInFrames, HSD_JObj_Instance.updateAnim, this);
+            this.aobj.calcAnim(deltaTimeFrames, HSD_JObj_Instance.updateAnim, this);
 
         for (let i = 0; i < this.dobj.length; i++)
-            this.dobj[i].calcAnim(deltaTimeInFrames);
+            this.dobj[i].calcAnim(deltaTimeFrames);
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].calcAnim(deltaTimeInFrames);
+            this.children[i].calcAnim(deltaTimeFrames);
     }
 
     public calcMtx(parentJointMtx: mat4 | null = null, parentScale: ReadonlyVec3 = Vec3One): void {
@@ -1379,8 +1379,8 @@ export class HSD_JObjRoot_Instance {
         return this.allJObjsByID.get(jointReferenceID)!;
     }
 
-    public calcAnim(deltaTimeInFrames: number): void {
-        this.rootInst.calcAnim(deltaTimeInFrames);
+    public calcAnim(deltaTimeFrames: number): void {
+        this.rootInst.calcAnim(deltaTimeFrames);
     }
 
     public calcMtx(viewerInput: ViewerRenderInput): void {

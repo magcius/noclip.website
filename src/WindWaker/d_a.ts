@@ -32,8 +32,6 @@ import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_cl
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
-import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { AABB } from "../Geometry.js";
 
 // Framework'd actors
 
@@ -270,8 +268,8 @@ class d_a_ep extends fopAc_ac_c {
         alphaModel0.set(dDlst_alphaModel__Type.Bonbori, this.alphaModelMtx, this.alphaModelAlpha);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         if (this.type === 0 || this.type === 3) {
             if (this.hasGa)
@@ -279,7 +277,7 @@ class d_a_ep extends fopAc_ac_c {
         }
 
         for (let i = 0; i < 3; i++)
-            this.timers[i] = Math.max(this.timers[i] - deltaTimeInFrames, 0);
+            this.timers[i] = Math.max(this.timers[i] - deltaTimeFrames, 0);
 
         if (this.timers[0] === 0) {
             this.timers[0] = cM_rndF(5.0);
@@ -308,8 +306,8 @@ class d_a_ep extends fopAc_ac_c {
         vec3.set(scratchVec3a, scale, scale, scale);
         mat4.scale(calc_mtx, calc_mtx, scratchVec3a);
         mat4.copy(this.alphaModelMtx, calc_mtx);
-        this.alphaModelRotY += 0xD0 * deltaTimeInFrames;
-        this.alphaModelRotX += 0x100 * deltaTimeInFrames;
+        this.alphaModelRotY += 0xD0 * deltaTimeFrames;
+        this.alphaModelRotX += 0x100 * deltaTimeFrames;
 
         this.ep_move();
     }
@@ -385,12 +383,12 @@ class daBg_btkAnm_c {
         // this.isSC_01 = modelData.bmd.mat3.materialEntries[0].name.startsWith('SC_01');
     }
 
-    public play(deltaTimeInFrames: number): void {
+    public play(deltaTimeFrames: number): void {
         if (this.isSC_01) {
             // Sync to SE timer.
-            this.anm.play(deltaTimeInFrames);
+            this.anm.play(deltaTimeFrames);
         } else {
-            this.anm.play(deltaTimeInFrames);
+            this.anm.play(deltaTimeFrames);
         }
     }
 }
@@ -406,8 +404,8 @@ class daBg_brkAnm_c {
         this.anm.entry(modelInstance);
     }
 
-    public play(deltaTimeInFrames: number): void {
-        this.anm.play(deltaTimeInFrames);
+    public play(deltaTimeFrames: number): void {
+        this.anm.play(deltaTimeFrames);
     }
 }
 
@@ -481,12 +479,12 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
-                this.bgBtkAnm[i]!.play(deltaTimeInFrames);
+                this.bgBtkAnm[i]!.play(deltaTimeFrames);
             if (this.bgBrkAnm[i] !== null)
-                this.bgBrkAnm[i]!.play(deltaTimeInFrames);
+                this.bgBrkAnm[i]!.play(deltaTimeFrames);
         }
     }
 
@@ -576,7 +574,7 @@ class d_a_vrbox extends fopAc_ac_c {
         }
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.dungeon_rain_proc(globals);
     }
 
@@ -646,7 +644,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    private daVrbox2_color_set(globals: dGlobals, deltaTimeInFrames: number): void {
+    private daVrbox2_color_set(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
         let sum = 0;
@@ -673,7 +671,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         const windScrollSpeed = windPower * ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
-        const scrollSpeed0 = deltaTimeInFrames * this.scrollSpeed * windScrollSpeed;
+        const scrollSpeed0 = deltaTimeFrames * this.scrollSpeed * windScrollSpeed;
 
         let mtx: mat4;
         const backMat0 = this.backCloud.materialInstances[0].materialData.material;
@@ -711,8 +709,8 @@ class d_a_vrbox2 extends fopAc_ac_c {
             this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiCol);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.daVrbox2_color_set(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.daVrbox2_color_set(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -753,15 +751,15 @@ const enum Kytag00EffectMode {
     None = 0x00,
     Rain = 0x01,
     Snow = 0x02,
-    Moya3 = 0x03,
-    Moya4 = 0x04,
-    Moya5 = 0x05,
+    Moya0 = 0x03,
+    Moya1 = 0x04,
+    Moya2 = 0x05,
     Housi = 0x06,
     Thunder = 0x07,
-    ThunderAndRain = 0x08,
-    Moya9 = 0x09,
-    MoyaA = 0x0A,
-    MoyaB = 0x0B,
+    ThunderRain = 0x08,
+    ThunderRainMoya = 0x09,
+    Moya3 = 0x0A,
+    Moya4 = 0x0B,
 };
 
 class d_a_kytag00 extends fopAc_ac_c {
@@ -820,7 +818,7 @@ class d_a_kytag00 extends fopAc_ac_c {
         // Moved inside wether_tag_move.
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.invert) {
             this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
         } else {
@@ -896,22 +894,40 @@ class d_a_kytag00 extends fopAc_ac_c {
 
             if (this.effectMode === Kytag00EffectMode.Rain) {
                 this.raincnt_set(globals, target);
+            } else if (this.effectMode === Kytag00EffectMode.Snow) {
+                envLight.snowCount = (target * 250.0) | 0;
+                envLight.moyaMode = 2;
+                envLight.moyaCount = (target * 100.0) | 0;
+            } else if (this.effectMode === Kytag00EffectMode.Moya0) {
+                envLight.moyaMode = 0;
+                envLight.moyaCount = (target * 100.0) | 0;
+            } else if (this.effectMode === Kytag00EffectMode.Moya1) {
+                envLight.moyaMode = 1;
+                envLight.moyaCount = (target * 100.0) | 0;
+            } else if (this.effectMode === Kytag00EffectMode.Moya2) {
+                envLight.moyaMode = 2;
+                envLight.moyaCount = (target * 100.0) | 0;
             } else if (this.effectMode === Kytag00EffectMode.Housi) {
-                envLight.housiCount = target * 300.0;
+                envLight.housiCount = (target * 300.0) | 0;
             } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = ThunderMode.TagActivated;
-            } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
+                    envLight.thunderMode = ThunderMode.Kytag;
+            } else if (this.effectMode === Kytag00EffectMode.ThunderRain) {
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = ThunderMode.TagActivated;
+                    envLight.thunderMode = ThunderMode.Kytag;
                 this.raincnt_set(globals, target);
-            } else if (this.effectMode === Kytag00EffectMode.Moya9) {
-                // TODO(jstpierre): moya
+            } else if (this.effectMode === Kytag00EffectMode.ThunderRainMoya) {
+                envLight.moyaMode = 0;
+                envLight.moyaCount = (target * 100.0) | 0;
                 if (envLight.thunderMode === ThunderMode.Off)
-                    envLight.thunderMode = ThunderMode.TagActivated;
+                    envLight.thunderMode = ThunderMode.Kytag;
                 this.raincnt_set(globals, target);
-            } else {
-                // TODO(jstpierre): The rest of the modes.
+            } else if (this.effectMode === Kytag00EffectMode.Moya3) {
+                envLight.moyaMode = 3;
+                envLight.moyaCount = (target * 100.0) | 0;
+            } else if (this.effectMode === Kytag00EffectMode.Moya4) {
+                envLight.moyaMode = 4;
+                envLight.moyaCount = (target * 100.0) | 0;
             }
         } else {
             if (this.colpatSet) {
@@ -927,20 +943,25 @@ class d_a_kytag00 extends fopAc_ac_c {
 
                 if (this.effectMode === Kytag00EffectMode.Rain) {
                     this.raincnt_cut(globals);
+                } else if (this.effectMode === Kytag00EffectMode.Snow) {
+                    envLight.snowCount = 0;
+                    envLight.moyaCount = 0;
                 } else if (this.effectMode === Kytag00EffectMode.Housi) {
                     envLight.housiCount = 0;
                 } else if (this.effectMode === Kytag00EffectMode.Thunder) {
-                    if (envLight.thunderMode === ThunderMode.TagActivated)
+                    if (envLight.thunderMode === ThunderMode.Kytag)
                         envLight.thunderMode = ThunderMode.Off;
-                } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
-                    if (envLight.thunderMode === ThunderMode.TagActivated)
-                        envLight.thunderMode = ThunderMode.Off;
-                    this.raincnt_cut(globals);
-                } else if (this.effectMode === Kytag00EffectMode.Moya9) {
-                    // TODO(jstpierre): moya
-                    if (envLight.thunderMode === ThunderMode.TagActivated)
+                } else if (this.effectMode === Kytag00EffectMode.ThunderRain) {
+                    if (envLight.thunderMode === ThunderMode.Kytag)
                         envLight.thunderMode = ThunderMode.Off;
                     this.raincnt_cut(globals);
+                } else if (this.effectMode === Kytag00EffectMode.ThunderRainMoya) {
+                    envLight.moyaCount = 0;
+                    if (envLight.thunderMode === ThunderMode.Kytag)
+                        envLight.thunderMode = ThunderMode.Off;
+                    this.raincnt_cut(globals);
+                } else if (this.effectMode === Kytag00EffectMode.Moya0 || this.effectMode === Kytag00EffectMode.Moya1 || this.effectMode === Kytag00EffectMode.Moya2 || this.effectMode === Kytag00EffectMode.Moya3 || this.effectMode === Kytag00EffectMode.Moya4) {
+                    envLight.moyaCount = 0;
                 }
             }
         }
@@ -1035,10 +1056,10 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.type !== 3) {
-            this.btkAnm.play(deltaTimeInFrames);
-            this.bckAnm.play(deltaTimeInFrames);
+            this.btkAnm.play(deltaTimeFrames);
+            this.bckAnm.play(deltaTimeFrames);
         }
 
         if (this.type === 1) {
@@ -1103,7 +1124,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         }
     };
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
         const windVec = dKyw_get_wind_vec(envLight);
@@ -1129,7 +1150,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
             this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], cM__Short2Rad(animDirTarget), cM__Short2Rad(0x04), cM__Short2Rad(0x20));
 
             // Rock back and forth.
-            this.animWave[i] += cM__Short2Rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeInFrames;
+            this.animWave[i] += cM__Short2Rad((windPow * 0x800) + cM_rndFX(0x80)) *deltaTimeFrames;
             const wave = Math.sin(this.animWave[i]);
 
             vec3.set(scratchVec3a, wave, 0, wave);
@@ -1213,7 +1234,7 @@ class d_a_obj_zouK extends fopAc_ac_c {
         mDoMtx_ZXYrotM(this.model.modelMatrix, this.rot);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.set_mtx();
     }
 
@@ -1267,9 +1288,9 @@ class d_a_swhit0 extends fopAc_ac_c {
         mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.bckAnm.play(deltaTimeInFrames);
-        this.btkAnm.play(deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.bckAnm.play(deltaTimeFrames);
+        this.btkAnm.play(deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1913,10 +1934,10 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigameResetTimer = 30;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
-            this.minigameResetTimer -= deltaTimeInFrames;
+            this.minigameResetTimer -= deltaTimeFrames;
             if (this.minigameResetTimer <= 0 || inputManager.isKeyDownEventTriggered('KeyF'))
                 this.minigameDeactivate(globals);
         } else if (this.minigame.bulletNum === 0 || this.minigame.aliveShipNum === 0) {
@@ -2147,7 +2168,7 @@ class dCloth_packet_c {
         }
     }
 
-    private getFactor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, distFly: number, distHoist: number, distBoth: number, fly: number, hoist: number, deltaTimeInFrames: number): void {
+    private getFactor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, distFly: number, distHoist: number, distBoth: number, fly: number, hoist: number, deltaTimeFrames: number): void {
         if (this.factorCheck(fly, hoist)) {
             vec3.zero(dst);
             return;
@@ -2157,7 +2178,7 @@ class dCloth_packet_c {
 
         const pos = posArr[idx];
         vec3.scale(dst, nrmArr[idx], vec3.dot(speed, nrmArr[idx]));
-        dst[1] += this.gravity * deltaTimeInFrames;
+        dst[1] += this.gravity * deltaTimeFrames;
 
         const flyM1 = clamp(fly - 1, 0, this.flyGridSize - 1);
         const flyP1 = clamp(fly + 1, 0, this.flyGridSize - 1);
@@ -2184,7 +2205,7 @@ class dCloth_packet_c {
             get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyP1, hoistP1)], distBoth, this.spring);
     }
 
-    public cloth_move(deltaTimeInFrames: number): void {
+    public cloth_move(deltaTimeFrames: number): void {
         // Compute global wind vector.
         vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(cM__Short2Rad(this.wave)));
 
@@ -2199,14 +2220,14 @@ class dCloth_packet_c {
         for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 const idx = this.getIndex(fly, hoist);
-                this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist, deltaTimeInFrames);
+                this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist, deltaTimeFrames);
                 vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
                 vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag);
-                vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeInFrames, 0, 1));
+                vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeFrames, 0, 1));
             }
         }
 
-        this.wave += this.waveSpeed * deltaTimeInFrames;
+        this.wave += this.waveSpeed * deltaTimeFrames;
         this.setNrm();
     }
 
@@ -2355,8 +2376,8 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         this.set_mtx();
 
@@ -2373,7 +2394,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.windSpeed = 13.0;
         this.cloth.windSpeedWave = 8.0;
         this.cloth.setGlobalWind(this.windvec);
-        this.cloth.cloth_move(deltaTimeInFrames);
+        this.cloth.cloth_move(deltaTimeFrames);
     }
 
     private set_mtx(): void {
@@ -2441,8 +2462,8 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         this.set_mtx();
 
@@ -2460,7 +2481,7 @@ class d_a_tori_flag extends fopAc_ac_c {
         this.cloth.windSpeed = 8.0;
         this.cloth.windSpeedWave = 8.0;
         this.cloth.setGlobalWind(this.windvec);
-        this.cloth.cloth_move(deltaTimeInFrames);
+        this.cloth.cloth_move(deltaTimeFrames);
     }
 
     private set_mtx(): void {
@@ -2778,14 +2799,14 @@ class d_a_majuu_flag extends fopAc_ac_c {
         return idx === 15 || idx === 20;
     }
 
-    private get_cloth_anim_factor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, idx: number, deltaTimeInFrames: number): void {
+    private get_cloth_anim_factor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, idx: number, deltaTimeFrames: number): void {
         if (this.isPointFixed(idx)) {
             vec3.zero(dst);
             return;
         }
 
         vec3.scale(dst, nrmArr[idx], vec3.dot(speed, nrmArr[idx]));
-        dst[1] += this.gravity * deltaTimeInFrames;
+        dst[1] += this.gravity * deltaTimeFrames;
 
         for (let i = 0; i < 5; i++) {
             const connectedIdx = this.adjTableConstraint[(idx * 6) + i];
@@ -2848,8 +2869,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         vec3.normalize(dst, dst);
     }
 
-    private majuu_flag_move(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.wave += this.waveSpeed * deltaTimeInFrames;
+    private majuu_flag_move(globals: dGlobals, deltaTimeFrames: number): void {
+        this.wave += this.waveSpeed * deltaTimeFrames;
         const windSpeed = lerp(this.windSpeed1, this.windSpeed2,  Math.sin(cM__Short2Rad(this.wave)) * 0.5 + 0.5);
 
         const windpow = dKyw_get_wind_pow(globals.g_env_light);
@@ -2863,18 +2884,18 @@ class d_a_majuu_flag extends fopAc_ac_c {
         const posArrNew = this.posArr[this.curArr];
 
         for (let idx = 0; idx < this.pointCount; idx++) {
-            this.get_cloth_anim_factor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, idx, deltaTimeInFrames);
+            this.get_cloth_anim_factor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, idx, deltaTimeFrames);
             vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
             vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag);
-            vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeInFrames, 0, 1));
+            vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeFrames, 0, 1));
         }
 
         for (let i = 0; i < this.pointCount; i++)
             this.setNrmVtx(this.nrmArr[i], i);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         const mMonotone = false;
         if (!mMonotone) {
@@ -2886,7 +2907,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
             }
 
             this.rot[1] = cLib_addCalcAngleS2(this.rot[1], targetAngle, 0x0008, 0x0400);
-            this.majuu_flag_move(globals, deltaTimeInFrames);
+            this.majuu_flag_move(globals, deltaTimeFrames);
             this.set_mtx();
         }
     }
@@ -2998,19 +3019,19 @@ class d_a_kamome extends fopAc_ac_c {
         this.noDraw = true;
     }
 
-    private kamome_imuoto_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_imuoto_move(globals: dGlobals, deltaTimeFrames: number): void {
         this.noDraw = true;
     }
 
-    private kamome_imuoto2_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_imuoto2_move(globals: dGlobals, deltaTimeFrames: number): void {
         this.noDraw = true;
     }
 
-    private kamome_path_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_path_move(globals: dGlobals, deltaTimeFrames: number): void {
         // todo
     }
 
-    private kamome_heisou_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_heisou_move(globals: dGlobals, deltaTimeFrames: number): void {
         // todo
     }
 
@@ -3019,7 +3040,7 @@ class d_a_kamome extends fopAc_ac_c {
         this.morf.setAnm(anmRes, loopMode, morf, speedInFrames);
     }
 
-    private kamome_pos_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_pos_move(globals: dGlobals, deltaTimeFrames: number): void {
         const dx = this.targetPos[0] - this.pos[0];
         const dy = this.targetPos[1] - this.pos[1];
         const dz = this.targetPos[2] - this.pos[2];
@@ -3034,22 +3055,22 @@ class d_a_kamome extends fopAc_ac_c {
         const rotTargetX = -cM_atan2s(dy, Math.hypot(dx, dz));
         this.rot[0] = cLib_addCalcAngleS2(this.rot[0], rotTargetX, 10.0, this.rotVel * this.rotVelFade);
 
-        this.rotVelFade = cLib_addCalc2(this.rotVelFade, 1.0, 1.0 * deltaTimeInFrames, 0.04);
-        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 1.0 * deltaTimeInFrames, this.velocityFwdTargetMaxVel);
+        this.rotVelFade = cLib_addCalc2(this.rotVelFade, 1.0, 1.0 * deltaTimeFrames, 0.04);
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 1.0 * deltaTimeFrames, this.velocityFwdTargetMaxVel);
 
         vec3.set(scratchVec3a, 0.0, 0.0, this.velocityFwd);
         mDoMtx_YrotS(calc_mtx, this.rot[1]);
         mDoMtx_XrotM(calc_mtx, this.rot[0]);
         MtxPosition(scratchVec3a, scratchVec3a);
-        vec3.scaleAndAdd(this.pos, this.pos, scratchVec3a, deltaTimeInFrames);
+        vec3.scaleAndAdd(this.pos, this.pos, scratchVec3a, deltaTimeFrames);
 
         if (this.riseTimer >= 0) {
-            this.riseTimer -= deltaTimeInFrames;
-            this.pos[1] += 5.0 * deltaTimeInFrames;
+            this.riseTimer -= deltaTimeFrames;
+            this.pos[1] += 5.0 * deltaTimeFrames;
         }
     }
 
-    private kamome_auto_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    private kamome_auto_move(globals: dGlobals, deltaTimeFrames: number): void {
         const animFrame = this.morf.frameCtrl.currentTimeInFrames;
 
         // anim
@@ -3111,10 +3132,10 @@ class d_a_kamome extends fopAc_ac_c {
             }
         }
 
-        this.kamome_pos_move(globals, deltaTimeInFrames);
+        this.kamome_pos_move(globals, deltaTimeFrames);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         this.noDraw = false;
 
         if (this.type === 6) {
@@ -3127,23 +3148,23 @@ class d_a_kamome extends fopAc_ac_c {
         }
 
         // update timers
-        this.globalTimer += deltaTimeInFrames;
-        this.timer0 = Math.max(this.timer0 - deltaTimeInFrames, 0);
-        this.timer1 = Math.max(this.timer1 - deltaTimeInFrames, 0);
+        this.globalTimer += deltaTimeFrames;
+        this.timer0 = Math.max(this.timer0 - deltaTimeFrames, 0);
+        this.timer1 = Math.max(this.timer1 - deltaTimeFrames, 0);
 
         if (this.use_path_move) {
-            this.kamome_path_move(globals, deltaTimeInFrames);
+            this.kamome_path_move(globals, deltaTimeFrames);
         } if (this.type === 4) {
-            this.kamome_imuoto_move(globals, deltaTimeInFrames);
+            this.kamome_imuoto_move(globals, deltaTimeFrames);
         } else if (this.type === 5) {
-            this.kamome_imuoto2_move(globals, deltaTimeInFrames);
+            this.kamome_imuoto2_move(globals, deltaTimeFrames);
         } else if (this.type === 7) {
-            this.kamome_heisou_move(globals, deltaTimeInFrames);
+            this.kamome_heisou_move(globals, deltaTimeFrames);
         } else {
-            this.kamome_auto_move(globals, deltaTimeInFrames);
+            this.kamome_auto_move(globals, deltaTimeFrames);
         }
 
-        this.morf.play(deltaTimeInFrames);
+        this.morf.play(deltaTimeFrames);
         this.headRotY = cLib_addCalcAngleS2(this.headRotY, this.headRotYTarget, 4, 0x800);
         this.headRotZ = cLib_addCalcAngleS2(this.headRotZ, this.headRotZTarget, 4, 0x800);
         this.daKamome_setMtx();
@@ -3185,14 +3206,14 @@ class d_a_kamome extends fopAc_ac_c {
     }
 }
 
-type ModeFunc = (globals: dGlobals, deltaTimeInFrames: number) => void;
+type ModeFunc = (globals: dGlobals, deltaTimeFrames: number) => void;
 interface ModeFuncExec<T extends number> {
     curMode: T;
 }
 
-function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], deltaTimeInFrames: number): void {
+function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], deltaTimeFrames: number): void {
     const func = mode_tbl[actor.curMode * 2 + 1];
-    func.call(actor, globals, deltaTimeInFrames);
+    func.call(actor, globals, deltaTimeFrames);
 }
 
 function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
@@ -3339,8 +3360,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         return this.isSv() || this.isTerry();
     }
 
-    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
-        dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeInFrames);
+    private setMtx(globals: dGlobals, deltaTimeFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, 0.0, deltaTimeFrames);
         vec3.copy(this.model.baseScale, this.scale);
 
         const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
@@ -3427,14 +3448,14 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private modeWaitInit(globals: dGlobals): void {
     }
 
-    private modeWait(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeWait(globals: dGlobals, deltaTimeFrames: number): void {
     }
 
     private modeStopTerryInit(globals: dGlobals): void {
         // this.timer = 210;
     }
 
-    private modeStopTerry(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeStopTerry(globals: dGlobals, deltaTimeFrames: number): void {
         // stop for player, check tg hit
         modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.pathMoveTerry);
     }
@@ -3443,7 +3464,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         // this.timer = 10;
     }
 
-    private modePathMoveTerry(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modePathMoveTerry(globals: dGlobals, deltaTimeFrames: number): void {
         // setCollision()
         // checkTgHit()
         if (this.type === 1)
@@ -3451,17 +3472,17 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         else if (this.type === 3)
             this.velocityFwdTarget = 15.0;
 
-        this.linkRideRockTimer = this.linkRideRockTimer + 0x1830 * deltaTimeInFrames;
-        this.linkRideRockAmpl = cLib_addCalcAngleS2(this.linkRideRockAmpl, 0, 10, 10 * deltaTimeInFrames);
+        this.linkRideRockTimer = this.linkRideRockTimer + 0x1830 * deltaTimeFrames;
+        this.linkRideRockAmpl = cLib_addCalcAngleS2(this.linkRideRockAmpl, 0, 10, 10 * deltaTimeFrames);
         if (this.linkRideRockAmpl <= 10)
             this.linkRideRockAmpl = 0;
 
         // check distance to player, stop if they get near
         if (this.path !== null)
-            this.pathMove(globals, deltaTimeInFrames);
+            this.pathMove(globals, deltaTimeFrames);
     }
 
-    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeInFrames: number): boolean => {
+    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeFrames: number): boolean => {
         this.craneMode = (next.arg3 !== 0xFF);
 
         vec3.copy(this.curPathP0, curr.pos);
@@ -3473,21 +3494,21 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
-        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeInFrames, 8);
-        const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeFrames, 8);
+        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
         return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
     };
 
-    private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeInFrames);
-        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeInFrames, this.pathMove_CB);
+    private pathMove(globals: dGlobals, deltaTimeFrames: number): void {
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeFrames);
+        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeFrames, this.pathMove_CB);
 
-        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeInFrames);
+        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeFrames);
         if (this.velocityFwd !== 0 && this.velocityFwdTarget !== 0) {
             const rotTargetY = cLib_targetAngleY(this.pos, this.pathMovePos);
-            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeInFrames);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeFrames);
         }
     }
 
@@ -3497,20 +3518,20 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         this.modePathMoveTerryInit, this.modePathMoveTerry,
     ];
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.waveAnim1Timer += 0x200 * deltaTimeInFrames;
+        this.waveAnim1Timer += 0x200 * deltaTimeFrames;
 
-        modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeFrames);
         this.pos[1] = dLib_getWaterY(globals, this.pos, null);
 
-        this.setMtx(globals, deltaTimeInFrames);
+        this.setMtx(globals, deltaTimeFrames);
         this.model.calcAnim();
 
         if (this.isShip()) {
             if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
-                this.setWave(globals, deltaTimeInFrames);
+                this.setWave(globals, deltaTimeFrames);
             } else {
                 this.waveL!.remove();
                 this.waveR!.remove();
@@ -3561,7 +3582,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         vec3.fromValues(-40.0, -100.0, -350.0),
     ];
 
-    private setWave(globals: dGlobals, deltaTimeInFrames: number): void {
+    private setWave(globals: dGlobals, deltaTimeFrames: number): void {
         let splashScaleTarget = 200.0;
         let waveVelFade = 2.0;
 
@@ -3607,7 +3628,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
 
         if (this.splash !== null) {
-            this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeInFrames);
+            this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeFrames);
             this.splash.maxScaleTimer = 300.0;
         }
     }
@@ -3744,7 +3765,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         return false;
     }
 
-    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeInFrames: number): boolean => {
+    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeFrames: number): boolean => {
         vec3.copy(this.curPathP0, curr.pos);
         this.curPathP0[1] = this.pos[1];
         vec3.copy(this.curPathP1, next.pos);
@@ -3754,21 +3775,21 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         vec3.normalize(scratchVec3a, scratchVec3a);
 
         const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
-        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeInFrames, 8);
-        const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeFrames, 8);
+        const fwdSpeed = this.velocityFwd * deltaTimeFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
         cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
 
         return cLib_distanceSqXZ(dst, this.curPathP1) < fwdSpeed ** 2.0;
     };
 
-    private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeInFrames);
-        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeInFrames, this.pathMove_CB);
+    private pathMove(globals: dGlobals, deltaTimeFrames: number): void {
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeFrames);
+        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeFrames, this.pathMove_CB);
 
-        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeInFrames);
+        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeFrames);
         if (this.velocityFwd !== 0 && this.velocityFwdTarget !== 0) {
             const rotTargetY = cLib_targetAngleY(this.pos, this.pathMovePos);
-            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeInFrames);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeFrames);
         }
     }
 
@@ -3777,10 +3798,10 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.pos[1] = dLib_getWaterY(globals, this.pos, null);
     }
 
-    private rangePathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+    private rangePathMove(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.path !== null) {
             this.velocityFwdTarget = 20.0;
-            this.pathMove(globals, deltaTimeInFrames);
+            this.pathMove(globals, deltaTimeFrames);
         }
     }
 
@@ -3792,7 +3813,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.changeModeByRange(globals);
     }
 
-    private modeWait(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeWait(globals: dGlobals, deltaTimeFrames: number): void {
         this.changeModeByRange(globals);
     }
 
@@ -3828,10 +3849,10 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         return true;
     }
 
-    private modeAttack(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeAttack(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.path !== null) {
             this.velocityFwdTarget = 0.0;
-            this.pathMove(globals, deltaTimeInFrames);
+            this.pathMove(globals, deltaTimeFrames);
         }
 
         if (this.checkTgHit(globals))
@@ -3840,12 +3861,12 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.calcY(globals);
 
         if (this.attackTimer >= 0.0) {
-            this.attackTimer -= deltaTimeInFrames;
+            this.attackTimer -= deltaTimeFrames;
             if (this.attackTimer <= 0.0) {
                 this.changeModeByRange(globals);
             } else {
-                this.attackSwayTimer += 0x1830 * deltaTimeInFrames;
-                this.attackSwayAmount = cLib_addCalcAngleS2(this.attackSwayAmount, 0, 10, 10 * deltaTimeInFrames);
+                this.attackSwayTimer += 0x1830 * deltaTimeFrames;
+                this.attackSwayAmount = cLib_addCalcAngleS2(this.attackSwayAmount, 0, 10, 10 * deltaTimeFrames);
             }
         } else {
             this.attackTimer = -1;
@@ -3863,20 +3884,20 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
     private modeDamageInit(globals: dGlobals): void {
     }
 
-    private modeDamage(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeDamage(globals: dGlobals, deltaTimeFrames: number): void {
     }
 
     private modeDeleteInit(globals: dGlobals): void {
     }
 
-    private modeDelete(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeDelete(globals: dGlobals, deltaTimeFrames: number): void {
     }
 
     private modeRangeAInit(globals: dGlobals): void {
         this.attackTimer = 30;
     }
 
-    private rangeTargetCommon(globals: dGlobals, deltaTimeInFrames: number): void {
+    private rangeTargetCommon(globals: dGlobals, deltaTimeFrames: number): void {
         vec3.copy(this.targetPos, globals.cameraPosition);
         this.calcY(globals);
 
@@ -3885,46 +3906,46 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         if (this.plFireRepeat(globals))
             return;
 
-        this.attackTimer -= deltaTimeInFrames;
+        this.attackTimer -= deltaTimeFrames;
         if (this.attackTimer <= 0.0)
             modeProcInit(globals, this, this.mode_tbl, d_a_oship_mode.attack);
         else
             this.changeModeByRange(globals);
     }
 
-    private modeRangeA(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeRangeA(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.subMode === 1 || this.subMode === 2)
-            this.rangePathMove(globals, deltaTimeInFrames);
+            this.rangePathMove(globals, deltaTimeFrames);
 
-        this.rangeTargetCommon(globals, deltaTimeInFrames);
+        this.rangeTargetCommon(globals, deltaTimeFrames);
     }
 
     private modeRangeBInit(globals: dGlobals): void {
         this.attackTimer = this.subMode === 0 ? 30 : 200;
     }
 
-    private modeRangeB(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.modeRangeA(globals, deltaTimeInFrames);
+    private modeRangeB(globals: dGlobals, deltaTimeFrames: number): void {
+        this.modeRangeA(globals, deltaTimeFrames);
     }
 
     private modeRangeCInit(globals: dGlobals): void {
         this.attackTimer = 200;
     }
 
-    private modeRangeC(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeRangeC(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.subMode === 2)
-            this.rangePathMove(globals, deltaTimeInFrames);
+            this.rangePathMove(globals, deltaTimeFrames);
 
-        this.rangeTargetCommon(globals, deltaTimeInFrames);
+        this.rangeTargetCommon(globals, deltaTimeFrames);
     }
 
     private modeRangeDInit(globals: dGlobals): void {
     }
 
-    private modeRangeD(globals: dGlobals, deltaTimeInFrames: number): void {
+    private modeRangeD(globals: dGlobals, deltaTimeFrames: number): void {
         if (!this.checkTgHit(globals)) {
             if (this.subMode === 2)
-                this.rangePathMove(globals, deltaTimeInFrames);
+                this.rangePathMove(globals, deltaTimeFrames);
             this.calcY(globals);
             this.changeModeByRange(globals);
         }
@@ -3957,8 +3978,8 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         */
     }
 
-    private setMtx(globals: dGlobals, deltaTimeInFrames: number): void {
-        dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeInFrames);
+    private setMtx(globals: dGlobals, deltaTimeFrames: number): void {
+        dLib_waveRot(globals, this.wave, this.pos, this.attackSwayAmount, deltaTimeFrames);
 
         const angleY = this.rot[1] + cLib_targetAngleY(this.pos, globals.cameraPosition);
         const swayAmount = Math.sin(cM__Short2Rad(this.attackSwayTimer)) * (this.attackSwayAmount * 10);
@@ -4014,7 +4035,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         vec3.fromValues(-40.0, -100.0, -350.0),
     ];
 
-    private setWave(globals: dGlobals, deltaTimeInFrames: number): void {
+    private setWave(globals: dGlobals, deltaTimeFrames: number): void {
         let splashScaleTarget = 200.0;
         let waveVelFade = 2.0;
 
@@ -4055,11 +4076,11 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.waveR.collapsePos[0][0] *= -1.0;
         this.waveR.collapsePos[1][0] *= -1.0;
 
-        this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeInFrames);
+        this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeFrames);
         this.splash.maxScaleTimer = 300.0;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         // TODO(jstpierre): smoke
         // TODO(jstpierre): bomb
 
@@ -4067,16 +4088,16 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         this.aimRotXTarget = cLib_targetAngleX(this.pos, this.targetPos);
         // TODO(jstpierre): Add on bad aim rot
 
-        this.aimRotX = cLib_addCalcAngleS2(this.aimRotX, this.aimRotXTarget, 6, 0x300 * deltaTimeInFrames);
-        this.aimRotY = cLib_addCalcAngleS2(this.aimRotY, this.aimRotYTarget, 6, 0x300 * deltaTimeInFrames);
-        modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
+        this.aimRotX = cLib_addCalcAngleS2(this.aimRotX, this.aimRotXTarget, 6, 0x300 * deltaTimeFrames);
+        this.aimRotY = cLib_addCalcAngleS2(this.aimRotY, this.aimRotYTarget, 6, 0x300 * deltaTimeFrames);
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeFrames);
 
         this.model.calcAnim();
-        this.setMtx(globals, deltaTimeInFrames);
+        this.setMtx(globals, deltaTimeFrames);
 
         this.visible
         if (this.velocityFwd > 2.0 && this.cullingCheck(globals.camera)) {
-            this.setWave(globals, deltaTimeInFrames);
+            this.setWave(globals, deltaTimeFrames);
         } else {
             this.waveL.remove();
             this.waveR.remove();
@@ -4406,10 +4427,10 @@ class d_a_obj_flame extends fopAc_ac_c {
         */
     }
 
-    private mode_proc_call(globals: dGlobals, deltaTimeInFrames: number): void {
+    private mode_proc_call(globals: dGlobals, deltaTimeFrames: number): void {
         const timerAdv = this.isWaiting() ? 1.0 : this.timerAdv;
 
-        this.timer -= deltaTimeInFrames * timerAdv;
+        this.timer -= deltaTimeFrames * timerAdv;
 
         this.mode_proc_tbl[this.mode].call(this, globals);
 
@@ -4425,20 +4446,20 @@ class d_a_obj_flame extends fopAc_ac_c {
         }
 
         if (!this.isWaiting()) {
-            this.btkAnm.play(deltaTimeInFrames);
+            this.btkAnm.play(deltaTimeFrames);
             if (this.brkAnm !== null)
-                this.brkAnm.play(deltaTimeInFrames);
+                this.brkAnm.play(deltaTimeFrames);
         }
 
         // hitbox
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.mode_proc_call(globals, deltaTimeInFrames);
+        this.mode_proc_call(globals, deltaTimeFrames);
 
-        this.rotY += 400 * deltaTimeInFrames;
+        this.rotY += 400 * deltaTimeFrames;
 
         // this.set_switch(globals);
         this.set_mtx(globals);
@@ -4558,16 +4579,16 @@ export class d_a_ff extends fopAc_ac_c {
         this.isVisibleZ = compareDepthValues(projectedZ, dst.value, GfxCompareMode.Less);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.flickerTimer -= deltaTimeInFrames;
-        this.flickerTimerTimer -= deltaTimeInFrames;
-        this.scatterTimer -= deltaTimeInFrames;
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.flickerTimer -= deltaTimeFrames;
+        this.flickerTimerTimer -= deltaTimeFrames;
+        this.scatterTimer -= deltaTimeFrames;
 
         this.z_check(globals);
-        this.glowScale = cLib_addCalc2(this.glowScale, this.isVisibleZ ? 1.0 : 0.0, 1.0 * deltaTimeInFrames, 0.333);
-        this.brkAnm[0].play(deltaTimeInFrames);
-        this.brkAnm[1].play(deltaTimeInFrames);
-        this.liveTimer += deltaTimeInFrames;
+        this.glowScale = cLib_addCalc2(this.glowScale, this.isVisibleZ ? 1.0 : 0.0, 1.0 * deltaTimeFrames, 0.333);
+        this.brkAnm[0].play(deltaTimeFrames);
+        this.brkAnm[1].play(deltaTimeFrames);
+        this.liveTimer += deltaTimeFrames;
 
         if (this.flickerTimerTimer <= 0.0) {
             this.flickerTimer = 40.0 + cM_rndF(50.0);
@@ -4575,7 +4596,7 @@ export class d_a_ff extends fopAc_ac_c {
         }
 
         const scaleTarget = (this.flickerTimer <= 0.0) ? Math.sin(cM__Short2Rad(this.liveTimer * 1000)) * 0.15 * 0.25 + 0.225 : 0.0;
-        this.flyScale = cLib_addCalc2(this.flyScale, scaleTarget, 0.1 * deltaTimeInFrames, 0.05);
+        this.flyScale = cLib_addCalc2(this.flyScale, scaleTarget, 0.1 * deltaTimeFrames, 0.05);
 
         let motion = false;
 
@@ -4590,9 +4611,9 @@ export class d_a_ff extends fopAc_ac_c {
         }
 
         if (this.state === 0 || this.state === 1) {
-            this.pos[0] = cLib_addCalc2(this.pos[0], this.homePos[0], 0.1 * deltaTimeInFrames, this.speed[0]);
-            this.pos[1] = cLib_addCalc2(this.pos[1], this.homePos[1], 0.1 * deltaTimeInFrames, this.speed[1]);
-            this.pos[2] = cLib_addCalc2(this.pos[2], this.homePos[2], 0.1 * deltaTimeInFrames, this.speed[2]);
+            this.pos[0] = cLib_addCalc2(this.pos[0], this.homePos[0], 0.1 * deltaTimeFrames, this.speed[0]);
+            this.pos[1] = cLib_addCalc2(this.pos[1], this.homePos[1], 0.1 * deltaTimeFrames, this.speed[1]);
+            this.pos[2] = cLib_addCalc2(this.pos[2], this.homePos[2], 0.1 * deltaTimeFrames, this.speed[2]);
 
             if (vec3.squaredDistance(this.pos, globals.playerPosition) < 250.0 ** 2) {
                 this.state = 2;
@@ -4635,28 +4656,28 @@ export class d_a_ff extends fopAc_ac_c {
             if (vec3.squaredDistance(this.scatterPos, this.homePos) < 2500.0)
                 this.state = 1;
 
-            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 10.0, 1.0 * deltaTimeInFrames, 0.15);
+            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 10.0, 1.0 * deltaTimeFrames, 0.15);
         }
 
         if (motion) {
-            this.rot[0] = cLib_addCalcAngleS2(this.rot[0], this.rotTargetX, 10.0 * deltaTimeInFrames, this.speedRotMax * 500.0);
-            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], this.rotTargetY, 10.0 * deltaTimeInFrames, this.speedRotMax * 500.0);
-            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 1.0, deltaTimeInFrames, 0.1);
-            this.speedFwd = cLib_addCalc2(this.speedFwd, this.speedFwdTarget, 1.0 * deltaTimeInFrames, 3.0);
+            this.rot[0] = cLib_addCalcAngleS2(this.rot[0], this.rotTargetX, 10.0 * deltaTimeFrames, this.speedRotMax * 500.0);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], this.rotTargetY, 10.0 * deltaTimeFrames, this.speedRotMax * 500.0);
+            this.speedRotMax = cLib_addCalc2(this.speedRotMax, 1.0, deltaTimeFrames, 0.1);
+            this.speedFwd = cLib_addCalc2(this.speedFwd, this.speedFwdTarget, 1.0 * deltaTimeFrames, 3.0);
 
             vec3.set(scratchVec3a, 0, 0, this.speedFwd * 0.25);
             mDoMtx_YrotS(calc_mtx, this.rot[1]);
             mDoMtx_XrotM(calc_mtx, this.rot[0]);
             MtxPosition(this.speed, scratchVec3a);
-            vec3.scaleAndAdd(this.pos, this.pos, this.speed, deltaTimeInFrames);
+            vec3.scaleAndAdd(this.pos, this.pos, this.speed, deltaTimeFrames);
         }
 
         if (this.pos[1] >= this.groundY + 12.5) {
-            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 1.0, 0.2 * deltaTimeInFrames, 0.1);
+            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 1.0, 0.2 * deltaTimeFrames, 0.1);
         } else {
             if (this.pos[1] < this.groundY)
                 this.pos[1] = this.groundY;
-            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 0.5, 0.2 * deltaTimeInFrames, 0.1);
+            this.glowScaleY = cLib_addCalc2(this.glowScaleY, 0.5, 0.2 * deltaTimeFrames, 0.1);
         }
     }
 

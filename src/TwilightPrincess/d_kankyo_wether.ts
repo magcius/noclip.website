@@ -93,21 +93,21 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     dKy_undwater_filter_draw(globals, globals.g_env_light, renderInstManager, viewerInput);
 }
 
-export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): void {
+export function dKyw_wether_move(globals: dGlobals, deltaTimeFrames: number): void {
     wether_move_thunder(globals);
 }
 
-export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
+export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeFrames: number): void {
     if (globals.stageName !== 'Name') {
-        wether_move_sun(globals, deltaTimeInFrames);
-        wether_move_rain(globals, deltaTimeInFrames);
+        wether_move_sun(globals, deltaTimeFrames);
+        wether_move_rain(globals, deltaTimeFrames);
         wether_move_snow(globals);
     }
 
-    wether_move_star(globals, deltaTimeInFrames);
+    wether_move_star(globals, deltaTimeFrames);
 
     if (globals.stageName !== 'Name') {
-        wether_move_housi(globals, deltaTimeInFrames);
+        wether_move_housi(globals, deltaTimeFrames);
         wether_move_moya(globals);
     }
 }
@@ -1482,7 +1482,7 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: Readonly
     return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }
 
-function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
+function dKyr_sun_move(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
@@ -1584,9 +1584,9 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
     }
 
     if (envLight.curTime >= 255.0)
-        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 0.0, 0.5 * deltaTimeInFrames, 0.1, 0.001);
+        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 0.0, 0.5 * deltaTimeFrames, 0.1, 0.001);
     else
-        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 1.0, 0.1 * deltaTimeInFrames, 0.01, 0.0001);
+        pkt.lensflareAlpha = cLib_addCalc(pkt.lensflareAlpha, 1.0, 0.1 * deltaTimeFrames, 0.01, 0.0001);
 
     if (envLight.curTime >= 180.0) {
         const t = 1.0 - saturate(invlerp(247.5, 270.0, envLight.curTime));
@@ -1653,7 +1653,7 @@ function wether_move_thunder(globals: dGlobals): void {
     }
 }
 
-function wether_move_sun(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_sun(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible)
@@ -1662,11 +1662,11 @@ function wether_move_sun(globals: dGlobals, deltaTimeInFrames: number): void {
     if (envLight.sunPacket === null)
         envLight.sunPacket = new dKankyo_sun_Packet(globals);
 
-    dKyr_sun_move(globals, deltaTimeInFrames);
+    dKyr_sun_move(globals, deltaTimeFrames);
     dKyr_lenzflare_move(globals);
 }
 
-function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_rain(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.rainCount === 0)
@@ -1707,9 +1707,9 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
         const rain = pkt.instances[i];
 
         if (rain.initialized) {
-            rain.pos[0] += deltaTimeInFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
-            rain.pos[1] += deltaTimeInFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
-            rain.pos[2] += deltaTimeInFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
+            rain.pos[0] += deltaTimeFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
+            rain.pos[1] += deltaTimeFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
+            rain.pos[2] += deltaTimeFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
 
             vec3.set(scratchVec3c, rain.basePos[0] + rain.pos[0], scratchVec3[1], rain.basePos[2] + rain.pos[2]);
             const distXZ = vec3.distance(scratchVec3c, scratchVec3);
@@ -1734,7 +1734,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
                     rain.timer = 10;
                 }
             } else {
-                rain.timer -= deltaTimeInFrames;
+                rain.timer -= deltaTimeFrames;
             }
         } else {
             vec3.copy(rain.basePos, scratchVec3);
@@ -1767,7 +1767,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
 function wether_move_snow(globals: dGlobals): void {
 }
 
-function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_star(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     const stageName = globals.stageName;
@@ -1808,15 +1808,15 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
     const pkt = envLight.starPacket;
 
     const star = pkt.instances[0];
-    star.animCounter += 0.01 * deltaTimeInFrames;
+    star.animCounter += 0.01 * deltaTimeFrames;
     star.animWave = Math.sin(star.animCounter);
 
     // cLib_addCalc here for no reason?
 
-    pkt.rot += deltaTimeInFrames;
+    pkt.rot += deltaTimeFrames;
 }
 
-function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_housi(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     const stageName = globals.stageName;
@@ -1844,9 +1844,9 @@ function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
 
         // testing...
         if (housi.initialized) {
-            housi.position[0] += deltaTimeInFrames * 20.0;
-            housi.position[1] += deltaTimeInFrames * 20.0;
-            housi.position[2] += deltaTimeInFrames * 20.0;
+            housi.position[0] += deltaTimeFrames * 20.0;
+            housi.position[1] += deltaTimeFrames * 20.0;
+            housi.position[2] += deltaTimeFrames * 20.0;
         } else {
             vec3.copy(housi.basePos, scratchVec3);
             vec3.set(housi.position, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
@@ -1862,13 +1862,13 @@ function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
     if (envLight.housiCount < pkt.count)
         pkt.count = envLight.housiCount;
 
-    pkt.rot += deltaTimeInFrames;
+    pkt.rot += deltaTimeFrames;
 }
 
 function wether_move_moya(globals: dGlobals): void {
 }
 
-function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
+function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     dKyw_get_wind_vecpow(scratchVec3, envLight);
@@ -1935,10 +1935,10 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
         const strengthVelocity = 4.0 + pkt.strength * 4.3;
         if (kumo.alpha > 0) {
-            const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeInFrames;
+            const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeFrames;
             vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
         } else {
-            const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeInFrames;
+            const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeFrames;
             vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
         }
 
@@ -1972,13 +1972,13 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
         const overheadFade = saturate(invlerp(0.98, 0.88, centerAmtCubic));
         alphaTarget *= overheadFade;
 
-        kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeInFrames, alphaMaxVel, 0.01);
+        kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeFrames, alphaMaxVel, 0.01);
     }
 
-    pkt.bounceAnimTimer += 200.0 * deltaTimeInFrames;
+    pkt.bounceAnimTimer += 200.0 * deltaTimeFrames;
 }
 
-function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_vrkumo(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.vrkumoPacket === null) {
@@ -2026,12 +2026,12 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     const windPitch = vecPitch(windDir), windAngle = vecAngle(windDir) + cM__Short2Rad(24575.0);
     const cosPitch = Math.cos(windPitch);
     const sinAngle = Math.sin(windAngle), cosAngle = Math.cos(windAngle);
-    pkt.cloudScrollX = (pkt.cloudScrollX + cosPitch * sinAngle * windPower * 0.0014 * deltaTimeInFrames) % 1.0;
-    pkt.cloudScrollY = (pkt.cloudScrollX + cosPitch * cosAngle * windPower * 0.0014 * deltaTimeInFrames) % 1.0;
+    pkt.cloudScrollX = (pkt.cloudScrollX + cosPitch * sinAngle * windPower * 0.0014 * deltaTimeFrames) % 1.0;
+    pkt.cloudScrollY = (pkt.cloudScrollX + cosPitch * cosAngle * windPower * 0.0014 * deltaTimeFrames) % 1.0;
 }
 
-export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeInFrames: number): void {
-    wether_move_vrkumo(globals, deltaTimeInFrames);
+export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeFrames: number): void {
+    wether_move_vrkumo(globals, deltaTimeFrames);
 }
 
 export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2158,8 +2158,8 @@ export class d_thunder extends kankyo_class {
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        const hasStopped = this.brkAnm.play(deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        const hasStopped = this.brkAnm.play(deltaTimeFrames);
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);
         }

@@ -54,13 +54,13 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
-        const deltaTimeInFrames = viewerInput.deltaTime / 1000.0 * 60.0;
+        const deltaTimeFrames = viewerInput.deltaTime / 1000.0 * 60.0;
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
         for (let i = 0; i < this.jobjRoots.length; i++) {
             const root = this.jobjRoots[i];
-            root.calcAnim(deltaTimeInFrames);
+            root.calcAnim(deltaTimeFrames);
             root.calcMtx(viewerInput);
             root.draw(device, this.renderHelper.renderInstManager, viewerInput);
         }

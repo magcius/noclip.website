@@ -1512,8 +1512,8 @@ const S_wether_time_pat = [
     [3.75, 3.75, 3.75],
 ];
 
-export function dice_rain_minus(envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
-    if ((deltaTimeInFrames & 3) === 0) {
+export function dice_rain_minus(envLight: dScnKy_env_light_c, deltaTimeFrames: number): void {
+    if ((deltaTimeFrames & 3) === 0) {
         if (envLight.rainCount > 40) {
             envLight.rainCount -= 3;
         } else if (envLight.rainCount !== 0) {
@@ -1551,7 +1551,7 @@ function dice_wether_execute(envLight: dScnKy_env_light_c, mode: number, timeCha
     }
 }
 
-export function dKy_event_proc(globals: dGlobals, deltaTimeInFrames: number): void {
+export function dKy_event_proc(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.cameraInWater || envLight.diceWeatherStop)
@@ -1612,12 +1612,12 @@ export function dKy_event_proc(globals: dGlobals, deltaTimeInFrames: number): vo
             if (envLight.thunderMode === 1)
                 envLight.thunderMode = 0;
 
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
             break;
         case DiceWeatherMode.Overcast:
             envLight.thunderMode = 0;
             colpat = 1;
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
             break;
         case DiceWeatherMode.LightRain:
             colpat = 1;
@@ -1639,7 +1639,7 @@ export function dKy_event_proc(globals: dGlobals, deltaTimeInFrames: number): vo
         case DiceWeatherMode.LightThunder:
             colpat = 1;
             envLight.thunderMode = 1;
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
             break;
         case DiceWeatherMode.HeavyThunder:
             envLight.thunderMode = 1;
@@ -1682,7 +1682,7 @@ export function dKy_daynight_check(globals: dGlobals): boolean {
     return hour < 6 || hour > 19;
 }
 
-function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFrames: number): void {
     let timePass = GetTimePass(globals);
 
     if (!timePass) {
@@ -1698,7 +1698,7 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeIn
     }
 
     if (dKy_darkworld_check(globals)) {
-        envLight.darkTime += envLight.timeSpeed * deltaTimeInFrames;
+        envLight.darkTime += envLight.timeSpeed * deltaTimeFrames;
         if (envLight.darkTime >= 360.0) {
             envLight.darkTime = 0.0;
         }
@@ -1710,14 +1710,14 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeIn
         if (globals.stageName === "F_SP127" || globals.stageName === "R_SP127") {
             if (envLight.curTime >= 300 || envLight.curTime <= 60) {
                 // increase the time multiple times on these stages
-                envLight.curTime += envLight.timeSpeed * deltaTimeInFrames;
-                envLight.curTime += envLight.timeSpeed * deltaTimeInFrames;
+                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
+                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
             } else if (envLight.curTime >= 150 && envLight.curTime <= 195) {
-                envLight.curTime += envLight.timeSpeed * deltaTimeInFrames;
+                envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
             }
         }
 
-        envLight.curTime += envLight.timeSpeed * deltaTimeInFrames;
+        envLight.curTime += envLight.timeSpeed * deltaTimeFrames;
         if (envLight.curTime >= 360.0) {
             envLight.curTime = 0.0;
             envLight.calendarDay += 1;
@@ -1735,7 +1735,7 @@ function CalcTevColor(globals: dGlobals, envLight: dScnKy_env_light_c, playerPos
     envLight.playerPlightIdx = dKy_light_influence_id(globals, playerPos, 0);
 }
 
-function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFrames: number): void {
     // Normally, this is done in the player code / settingTevStruct_colget_player.
     const newEnvrIdxCurr = globals.mStayNo;
     if (envLight.envrIdxCurr !== newEnvrIdxCurr) {
@@ -1819,7 +1819,7 @@ function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInF
     envLight.vrKumoColRatioGather = 1.0;
     envLight.unk_122c = 1.0;
 
-    setDaytime(globals, envLight, deltaTimeInFrames);
+    setDaytime(globals, envLight, deltaTimeFrames);
     // dKyw_wether_proc();
     CalcTevColor(globals, envLight, globals.playerPosition);
 }
@@ -2543,7 +2543,7 @@ class d_kankyo extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         // temporary until some better setup for handling twilight layers is done
         if (globals.stageName.startsWith("D_MN08")) {
             globals.world_dark = true;
@@ -2551,10 +2551,10 @@ class d_kankyo extends kankyo_class {
             globals.world_dark = false;
         }
 
-        exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
+        exeKankyo(globals, globals.g_env_light, deltaTimeFrames);
         dKyw_wind_set(globals);
         drawKankyo(globals);
-        globals.g_env_light.underwater_screen_ef_btk.play(deltaTimeInFrames);
+        globals.g_env_light.underwater_screen_ef_btk.play(deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals): void {
@@ -2573,9 +2573,9 @@ class d_kyeff extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        dKyw_wether_move(globals, deltaTimeInFrames);
-        dKyw_wether_move_draw(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        dKyw_wether_move(globals, deltaTimeFrames);
+        dKyw_wether_move_draw(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2595,8 +2595,8 @@ class d_kyeff2 extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        dKyw_wether_move_draw2(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        dKyw_wether_move_draw2(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

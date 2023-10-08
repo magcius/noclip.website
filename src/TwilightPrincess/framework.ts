@@ -295,12 +295,12 @@ export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): vo
 //#endregion
 
 //#region fpcEx (framework process executor)
-function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData, deltaTimeInFrames: number): void {
+function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData, deltaTimeFrames: number): void {
     for (let i = 0; i < globals.liQueue.length; i++) {
         for (let j = 0; j < globals.liQueue[i].length; j++) {
             const pc = globals.liQueue[i][j];
             fpcLy_SetCurrentLayer(globals, pc.ly);
-            globals.liQueue[i][j].execute(globalUserData, deltaTimeInFrames);
+            globals.liQueue[i][j].execute(globalUserData, deltaTimeFrames);
         }
     }
 }
@@ -355,7 +355,7 @@ export class base_process_class {
         return cPhs__Status.Complete;
     }
 
-    public execute(globals: GlobalUserData, deltaTimeInFrames: number): void {
+    public execute(globals: GlobalUserData, deltaTimeFrames: number): void {
     }
 
     public delete(globals: GlobalUserData): void {
@@ -443,8 +443,8 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
     // fpcCt_Handler(globals);
-    const deltaTimeInFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
-    fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
+    const deltaTimeFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
+    fpcEx_Handler(globals, globalUserData, deltaTimeFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
 //#endregion

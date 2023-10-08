@@ -12,7 +12,7 @@ import { ColorKind, MaterialParams } from "../gx/gx_render.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cM_rndF } from "./SComponent.js";
-import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_housi_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_housi_Packet, dKankyo_moya_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { stage_envr_info_class, stage_palet_info_class, stage_palet_info_class__DifAmb, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { dGlobals } from "./zww_scenes.js";
@@ -39,16 +39,16 @@ export class dScnKy_env_light_c {
     public virt: stage_vrbox_info_class[];
 
     // Time
-    public curTime: number = 0.0;
-    public timeAdv: number = 0.02;
-    public calendarDay: number = 0.0;
+    public curTime = 0.0;
+    public timeAdv = 0.02;
+    public calendarDay = 0.0;
     public schejule: dScnKy__Schedule;
 
     public sunPos = vec3.create();
     public moonPos = vec3.create();
 
     // Sky
-    public vrboxInvisible: boolean = true;
+    public vrboxInvisible = true;
 
     // Color palette
     public actCol = new stage_palet_info_class__DifAmb(White);
@@ -66,21 +66,21 @@ export class dScnKy_env_light_c {
     public vrKasumiAdd = colorNewCopy(TransparentBlack);
     public fogAdd = colorNewCopy(TransparentBlack);
 
-    public allColRatio: number = 1.0;
-    public actColRatio: number = 1.0;
-    public bgColRatio: number = 1.0;
-    public vrSoraColRatio: number = 1.0;
-    public vrKumoColRatio: number = 1.0;
-    public fogColRatio: number = 1.0;
+    public allColRatio = 1.0;
+    public actColRatio = 1.0;
+    public bgColRatio = 1.0;
+    public vrSoraColRatio = 1.0;
+    public vrKumoColRatio = 1.0;
+    public fogColRatio = 1.0;
 
-    public fogStartZ: number = 0.0;
-    public fogEndZ: number = 0.0;
-    public fogGlobalStartZ: number = 0.0;
-    public fogGlobalEndZ: number = 0.0;
-    public fogGlobalRatio: number = 0.0;
+    public fogStartZ = 0.0;
+    public fogEndZ = 0.0;
+    public fogGlobalStartZ = 0.0;
+    public fogGlobalEndZ = 0.0;
+    public fogGlobalRatio = 0.0;
 
-    public colpatBlend: number = 1.0;
-    public colpatBlendGather: number = -1.0;
+    public colpatBlend = 1.0;
+    public colpatBlendGather = -1.0;
 
     // Lighting
     public baseLight = new LIGHT_INFLUENCE();
@@ -91,53 +91,60 @@ export class dScnKy_env_light_c {
     public lightStatus = nArray(2, () => new Light());
 
     // eflight/plight closest to the player
-    public playerEflightIdx: number = -1;
-    public playerPlightIdx: number = -1;
+    public playerEflightIdx = -1;
+    public playerPlightIdx = -1;
 
-    public envrIdxCurr: number = 0;
-    public envrIdxPrev: number = 0;
-    public colpatPrev: number = 0;
-    public colpatCurr: number = 0;
-    public colpatPrevGather: number = -1;
-    public colpatCurrGather: number = -1;
+    public envrIdxCurr = 0;
+    public envrIdxPrev = 0;
+    public colpatPrev = 0;
+    public colpatCurr = 0;
+    public colpatPrevGather = -1;
+    public colpatCurrGather = -1;
 
     // These appear to be enums ranging from 0-2? I don't know.
-    public colpatMode: number = 0;
-    public colpatModeGather: number = 0;
+    public colpatMode = 0;
+    public colpatModeGather = 0;
 
     // Weather.
     public colpatWeather = 0;
-    public diceWeatherStop: boolean = false;
-    public diceWeatherMode: DiceWeatherMode = DiceWeatherMode.Sunny;
+    public diceWeatherStop = false;
+    public diceWeatherMode = DiceWeatherMode.Sunny;
     public diceWeatherChangeTime: number;
-    public diceWeatherState: DiceWeatherState = DiceWeatherState.Uninitialized;
-    public diceWeatherCurrPattern: number = 0;
-    public diceWeatherCounter: number = 0;
-    public diceWeatherTime: number = 0.0;
+    public diceWeatherState = DiceWeatherState.Uninitialized;
+    public diceWeatherCurrPattern = 0;
+    public diceWeatherCounter = 0;
+    public diceWeatherTime = 0.0;
 
     // Wind
-    public windTactAngleX: number = 0;
-    public windTactAngleY: number = 0;
+    public windTactAngleX = 0;
+    public windTactAngleY = 0;
     public windVec = vec3.fromValues(0.0, 0.0, 0.0);
     public windPower = 0.0;
     public customWindPower = 0.0;
 
-    // Rain.
-    public rainCount: number = 0;
-    public rainCountOrig: number = 0;
+    // Rain
+    public rainCount = 0;
+    public rainCountOrig = 0;
 
-    // Thunder.
-    public thunderMode: ThunderMode = ThunderMode.Off;
-    public thunderActive: boolean = false;
-    public thunderState: ThunderState = ThunderState.Clear;
-    public thunderFlashTimer: number = 0;
+    // Snow
+    public snowCount = 0;
+
+    // Moya
+    public moyaCount = 0;
+    public moyaMode = 0;
+
+    // Thunder
+    public thunderMode = ThunderMode.Off;
+    public thunderActive = false;
+    public thunderState = ThunderState.Clear;
+    public thunderFlashTimer = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 
-    // Stars.
+    // Stars
     public starAmount = 0.0;
     public starCount = 0;
 
-    // Wave.
+    // Wave
     public waveCount = 0;
     public waveFlatInter = 0.0;
     public waveSpawnRadius = 0.0;
@@ -149,7 +156,7 @@ export class dScnKy_env_light_c {
     public waveScaleBottom = 0.0;
     public waveReset = false;
 
-    // Housi.
+    // Housi
     public housiCount = 0;
 
     // Wether packets
@@ -161,23 +168,24 @@ export class dScnKy_env_light_c {
     public wavePacket: dKankyo_wave_Packet | null = null;
     public starPacket: dKankyo_star_Packet | null = null;
     public housiPacket: dKankyo_housi_Packet | null = null;
+    public moyaPacket: dKankyo_moya_Packet | null = null;
 
-    public eventNightStop: boolean = false;
-    public forceTimePass: boolean = false;
+    public eventNightStop = false;
+    public forceTimePass = false;
 }
 
 export class LIGHT_INFLUENCE {
     public pos = vec3.create();
     public color = colorNewCopy(TransparentBlack);
-    public power: number = 0;
-    public fluctuation: number = 0;
-    public priority: boolean = false;
+    public power = 0;
+    public fluctuation = 0;
+    public priority = false;
 }
 
 export class WAVE_INFO {
     public pos = vec3.create();
-    public outerRadius: number = 0.0;
-    public innerRadius: number = 0.0;
+    public outerRadius = 0.0;
+    public innerRadius = 0.0;
 }
 
 const enum LightMode {
@@ -193,9 +201,9 @@ export class dKy_tevstr_c {
     public colorK0: Color = colorNewCopy(White);
     public colorK1: Color = colorNewCopy(White);
     public fogCol: Color = colorNewCopy(White);
-    public fogStartZ: number = 0;
-    public fogEndZ: number = 0;
-    public colpatBlend: number = 0.0;
+    public fogStartZ = 0;
+    public fogEndZ = 0;
+    public colpatBlend = 0.0;
     // someAnimTimer
     public envrIdxCurr: number;
     public envrIdxPrev: number;
@@ -228,7 +236,7 @@ class setLight_palno_ret {
     public palePrevB: stage_palet_info_class;
     public paleCurrA: stage_palet_info_class;
     public paleCurrB: stage_palet_info_class;
-    public blendPaleAB: number = 0;
+    public blendPaleAB = 0;
 }
 
 interface dScnKy__ScheduleEntry {
@@ -580,7 +588,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
     }
 }
 
-export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverride: number = -1): void {
+export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverride = -1): void {
     tevstr.roomNo = roomNo;
     tevstr.envrIdxCurr = tevstr.roomNo;
     tevstr.envrIdxPrev = tevstr.roomNo;
@@ -906,7 +914,7 @@ function dKy_daynight_check(globals: dGlobals): boolean {
     return hour < 5 || hour > 17;
 }
 
-function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFrames: number): void {
     // Game checks whether the player has collected the Wind Waker, and Flight Control Platform Minigame (?)
 
     let timePass = GetTimePass(globals);
@@ -924,7 +932,7 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeIn
     }
 
     if (timePass) {
-        envLight.curTime += envLight.timeAdv * deltaTimeInFrames;
+        envLight.curTime += envLight.timeAdv * deltaTimeFrames;
         if (envLight.curTime >= 360.0) {
             envLight.curTime = 0.0;
             envLight.calendarDay += 1;
@@ -939,7 +947,7 @@ function CalcTevColor(envLight: dScnKy_env_light_c, playerPos: vec3): void {
     envLight.playerPlightIdx = dKy_light_influence_id(envLight.plights, playerPos);
 }
 
-function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
+function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeFrames: number): void {
     const colSetModeGather = envLight.colpatModeGather;
 
     // Normally, this is done in the player code / settingTevStruct_colget_player.
@@ -1004,7 +1012,7 @@ function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInF
 
     // TODO(jstpierre): Gather colors.
 
-    setDaytime(globals, envLight, deltaTimeInFrames);
+    setDaytime(globals, envLight, deltaTimeFrames);
     // dKyw_wether_proc();
     CalcTevColor(envLight, globals.playerPosition);
 }
@@ -1298,9 +1306,9 @@ class d_kankyo extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         dKy_event_proc(globals);
-        exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
+        exeKankyo(globals, globals.g_env_light, deltaTimeFrames);
         dKyw_wind_set(globals);
         drawKankyo(globals);
     }
@@ -1349,13 +1357,13 @@ class d_kyeff extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (globals.stageName === 'Name') {
             // menu_vrbox_set();
         } else {
-            dKyw_wether_move(globals, deltaTimeInFrames);
+            dKyw_wether_move(globals, deltaTimeFrames);
         }
-        dKyw_wether_move_draw(globals, deltaTimeInFrames);
+        dKyw_wether_move_draw(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1378,6 +1386,8 @@ class d_kyeff extends kankyo_class {
             envLight.starPacket.destroy(device);
         if (envLight.housiPacket !== null)
             envLight.housiPacket.destroy(device);
+        if (envLight.moyaPacket !== null)
+            envLight.moyaPacket.destroy(device);
     }
 }
 
@@ -1389,8 +1399,8 @@ class d_kyeff2 extends kankyo_class {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        dKyw_wether_move_draw2(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        dKyw_wether_move_draw2(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

@@ -58,9 +58,9 @@ class daSea_WaveInfo {
             offs += this.waveParam[i].parse(prmBuffer.slice(offs));
     }
 
-    public AddCounter(deltaTimeInFrames: number): void {
+    public AddCounter(deltaTimeFrames: number): void {
         for (let i = 0; i < this.counters.length; i++)
-            this.counters[i] = (this.counters[i] + deltaTimeInFrames) % this.waveParam[i].counterMax;
+            this.counters[i] = (this.counters[i] + deltaTimeFrames) % this.waveParam[i].counterMax;
     }
 
     public GetRatio(i: number): number {
@@ -578,7 +578,7 @@ export class d_a_sea extends fopAc_ac_c {
     private fadeTable = nArray(65, () => 0);
 
     private copyPos = true;
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         if (this.copyPos)
             vec3.copy(this.playerPos, globals.playerPosition);
 
@@ -679,9 +679,9 @@ export class d_a_sea extends fopAc_ac_c {
             waveTheta3_Base += gridSize * this.scratchThetaZ[3];
         }
 
-        this.waveInfo.AddCounter(deltaTimeInFrames);
+        this.waveInfo.AddCounter(deltaTimeFrames);
 
-        this.animCounter += deltaTimeInFrames;
+        this.animCounter += deltaTimeFrames;
     }
 
     public override delete(globals: dGlobals): void {
@@ -707,7 +707,7 @@ export class dLib_wave_c {
     public animZ = 0.0;
 }
 
-function waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, deltaTimeInFrames: number | null): void {
+function waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, deltaTimeFrames: number | null): void {
     if (globals.sea === null)
         return;
 
@@ -719,9 +719,9 @@ function waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, deltaT
     const y11 = globals.sea.calcWave(globals, pos[0] + r, pos[2]);
     const angleZ = cM_atan2s(y11 - y10, r * 2.0);
 
-    if (deltaTimeInFrames !== null) {
-        wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 10, 0x200 * deltaTimeInFrames);
-        wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 10, 0x200 * deltaTimeInFrames);
+    if (deltaTimeFrames !== null) {
+        wave.angleX = cLib_addCalcAngleS2(wave.angleX, angleX, 10, 0x200 * deltaTimeFrames);
+        wave.angleZ = cLib_addCalcAngleS2(wave.angleZ, angleZ, 10, 0x200 * deltaTimeFrames);
     } else {
         wave.angleX = angleX;
         wave.angleZ = angleZ;
@@ -736,10 +736,10 @@ export function dLib_waveInit(globals: dGlobals, wave: dLib_wave_c, pos: Readonl
     waveRot(globals, wave, pos, null);
 }
 
-export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeInFrames: number): void {
-    waveRot(globals, wave, pos, deltaTimeInFrames);
-    wave.animX += 400 * deltaTimeInFrames;
-    wave.animZ += 430 * deltaTimeInFrames;
+export function dLib_waveRot(globals: dGlobals, wave: dLib_wave_c, pos: ReadonlyVec3, swayAmount: number, deltaTimeFrames: number): void {
+    waveRot(globals, wave, pos, deltaTimeFrames);
+    wave.animX += 400 * deltaTimeFrames;
+    wave.animZ += 430 * deltaTimeFrames;
     const swayAmountFull = 130.0 + swayAmount;
     wave.rotX = wave.angleX + swayAmountFull * Math.sin(cM__Short2Rad(wave.animX));
     wave.rotZ = wave.angleZ + swayAmountFull * Math.cos(cM__Short2Rad(wave.animZ));

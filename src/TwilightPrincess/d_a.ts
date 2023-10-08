@@ -54,12 +54,12 @@ class daBg_btkAnm_c {
         // this.isSC_01 = modelData.bmd.mat3.materialEntries[0].name.startsWith('SC_01');
     }
 
-    public play(deltaTimeInFrames: number): void {
+    public play(deltaTimeFrames: number): void {
         if (this.isSC_01) {
             // Sync to SE timer.
-            this.anm.play(deltaTimeInFrames);
+            this.anm.play(deltaTimeFrames);
         } else {
-            this.anm.play(deltaTimeInFrames);
+            this.anm.play(deltaTimeFrames);
         }
     }
 }
@@ -75,8 +75,8 @@ class daBg_brkAnm_c {
         this.anm.entry(modelInstance);
     }
 
-    public play(deltaTimeInFrames: number): void {
-        this.anm.play(deltaTimeInFrames);
+    public play(deltaTimeFrames: number): void {
+        this.anm.play(deltaTimeFrames);
     }
 }
 
@@ -162,12 +162,12 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
-                this.bgBtkAnm[i]!.play(deltaTimeInFrames);
+                this.bgBtkAnm[i]!.play(deltaTimeFrames);
             if (this.bgBrkAnm[i] !== null && this.brkFlag === 0)
-                this.bgBrkAnm[i]!.play(deltaTimeInFrames);
+                this.bgBrkAnm[i]!.play(deltaTimeFrames);
         }
     }
 
@@ -283,7 +283,7 @@ class d_a_vrbox extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
     }
 
     private daVrbox_color_set(globals: dGlobals): void {
@@ -365,7 +365,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    private daVrbox2_color_set(globals: dGlobals, deltaTimeInFrames: number): void {
+    private daVrbox2_color_set(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
         if (globals.stageName === "R_SP107" || globals.stageName === "D_MN07" || globals.stageName === "D_MN07A" || globals.stageName === "D_MN07B") {
@@ -396,7 +396,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         if (globals.stageName === "R_SP30")
             windScrollSpeed += 0.3;
 
-        const scrollSpeed0 = deltaTimeInFrames * this.scrollSpeed * windScrollSpeed;
+        const scrollSpeed0 = deltaTimeFrames * this.scrollSpeed * windScrollSpeed;
 
         let mtx: mat4;
         const backMat0 = this.backCloud.materialInstances[0].materialData.material;
@@ -423,7 +423,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const sunPacket = envLight.sunPacket;
         if (sunPacket !== null) {
             const targetAlpha = (envLight.curTime > 255 || envLight.curTime < 97.5) ? 1.0 : 0.0;
-            sunPacket.sunMaterialAlpha = cLib_addCalc(sunPacket.sunMaterialAlpha, targetAlpha, 0.2 * deltaTimeInFrames, 0.1, 0.0001);
+            sunPacket.sunMaterialAlpha = cLib_addCalc(sunPacket.sunMaterialAlpha, targetAlpha, 0.2 * deltaTimeFrames, 0.1, 0.0001);
 
             for (let i = 0; i < this.sun.materialInstances.length; i++) {
                 const materialInstance = this.sun.materialInstances[i];
@@ -442,12 +442,12 @@ class d_a_vrbox2 extends fopAc_ac_c {
         }
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.daVrbox2_color_set(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.daVrbox2_color_set(globals, deltaTimeFrames);
 
         const envLight = globals.g_env_light;
         if (envLight.curTime > 255.0)
-            this.sunBtkAnm.play(deltaTimeInFrames);
+            this.sunBtkAnm.play(deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -611,10 +611,10 @@ class d_a_obj_suisya extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.rot[0] += 25 * deltaTimeInFrames;
+        this.rot[0] += 25 * deltaTimeFrames;
         MtxTrans(this.pos, false);
         mDoMtx_ZXYrotM(calc_mtx, this.rot);
         mat4.copy(this.model.modelMatrix, calc_mtx);
@@ -946,14 +946,14 @@ class d_a_bg_obj extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         for (let i = 0; i < 2; i++) {
             if (this.btks0[i] !== null)
-                this.btks0[i]!.play(deltaTimeInFrames);
+                this.btks0[i]!.play(deltaTimeFrames);
             if (this.brks0[i] !== null)
-                this.brks0[i]!.play(deltaTimeInFrames);
+                this.brks0[i]!.play(deltaTimeFrames);
         }
 
         MtxTrans(this.pos, false);
@@ -1026,11 +1026,11 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.brk.play(deltaTimeInFrames);
-        this.btk.play(deltaTimeInFrames);
+        this.brk.play(deltaTimeFrames);
+        this.btk.play(deltaTimeFrames);
 
         const colorPrm = colorNewCopy(White);
 
@@ -1112,8 +1112,8 @@ class d_a_obj_iceblk extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         MtxTrans(this.pos, false);
         mDoMtx_YrotM(calc_mtx, this.rot[1]);
@@ -1176,15 +1176,15 @@ class kytag10_class extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
-        this.sparks_move(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+        this.sparks_move(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     }
 
-    public sparks_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    public sparks_move(globals: dGlobals, deltaTimeFrames: number): void {
         const path = this.path;
 
         if (path === null || this.emitter1 === null || this.emitter2 === null)
@@ -1217,13 +1217,13 @@ class kytag10_class extends fopAc_ac_c {
         this.emitter2.setGlobalScale(this.ptclScale);
 
         if (this.rate !== -1) {
-            const rate = this.rate / 100.0 * deltaTimeInFrames;
+            const rate = this.rate / 100.0 * deltaTimeFrames;
             this.emitter1.setRate(rate);
             this.emitter2.setRate(rate);
         }
 
         if (this.unk_594 <= 1.0 - (250.0 - tempf)) {
-            this.unk_594 += tempf * deltaTimeInFrames;
+            this.unk_594 += tempf * deltaTimeFrames;
             return;
         } else if (this.pathPnt >= end_idx - 1) {
             this.pathPnt = start_idx;
@@ -1406,19 +1406,19 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
         this.actionID = 0;
     }
 
-    public actionOff(globals: dGlobals, deltaTimeInFrames: number): void {
-        cLib_chaseF(this.unk_948, 0.0, this.scale[1] * 0.1 * deltaTimeInFrames);
+    public actionOff(globals: dGlobals, deltaTimeFrames: number): void {
+        cLib_chaseF(this.unk_948, 0.0, this.scale[1] * 0.1 * deltaTimeFrames);
 
         if (this.timer <= 0) {
-            this.actionOnWaitInit(globals, deltaTimeInFrames);
+            this.actionOnWaitInit(globals, deltaTimeFrames);
         } else if ((this.parameters & 0xFF) === 0xFF) {
-            this.timer -= deltaTimeInFrames;
+            this.timer -= deltaTimeFrames;
         } else {
             this.timer = 0;
         }
     }
 
-    public actionOnWaitInit(globals: dGlobals, deltaTimeInFrames: number): void {
+    public actionOnWaitInit(globals: dGlobals, deltaTimeFrames: number): void {
         const particleCtrl = globals.particleCtrl;
 
         const l_pipe_fire_id = [0x84E1, 0x84E2, 0x84E3];
@@ -1438,19 +1438,19 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
         this.actionID = 1;
     }
 
-    public actionOnWait(globals: dGlobals, deltaTimeInFrames: number): void {
-        cLib_chaseF(this.unk_948, this.scale[1] * 0.1, this.scale[1] * 0.02 * deltaTimeInFrames);
+    public actionOnWait(globals: dGlobals, deltaTimeFrames: number): void {
+        cLib_chaseF(this.unk_948, this.scale[1] * 0.1, this.scale[1] * 0.02 * deltaTimeFrames);
 
         if (this.timer <= 0) {
-            this.actionOnInit(globals, deltaTimeInFrames);
+            this.actionOnInit(globals, deltaTimeFrames);
         } else if ((this.parameters & 0xFF) === 0xFF) {
-            this.timer -= deltaTimeInFrames;
+            this.timer -= deltaTimeFrames;
         } else {
             this.timer = 0;
         }
     }
 
-    public actionOnInit(globals: dGlobals, deltaTimeInFrames: number): void {
+    public actionOnInit(globals: dGlobals, deltaTimeFrames: number): void {
         const particleCtrl = globals.particleCtrl;
 
         const l_yogan_headS_id = [0x816F, 0x8170, 0x8171];
@@ -1483,19 +1483,19 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
         this.actionID = 2;
     }
 
-    public actionOn(globals: dGlobals, deltaTimeInFrames: number): void {
+    public actionOn(globals: dGlobals, deltaTimeFrames: number): void {
         let tmp = this.scale[1];
 
         if (this.timer <= 0) {
             tmp = 0.0;
         } else if ((this.parameters & 0xFF) === 0xFF) {
-            this.timer -= deltaTimeInFrames;
+            this.timer -= deltaTimeFrames;
         }
 
         if (tmp === 0.0) {
             if (this.type === 1) {
 
-                if (cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.04 * deltaTimeInFrames)) {
+                if (cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.04 * deltaTimeFrames)) {
                     for (let i = 0; i < 3; i++) {
                         if (this.type1Emitters[i] !== undefined && this.type1Emitters[i] !== null) {
                             this.type1Emitters[i].becomeInvalidEmitter();
@@ -1505,14 +1505,14 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
                     this.actionOffInit();
                 }
             } else {
-                cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.02 * deltaTimeInFrames);
-                cLib_chaseF(this.ptclRate, 0.2, 0.016 * deltaTimeInFrames);
-                cLib_chaseF(this.ptclLifetime, 15.0, 0.3 * deltaTimeInFrames);
-                cLib_chaseF(this.ptclDirSpeed, 0.0, 1.6 * deltaTimeInFrames);
-                cLib_chaseF(this.ptclScale, 0.8, 0.004 * deltaTimeInFrames);
+                cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.02 * deltaTimeFrames);
+                cLib_chaseF(this.ptclRate, 0.2, 0.016 * deltaTimeFrames);
+                cLib_chaseF(this.ptclLifetime, 15.0, 0.3 * deltaTimeFrames);
+                cLib_chaseF(this.ptclDirSpeed, 0.0, 1.6 * deltaTimeFrames);
+                cLib_chaseF(this.ptclScale, 0.8, 0.004 * deltaTimeFrames);
 
                 if (this.type0Timer !== 0) {
-                    this.type0Timer -= deltaTimeInFrames;
+                    this.type0Timer -= deltaTimeFrames;
                 }
 
                 if (this.type0Timer === 0) {
@@ -1526,7 +1526,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
                 }
             }
         } else {
-            cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.1 * deltaTimeInFrames);
+            cLib_chaseF(this.unk_948, tmp, this.scale[1] * 0.1 * deltaTimeFrames);
         }
 
         if (this.model !== null) {
@@ -1547,32 +1547,32 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
         }
     }
 
-    public action(globals: dGlobals, deltaTimeInFrames: number): void {
+    public action(globals: dGlobals, deltaTimeFrames: number): void {
         switch (this.actionID) {
         case 0:
-            this.actionOff(globals, deltaTimeInFrames);
+            this.actionOff(globals, deltaTimeFrames);
             break;
         case 1:
-            this.actionOnWait(globals, deltaTimeInFrames);
+            this.actionOnWait(globals, deltaTimeFrames);
             break;
         case 2:
-            this.actionOn(globals, deltaTimeInFrames);
+            this.actionOn(globals, deltaTimeFrames);
             break;
         }
 
         if (this.bck !== null) {
-            this.bck.play(deltaTimeInFrames);
+            this.bck.play(deltaTimeFrames);
         }
 
         if (this.btk !== null) {
-            this.btk.play(deltaTimeInFrames);
+            this.btk.play(deltaTimeFrames);
         }
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.action(globals, deltaTimeInFrames);
+        this.action(globals, deltaTimeFrames);
 
         let vec = vec3.create();
         if (this.type === 1) {
@@ -1667,13 +1667,13 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
-        this.btk.play(deltaTimeInFrames);
+        this.btk.play(deltaTimeFrames);
 
         if (this.btkIndirect !== undefined) {
-            this.btkIndirect.play(deltaTimeInFrames);
+            this.btkIndirect.play(deltaTimeFrames);
         }
 
         MtxTrans(this.pos, false);
@@ -1779,8 +1779,8 @@ class kytag06_class extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         const envLight = globals.g_env_light;
 
         switch (this.type) {
@@ -1801,20 +1801,20 @@ class kytag06_class extends fopAc_ac_c {
             // this.daKytag06_type_03_Execute();
             break;
         case 4:
-            this.daKytag06_type_04_Execute(globals, deltaTimeInFrames);
+            this.daKytag06_type_04_Execute(globals, deltaTimeFrames);
             break;
         case 5:
             // something player position specific?
             // this.daKytag06_type_05_Execute();
             break;
         case 6:
-            this.daKytag06_type_06_Execute(globals, deltaTimeInFrames);
+            this.daKytag06_type_06_Execute(globals, deltaTimeFrames);
             break;
         case 7:
-            this.daKytag06_type_07_Execute(globals, deltaTimeInFrames);
+            this.daKytag06_type_07_Execute(globals, deltaTimeFrames);
             break;
         case 8:
-            this.daKytag06_type_08_Execute(globals, deltaTimeInFrames);
+            this.daKytag06_type_08_Execute(globals, deltaTimeFrames);
             break;
         case 9:
             // this.daKytag06_type_09_Execute();
@@ -1824,7 +1824,7 @@ class kytag06_class extends fopAc_ac_c {
                 // Midna's Desperate Hour weather?
                 // this.daKytag06_type_03_Execute();
             } else {
-                this.daKytag06_type_10_Execute(globals, deltaTimeInFrames);
+                this.daKytag06_type_10_Execute(globals, deltaTimeFrames);
             }
             break;
         case 11:
@@ -1885,15 +1885,15 @@ class kytag06_class extends fopAc_ac_c {
         this.mode = 0;
     }
 
-    public daKytag06_type_04_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        dKy_event_proc(globals, deltaTimeInFrames);
+    public daKytag06_type_04_Execute(globals: dGlobals, deltaTimeFrames: number): void {
+        dKy_event_proc(globals, deltaTimeFrames);
     }
 
-    public daKytag06_type_06_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public daKytag06_type_06_Execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
         const w_eff_name = [0x8753, 0x8754, 0x8755, 0x8756];
 
-        this.daKytag06_wether_proc(globals, deltaTimeInFrames, envLight.unk_12cc);
+        this.daKytag06_wether_proc(globals, deltaTimeFrames, envLight.unk_12cc);
 
         if (this.unk_574 === 0) {
             if (envLight.curTime > 285.0 || envLight.curTime < 82.5) {
@@ -1943,7 +1943,7 @@ class kytag06_class extends fopAc_ac_c {
         }
     }
 
-    public daKytag06_wether_proc(globals: dGlobals, deltaTimeInFrames: number, type: number): void {
+    public daKytag06_wether_proc(globals: dGlobals, deltaTimeFrames: number, type: number): void {
         const envLight = globals.g_env_light;
         envLight.thunderMode = 0;
 
@@ -1951,14 +1951,14 @@ class kytag06_class extends fopAc_ac_c {
         switch (type) {
         case 0:
             colpat_weather = 0;
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
 
             if (envLight.snowCount !== 0)
                 envLight.snowCount--;
             break;
         case 1:
             colpat_weather = 1;
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
 
             if (envLight.snowCount !== 0)
                 envLight.snowCount--;
@@ -1966,7 +1966,7 @@ class kytag06_class extends fopAc_ac_c {
         case 2:
             colpat_weather = 1;
             
-            if ((deltaTimeInFrames & 3) == 0) {
+            if ((deltaTimeFrames & 3) == 0) {
                 if (envLight.rainCount < 40) {
                     envLight.rainCount++;
                     dKyw_rain_set(envLight, envLight.rainCount);
@@ -2006,7 +2006,7 @@ class kytag06_class extends fopAc_ac_c {
             envLight.thunderMode = 1;
             colpat_weather = 1;
             
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
 
             if (envLight.snowCount !== 0)
                 envLight.snowCount--;
@@ -2015,7 +2015,7 @@ class kytag06_class extends fopAc_ac_c {
             colpat_weather = 1;
             
             if (envLight.snowCount < 125) {
-                if ((deltaTimeInFrames & 3) == 0) {
+                if ((deltaTimeFrames & 3) == 0) {
                     envLight.snowCount++;
                 }
             } else {
@@ -2036,11 +2036,11 @@ class kytag06_class extends fopAc_ac_c {
         }
     }
 
-    public daKytag06_type_07_wether_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.daKytag06_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+    public daKytag06_type_07_wether_Execute(globals: dGlobals, deltaTimeFrames: number): void {
+        this.daKytag06_wether_proc(globals, deltaTimeFrames, globals.g_env_light.unk_12cc);
     }
 
-    public daKytag06_type_07_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public daKytag06_type_07_Execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
         if (this.unk_574 === 0) {
@@ -2082,7 +2082,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         }
 
-        this.daKytag06_type_07_wether_Execute(globals, deltaTimeInFrames);
+        this.daKytag06_type_07_wether_Execute(globals, deltaTimeFrames);
 
         if (globals.cameraPosition[1] > 0.0) {
             envLight.bgAmbCol[3].r = (this.windPower * 230.0 + 25.0) / 255.0;
@@ -2096,7 +2096,7 @@ class kytag06_class extends fopAc_ac_c {
         }
     }
 
-    public daKytag06_lv7_boss_wether_proc(globals: dGlobals, deltaTimeInFrames: number, mode: number): void {
+    public daKytag06_lv7_boss_wether_proc(globals: dGlobals, deltaTimeFrames: number, mode: number): void {
         const envLight = globals.g_env_light;
 
         envLight.thunderMode = 0;
@@ -2115,7 +2115,7 @@ class kytag06_class extends fopAc_ac_c {
             break;
         case 1:
             colpat_weather = 1;
-            dice_rain_minus(envLight, deltaTimeInFrames);
+            dice_rain_minus(envLight, deltaTimeFrames);
             break;
         case 2:
             colpat_weather = 2;
@@ -2135,13 +2135,13 @@ class kytag06_class extends fopAc_ac_c {
         }
     }
 
-    public daKytag06_type_08_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public daKytag06_type_08_Execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
-        this.daKytag06_lv7_boss_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+        this.daKytag06_lv7_boss_wether_proc(globals, deltaTimeFrames, globals.g_env_light.unk_12cc);
     }
 
-    public daKytag06_Ganon_wether_proc(globals: dGlobals, deltaTimeInFrames: number, mode: number): void {
+    public daKytag06_Ganon_wether_proc(globals: dGlobals, deltaTimeFrames: number, mode: number): void {
         const envLight = globals.g_env_light;
 
         envLight.thunderMode = 0;
@@ -2149,13 +2149,13 @@ class kytag06_class extends fopAc_ac_c {
         // sets a bunch of moya values, setup properly later
     }
 
-    public daKytag06_type_09_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public daKytag06_type_09_Execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
-        this.daKytag06_Ganon_wether_proc(globals, deltaTimeInFrames, globals.g_env_light.unk_12cc);
+        this.daKytag06_Ganon_wether_proc(globals, deltaTimeFrames, globals.g_env_light.unk_12cc);
     }
 
-    public daKytag06_type_10_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    public daKytag06_type_10_Execute(globals: dGlobals, deltaTimeFrames: number): void {
         const envLight = globals.g_env_light;
 
         // normally the game sets this depending on various event flags set
@@ -2188,8 +2188,8 @@ class kytag07_class extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         const envLight = globals.g_env_light;
 
         if (this.unk_58c !== 99) {
@@ -2284,8 +2284,8 @@ class daItemBase extends fopAc_ac_c {
         this.display = true;
     }
 
-    protected rotateYBase(globals: dGlobals, deltaTimeInFrames: number): void {
-        this.rot[1] += ((0xFFFF / 120) & 0xFFFF) * deltaTimeInFrames;
+    protected rotateYBase(globals: dGlobals, deltaTimeFrames: number): void {
+        this.rot[1] += ((0xFFFF / 120) & 0xFFFF) * deltaTimeFrames;
     }
 };
 
@@ -2391,21 +2391,21 @@ class d_a_obj_item extends daItemBase {
         MtxTrans(vec3.set(scratchVec3a, 0.0, -y, 0.0), true);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         const envLight = globals.g_env_light;
 
         const tevFrm = globals.item_resource[this.itemNo].tevFrm;
 
         if (this.brk !== null && tevFrm === 0xFF) {
-            this.brk.play(deltaTimeInFrames);
+            this.brk.play(deltaTimeFrames);
         }
 
         if (this.bck !== null)
-            this.bck.play(deltaTimeInFrames);
+            this.bck.play(deltaTimeFrames);
 
         if (this.btk !== null)
-            this.btk.play(deltaTimeInFrames);
+            this.btk.play(deltaTimeFrames);
         
         this.setBaseMtx();
 
@@ -2487,8 +2487,8 @@ class d_a_obj_life extends daItemBase {
         }
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         const envLight = globals.g_env_light;
 
         this.setBaseMtx();
@@ -2496,16 +2496,16 @@ class d_a_obj_life extends daItemBase {
         const tevFrm = globals.item_resource[this.itemNo].tevFrm;
 
         if (this.brk !== null && tevFrm === 0xFF) {
-            this.brk.play(deltaTimeInFrames);
+            this.brk.play(deltaTimeFrames);
         }
 
         if (this.bck !== null)
-            this.bck.play(deltaTimeInFrames);
+            this.bck.play(deltaTimeFrames);
 
         if (this.btk !== null)
-            this.btk.play(deltaTimeInFrames);
+            this.btk.play(deltaTimeFrames);
 
-        this.rotateYBase(globals, deltaTimeInFrames);
+        this.rotateYBase(globals, deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2647,8 +2647,8 @@ class d_a_obj_firewood2 extends fopAc_ac_c {
         mDoMtx_ZXYrotM(calc_mtx, this.rot);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         const envLight = globals.g_env_light;
 
         const particleCtrl = globals.particleCtrl;
@@ -2756,10 +2756,10 @@ class d_a_obj_onsen extends fopAc_ac_c {
         mat4.copy(this.modelIndirect.modelMatrix, calc_mtx);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
         
-        this.btk.play(deltaTimeInFrames);
+        this.btk.play(deltaTimeFrames);
     }
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2914,11 +2914,11 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         mat4.copy(this.model.modelMatrix, calc_mtx);
     }
 
-    private modeWait(deltaTimeInFrames: number): void {
+    private modeWait(deltaTimeFrames: number): void {
         if (this.timer <= 0)
             this.init_modeMove();
         else
-            this.timer -= deltaTimeInFrames;
+            this.timer -= deltaTimeFrames;
     }
 
     private modeMoveWait(): void {
@@ -2926,11 +2926,11 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         this.init_modeWait();
     }
 
-    private modeMove(deltaTimeInFrames: number): void {
-        this.speedF = cLib_chaseF(this.speedF, 8.0, 0.05 * deltaTimeInFrames);
+    private modeMove(deltaTimeFrames: number): void {
+        this.speedF = cLib_chaseF(this.speedF, 8.0, 0.05 * deltaTimeFrames);
 
         const speed = cM__Deg2Short(this.speedF);
-        this.rot[2] = cLib_addCalcAngleS_(this.rot[2], this.rotTarget, 1, speed * deltaTimeInFrames, 1);
+        this.rot[2] = cLib_addCalcAngleS_(this.rot[2], this.rotTarget, 1, speed * deltaTimeFrames, 1);
 
         if ((this.rotTarget - this.rot[2]) === 0) {
             this.rotTarget = (this.rotTarget - 0x8000);
@@ -2938,13 +2938,13 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         }
     }
 
-    private moveLift(deltaTimeInFrames: number): void {
+    private moveLift(deltaTimeFrames: number): void {
         switch (this.mode) {
         case 0:
-            this.modeMove(deltaTimeInFrames);
+            this.modeMove(deltaTimeFrames);
             break;
         case 1:
-            this.modeWait(deltaTimeInFrames);
+            this.modeWait(deltaTimeFrames);
             break;
         case 2:
             this.modeMoveWait();
@@ -2961,15 +2961,15 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         this.counter += 1.0;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
-        this.moveLift(deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
+        this.moveLift(deltaTimeFrames);
         
         if (this.btk !== null)
-            this.btk.play(deltaTimeInFrames);
+            this.btk.play(deltaTimeFrames);
 
         if (this.brk !== null)
-            this.brk.play(deltaTimeInFrames);
+            this.brk.play(deltaTimeFrames);
 
         this.setBaseMtx();
     }
@@ -3039,15 +3039,15 @@ class d_a_e_hp extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        super.execute(globals, deltaTimeFrames);
 
         this.height = 170.0 + Math.sin(cM__Short2Rad(this.counter * 1000)) * 20;
 
         this.mtx_set();
 
-        this.morf.play(deltaTimeInFrames);
-        this.glowMorf.play(deltaTimeInFrames);
+        this.morf.play(deltaTimeFrames);
+        this.glowMorf.play(deltaTimeFrames);
 
         this.counter++;
     }

@@ -44,7 +44,7 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
 export const enum ThunderMode {
     Off     = 0,
     On      = 1,
-    TagActivated = 2,
+    Kytag = 2,
     FarOnly = 10,
 }
 
@@ -204,9 +204,9 @@ export class dKankyo_sun_Packet {
     private materialHelperSunMoon: GXMaterialHelperGfx;
     public sunPos = vec3.create();
     private moonPos = vec3.create();
-    public sunAlpha: number = 0.0;
-    public moonAlpha: number = 0.0;
-    public visibility: number = 0.0;
+    public sunAlpha = 0.0;
+    public moonAlpha = 0.0;
+    public visibility = 0.0;
 
     // Lenzflare
     private lensHalfTexture: BTIData;
@@ -214,9 +214,9 @@ export class dKankyo_sun_Packet {
     private materialHelperLenzflare: GXMaterialHelperGfx;
     private materialHelperLenzflareSolid: GXMaterialHelperGfx;
     public lensflarePos = nArray(6, () => vec3.create());
-    public lensflareAngle: number = 0.0;
-    public distFalloff: number = 0.0;
-    public drawLenzInSky: boolean = false;
+    public lensflareAngle = 0.0;
+    public distFalloff = 0.0;
+    public drawLenzInSky = false;
 
     public chkPoints: vec2[] = [
         vec2.fromValues(  0,   0),
@@ -410,9 +410,9 @@ export class dKankyo_sun_Packet {
     @dfShow()
     private lensflareColor = colorNewCopy(White);
     @dfRange(0, 1600, 1)
-    private lensflareBaseSize: number = 960.0;
+    private lensflareBaseSize = 960.0;
     @dfRange(0, 32, 1)
-    private lensflareCount: number = 16.0;
+    private lensflareCount = 16.0;
     @dfRange(0.0, MathConstants.TAU, 0.0001)
     private lensflareAngles: number[] = [cM__Short2Rad(0xf80a), cM__Short2Rad(0x416b)];
     @dfRange(0.0, 0.8, 0.0001)
@@ -420,7 +420,7 @@ export class dKankyo_sun_Packet {
     @dfRange(-5, 5)
     private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
     @dfRange(0, MathConstants.TAU, 0.0001)
-    private lensflareWidth: number = cM__Short2Rad(1600.0);
+    private lensflareWidth = cM__Short2Rad(1600.0);
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
@@ -468,7 +468,7 @@ export class dKankyo_sun_Packet {
             if (whichScale !== 0)
                 outerRadScale *= 0.2;
 
-            const outerRadScale2: number = this.lensflareSizes[whichScale];
+            const outerRadScale2 = this.lensflareSizes[whichScale];
 
             const outerRad = outerRadScale * (this.visibility * (this.visibility**2 + outerRadScale2));
             vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
@@ -574,11 +574,11 @@ class VRKUMO_EFF {
 }
 
 export class dKankyo_vrkumo_Packet {
-    public enabled: boolean = false;
-    public count: number = 0;
-    public strength: number = 0;
-    public instances: VRKUMO_EFF[] = nArray(100, () => new VRKUMO_EFF());
-    public bounceAnimTimer: number = 0;
+    public enabled = false;
+    public count = 0;
+    public strength = 0;
+    public eff = nArray(100, () => new VRKUMO_EFF());
+    public bounceAnimTimer = 0;
     private ddraw = new TDDraw();
     private textures: BTIData[] = [];
     private materialHelper: GXMaterialHelperGfx;
@@ -633,10 +633,10 @@ export class dKankyo_vrkumo_Packet {
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-            ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.instances.length);
+            ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.eff.length);
 
-            for (let i = 0; i < this.instances.length; i++) {
-                const kumo = this.instances[i];
+            for (let i = 0; i < this.eff.length; i++) {
+                const kumo = this.eff[i];
 
                 if (kumo.alpha <= 0.000001)
                     continue;
@@ -772,7 +772,7 @@ export class dKankyo_rain_Packet {
         vec3.fromValues(150, 320, 150),
         vec3.fromValues(45, 480, 45),
     ];
-    public instances = nArray(250, () => new RAIN_EFF());
+    public eff = nArray(250, () => new RAIN_EFF());
     public rainCount: number = 0.0;
 
     public camEyePos = vec3.create();
@@ -821,7 +821,7 @@ export class dKankyo_rain_Packet {
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, alpha);
 
         for (let i = 0; i < this.rainCount; i++) {
-            const rain = this.instances[i];
+            const rain = this.eff[i];
             vec3.add(scratchVec3, rain.basePos, rain.pos);
 
             if (rain.alpha <= 0.001)
@@ -1004,15 +1004,15 @@ class WAVE_EFF {
 }
 
 export class dKankyo_wave_Packet {
-    public instances: WAVE_EFF[] = nArray(300, () => new WAVE_EFF());
+    public eff = nArray(300, () => new WAVE_EFF());
 
     private texUsonami: BTIData;
     private texUsonamiM: BTIData;
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
 
-    public skewDirection: number = 0.0;
-    public skewWidth: number = 0.0;
+    public skewDirection = 0.0;
+    public skewWidth = 0.0;
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
@@ -1067,7 +1067,7 @@ export class dKankyo_wave_Packet {
         const txc1 = 0xFA/0xFF;
 
         for (let i = 0; i < envLight.waveCount; i++) {
-            const wave = this.instances[i];
+            const wave = this.eff[i];
             const sin = Math.sin(wave.animCounter);
             if (sin < 0.0)
                 continue;
@@ -1128,13 +1128,13 @@ export class dKankyo_wave_Packet {
 }
 
 class STAR_EFF {
-    public animCounter: number = 0;
-    public animWave: number = 0.0;
+    public animCounter = 0;
+    public animWave = 0.0;
 }
 
 export class dKankyo_star_Packet {
-    public instances = nArray(1, () => new STAR_EFF());
-    public rot: number = 0.0;
+    public eff = nArray(1, () => new STAR_EFF());
+    public rot = 0.0;
 
     private hokuto_pos = [
         vec3.fromValues(13000, 10500, -16000),
@@ -1204,7 +1204,7 @@ export class dKankyo_star_Packet {
         ddraw.beginDraw(globals.modelCache.cache);
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 6 * envLight.starCount);
 
-        const star = this.instances[0];
+        const star = this.eff[0];
 
         const fovYAdj = 0.0;
 
@@ -1224,7 +1224,7 @@ export class dKankyo_star_Packet {
         // Projected moon position.
         mDoLib_projectFB(scratchVec3e, envLight.moonPos, viewerInput);
 
-        let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
+        let radius = 0.0, angle = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
             let scale: number;
             if (i < this.hokuto_pos.length) {
@@ -1314,7 +1314,6 @@ class HOUSI_EFF {
     public initialized = false;
     public basePos = vec3.create();
     public pos = vec3.create();
-    public pntwindVel = vec3.create();
     public wave = vec3.create();
     public alpha = 0.0;
     public speed = 0.0;
@@ -1323,9 +1322,9 @@ class HOUSI_EFF {
 }
 
 export class dKankyo_housi_Packet {
-    public instances = nArray(300, () => new HOUSI_EFF());
-    public alpha: number = 0.0;
-    public count: number = 0.0;
+    public eff = nArray(300, () => new HOUSI_EFF());
+    public alpha = 0.0;
+    public count = 0;
 
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
@@ -1368,14 +1367,14 @@ export class dKankyo_housi_Packet {
         ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
 
         for (let i = 0; i < this.count; i++) {
-            const housi = this.instances[i];
+            const eff = this.eff[i];
 
-            vec3.add(scratchVec3a, housi.basePos, housi.pos);
+            vec3.add(scratchVec3a, eff.basePos, eff.pos);
 
-            const alpha = housi.alpha * 0xFF;
+            const alpha = eff.alpha * 0xFF;
 
-            const sx = Math.sin(housi.wave[0] * 10.0) * 0.22;
-            const sy = Math.sin(housi.wave[1] * 10.0) * 0.22;
+            const sx = Math.sin(eff.wave[0] * 10.0) * 0.22;
+            const sy = Math.sin(eff.wave[1] * 10.0) * 0.22;
             const baseSize = 3.0;
 
             vec3.set(scratchVec3, baseSize - sx, baseSize - sy, 0.0);
@@ -1416,6 +1415,128 @@ export class dKankyo_housi_Packet {
 
             colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xE5FFC8FF);
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x43D2CAFF);
+
+            submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class CLOUD_EFF {
+    public initialized = false;
+    public basePos = vec3.create();
+    public pos = vec3.create();
+    public windSpeed = 0.0;
+    public extraSpeed = vec3.create();
+    public alpha = 0.0;
+    public baseSize = 0.0;
+    public size = 0.0;
+    public sizeTimer = 0;
+}
+
+export class dKankyo_moya_Packet {
+    public eff = nArray(100, () => new CLOUD_EFF());
+    public count = 0;
+    public rot = 0;
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    private texData: BTIData;
+
+    constructor(globals: dGlobals) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+
+        const mb = new GXMaterialBuilder();
+        mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_moya_Packet'));
+
+        const resCtrl = globals.resCtrl;
+        this.texData = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x84);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.count === 0)
+            return;
+
+        const ddraw = this.ddraw;
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
+
+        for (let i = 0; i < this.count; i++) {
+            const eff = this.eff[i];
+
+            vec3.add(scratchVec3a, eff.basePos, eff.pos);
+
+            const alpha = (eff.alpha * 0xFF) | 0;
+            if (alpha === 0)
+                continue;
+
+            const size = eff.size;
+
+            vec3.set(scratchVec3, -size, -size, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            vec3.set(scratchVec3, -size, size, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+            vec3.set(scratchVec3, size, size, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+            vec3.set(scratchVec3, size, -size, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+
+            drawWorldSpaceLine
+        }
+
+        ddraw.end();
+        ddraw.endDraw(renderInstManager);
+
+        if (ddraw.hasIndicesToDraw()) {
+            const renderInst = ddraw.makeRenderInst(renderInstManager);
+            this.texData.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+            const envLight = globals.g_env_light;
+            if (envLight.moyaMode === 3 || envLight.moyaMode === 4)
+                colorCopy(materialParams.u_Color[ColorKind.C0], envLight.bgCol[3].K0, 1.0);
+            else
+                colorCopy(materialParams.u_Color[ColorKind.C0], envLight.bgCol[0].K0, 1.0);
 
             submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
@@ -1609,7 +1730,7 @@ function wether_move_thunder(globals: dGlobals): void {
     }
 }
 
-function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void {
+function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     const pkt = envLight.windline!;
@@ -1659,7 +1780,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
     count *= 4;
 
     const oldCounter = (pkt.frameCounter) | 0;
-    pkt.frameCounter += deltaTimeInFrames;
+    pkt.frameCounter += deltaTimeFrames;
     const g_Counter = (pkt.frameCounter) | 0;
     if (oldCounter === g_Counter)
         return;
@@ -1720,7 +1841,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
             eff.swerveAnimCounter += swerveAnimAmount;
 
             const swerveAnimMag = cM__Short2Rad((swerveMagnitudeScale - ((0.2 * swerveMagnitudeScale) * (1.0 - windPow))));
-            const swerveAngleChange = deltaTimeInFrames * swerveAnimMag * Math.sin(eff.swerveAnimCounter);
+            const swerveAngleChange = deltaTimeFrames * swerveAnimMag * Math.sin(eff.swerveAnimCounter);
             eff.swerveAngleY += swerveAngleChange;
             eff.swerveAngleXZ += (swerveAngleChange * ((i & 1) ? 1 : -1));
 
@@ -1750,7 +1871,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 Math.cos(eff.swerveAngleY) * Math.cos(eff.swerveAngleXZ),
             );
 
-            vec3.scaleAndAdd(eff.animPos, eff.animPos, scratchVec3, swervePosMag * deltaTimeInFrames);
+            vec3.scaleAndAdd(eff.animPos, eff.animPos, scratchVec3, swervePosMag * deltaTimeFrames);
             vec3.add(emitter.globalTranslation, eff.basePos, eff.animPos);
 
             const dist = vec3.distance(emitter.globalTranslation, globals.cameraPosition);
@@ -1787,7 +1908,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
     }
 }
 
-function wether_move_windline(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_windline(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     let windlineCount = 0;
@@ -1804,12 +1925,12 @@ function wether_move_windline(globals: dGlobals, deltaTimeInFrames: number): voi
 
     envLight.windline.count = windlineCount;
 
-    dKyr_windline_move(globals, deltaTimeInFrames);
+    dKyr_windline_move(globals, deltaTimeFrames);
 }
 
-export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): void {
+export function dKyw_wether_move(globals: dGlobals, deltaTimeFrames: number): void {
     wether_move_thunder(globals);
-    wether_move_windline(globals, deltaTimeInFrames);
+    wether_move_windline(globals, deltaTimeFrames);
 }
 
 function wether_move_sun(globals: dGlobals): void {
@@ -1825,7 +1946,7 @@ function wether_move_sun(globals: dGlobals): void {
     dKyr_lenzflare_move(globals);
 }
 
-function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_rain(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.rainCount === 0)
@@ -1863,12 +1984,12 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     dKy_set_eyevect_calc2(globals, scratchVec3, 700.0, 600.0);
 
     for (let i = 0; i < pkt.rainCount; i++) {
-        const rain = pkt.instances[i];
+        const rain = pkt.eff[i];
 
         if (rain.initialized) {
-            rain.pos[0] += deltaTimeInFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
-            rain.pos[1] += deltaTimeInFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
-            rain.pos[2] += deltaTimeInFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
+            rain.pos[0] += deltaTimeFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
+            rain.pos[1] += deltaTimeFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
+            rain.pos[2] += deltaTimeFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
 
             vec3.set(scratchVec3c, rain.basePos[0] + rain.pos[0], scratchVec3[1], rain.basePos[2] + rain.pos[2]);
             const distXZ = vec3.distance(scratchVec3c, scratchVec3);
@@ -1893,7 +2014,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
                     rain.timer = 10;
                 }
             } else {
-                rain.timer -= deltaTimeInFrames;
+                rain.timer -= deltaTimeFrames;
             }
         } else {
             vec3.copy(rain.basePos, scratchVec3);
@@ -1923,10 +2044,10 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
         pkt.rainCount = envLight.rainCount;
 }
 
-function wether_move_snow(globals: dGlobals): void {
+function wether_move_snow(globals: dGlobals, deltaTimeFrames: number): void {
 }
 
-function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_star(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     const isName = globals.stageName === 'Name';
@@ -1966,31 +2087,32 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
 
     const pkt = envLight.starPacket;
 
-    const star = pkt.instances[0];
-    star.animCounter += 0.01 * deltaTimeInFrames;
+    const star = pkt.eff[0];
+    star.animCounter += 0.01 * deltaTimeFrames;
     star.animWave = Math.sin(star.animCounter);
 
     // cLib_addCalc here for no reason?
 
-    pkt.rot += deltaTimeInFrames;
+    pkt.rot += deltaTimeFrames;
 }
 
-function wether_move_poison(globals: dGlobals): void {
+function wether_move_poison(globals: dGlobals, deltaTimeFrames: number): void {
 }
 
-function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_housi(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
-    if (envLight.housiPacket === null && envLight.housiCount !== 0)
-        envLight.housiPacket = new dKankyo_housi_Packet(globals);
-    else if (envLight.housiPacket === null)
+    if (envLight.housiCount === 0 && envLight.housiPacket === null)
         return;
+
+    if (envLight.housiPacket === null)
+        envLight.housiPacket = new dKankyo_housi_Packet(globals);
 
     const pkt = envLight.housiPacket;
     if (envLight.housiCount !== 0 || pkt.alpha <= 0)
         pkt.count = envLight.housiCount;
 
-    pkt.alpha = cLib_addCalc(pkt.alpha, envLight.housiCount > 0.0 ? 1.0 : 0.0, 0.2 * deltaTimeInFrames, 0.05, 0.01);
+    pkt.alpha = cLib_addCalc(pkt.alpha, envLight.housiCount > 0.0 ? 1.0 : 0.0, 0.2 * deltaTimeFrames, 0.05, 0.01);
 
     if (pkt.count === 0)
         return;
@@ -1998,7 +2120,7 @@ function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
     dKyw_get_wind_vecpow(scratchVec3b, envLight);
     dKy_set_eyevect_calc2(globals, scratchVec3a, 800.0);
     for (let i = 0; i < pkt.count; i++) {
-        const eff = pkt.instances[i];
+        const eff = pkt.eff[i];
         if (!eff.initialized) {
             eff.alphaTimer = cM_rndFX(0x10000);
             eff.speed = 0.2 + cM_rndF(1.5);
@@ -2016,47 +2138,132 @@ function wether_move_housi(globals: dGlobals, deltaTimeInFrames: number): void {
                 eff.pos[1] = (-99999.9 - posY) + 10.0;
 
             eff.initialized = true;
-        } else {
-            vec3.scaleAndAdd(eff.pos, eff.pos, scratchVec3b, 5.0 * eff.speed * deltaTimeInFrames);
-            eff.pos[1] -= 0.6 * eff.speed * deltaTimeInFrames;
-
-            eff.pos[0] += Math.sin(eff.wave[0]) * eff.speed * deltaTimeInFrames;
-            eff.pos[1] += Math.sin(eff.wave[1]) * eff.speed * 0.5 * deltaTimeInFrames;
-            eff.pos[2] += Math.sin(eff.wave[2]) * eff.speed * deltaTimeInFrames;
-
-            eff.wave[0] += 0.03 * deltaTimeInFrames;
-            eff.wave[1] += 0.02 * deltaTimeInFrames;
-            eff.wave[2] += 0.01 * deltaTimeInFrames;
-
-            vec3.add(scratchVec3c, eff.basePos, eff.pos);
-            // pntwind
-
-            if (eff.resetTimer === 0) {
-                if (vec3.distance(scratchVec3c, scratchVec3a) > 1000.0 || scratchVec3c[1] < -99980.0) {
-                    eff.resetTimer = 10;
-
-                    vec3.copy(eff.basePos, scratchVec3a);
-                    if (vec3.distance(scratchVec3c, scratchVec3a) > 1050.0) {
-                        vec3.set(eff.pos, cM_rndFX(1000.0), cM_rndFX(1000.0), cM_rndFX(1000.0));
-                    } else {
-                        dKyr_get_vectle_calc(scratchVec3c, scratchVec3a, scratchVec3d);
-                        vec3.scale(eff.pos, scratchVec3d, 1000.0 * cM_rndFX(50.0));
-                    }
-                }
-            } else {
-                eff.resetTimer--;
-            }
-
-            eff.alphaTimer += 600 * deltaTimeInFrames;
-            eff.alphaTimer = eff.alphaTimer % 0x10000;
-
-            const alpha = eff.alphaTimer >= 30000 ? 0.0 : pkt.alpha;
-            eff.alpha = cLib_addCalc(eff.alpha, alpha, 0.5 * deltaTimeInFrames, 0.02, 0.00001);
         }
+
+        vec3.scaleAndAdd(eff.pos, eff.pos, scratchVec3b, 5.0 * eff.speed * deltaTimeFrames);
+        eff.pos[1] -= 0.6 * eff.speed * deltaTimeFrames;
+
+        eff.pos[0] += Math.sin(eff.wave[0]) * eff.speed * deltaTimeFrames;
+        eff.pos[1] += Math.sin(eff.wave[1]) * eff.speed * 0.5 * deltaTimeFrames;
+        eff.pos[2] += Math.sin(eff.wave[2]) * eff.speed * deltaTimeFrames;
+
+        eff.wave[0] += 0.03 * deltaTimeFrames;
+        eff.wave[1] += 0.02 * deltaTimeFrames;
+        eff.wave[2] += 0.01 * deltaTimeFrames;
+
+        vec3.add(scratchVec3c, eff.basePos, eff.pos);
+        // pntwind
+
+        if (eff.resetTimer === 0) {
+            if (vec3.distance(scratchVec3c, scratchVec3a) > 1000.0 || scratchVec3c[1] < -99980.0) {
+                eff.resetTimer = 10;
+
+                vec3.copy(eff.basePos, scratchVec3a);
+                if (vec3.distance(scratchVec3c, scratchVec3a) > 1050.0) {
+                    vec3.set(eff.pos, cM_rndFX(1000.0), cM_rndFX(1000.0), cM_rndFX(1000.0));
+                } else {
+                    dKyr_get_vectle_calc(scratchVec3c, scratchVec3a, scratchVec3d);
+                    vec3.scale(eff.pos, scratchVec3d, 1000.0 * cM_rndFX(50.0));
+                }
+            }
+        } else {
+            eff.resetTimer--;
+        }
+
+        eff.alphaTimer += 600 * deltaTimeFrames;
+        eff.alphaTimer = eff.alphaTimer % 0x10000;
+
+        const alpha = eff.alphaTimer >= 30000 ? 0.0 : pkt.alpha;
+        eff.alpha = cLib_addCalc(eff.alpha, alpha, 0.5 * deltaTimeFrames, 0.02, 0.00001);
     }
 }
 
-function wether_move_moya(globals: dGlobals): void {
+function wether_move_moya(globals: dGlobals, deltaTimeFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.moyaCount === 0 && envLight.moyaPacket === null)
+        return;
+
+    if (envLight.moyaPacket === null)
+        envLight.moyaPacket = new dKankyo_moya_Packet(globals);
+
+    const pkt = envLight.moyaPacket;
+
+    if (pkt.count < envLight.moyaCount)
+        pkt.count = envLight.moyaCount;
+
+    dKyw_get_wind_vecpow(scratchVec3b, envLight);
+    dKy_set_eyevect_calc2(globals, scratchVec3a, 1500.0);
+    for (let i = 0; i < pkt.count; i++) {
+        const eff = pkt.eff[i];
+
+        if (!eff.initialized) {
+            eff.baseSize = 400.0 + cM_rndFX(80.0);
+            eff.size = eff.baseSize;
+            vec3.copy(eff.basePos, scratchVec3a);
+            vec3.set(eff.pos, cM_rndFX(2000.0), cM_rndFX(2000.0), cM_rndFX(2000.0));
+            eff.windSpeed = 0.7 + cM_rndF(0.3);
+            eff.alpha = 0.0;
+            vec3.set(eff.extraSpeed, cM_rndFX(0.5), cM_rndFX(0.5), cM_rndFX(0.5));
+
+            eff.initialized = true;
+        }
+
+        if (!!(envLight.moyaMode & 1)) {
+            if (globals.stageName === "M_DragB" && !envLight.vrboxInvisible) {
+                eff.pos[1] += 5.0 * deltaTimeFrames;
+            } else if (envLight.moyaMode === 1) {
+                eff.pos[1] += 20.0 * deltaTimeFrames;
+            }
+        }
+
+        const windMul = (envLight.moyaMode === 1) ? 10.0 : 40.0;
+        vec3.scaleAndAdd(eff.pos, eff.pos, scratchVec3b, eff.windSpeed * windMul * deltaTimeFrames);
+        // pntwind
+
+        let extraSpeedMul = 8.0;
+        if (globals.stageName === "Adanmae")
+            extraSpeedMul = 20.0;
+        vec3.scaleAndAdd(eff.pos, eff.pos, eff.extraSpeed, extraSpeedMul * deltaTimeFrames);
+
+        vec3.add(scratchVec3c, eff.basePos, eff.pos);
+
+        if (vec3.distance(scratchVec3a, scratchVec3c) > 2000.0) {
+            vec3.copy(eff.basePos, scratchVec3a);
+
+            if (vec3.distance(scratchVec3a, scratchVec3c) >= 2200.0) {
+                vec3.set(eff.pos, cM_rndFX(2000.0), cM_rndFX(2000.0), cM_rndFX(2000.0));
+            } else {
+                dKyr_get_vectle_calc(scratchVec3c, scratchVec3a, eff.pos);
+                eff.pos[0] = (eff.pos[0] + cM_rndF(0.5)) * 2000.0;
+                eff.pos[1] = (eff.pos[1] + cM_rndF(0.5)) * 2000.0;
+                eff.pos[2] = (eff.pos[2] + cM_rndF(0.5)) * 2000.0;
+            }
+
+            eff.alpha = 0.0;
+        }
+
+        eff.sizeTimer += 120 * deltaTimeFrames;
+
+        const distanceCam = vec3.distance(globals.cameraPosition, scratchVec3c);
+        eff.size = (Math.sin(cM__Short2Rad(eff.sizeTimer)) * 40.0) + eff.baseSize + (eff.baseSize * 1.5 * (distanceCam - 1000.0) / 2000.0);
+
+        if (i < envLight.moyaCount) {
+            const distance = vec3.distance(scratchVec3a, scratchVec3c);
+            const alphaTarget = saturate((1.0 - (distance / 2000.0)) * 1.2);
+            let maxAlpha = 0.035;
+            if (envLight.moyaMode === 3)
+                maxAlpha = 0.06;
+            else if (envLight.moyaMode === 4)
+                maxAlpha = 0.05;
+
+            eff.alpha = cLib_addCalc(eff.alpha, alphaTarget * maxAlpha, 0.1 * deltaTimeFrames, 0.1, 0.00001);
+        } else if (eff.alpha < 0.001 && i === (pkt.count - 1)) {
+            pkt.count--;
+        }
+    }
+
+    pkt.rot += -1.5 * deltaTimeFrames;
 }
 
 function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRadius: number, outerRadius: number): void {
@@ -2071,7 +2278,7 @@ function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRa
     }
 }
 
-function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.waveCount === 0)
@@ -2120,7 +2327,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
     pkt.skewWidth = windPow * 0.6 * skewWidth;
 
     for (let i = 0; i < envLight.waveCount; i++) {
-        const wave = pkt.instances[i];
+        const wave = pkt.eff[i];
 
         if (envLight.waveReset)
             wave.initialized = false;
@@ -2142,9 +2349,9 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
         }
 
         const speed = (0.2 + 0.8 * wave.alpha) * (0.5 + 0.5 * wave.strengthEnv) * wave.speed * envLight.waveSpeed;
-        wave.pos[0] += speed * scratchVec3[0] * deltaTimeInFrames;
-        wave.pos[2] += speed * scratchVec3[2] * deltaTimeInFrames;
-        wave.animCounter += wave.animCounterSpeed * deltaTimeInFrames;
+        wave.pos[0] += speed * scratchVec3[0] * deltaTimeFrames;
+        wave.pos[2] += speed * scratchVec3[2] * deltaTimeFrames;
+        wave.animCounter += wave.animCounterSpeed * deltaTimeFrames;
 
         // Reached end of animation, recycle.
         vec3.add(scratchVec3d, wave.basePos, wave.pos);
@@ -2194,22 +2401,22 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
     }
 }
 
-export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
+export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeFrames: number): void {
     if (globals.stageName !== 'Name') {
         wether_move_sun(globals);
-        wether_move_rain(globals, deltaTimeInFrames);
-        wether_move_snow(globals);
+        wether_move_rain(globals, deltaTimeFrames);
+        wether_move_snow(globals, deltaTimeFrames);
     }
-    wether_move_star(globals, deltaTimeInFrames);
+    wether_move_star(globals, deltaTimeFrames);
     if (globals.stageName !== 'Name') {
-        wether_move_poison(globals);
-        wether_move_housi(globals, deltaTimeInFrames);
-        wether_move_moya(globals);
-        wether_move_wave(globals, deltaTimeInFrames);
+        wether_move_poison(globals, deltaTimeFrames);
+        wether_move_housi(globals, deltaTimeFrames);
+        wether_move_moya(globals, deltaTimeFrames);
+        wether_move_wave(globals, deltaTimeFrames);
     }
 }
 
-function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
+function vrkumo_move(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     dKyw_get_wind_vecpow(scratchVec3, envLight);
@@ -2236,7 +2443,7 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
     }
 
     for (let i = 0; i < 100; i++) {
-        const kumo = pkt.instances[i];
+        const kumo = pkt.eff[i];
 
         let distFromCenterXZ = Math.hypot(kumo.position[0], kumo.position[2]);
 
@@ -2254,10 +2461,10 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
 
         const strengthVelocity = 4.0 + pkt.strength * 4.3;
         if (kumo.alpha > 0) {
-            const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeInFrames;
+            const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeFrames;
             vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
         } else {
-            const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeInFrames;
+            const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeFrames;
             vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
         }
 
@@ -2295,13 +2502,13 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
         const overheadFade = saturate(invlerp(0.98, 0.88, centerAmtCubic));
         alphaTarget *= overheadFade;
 
-        kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeInFrames, alphaMaxVel, 0.01);
+        kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeFrames, alphaMaxVel, 0.01);
     }
 
-    pkt.bounceAnimTimer += 200.0 * deltaTimeInFrames;
+    pkt.bounceAnimTimer += 200.0 * deltaTimeFrames;
 }
 
-function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void {
+function wether_move_vrkumo(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.vrkumoPacket === null) {
@@ -2340,11 +2547,11 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
             pkt.count = 0;
     }
 
-    vrkumo_move(globals, deltaTimeInFrames);
+    vrkumo_move(globals, deltaTimeFrames);
 }
 
-export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeInFrames: number): void {
-    wether_move_vrkumo(globals, deltaTimeInFrames);
+export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeFrames: number): void {
+    wether_move_vrkumo(globals, deltaTimeFrames);
 }
 
 export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -2357,6 +2564,8 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
             envLight.wavePacket.draw(globals, renderInstManager, viewerInput);
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
+        if (envLight.moyaPacket !== null)
+            envLight.moyaPacket.draw(globals, renderInstManager, viewerInput);
     }
 
     if (envLight.starPacket !== null)
@@ -2465,7 +2674,7 @@ export class d_thunder extends kankyo_class {
     private btkAnm = new mDoExt_btkAnm();
     private btkTime = 0.0;
     private brkAnm = new mDoExt_brkAnm();
-    private rotation: number = 0.0;
+    private rot = 0.0;
 
     public override subload(globals: dGlobals): cPhs__Status {
         const modelData = globals.resCtrl.getObjectRes(ResType.Model, `Always`, 0x3E);
@@ -2480,7 +2689,7 @@ export class d_thunder extends kankyo_class {
         this.btkTime = cM_rndF(1.0);
 
         const nearMul = ((globals.g_env_light.thunderState < ThunderState.NearThresh) ? 1.0 : 0.5);
-        this.rotation = cM_rndFX(4000) * nearMul;
+        this.rot = cM_rndFX(4000) * nearMul;
         this.scale[0] = nearMul * (5.0 + cM_rndF(15.0));
         if (cM_rndFX(1.0) >= 0.5)
             this.scale[0] *= -1.0;
@@ -2503,8 +2712,8 @@ export class d_thunder extends kankyo_class {
 
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         MtxTrans(this.pos, false);
-        mDoMtx_ZrotM(calc_mtx, this.rotation);
-        mDoMtx_XrotM(calc_mtx, this.rotation);
+        mDoMtx_ZrotM(calc_mtx, this.rot);
+        mDoMtx_XrotM(calc_mtx, this.rot);
         mat4.copy(this.model.modelMatrix, calc_mtx);
         vec3.copy(this.model.baseScale, this.scale);
 
@@ -2513,8 +2722,8 @@ export class d_thunder extends kankyo_class {
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 
-    public override execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        const hasStopped = this.brkAnm.play(deltaTimeInFrames);
+    public override execute(globals: dGlobals, deltaTimeFrames: number): void {
+        const hasStopped = this.brkAnm.play(deltaTimeFrames);
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);
         }
