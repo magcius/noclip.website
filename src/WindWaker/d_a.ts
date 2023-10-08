@@ -1,6 +1,6 @@
 
 import { ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { Green, Red, TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { Green, Magenta, Red, TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
@@ -17,22 +17,23 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { TevDefaultSwapTables } from "../gx/gx_material.js";
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
-import { assert, assertExists, nArray } from "../util.js";
+import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
 import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
 import { PeekZResult } from "./d_dlst_peekZ.js";
-import { LIGHT_INFLUENCE, LightType, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
+import { LIGHT_INFLUENCE, LightType, WAVE_INFO, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
-import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c } from "./d_stage.js";
+import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
-import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB } from "../Geometry.js";
 
 // Framework'd actors
 
@@ -661,7 +662,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         let windX = windVec[0];
         let windZ = windVec[2];
 
-        const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+        const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
         if (roomType === 2) {
             // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
         }
@@ -751,7 +752,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
 const enum Kytag00EffectMode {
     None = 0x00,
     Rain = 0x01,
-    Moya2 = 0x02,
+    Snow = 0x02,
     Moya3 = 0x03,
     Moya4 = 0x04,
     Moya5 = 0x05,
@@ -949,14 +950,14 @@ class d_a_kytag00 extends fopAc_ac_c {
 class d_a_kytag01 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_kytag01;
 
-    private influence = new WAVE_INFLUENCE();
+    private info = new WAVE_INFO();
 
     public override subload(globals: dGlobals): cPhs__Status {
-        vec3.copy(this.influence.pos, this.pos);
+        vec3.copy(this.info.pos, this.pos);
 
-        this.influence.innerRadius = this.scale[0] * 5000.0;
-        this.influence.outerRadius = Math.max(this.scale[2] * 5000.0, this.influence.innerRadius + 500.0);
-        dKy__waveinfl_set(globals.g_env_light, this.influence);
+        this.info.innerRadius = this.scale[0] * 5000.0;
+        this.info.outerRadius = Math.max(this.scale[2] * 5000.0, this.info.innerRadius + 500.0);
+        globals.g_env_light.waveInfo.push(this.info);
 
         // TODO(jstpierre): Need a Create/Destroy hook that happens on room load / unload for this to work on sea stage.
         if (globals.stageName !== 'sea')
@@ -995,7 +996,7 @@ class d_a_kytag01 extends fopAc_ac_c {
     }
 
     public override delete(globals: dGlobals): void {
-        dKy__waveinfl_cut(globals.g_env_light, this.influence);
+        arrayRemove(globals.g_env_light.waveInfo, this.info);
     }
 }
 

@@ -1486,7 +1486,7 @@ function dKyr_sun_move(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
-    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.baseLight.pos, scratchVec3);
     } else {
@@ -1687,7 +1687,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     let fadeMaxXZDist = 0;
     let fadeMaxY = 0;
 
-    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (roomType === 2 && globals.stageName !== 'Ocrogh' && globals.stageName !== 'Omori') {
         if (globals.stageName === 'Orichh')
             fadeMaxXZDist = 2300.0;

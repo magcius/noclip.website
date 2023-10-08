@@ -150,6 +150,10 @@ export class stage_stag_info_class {
     }
 }
 
+export function dStage_stagInfo_GetSTType(stagInfo: stage_stag_info_class): number {
+    return (stagInfo.roomTypeAndSchBit >>> 16) & 0x07;
+}
+
 export class dStage_Multi_c {
     public transX: number;
     public transZ: number;

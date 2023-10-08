@@ -86,7 +86,7 @@ export class dScnKy_env_light_c {
     public baseLight = new LIGHT_INFLUENCE();
     public plights: LIGHT_INFLUENCE[] = [];
     public eflights: LIGHT_INFLUENCE[] = [];
-    public waveInfluences: WAVE_INFLUENCE[] = [];
+    public waveInfo: WAVE_INFO[] = [];
     // The game records this in a separate struct with a bunch of extra data, but we don't need it lol.
     public lightStatus = nArray(2, () => new Light());
 
@@ -174,7 +174,7 @@ export class LIGHT_INFLUENCE {
     public priority: boolean = false;
 }
 
-export class WAVE_INFLUENCE {
+export class WAVE_INFO {
     public pos = vec3.create();
     public outerRadius: number = 0.0;
     public innerRadius: number = 0.0;
@@ -1279,14 +1279,6 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
     const idx = arrayRemove(envLight.eflights, plight);
     if (envLight.playerEflightIdx === idx)
         envLight.playerEflightIdx = -1;
-}
-
-export function dKy__waveinfl_set(envLight: dScnKy_env_light_c, infl: WAVE_INFLUENCE): void {
-    envLight.waveInfluences.push(infl);
-}
-
-export function dKy__waveinfl_cut(envLight: dScnKy_env_light_c, infl: WAVE_INFLUENCE): void {
-    arrayRemove(envLight.waveInfluences, infl);
 }
 
 export function dKy_get_dayofweek(envLight: dScnKy_env_light_c): number {

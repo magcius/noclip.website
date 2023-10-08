@@ -203,11 +203,11 @@ export class stage_stag_info_class {
 }
 
 export function dStage_stagInfo_GetSTType(stagInfo: stage_stag_info_class): number {
-    return (stagInfo.roomTypeAndSchBit >> 16) & 0x07;
+    return (stagInfo.roomTypeAndSchBit >>> 16) & 0x07;
 }
 
 export function dStage_stagInfo_GetArg0(stagInfo: stage_stag_info_class): number {
-    return (stagInfo.roomTypeAndSchBit >> 20) & 0xFF;
+    return (stagInfo.roomTypeAndSchBit >>> 20) & 0xFF;
 }
 
 export class dStage_Multi_c {

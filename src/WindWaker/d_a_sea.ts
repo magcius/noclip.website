@@ -18,6 +18,7 @@ import { colorLerp, OpaqueBlack } from '../Color.js';
 import { dKy_usonami_set } from './d_kankyo_wether.js';
 import { Plane } from '../Geometry.js';
 import { cLib_addCalcAngleS2, cM_atan2s, cM_rndF, cM__Short2Rad } from './SComponent.js';
+import { dStage_stagInfo_GetSTType } from './d_stage.js';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -124,7 +125,7 @@ class daSea_WaterHeightInfo_Mng {
         if (x < 0 || x > 8 || z < 0 || z > 8)
             return 10;
 
-        const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+        const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
 
         if (roomType === 7) {
             return this.height[z*9 + x];

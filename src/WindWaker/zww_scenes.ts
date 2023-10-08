@@ -1269,7 +1269,7 @@ const sceneDescs = [
     new SceneDesc("Ebesso", "Island with House"),
     new SceneDesc("KATA_HB", "Bridge Room"),
     new SceneDesc("KATA_RM", "Large Empty Room"),
-    // new SceneDesc("kazan", "Fire Mountain"),
+    new SceneDesc("kazan", "Fire Mountain"),
     new SceneDesc("Msmoke", "Smoke Test Room", [0, 1]),
     new SceneDesc("Mukao", "Early Headstone Island"),
     new SceneDesc("tincle", "Tingle's Room"),
@@ -1300,6 +1300,8 @@ const sceneDescs = [
     new SceneDesc("DmSpot0", "DmSpot0"),
     new SceneDesc("Amos_T", "Amos_T"),
     new SceneDesc("A_umikz", "A_umikz"),
+    new SceneDesc("I_TestM", "I_TestM"),
+    new SceneDesc("I_TestR", "I_TestR"),
 ];
 
 const id = "zww";

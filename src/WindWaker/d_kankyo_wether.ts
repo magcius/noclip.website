@@ -21,7 +21,7 @@ import { cLib_addCalc, cLib_addCalcAngleRad, cM__Short2Rad, cM_rndF, cM_rndFX } 
 import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
 import { dKy_GxFog_sea_set, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_addcol_fog_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_checkEventNightStop, dKy_efplight_cut, dKy_efplight_set, dKy_get_dayofweek, dKy_get_seacolor, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_vrbox_addcol_kasumi_set, dKy_vrbox_addcol_sky0_set, dScnKy_env_light_c } from "./d_kankyo.js";
 import { ResType } from "./d_resorce.js";
-import { dStage_FileList_dt_c } from "./d_stage.js";
+import { dStage_FileList_dt_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
@@ -301,7 +301,7 @@ export class dKankyo_sun_Packet {
         let drawSun = this.sunAlpha > 0.0;
         let drawMoon = this.moonAlpha > 0.0;
 
-        const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+        const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
         if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
             if (envLight.curTime > 285 || envLight.curTime < 105)
                 drawMoon = false;
@@ -1422,7 +1422,7 @@ export class dKankyo_housi_Packet {
     }
 
     public destroy(device: GfxDevice): void {
-        this.texData.destroy(device);
+        this.ddraw.destroy(device);
     }
 }
 
@@ -1466,7 +1466,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
-    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.baseLight.pos, scratchVec3);
     } else {
@@ -1846,7 +1846,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     let fadeMaxXZDist = 0;
     let fadeMaxY = 0;
 
-    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (roomType === 2 && globals.stageName !== 'Ocrogh' && globals.stageName !== 'Omori') {
         if (globals.stageName === 'Orichh')
             fadeMaxXZDist = 2300.0;
@@ -2100,7 +2100,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
     let windY = windVec[1];
     let windZ = windVec[2];
 
-    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    const roomType = dStage_stagInfo_GetSTType(globals.dStage_dt.stag);
     if (roomType === 2) {
         // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
     }
@@ -2168,8 +2168,8 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
         wave.strengthEnv = 1.0;
 
         // Wave influence fade.
-        for (let i = 0; i < envLight.waveInfluences.length; i++) {
-            const infl = envLight.waveInfluences[i];
+        for (let i = 0; i < envLight.waveInfo.length; i++) {
+            const infl = envLight.waveInfo[i];
             const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
             wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
         }
