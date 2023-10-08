@@ -1,6 +1,6 @@
 
 import { ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { Green, Red, TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
@@ -9,6 +9,7 @@ import { Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero, clamp, computeMatrixWithoutTra
 import { GlobalSaveManager } from "../SaveManager.js";
 import { TDDraw, TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { Endianness } from "../endian.js";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -20,7 +21,8 @@ import { assert, assertExists, nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleRad2, cLib_addCalcAngleS, cLib_addCalcAngleS2, cLib_addCalcPosXZ2, cLib_chasePosXZ, cLib_distanceSqXZ, cLib_distanceXZ, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM_atan2s, cM_rndF, cM_rndFX } from "./SComponent.js";
 import { dLib_getWaterY, dLib_waveInit, dLib_waveRot, dLib_wave_c, d_a_sea } from "./d_a_sea.js";
-import { cBgS_GndChk, cBgW_Flags, dBgW } from "./d_bg.js";
+import { cBgW_Flags, dBgS_GndChk, dBgW } from "./d_bg.js";
+import { PeekZResult } from "./d_dlst_peekZ.js";
 import { LIGHT_INFLUENCE, LightType, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_change_colpat, dKy_checkEventNightStop, dKy_plight_cut, dKy_plight_set, dKy_setLight__OnMaterialParams, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, setLightTevColorType, settingTevStruct } from "./d_kankyo.js";
 import { ThunderMode, dKyr_get_vectle_calc, dKyw_get_AllWind_vecpow, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set, loadRawTexture } from "./d_kankyo_wether.js";
 import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle.js";
@@ -30,9 +32,7 @@ import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_cl
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
 import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
-import { PeekZManager, PeekZResult } from "./d_dlst_peekZ.js";
-import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { drawWorldSpaceLine, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 // Framework'd actors
 
@@ -4450,8 +4450,6 @@ class d_a_obj_flame extends fopAc_ac_c {
     }
 }
 
-const chk = new cBgS_GndChk();
-
 export class d_a_ff extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_ff;
     private model: J3DModelInstance[] = [];
@@ -4461,7 +4459,7 @@ export class d_a_ff extends fopAc_ac_c {
     private isVisibleZ = false;
     private glowScale = 0.0;
     private glowScaleY = 1.0;
-    private flyScale = 1.0;
+    private flyScale = 0.0;
     private flickerTimer = 0;
     private flickerTimerTimer = 0;
     private scatterTimer = 0;
@@ -4493,7 +4491,7 @@ export class d_a_ff extends fopAc_ac_c {
 
             const brkAnm = new mDoExt_brkAnm();
             const anm = globals.resCtrl.getObjectRes(ResType.Brk, arcName, ho_brk[i]);
-            brkAnm.init(modelData, anm, true, LoopMode.Repeat);
+            brkAnm.init(modelData, anm, true, LoopMode.Repeat, 0.9 + cM_rndF(0.15));
             this.brkAnm.push(brkAnm);
         }
 
@@ -4577,7 +4575,7 @@ export class d_a_ff extends fopAc_ac_c {
         let motion = false;
 
         if (this.state === 0) {
-            chk.Reset();
+            const chk = new dBgS_GndChk();
             vec3.scaleAndAdd(chk.pos, this.pos, Vec3UnitY, 250.0);
             this.groundY = globals.scnPlay.bgS.GroundCross(chk) + 12.5;
             if (!this.noFollowGround)
@@ -4673,12 +4671,6 @@ export class d_a_ff extends fopAc_ac_c {
                 mDoExt_modelUpdateDL(globals, this.model[1], renderInstManager, viewerInput, globals.dlst.effect);
             }
         }
-
-        // vec3.copy(scratchVec3a, this.pos);
-        // scratchVec3a[1] = this.groundY;
-        // drawWorldSpaceLine(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, scratchVec3a);
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a, (this.pos[1] - this.groundY).toFixed(2));
-        // drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a, `${this.glowScale.toFixed(2)} ${this.glowScaleY.toFixed(2)}`, 20);
     }
 }
 

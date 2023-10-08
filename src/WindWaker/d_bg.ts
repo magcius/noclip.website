@@ -180,20 +180,6 @@ class cBgW_NodeTree {
     public aabb = new AABB();
 }
 
-class cBgS_GrpPassChk {
-    public attr: number;
-}
-
-class cBgS_PolyPassChk {
-    public objThrough: boolean = false;
-    public camThrough: boolean = false;
-    public linkThrough: boolean = false;
-    public arrowThrough: boolean = false;
-    public bombThrough: boolean = false;
-    public boomerangThrough: boolean = false;
-    public ropeThrough: boolean = false;
-}
-
 class cBgS_PolyInfo {
     public triIdx: number = -1;
     public bgIdx: number = -1;
@@ -212,8 +198,8 @@ class cBgS_Chk {
     public polyInfo = new cBgS_PolyInfo();
     public processId: number = -1;
     public excludeSameProcessId: boolean = true;
-    public grpPassChk: cBgS_GrpPassChk | null = null;
-    public polyPassChk: cBgS_PolyPassChk | null = null;
+    public grpPassChk: unknown | null = null;
+    public polyPassChk: unknown | null = null;
 
     public ChkSameActorPid(pid: number): boolean {
         if (this.processId !== -1 && pid !== -1 && this.excludeSameProcessId)
@@ -225,14 +211,12 @@ class cBgS_Chk {
         this.polyInfo.Reset();
         this.processId = -1;
         this.excludeSameProcessId = true;
-        this.grpPassChk = null;
-        this.polyPassChk = null;
     }
 }
 
-export class cBgS_GndChk extends cBgS_Chk {
+class cBgS_GndChk extends cBgS_Chk {
     public pos = vec3.create();
-    public flags: number = 0;
+    public flags: number = 0x03;
     public retY: number = -Infinity;
     public searchGnd: boolean = true;
     public searchWall: boolean = true;
@@ -641,11 +625,11 @@ class cBgW {
     }
 
     // Base class. Overridden by dBgW.
-    protected ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
+    protected ChkGrpThrough(grpIdx: number, chk: unknown | null, depth: number): boolean {
         return false;
     }
 
-    protected ChkPolyThrough(grpIdx: number, chk: cBgS_PolyPassChk | null): boolean {
+    protected ChkPolyThrough(grpIdx: number, chk: unknown | null): boolean {
         return false;
     }
 }
@@ -663,44 +647,102 @@ function cM3d_CrossY_Tri_Front(p1: vec3, p2: vec3, p3: vec3, pos: vec3): boolean
     );
 }
 
+class dBgS_PolyPassChk {
+    public Obj: boolean = false;
+    public Cam: boolean = false;
+    public Link: boolean = false;
+    public Arrow: boolean = false;
+    public Bomb: boolean = false;
+    public Boomerang: boolean = false;
+    public Rope: boolean = false;
+
+    public SetObj(): void { this.Obj = true; }
+    public SetCam(): void { this.Cam = true; }
+    public SetLink(): void { this.Link = true; }
+    public SetArrow(): void { this.Arrow = true; }
+    public SetBomb(): void { this.Bomb = true; }
+    public SetBoomerang(): void { this.Boomerang = true; }
+    public SetRope(): void { this.Rope = true; }
+}
+
+class dBgS_GrpPassChk {
+    public grp: number = 0x01;
+
+    public OnNormalGrp(): void { this.grp |= 0x01; }
+    public OnWaterGrp(): void { this.grp |= 0x02; }
+    public OnYoganGrp(): void { this.grp |= 0x04; }
+    public OnDokuGrp(): void { this.grp |= 0x08; }
+    public OnSpl(): void { this.grp |= 0x0E; }
+    public OnAll(): void { this.grp |= 0x0F; }
+    public OnLightGrp(): void { this.grp |= 0x10; }
+
+    public OffNormalGrp(): void { this.grp &= ~0x01; }
+    public OffWaterGrp(): void { this.grp &= ~0x02; }
+    public OffFullGrp(): void { this.grp &= ~0x0F; }
+
+    public MaskNormalGrp(): boolean { return !!(this.grp & 0x01); }
+    public MaskWaterGrp(): boolean { return !!(this.grp & 0x02); }
+    public MaskYoganGrp(): boolean { return !!(this.grp & 0x04); }
+    public MaskDokuGrp(): boolean { return !!(this.grp & 0x08); }
+    public MaskLightGrp(): boolean { return !!(this.grp & 0x10); }
+}
+
+export class dBgS_GndChk extends cBgS_GndChk {
+    constructor() {
+        super();
+        this.polyPassChk = new dBgS_PolyPassChk();
+        this.grpPassChk = new dBgS_GrpPassChk();
+    }
+
+    public GetPolyPassChkInfo(): dBgS_PolyPassChk { return this.polyPassChk as dBgS_PolyPassChk; }
+    public GetGrpPassChkInfo(): dBgS_GrpPassChk { return this.grpPassChk as dBgS_GrpPassChk; }
+}
+
+export class dBgS_ObjGndChk extends dBgS_GndChk {
+    constructor() {
+        super();
+        this.GetPolyPassChkInfo().SetObj();
+    }
+}
+
 export class dBgW extends cBgW {
-    protected override ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
-        if (depth === 2 && chk !== null) {
+    protected override ChkGrpThrough(grpIdx: number, chk_: unknown, depth: number): boolean {
+        if (depth === 2 && chk_ !== null) {
+            const chk = chk_ as dBgS_GrpPassChk;
             const attr = this.dt.grpTbl[grpIdx].attr;
-            if (!(attr & 0x80700) && !!(chk.attr & 0x01))
+            if (!(attr & 0x80700) && chk.MaskNormalGrp())
                 return false;
-
-            if (!!(attr & 0x00100) && !!(chk.attr & 0x02))
+            if (!!(attr & 0x00100) && chk.MaskWaterGrp())
                 return false;
-            if (!!(attr & 0x00200) && !!(chk.attr & 0x04))
+            if (!!(attr & 0x00200) && chk.MaskYoganGrp())
                 return false;
-            if (!!(attr & 0x00400) && !!(chk.attr & 0x08))
+            if (!!(attr & 0x00400) && chk.MaskDokuGrp())
                 return false;
-            if (!!(attr & 0x80000) && !!(chk.attr & 0x10))
+            if (!!(attr & 0x80000) && chk.MaskLightGrp())
                 return false;
-
             return true;
         }
 
         return false;
     }
 
-    protected override ChkPolyThrough(triIdx: number, chk: cBgS_PolyPassChk | null): boolean {
-        if (chk !== null) {
+    protected override ChkPolyThrough(triIdx: number, chk_: unknown | null): boolean {
+        if (chk_ !== null) {
+            const chk = chk_ as dBgS_PolyPassChk;
             const inf = this.dt.infTbl[this.dt.triTbl[triIdx].infIdx];
-            if (chk.objThrough && !!(inf.passFlag & dBgW__PassFlag.ObjThrough))
+            if (chk.Obj && !!(inf.passFlag & dBgW__PassFlag.ObjThrough))
                 return true;
-            if (chk.camThrough && !!(inf.passFlag & dBgW__PassFlag.CamThrough))
+            if (chk.Cam && !!(inf.passFlag & dBgW__PassFlag.CamThrough))
                 return true;
-            if (chk.linkThrough && !!(inf.passFlag & dBgW__PassFlag.LinkThrough))
+            if (chk.Link && !!(inf.passFlag & dBgW__PassFlag.LinkThrough))
                 return true;
-            if (chk.arrowThrough && !!(inf.passFlag & dBgW__PassFlag.ArrowThrough))
+            if (chk.Arrow && !!(inf.passFlag & dBgW__PassFlag.ArrowThrough))
                 return true;
-            if (chk.bombThrough && !!(inf.passFlag & dBgW__PassFlag.BombThrough))
+            if (chk.Bomb && !!(inf.passFlag & dBgW__PassFlag.BombThrough))
                 return true;
-            if (chk.boomerangThrough && !!(inf.passFlag & dBgW__PassFlag.BoomerangThrough))
+            if (chk.Boomerang && !!(inf.passFlag & dBgW__PassFlag.BoomerangThrough))
                 return true;
-            if (chk.ropeThrough && !!(inf.passFlag & dBgW__PassFlag.RopeThrough))
+            if (chk.Rope && !!(inf.passFlag & dBgW__PassFlag.RopeThrough))
                 return true;
         }
 

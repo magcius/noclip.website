@@ -19,7 +19,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/rend
 import { ViewerRenderInput } from '../viewer.js';
 import { colorCopy, colorFromRGBA } from '../Color.js';
 import { dKy_GxFog_set } from './d_kankyo.js';
-import { cBgS_GndChk } from './d_bg.js';
+import { dBgS_GndChk } from './d_bg.js';
 import { getMatrixTranslation } from '../MathHelpers.js';
 import { cM__Short2Rad } from './SComponent.js';
 
@@ -112,7 +112,7 @@ const materialParams = new MaterialParams();
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
 
-const chk = new cBgS_GndChk();
+const chk = new dBgS_GndChk();
 function checkGroundY(globals: dGlobals, roomIdx: number, pos: vec3) {
     chk.Reset();
     vec3.copy(chk.pos, pos);

@@ -17,9 +17,9 @@ import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTev
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA.js';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework.js';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera.js';
-import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
-import { cBgS_GndChk } from './d_bg.js';
+import { dBgS_GndChk } from './d_bg.js';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -38,7 +38,7 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
         actor.pos![0], actor.pos![1], actor.pos![2]);
 }
 
-const chk = new cBgS_GndChk();
+const chk = new dBgS_GndChk();
 
 // "Legacy actor" for noclip
 class d_a_noclip_legacy extends fopAc_ac_c {

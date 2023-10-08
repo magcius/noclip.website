@@ -153,7 +153,7 @@ void main() {
         for (let i = 0; i < frame.results.length; i++) {
             // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
             const attachmentX = (((frame.entryX[i] * 0.5) + 0.5) * width) | 0;
-            const attachmentY = (((frame.entryX[i] * 0.5) + 0.5) * height) | 0;
+            const attachmentY = (((frame.entryY[i] * 0.5) + 0.5) * height) | 0;
             device.readPixelFromTexture(frame.readback, i, depthColorTexture, attachmentX, attachmentY);
         }
 
