@@ -1475,9 +1475,20 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // House door
     else if (actorName === 'KNOB00') fetchArchive(`Knob`).then((rarc) => {
-        const m = buildModel(rarc, `bdl/door_a.bdl`);
+        const shapeType = (actor.parameters >>> 20) & 0xFF;
+        const models = [
+            `bdl/door_a.bdl`,
+            `bdl/door_b.bdl`,
+            `bdl/door_c.bdl`,
+            `bdl/door_d.bdl`,
+            `bdl/door_e.bdl`,
+            `bdl/door_f.bdl`,
+            `bdl/door_g.bdl`,
+            `bdl/door_h.bdl`,
+        ];
+        const m = buildModel(rarc, models[shapeType]);
         m.bindANK1(parseBCK(rarc, `bck/dooropenbdoor.bck`), animFrame(0));
-        m.lightTevColorType = LightType.BG0;
+        m.lightTevColorType = shapeType == 5 ? LightType.Actor : LightType.BG0;
     });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
@@ -1692,16 +1703,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             }
         });
         else if (figureId >= 0x29 && figureId <= 0x40) fetchArchive(`Figure2`).then((rarc) => {
-            // Nintendo is REALLY cool.
             if (figureId === 61) {
                 buildModel(rarc, `bdlm/${baseFilename}.bdl`).modelMatrix[13] += 100;
             } else {
                 buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
             }
-
-            // TODO(jstpierre): What are Figure2a/b for? 
-            // fetchArchive(`Figure2a`).then((rarc) => console.log("2a", rarc));
-            // fetchArchive(`Figure2b`).then((rarc) => console.log("2b", rarc));
         });
         // Dragon Roost Island
         else if (figureId >= 0x41 && figureId <= 0x52) fetchArchive(`Figure3`).then((rarc) => {
@@ -1719,8 +1725,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         else if (figureId >= 0x74 && figureId < 0xFF) fetchArchive(`Figure6`).then((rarc) => {
             buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
         });
-    } else if (actorName === 'KNOB00') {
-        // Doors: TODO(jstpierre)
     } else if (actorName === 'Salvage' || actorName === 'Salvag2' || actorName === 'SalvagE' || actorName === 'SalvagN' || actorName === 'SalvFM') {
         // Under-water treasure points. Perhaps spawn at some point?
     } else if (actorName === 'woodb' || actorName === 'woodbx') {
