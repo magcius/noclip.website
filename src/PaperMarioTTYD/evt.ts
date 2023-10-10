@@ -950,10 +950,16 @@ export class evtmgr {
     }
 
     private execevt(evt: evt_exec): void {
+        let instCount = 0;
+
         while (evt.state === evt_state.running || evt.state === evt_state.userfuncblock) {
             this.execone(evt);
 
             if (evt.state !== evt_state.running)
+                break;
+
+            // Yield to another thread, for now.
+            if (instCount++ > 1000)
                 break;
         }
 

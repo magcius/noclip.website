@@ -336,7 +336,7 @@ class NodeInstance {
 
             const indexBias = this.childIndex * 0.01;
             const camera = viewerInput.camera, far = camera.far, near = camera.near;
-            const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
+            const depthBias = 1.0 + (indexBias * 2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
                 let offs = template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
