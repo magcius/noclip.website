@@ -1824,8 +1824,8 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
                 eff.emitter.globalColorPrm.a = 0.0;
                 // Modification for noclip: Increase the scale to reduce aliasing.
                 effScale *= 1.8;
-                vec3.set(eff.emitter.globalScale, effScale, effScale, effScale);
-                eff.emitter.setGlobalScale(eff.emitter.globalScale);
+                vec3.set(eff.emitter.globalDynamicsScale, effScale, effScale, effScale);
+                eff.emitter.setGlobalScale(eff.emitter.globalDynamicsScale);
 
                 eff.state = 1;
 

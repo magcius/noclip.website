@@ -145,7 +145,7 @@ export class dPa_control_c {
         if (rot !== null)
             computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
         if (scale !== null) {
-            vec3.copy(baseEmitter.globalScale, scale);
+            vec3.copy(baseEmitter.globalDynamicsScale, scale);
             vec2.set(baseEmitter.globalParticleScale, scale[0], scale[1]);
         }
 
@@ -213,7 +213,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
         if (this.state === 0) {
             vec3.copy(emitter.globalTranslation, this.pos);
             const scale = Math.min(this.scaleTimer / this.maxScaleTimer, 1.0);
-            vec3.set(emitter.globalScale, scale, scale, scale);
+            vec3.set(emitter.globalDynamicsScale, scale, scale, scale);
             vec2.set(emitter.globalParticleScale, scale, scale);
             emitter.directionalSpeed = 15.0 * scale;
             computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]), 0.0);
@@ -222,7 +222,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             if (scale <= 0.0) {
                 this.remove();
             } else {
-                vec3.set(emitter.globalScale, scale, scale, scale);
+                vec3.set(emitter.globalDynamicsScale, scale, scale, scale);
                 vec2.set(emitter.globalParticleScale, scale, scale);
                 emitter.directionalSpeed = 15.0 * scale;
             }

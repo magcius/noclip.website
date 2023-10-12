@@ -174,10 +174,10 @@ class ParticleEmitter {
     public setGlobalSRTMatrix(m: ReadonlyMat4): void {
         if (this.baseEmitter !== null) {
             getMatrixTranslation(this.baseEmitter.globalTranslation, m);
-            this.baseEmitter.globalScale[0] = Math.hypot(m[0], m[4], m[8]);
-            this.baseEmitter.globalScale[1] = Math.hypot(m[1], m[5], m[9]);
-            this.baseEmitter.globalScale[2] = Math.hypot(m[2], m[6], m[10]);
-            calcRotMtx(this.baseEmitter.globalRotation, m, this.baseEmitter.globalScale);
+            this.baseEmitter.globalDynamicsScale[0] = Math.hypot(m[0], m[4], m[8]);
+            this.baseEmitter.globalDynamicsScale[1] = Math.hypot(m[1], m[5], m[9]);
+            this.baseEmitter.globalDynamicsScale[2] = Math.hypot(m[2], m[6], m[10]);
+            calcRotMtx(this.baseEmitter.globalRotation, m, this.baseEmitter.globalDynamicsScale);
         }
     }
 

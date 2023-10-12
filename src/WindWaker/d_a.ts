@@ -3571,7 +3571,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         if (this.track !== null && this.track.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
             if (emitter !== null) {
-                vec3.set(emitter.globalScale, 1.0, 1.0, 1.0);
+                vec3.set(emitter.globalDynamicsScale, 1.0, 1.0, 1.0);
                 vec2.set(emitter.globalParticleScale, 1.0, 1.0);
             }
         }
@@ -4024,7 +4024,7 @@ class d_a_oship extends fopAc_ac_c implements ModeFuncExec<d_a_oship_mode> {
         if (this.track.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
             if (emitter !== null) {
-                vec3.set(emitter.globalScale, 3.0, 3.0, 3.0);
+                vec3.set(emitter.globalDynamicsScale, 3.0, 3.0, 3.0);
                 vec2.set(emitter.globalParticleScale, 3.0, 3.0);
             }
         }

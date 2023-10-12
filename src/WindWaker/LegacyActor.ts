@@ -1475,7 +1475,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // House door
     else if (actorName === 'KNOB00') fetchArchive(`Knob`).then((rarc) => {
-        const shapeType = (actor.parameters >>> 20) & 0xFF;
         const models = [
             `bdl/door_a.bdl`,
             `bdl/door_b.bdl`,
@@ -1486,6 +1485,9 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             `bdl/door_g.bdl`,
             `bdl/door_h.bdl`,
         ];
+        let shapeType = (actor.parameters >>> 20) & 0xFF;
+        if (shapeType > models.length)
+            shapeType = 0;
         const m = buildModel(rarc, models[shapeType]);
         m.bindANK1(parseBCK(rarc, `bck/dooropenbdoor.bck`), animFrame(0));
         m.lightTevColorType = shapeType == 5 ? LightType.Actor : LightType.BG0;

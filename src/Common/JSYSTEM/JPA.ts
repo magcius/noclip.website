@@ -902,8 +902,8 @@ export class JPAEmitterWorkData {
     public emitterGlobalDir = vec3.create();
     public emitterGlobalCenterPos = vec3.create();
     public globalRotation = mat4.create();
-    public globalScale = vec3.create();
-    public globalScale2D = vec2.create();
+    public globalDynamicsScale = vec3.create();
+    public globalParticleScale = vec2.create();
 
     public pivotX: number = 1;
     public pivotY: number = 1;
@@ -1361,7 +1361,7 @@ export class JPABaseEmitter {
 
     // These are the public APIs to affect an emitter's placement.
     public globalRotation = mat4.create();
-    public globalScale = vec3.create();
+    public globalDynamicsScale = vec3.create();
     public globalTranslation = vec3.create();
     public globalParticleScale = vec2.create();
 
@@ -1425,9 +1425,16 @@ export class JPABaseEmitter {
     }
 
     public setGlobalScale(s: ReadonlyVec3): void {
-        vec3.copy(this.globalScale, s);
-        this.globalParticleScale[0] = s[0];
-        this.globalParticleScale[1] = s[1];
+        this.setGlobalDynamicsScale(s);
+        this.setGlobalParticleScale(s);
+    }
+
+    public setGlobalDynamicsScale(s: ReadonlyVec3): void {
+        vec3.copy(this.globalDynamicsScale, s);
+    }
+
+    public setGlobalParticleScale(s: ReadonlyVec3): void {
+        vec2.set(this.globalParticleScale, s[0], s[1]);
     }
 
     public setDrawParticle(v: boolean): void {
@@ -1470,7 +1477,7 @@ export class JPABaseEmitter {
         next_rndm(this.emitterManager.workData.random);
         copy_rndm(this.random, this.emitterManager.workData.random);
         mat4.identity(this.globalRotation);
-        vec3SetAll(this.globalScale, 1);
+        vec3SetAll(this.globalDynamicsScale, 1);
         vec3.zero(this.globalTranslation);
         vec2.set(this.globalParticleScale, 1, 1);
         colorCopy(this.globalColorPrm, White);
@@ -1810,13 +1817,13 @@ export class JPABaseEmitter {
         mat4.fromScaling(scratchMatrix, this.localScale);
         mat4.mul(workData.emitterGlobalSR, workData.emitterGlobalRotation, scratchMatrix);
 
-        vec3.mul(workData.emitterGlobalScale, this.globalScale, this.localScale);
+        vec3.mul(workData.emitterGlobalScale, this.globalDynamicsScale, this.localScale);
         JPAGetDirMtx(workData.emitterDirMtx, this.localDirection);
-        vec3.copy(workData.globalScale, this.globalScale);
+        vec3.copy(workData.globalDynamicsScale, this.globalDynamicsScale);
 
         vec3.copy(workData.emitterTranslation, this.localTranslation);
 
-        mat4.fromScaling(scratchMatrix, this.globalScale);
+        mat4.fromScaling(scratchMatrix, this.globalDynamicsScale);
         mat4.mul(scratchMatrix, workData.globalRotation, scratchMatrix);
         setMatrixTranslation(scratchMatrix, this.globalTranslation);
         transformVec3Mat4w1(workData.emitterGlobalCenterPos, scratchMatrix, this.localTranslation);
@@ -1909,7 +1916,7 @@ export class JPABaseEmitter {
     }
 
     private calcEmitterGlobalPosition(v: vec3): void {
-        mat4.scale(scratchMatrix, this.globalRotation, this.globalScale);
+        mat4.scale(scratchMatrix, this.globalRotation, this.globalDynamicsScale);
         scratchMatrix[12] += this.globalTranslation[0];
         scratchMatrix[13] += this.globalTranslation[1];
         scratchMatrix[14] += this.globalTranslation[2];
@@ -1922,7 +1929,7 @@ export class JPABaseEmitter {
         if (particleCount < 2)
             return;
 
-        const globalScaleX = 25 * workData.globalScale2D[0];
+        const globalScaleX = 25 * workData.globalParticleScale[0];
         if (globalScaleX <= 0.0) {
             // Nothing to do.
             return;
@@ -2051,13 +2058,13 @@ export class JPABaseEmitter {
         const etx1 = this.resData.res.etx1;
 
         this.status &= ~JPAEmitterStatus.CHILD_DRAW;
-        vec2.mul(workData.globalScale2D, this.globalParticleScale, bsp1.baseSize);
+        vec2.mul(workData.globalParticleScale, this.globalParticleScale, bsp1.baseSize);
 
         if (bsp1.shapeType === ShapeType.Point) {
-            workData.globalScale2D[0] *= 1.02;
+            workData.globalParticleScale[0] *= 1.02;
         } else if (bsp1.shapeType === ShapeType.Line) {
-            workData.globalScale2D[0] *= 1.02;
-            workData.globalScale2D[1] *= 0.4;
+            workData.globalParticleScale[0] *= 1.02;
+            workData.globalParticleScale[1] *= 0.4;
         }
 
         // mpDrawEmitterFuncList
@@ -2136,15 +2143,15 @@ export class JPABaseEmitter {
         this.status |= JPAEmitterStatus.CHILD_DRAW;
 
         if (ssp1.isInheritedScale)
-            vec2.mul(workData.globalScale2D, this.globalParticleScale, bsp1.baseSize);
+            vec2.mul(workData.globalParticleScale, this.globalParticleScale, bsp1.baseSize);
         else
-            vec2.mul(workData.globalScale2D, this.globalParticleScale, ssp1.globalScale2D);
+            vec2.mul(workData.globalParticleScale, this.globalParticleScale, ssp1.globalScale2D);
 
         if (ssp1.shapeType === ShapeType.Point) {
-            workData.globalScale2D[0] *= 1.02;
+            workData.globalParticleScale[0] *= 1.02;
         } else if (ssp1.shapeType === ShapeType.Line) {
-            workData.globalScale2D[0] *= 1.02;
-            workData.globalScale2D[1] *= 0.4;
+            workData.globalParticleScale[0] *= 1.02;
+            workData.globalParticleScale[1] *= 0.4;
         }
 
         workData.forceTexMtxIdentity = true;
@@ -2375,9 +2382,9 @@ export class JPABaseParticle {
 
         vec3.copy(this.offsetPosition, workData.emitterGlobalCenterPos);
 
-        this.position[0] = this.offsetPosition[0] + this.localPosition[0] * workData.globalScale[0];
-        this.position[1] = this.offsetPosition[1] + this.localPosition[1] * workData.globalScale[1];
-        this.position[2] = this.offsetPosition[2] + this.localPosition[2] * workData.globalScale[2];
+        this.position[0] = this.offsetPosition[0] + this.localPosition[0] * workData.globalDynamicsScale[0];
+        this.position[1] = this.offsetPosition[1] + this.localPosition[1] * workData.globalDynamicsScale[1];
+        this.position[2] = this.offsetPosition[2] + this.localPosition[2] * workData.globalDynamicsScale[2];
 
         vec3.zero(this.baseVel);
 
@@ -2960,7 +2967,7 @@ export class JPABaseParticle {
                     workData.baseEmitter.createChild(this);
 
             vec3.scaleAndAdd(this.localPosition, this.localPosition, this.velocity, workData.deltaTime);
-            vec3.mul(this.position, this.localPosition, workData.globalScale);
+            vec3.mul(this.position, this.localPosition, workData.globalDynamicsScale);
             vec3.add(this.position, this.position, this.offsetPosition);
 
             return true;
@@ -3020,7 +3027,7 @@ export class JPABaseParticle {
             this.rotateAngle += this.rotateSpeed * workData.deltaTime;
 
             vec3.scaleAndAdd(this.localPosition, this.localPosition, this.velocity, workData.deltaTime);
-            vec3.mul(this.position, this.localPosition, workData.globalScale);
+            vec3.mul(this.position, this.localPosition, workData.globalDynamicsScale);
             vec3.add(this.position, this.position, this.offsetPosition);
 
             return true;
@@ -3195,8 +3202,8 @@ export class JPABaseParticle {
         // We model all particles below as spheres with radius 25, which should cover all bases.
         // Stripes are an exception, but they are handled separately.
         if (workData.frustum !== null) {
-            const scaleX = Math.abs(this.particleScale[0] * workData.globalScale2D[0]);
-            const scaleY = Math.abs(this.particleScale[1] * workData.globalScale2D[1]);
+            const scaleX = Math.abs(this.particleScale[0] * workData.globalParticleScale[0]);
+            const scaleY = Math.abs(this.particleScale[1] * workData.globalParticleScale[1]);
             const radius = 25 * Math.max(scaleX, scaleY);
             if (!workData.frustum.containsSphere(this.position, radius))
                 return;
@@ -3219,8 +3226,8 @@ export class JPABaseParticle {
         const materialParams = workData.materialParams;
         const drawParams = workData.drawParams;
 
-        const scaleX = workData.globalScale2D[0] * this.particleScale[0];
-        const scaleY = workData.globalScale2D[1] * this.particleScale[1];
+        const scaleX = workData.globalParticleScale[0] * this.particleScale[0];
+        const scaleY = workData.globalParticleScale[1] * this.particleScale[1];
 
         if (shapeType === ShapeType.Line) {
             // Draw a line from (this.position) to (this.position - this.velocity.norm() * scaleY).

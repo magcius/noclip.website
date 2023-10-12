@@ -143,10 +143,8 @@ export class dPa_control_c {
             vec3.copy(baseEmitter.globalTranslation, pos);
         if (rot !== null)
             computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
-        if (scale !== null) {
-            vec3.copy(baseEmitter.globalScale, scale);
-            vec2.set(baseEmitter.globalParticleScale, scale[0], scale[1]);
-        }
+        if (scale !== null)
+            baseEmitter.setGlobalScale(scale);
 
         if (colorPrm !== null)
             colorCopy(baseEmitter.globalColorPrm, colorPrm);
