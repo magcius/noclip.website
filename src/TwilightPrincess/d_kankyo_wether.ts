@@ -928,107 +928,120 @@ export class dKankyo_vrkumo_Packet {
 
 export class HOUSI_EFF {
     public initialized = false;
-    public status: number;
-    public position = vec3.create();
     public basePos = vec3.create();
-    public speed: number = 1.0;
-    public scale: number = 1.0;
-    public alpha: number = 1.0;
+    public pos = vec3.create();
+    public wave = vec3.create();
+    public alpha = 0.0;
+    public speed = 0.0;
+    public resetTimer = 0;
+    public alphaTimer = 0;
 };
 
 // the square twilight particle things
 export class dKankyo_housi_Packet {
-    private tex: BTIData;
-    public count: number = 0;
-    public instances: HOUSI_EFF[] = nArray(300, () => new HOUSI_EFF());
+    public eff = nArray(300, () => new HOUSI_EFF());
+    public alpha = 0.0;
+    public count = 0;
+    public rot = 0.0;
+    
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
-    public rot: number = 0.0;
+
+    private texData: BTIData;
 
     constructor(globals: dGlobals) {
-        this.tex = assertExists(globals.resCtrl.getObjectRes(ResType.Bti, `Always`, 0x56));
-
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
 
         const mb = new GXMaterialBuilder();
-        // noclip modification: Use VTX instead of separate draw calls for the color.
-        //mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-
+        mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.C1, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorIn(0, GX.CC.C1, GX.CC.C0, GX.CC.TEXC, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_housi_Packet'));
+
+        const resCtrl = globals.resCtrl;
+        this.texData = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x5E);
     }
 
-    public drawHousi(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const envLight = globals.g_env_light;
-        const ddraw = this.ddraw;
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.count === 0)
+            return;
 
+        const ddraw = this.ddraw;
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
 
-        let c1 = colorNewFromRGBA8(0xE5FFC800 | (120.0 & 0xFF));
-        let c2 = colorNewFromRGBA8(0x43D2CAFF);
+        ddraw.beginDraw(globals.modelCache.cache);
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * this.count);
 
-        if (dKy_darkworld_check(globals) || globals.stageName === "D_MN08") {
-            c2 = colorNewFromRGBA8(0x000000FF);
-        }
+        for (let i = 0; i < this.count; i++) {
+            const eff = this.eff[i];
+            mat4.rotateY(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * this.rot);
 
-        colorCopy(materialParams.u_Color[ColorKind.C0], c1);
-        colorCopy(materialParams.u_Color[ColorKind.C1], c2);
+            vec3.add(scratchVec3a, eff.basePos, eff.pos);
 
-        this.tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            const alpha = eff.alpha * 0xFF;
 
-        for (let i = 0; i < envLight.housiCount; i++) {
-            const housi = this.instances[i];
-            vec3.add(scratchVec3, housi.basePos, housi.position);
+            const sx = Math.sin(eff.wave[0] * 5.0) * 0.2;
+            const sy = Math.sin(eff.wave[1] * 6.0) * 0.2;
+            const baseSize = 9.0;
 
-            materialParams.u_Color[ColorKind.C0].a = housi.alpha;
-
-            // basePos
-            vec3.add(scratchVec3, housi.basePos, housi.position);
-            const dist = vec3.distance(scratchVec3, globals.cameraPosition);
-
-            ddraw.begin(GX.Command.DRAW_QUADS, 4 * 5 * this.count);
-
+            vec3.set(scratchVec3, baseSize - sx, baseSize - sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
             ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
+            vec3.set(scratchVec3, -baseSize + sx, baseSize + sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
             ddraw.position3vec3(scratchVec3);
-            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 0);
 
+            vec3.set(scratchVec3, -baseSize - sx, -baseSize + sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
             ddraw.position3vec3(scratchVec3);
-            ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 2);
 
+            vec3.set(scratchVec3, baseSize + sx, -baseSize - sy, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
             ddraw.position3vec3(scratchVec3);
-            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-
-            ddraw.end();
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 2);
         }
+
+        ddraw.end();
+        ddraw.endDraw(renderInstManager);
 
         if (ddraw.hasIndicesToDraw()) {
             const renderInst = ddraw.makeRenderInst(renderInstManager);
+            this.texData.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xE5FFC8FF);
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x43D2CAFF);
+
+            if (dKy_darkworld_check(globals) || globals.stageName === "D_MN08") {
+                colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 120.0 / 0xFF);
+                colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF);
+            }
+
             submitScratchRenderInst(renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
-    }
-
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const envLight = globals.g_env_light;
-
-        if (envLight.housiCount === 0)
-            return;
-
-        this.ddraw.beginDraw(globals.modelCache.cache);
-        this.drawHousi(globals, renderInstManager, viewerInput);
-        this.ddraw.endDraw(renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1820,49 +1833,99 @@ function wether_move_housi(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
 
     const stageName = globals.stageName;
-    if (!dKy_darkworld_check(globals) || stageName !== "D_MN08") {
-        envLight.housiCount = 0;
+    if (stageName === "D_MN08A" || stageName === "D_MN08B" || stageName === "D_MN08C") {
         return;
     }
 
-    if (envLight.housiCount === 0)
+    if (dKy_darkworld_check(globals)) {
+        envLight.housiCount = 200;
+    } else {
+        envLight.housiCount = 0;
+    }
+
+    if (envLight.housiCount === 0 && envLight.housiPacket === null)
         return;
 
     if (envLight.housiPacket === null)
         envLight.housiPacket = new dKankyo_housi_Packet(globals);
 
     const pkt = envLight.housiPacket;
-
-    if (envLight.housiCount > pkt.count)
+    if (envLight.housiCount !== 0 || pkt.alpha <= 0)
         pkt.count = envLight.housiCount;
+
+    pkt.alpha = cLib_addCalc(pkt.alpha, envLight.housiCount > 0.0 ? 1.0 : 0.0, 0.2 * deltaTimeFrames, 0.05, 0.01);
 
     if (pkt.count === 0)
         return;
 
-    for (let i = 0; i < pkt.count; i++) {
-        const housi = pkt.instances[i];
+        dKyw_get_wind_vecpow(scratchVec3b, envLight);
 
-        // testing...
-        if (housi.initialized) {
-            housi.position[0] += deltaTimeFrames * 20.0;
-            housi.position[1] += deltaTimeFrames * 20.0;
-            housi.position[2] += deltaTimeFrames * 20.0;
-        } else {
-            vec3.copy(housi.basePos, scratchVec3);
-            vec3.set(housi.position, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
-            housi.alpha = 1.0;
-            housi.initialized = true;
+        if (dKy_darkworld_check(globals) || stageName === "D_MN08") {
+            scratchVec3b[0] = 0.0;
+            scratchVec3b[1] = 2.8;
+            scratchVec3b[2] = 0.0;
         }
 
-        let alpha = 1.0;
+        dKy_set_eyevect_calc2(globals, scratchVec3a, 800.0);
+        pkt.rot += (1.2 * deltaTimeFrames) * 0.1;
 
-        housi.alpha = alpha;
-    }
-
-    if (envLight.housiCount < pkt.count)
-        pkt.count = envLight.housiCount;
-
-    pkt.rot += deltaTimeFrames;
+        for (let i = 0; i < pkt.count; i++) {
+            const eff = pkt.eff[i];
+            if (!eff.initialized) {
+                eff.alphaTimer = cM_rndFX(0x10000);
+                eff.speed = 0.2 + cM_rndF(1.5);
+    
+                vec3.copy(eff.basePos, scratchVec3a);
+                vec3.set(eff.pos, cM_rndFX(1000.0), cM_rndFX(1000.0), cM_rndFX(1000.0));
+                eff.alpha = 0.0;
+    
+                eff.wave[0] = cM_rndF(MathConstants.TAU);
+                eff.wave[1] = cM_rndF(MathConstants.TAU);
+                eff.wave[2] = cM_rndF(MathConstants.TAU);
+    
+                const posY = eff.pos[1] + eff.basePos[1];
+                if (posY < -100149.9)
+                    eff.pos[1] = (-99999.9 - posY) + 10.0;
+    
+                eff.initialized = true;
+            }
+    
+            vec3.scaleAndAdd(eff.pos, eff.pos, scratchVec3b, 5.0 * eff.speed * deltaTimeFrames);
+            eff.pos[1] -= 0.6 * eff.speed * deltaTimeFrames;
+    
+            eff.pos[0] += Math.sin(eff.wave[0]) * eff.speed * deltaTimeFrames;
+            eff.pos[1] += Math.sin(eff.wave[1]) * eff.speed * 0.5 * deltaTimeFrames;
+            eff.pos[2] += Math.sin(eff.wave[2]) * eff.speed * deltaTimeFrames;
+    
+            eff.wave[0] += 0.03 * deltaTimeFrames;
+            eff.wave[1] += 0.02 * deltaTimeFrames;
+            eff.wave[2] += 0.01 * deltaTimeFrames;
+    
+            vec3.add(scratchVec3c, eff.basePos, eff.pos);
+            // pntwind
+    
+            if (eff.resetTimer === 0) {
+                if (vec3.distance(scratchVec3c, scratchVec3a) > 1000.0 || scratchVec3c[1] < -99980.0) {
+                    eff.resetTimer = 10;
+    
+                    vec3.copy(eff.basePos, scratchVec3a);
+                    if (vec3.distance(scratchVec3c, scratchVec3a) > 1050.0) {
+                        vec3.set(eff.pos, cM_rndFX(1000.0), cM_rndFX(1000.0), cM_rndFX(1000.0));
+                    } else {
+                        dKyr_get_vectle_calc(scratchVec3c, scratchVec3a, scratchVec3d);
+                        vec3.scale(eff.pos, scratchVec3d, 1000.0 * cM_rndFX(50.0));
+                    }
+                }
+            } else {
+                eff.resetTimer--;
+            }
+    
+            eff.alphaTimer += 600 * deltaTimeFrames;
+            eff.alphaTimer = eff.alphaTimer % 0x10000;
+    
+            const alpha = eff.alphaTimer >= 30000 ? 0.0 : pkt.alpha;
+            eff.alpha = cLib_addCalc(eff.alpha, alpha, 0.5 * deltaTimeFrames, 0.02, 0.00001);
+        }
 }
 
 function wether_move_moya(globals: dGlobals): void {

@@ -149,7 +149,7 @@ export class stage_vrbox_info_class {
         colorFromRGB8(this.kumoCol, view.getUint32(0x03));
         colorFromRGB8(this.shitaGumoCol, view.getUint32(0x06));
         colorFromRGB8(this.shimoUneiCol, view.getUint32(0x09));
-        this.kumoCol.a = view.getUint8(0x0B) / 0xFF;
+        this.kumoCol.a = view.getUint8(0x0C) / 0xFF;
         colorFromRGBA8(this.kasumiCol, view.getUint32(0x0D));
         colorFromRGBA8(this.okuKasumiCol, view.getUint32(0x11));
         return 0x15;

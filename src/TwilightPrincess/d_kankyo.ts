@@ -683,6 +683,13 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
         envLight.actorAmbCol.r = 1;
         envLight.actorAmbCol.g = 0;
         envLight.actorAmbCol.b = 0;
+
+        for (let i = 0; i < 4; i++) {
+            envLight.bgAmbCol[i].r = 1;
+            envLight.bgAmbCol[i].g = 0;
+            envLight.bgAmbCol[i].b = 0;
+            envLight.bgAmbCol[i].a = 0;
+        }
     } else {
         dKy_calc_color_set(envLight, envLight.actorAmbCol, ret.palePrevA.actorAmbCol, ret.palePrevB.actorAmbCol, ret.paleCurrA.actorAmbCol, ret.paleCurrB.actorAmbCol, ret.blendPaleAB, envLight.colpatBlend, null, envLight.unk_1210 * envLight.actAmbColRatio * envLight.actAmbColRatio);
 
@@ -1452,10 +1459,6 @@ function drawKankyo(globals: dGlobals): void {
     SetBaseLight(globals);
     setLight(globals, envLight);
     dKy_setLight_nowroom(globals, globals.mStayNo);
-
-    if (globals.stageName === "D_MN08") {
-        envLight.housiCount = 200;
-    }
 }
 
 export function dKy_checkEventNightStop(globals: dGlobals): boolean {
@@ -2547,8 +2550,6 @@ class d_kankyo extends kankyo_class {
         // temporary until some better setup for handling twilight layers is done
         if (globals.stageName.startsWith("D_MN08")) {
             globals.world_dark = true;
-        } else {
-            globals.world_dark = false;
         }
 
         exeKankyo(globals, globals.g_env_light, deltaTimeFrames);
