@@ -418,7 +418,6 @@ export type GfxPass = GfxRenderPass | GfxComputePass;
  * 
  * To upload data to the GPU, call either {@see uploadBufferData} or {@see uploadTextureData}. Note that
  * this happens on the GPU timeline. Where possible, do try to upload data at the beginning of the frame.
- * There might be additional support for more passes in the future.
  */
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
