@@ -371,13 +371,13 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
     }
 }
 
-const triangleScratch = new Triangle();
 function getPolygonOnRailPoint(sceneObjHolder: SceneObjHolder, dstPos: vec3, dstNrm: vec3, actor: LiveActor, pointIdx: number): void {
     calcRailPointPos(dstPos, actor, pointIdx);
     calcGravityVector(sceneObjHolder, actor, dstPos, dstNrm);
     vec3.scale(dstNrm, dstNrm, 2000.0);
-    if (getFirstPolyOnLineToMapExceptSensor(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm, actor.getSensor('body')!))
-        vec3.copy(dstNrm, triangleScratch.faceNormal);
+    const triangle = new Triangle();
+    if (getFirstPolyOnLineToMapExceptSensor(sceneObjHolder, dstPos, triangle, dstPos, dstNrm, actor.getSensor('body')!))
+        vec3.copy(dstNrm, triangle.faceNormal);
     else
         vec3.normalize(dstNrm, dstNrm);
 }

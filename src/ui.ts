@@ -312,7 +312,8 @@ export abstract class ScrollSelect implements Widget {
 
     public setItems(items: ScrollSelectItem[]): void {
         this.scrollContainer.style.display = (items.length > 0) ? '' : 'none';
-        this.scrollContainer.innerHTML = '';
+        while (this.scrollContainer.firstChild)
+            this.scrollContainer.removeChild(this.scrollContainer.firstChild);
         let hasHeader = false;
         for (let i = 0; i < items.length; i++) {
             const item = items[i];

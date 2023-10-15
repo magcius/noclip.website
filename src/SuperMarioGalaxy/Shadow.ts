@@ -45,7 +45,6 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
 const scratchMat4b = mat4.create();
-const scratchTriangle = new Triangle();
 class ShadowController {
     public shadowDrawer: ShadowDrawer;
     public isProjected = false;
@@ -267,12 +266,13 @@ class ShadowController {
         vec3.scaleAndAdd(scratchVec3a, scratchVec3a, dropDir, -this.dropStartOffset);
         vec3.scale(scratchVec3b, dropDir, this.dropLength + this.dropStartOffset);
 
+        const triangle = new Triangle();
         const category: CollisionKeeperCategory = this.dropType === DropType.Surface ? CollisionKeeperCategory.WaterSurface : CollisionKeeperCategory.Map;
-        this.isProjected = getFirstPolyOnLineCategory(sceneObjHolder, this.projectionPosFix, scratchTriangle, scratchVec3a, scratchVec3b, null, this.partsFilter, category);
+        this.isProjected = getFirstPolyOnLineCategory(sceneObjHolder, this.projectionPosFix, triangle, scratchVec3a, scratchVec3b, null, this.partsFilter, category);
 
         if (this.isProjected) {
-            vec3.copy(this.projectionNrmFix, scratchTriangle.faceNormal);
-            this.triHitSensor = scratchTriangle.hitSensor;
+            vec3.copy(this.projectionNrmFix, triangle.faceNormal);
+            this.triHitSensor = triangle.hitSensor;
         } else {
             this.triHitSensor = null;
         }

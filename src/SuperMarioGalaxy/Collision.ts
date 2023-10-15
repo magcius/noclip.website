@@ -23,6 +23,12 @@ export class Triangle {
     public pos2 = vec3.create();
     public faceNormal = vec3.create();
 
+    public clear() {
+        this.collisionParts = null;
+        this.prism = null;
+        this.hitSensor = null;
+    }
+
     public calcForceMovePower(dst: vec3, pos: ReadonlyVec3): void {
         this.collisionParts!.calcForceMovePower(dst, pos);
     }
@@ -1248,6 +1254,10 @@ export class Binder {
         this.floorHitInfo.distance = -99999.0;
         this.wallHitInfo.distance = -99999.0;
         this.ceilingHitInfo.distance = -99999.0;
+
+        if (this.hitInfos === scratchHitInfo)
+            for (let i = 0; i < scratchHitInfo.length; i++)
+                scratchHitInfo[i].clear();
     }
 
     public setTriangleFilter(filter: TriangleFilterFunc | null): void {
