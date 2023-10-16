@@ -3447,7 +3447,7 @@ export class StudioPanel extends FloatingPanel {
                 const fileContents = await this.loadFile(input.files.item(0) as File);
                 const obj = JSON.parse(fileContents);
                 let animation;
-                if (this.isValidAnimationObj(obj.animation)) {
+                if (this.isValidAnimationObj(obj)) {
                     animation = obj.animation;
                 } else if (this.isBlenderCameraData(obj)) {
                     animation = this.parseBlenderCameraData(obj);
