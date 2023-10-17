@@ -1,6 +1,6 @@
 
 import { ReadonlyVec3, mat4, quat, vec2, vec3 } from "gl-matrix";
-import { Green, Magenta, Red, TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { TransparentBlack, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelData, J3DModelInstance, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA.js";
@@ -46,10 +46,10 @@ class d_a_grass extends fopAc_ac_c {
     static kSpawnPatterns = [
         { group: 0, count: 1 },
         { group: 0, count: 7 },
-        { group: 1, count: 15 },
+        { group: 1, count: 21 },
         { group: 2, count: 3 },
         { group: 3, count: 7 },
-        { group: 4, count: 11 },
+        { group: 4, count: 17 },
         { group: 5, count: 7 },
         { group: 6, count: 5 },
     ];
@@ -73,7 +73,7 @@ class d_a_grass extends fopAc_ac_c {
             [33, 0, -56],
             [83, 0, -27],
             [-120, 0, -26],
-            [-18, 0, -65],
+            [-18, 0, -74],
             [-20, 0, -21],
             [-73, 0, 1],
             [-67, 0, -102],
