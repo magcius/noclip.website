@@ -617,8 +617,6 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
     }), fullscreenMegaState);
 
-    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-
     private blitProgram: GfxProgram;
     private depthOfFieldProgram: GfxProgram;
 
@@ -628,7 +626,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         connectToSceneImageEffect(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         const linearSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
@@ -669,13 +667,6 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         if (!this.isOn())
             return;
 
-        const mainColorTargetDesc = builder.getRenderTargetDescription(mainColorTargetID);
-        const targetWidth = mainColorTargetDesc.width >> 2;
-        const targetHeight = mainColorTargetDesc.height >> 2;
-        this.targetColorDesc.setDimensions(targetWidth, targetHeight, 1);
-
-        const downsampleColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Depth of Field Simple Downsample');
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
         renderInst.setMegaStateFlags(fullscreenMegaState);
@@ -683,23 +674,38 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         this.allocateParameterBuffer(renderInst);
         renderInst.drawPrimitives(3);
 
-        // Downsample.
-        builder.pushPass((pass) => {
-            pass.setDebugName('Depth of Field Downsample');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+        let targetDesc = builder.getRenderTargetDescription(mainColorTargetID);
+        let downsampleColorTargetID: GfxrRenderTargetID;
 
-            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
-            pass.attachResolveTexture(mainColorResolveTextureID);
+        for (let i = 0; i < 2; i++) {
+            const targetWidth = targetDesc.width >> 1;
+            const targetHeight = targetDesc.height >> 1;
 
-            pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(this.blitProgram);
-                renderInst.setMegaStateFlags(fullscreenMegaState);
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                this.textureMapping[1].gfxTexture = null;
-                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            targetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+            targetDesc.setDimensions(targetWidth, targetHeight, 1);
+
+            let srcColorTargetID = (i === 0) ? mainColorTargetID : downsampleColorTargetID!;
+            downsampleColorTargetID = builder.createRenderTargetID(targetDesc, `Depth of Field Simple Downsample ${i}`);
+
+            // Downsample.
+            builder.pushPass((pass) => {
+                pass.setDebugName(`Depth of Field Downsample ${i}`);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+
+                const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
+                pass.attachResolveTexture(srcResolveTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    renderInst.setGfxProgram(this.blitProgram);
+                    renderInst.setMegaStateFlags(fullscreenMegaState);
+                    this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                    this.textureMapping[1].gfxTexture = null;
+                    renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                    renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+                });
             });
-        });
+            builder.pushDebugThumbnail(downsampleColorTargetID);
+        }
 
         // Combine.
         builder.pushPass((pass) => {
@@ -720,7 +726,6 @@ export class DepthOfFieldBlur extends ImageEffectBase {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-        builder.pushDebugThumbnail(resultBlendTargetID);
     }
 }
 
