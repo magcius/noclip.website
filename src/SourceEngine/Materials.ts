@@ -1749,15 +1749,15 @@ vec4 SeamlessSampleTex(PD_SAMPLER_2D(t_Texture), in bool t_UseSeamless, in vec2 
 
 float CalcShadowPCF9(PD_SAMPLER_2DShadow(t_TextureDepth), in vec3 t_ProjCoord) {
     float t_Res = 0.0;
-    t_Res += texture(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0,  1)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 0, -1)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 1,  0)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2(-1,  0)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 1,  1)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2( 1, -1)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2(-1,  1)) * (1.0 / 9.0);
-    t_Res += textureOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, ivec2(-1, -1)) * (1.0 / 9.0);
+    t_Res += textureLod(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0,  1)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 0, -1)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 1,  0)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2(-1,  0)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 1,  1)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2( 1, -1)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2(-1,  1)) * (1.0 / 9.0);
+    t_Res += textureLodOffset(PU_SAMPLER_2DShadow(t_TextureDepth), t_ProjCoord.xyz, 0.0, ivec2(-1, -1)) * (1.0 / 9.0);
     return t_Res;
 }
 

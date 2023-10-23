@@ -484,14 +484,12 @@ export class BMDModelInstance {
     }
 
     public computeNormalMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        computeMatrixWithoutScale(scratchModelMatrix, this.modelMatrix);
-
         this.computeViewMatrix(dst, viewerInput);
+        computeMatrixWithoutScale(scratchModelMatrix, this.modelMatrix);
+        mat4.mul(dst, dst, scratchModelMatrix);
         dst[12] = 0;
         dst[13] = 0;
         dst[14] = 0;
-
-        mat4.mul(dst, dst, scratchModelMatrix);
     }
 }
 
