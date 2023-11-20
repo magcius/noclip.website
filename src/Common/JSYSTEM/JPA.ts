@@ -1625,7 +1625,7 @@ export class JPABaseEmitter {
         const angle1 = (workData.volumeSweep * get_r_zh(this.random)) * MathConstants.TAU;
         const angle2 = get_r_zh(this.random) * MathConstants.TAU;
         vec3.set(workData.velAxis,
-            size * Math.sin(angle1) * Math.cos(angle2),
+            size * Math.cos(angle1) * Math.cos(angle2),
             size * Math.sin(angle2),
             size * Math.cos(angle1) * Math.sin(angle2),
         );
