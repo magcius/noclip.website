@@ -7,31 +7,31 @@ export const SIZE_OF_VERTEX = 10;
 export const SIZE_OF_TRIANGLE_FACE = 16;
 
 export interface DkrVertex {
-    x: number, y: number, z: number,    // position
-    xr: number, yg: number, zb: number, // Color / Normal
-    a: number, // Alpha (Transparency)
+    x: number; y: number; z: number;    // position
+    xr: number; yg: number; zb: number; // Color / Normal
+    a: number; // Alpha (Transparency)
 }
 
 export interface DkrTriangle {
-    doBackface: boolean,
-    i0: number, i1: number, i2: number, // indices
-    u0: number, v0: number, // Texture coordinates for the first index.
-    u1: number, v1: number, // Texture coordinates for the second index.
-    u2: number, v2: number, // Texture coordinates for the third index.
+    doBackface: boolean;
+    i0: number; i1: number; i2: number; // indices
+    u0: number; v0: number; // Texture coordinates for the first index.
+    u1: number; v1: number; // Texture coordinates for the second index.
+    u2: number; v2: number; // Texture coordinates for the third index.
 }
 
 // What gets sent to the shaders
 export interface DkrFinalVertex {
-    x: number, y: number, z: number,    // Position
-    xr: number, yg: number, zb: number, // Color / Normal
-    a: number,                          // Alpha (Transparency)
-    u: number, v: number,               // Texture Coordinates
-    originalIndex: number, // Used as a reference for object animations
+    x: number; y: number; z: number;    // Position
+    xr: number; yg: number; zb: number; // Color / Normal
+    a: number;                          // Alpha (Transparency)
+    u: number; v: number;               // Texture Coordinates
+    originalIndex: number; // Used as a reference for object animations
 }
 
 export class DkrTriangleBatch {
-    private vertices = Array<DkrVertex>();
-    private finalVertices = Array<DkrFinalVertex>();
+    private vertices: DkrVertex[] = [];
+    private finalVertices: DkrFinalVertex[] = [];
 
     constructor(triangleData: ArrayBufferSlice, vertexData: ArrayBufferSlice, verticesStart: number, private flags: number, private texture: DkrTexture | null) {
         const numberOfVertices = vertexData.byteLength / SIZE_OF_VERTEX;
@@ -104,7 +104,7 @@ export class DkrTriangleBatch {
         }
     }
 
-    public getVertices(): Array<any> {
+    public getVertices(): DkrFinalVertex[] {
         return this.finalVertices;
     }
 
@@ -121,4 +121,3 @@ export class DkrTriangleBatch {
         });
     }
 }
-

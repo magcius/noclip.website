@@ -17,7 +17,7 @@ export class DkrLevelObjectMap {
 
     constructor(objectMap: ArrayBufferSlice, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache, sprites: DkrSprites) {
         let objectIds = new Set<number>(); // Set ensures each item is unqiue
-        let objectEntries: any[] = [];
+        let objectEntries: { objectId: number, data: ArrayBufferSlice }[] = [];
 
         const dataView = objectMap.createDataView();
 
@@ -107,21 +107,7 @@ export class DkrLevelObjectMap {
         }
     }
 
-    public getObjects(): Array<DkrObject> {
+    public getObjects(): DkrObject[] {
         return this.objects;
-    }
-
-    public getFlybyAnimationNodes(animationIndex: number): Array<DkrObject> {
-        let nodes = new Array<DkrObject>();
-        for(let i = 0; i < this.objects.length; i++) {
-            if(this.objects[i].getName() == 'Animation') {
-                let properties = this.objects[i].getProperties();
-                if(properties.animIndex == animationIndex) {
-                    nodes.push(this.objects[i]);
-                }
-            }
-        }
-        nodes.sort((a, b) => a.getProperties().order - b.getProperties().order);
-        return nodes;
     }
 }

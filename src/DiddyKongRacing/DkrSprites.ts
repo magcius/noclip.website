@@ -35,11 +35,15 @@ const mirrorMatrix = mat4.fromValues(
 export const SPRITE_LAYER_SOLID = 0;
 export const SPRITE_LAYER_TRANSPARENT = 1;
 
+interface SpriteInfo {
+    x: number; y: number; w: number; h: number;
+}
+
 export class DkrSprites {
-    private spritesInfo: any[];
+    private spritesInfo: SpriteInfo[][];
     private spriteSheetWidth = 0;
     private spriteSheetHeight = 0;
-    private spriteIndexOffsets = new Array<number>();
+    private spriteIndexOffsets: number[] = [];
 
     public spriteData: Float32Array;
     private inputLayout: GfxInputLayout;
@@ -50,7 +54,7 @@ export class DkrSprites {
     private program: F3DDKR_Sprite_Program;
 
     private currentFrame = 0;
-    private spriteInstances = [new Array<DkrObject>(), new Array<DkrObject>()];
+    private spriteInstances: [DkrObject[], DkrObject[]] = [[], []];
 
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;

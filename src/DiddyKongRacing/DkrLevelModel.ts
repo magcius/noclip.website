@@ -1,45 +1,88 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { SIZE_OF_TEXTURE_INFO } from "./DkrTexture.js";
-import { DkrLevelSegment } from "./DkrLevelSegment.js";
-import { IDENTITY_MATRIX } from "./DkrUtil.js";
+import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
-import { assert } from "../util.js";
-import { Camera } from "../Camera.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
+import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall.js";
+import { BatchBuilder } from "./DkrObjectModel.js";
+import { DkrTriangleBatch, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
+import { Mat4Identity } from "../MathHelpers.js";
 
-const SIZE_OF_BSP_NODE = 0x08;
 const SIZE_OF_LEVEL_SEGMENT_HEADER = 0x44;
+const SIZE_OF_BATCH_INFO = 12;
 
-class BSPNode {
-    public leftNode: BSPNode | null;
-    public rightNode: BSPNode | null;
-    public splitAxis: string; // Axis to split on. 'X', 'Y', or 'Z'
-    public segment: number; // Segment number
-    public splitValue: number; // Value to split on.
+class DkrLevelSegment {
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: ArrayBufferSlice, offset: number, textureCache: DkrTextureCache, textureIndices: number[], batchBuilder: BatchBuilder) {
+        const view = levelData.createDataView();
 
-    constructor(left: BSPNode | null, right: BSPNode | null, splitAxis: string, segment: number, splitValue: number) {
-        assert(splitAxis == 'X' || splitAxis == 'Y' || splitAxis == 'Z');
-        this.leftNode = left;
-        this.rightNode = right;
-        this.splitAxis = splitAxis;
-        this.segment = segment;
-        this.splitValue = splitValue;
+        let verticesOffset = view.getInt32(offset + 0x00);
+        let numberOfVertices = view.getInt16(offset + 0x1C);
+        let trianglesOffset = view.getInt32(offset + 0x04);
+        let numberOfTriangles = view.getInt16(offset + 0x1E);
+        let triangleBatchInfoOffset = view.getInt32(offset + 0x0C);
+        let numberOfTriangleBatches = view.getInt16(offset + 0x20);
+
+        const cache = renderHelper.renderCache;
+        for (let i = 0; i < numberOfTriangleBatches; i++) {
+            const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
+            const tiNext = ti + SIZE_OF_BATCH_INFO;
+            const tii = view.getUint8(ti);
+
+            if (tii !== 0xFF) {
+                let textureIndex = textureIndices[tii];
+                textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
+                    const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, verticesOffset, trianglesOffset, texture);
+                    const drawCall = batchBuilder.addDrawCall(textureIndex, texture);
+                    drawCall.addTriangleBatch(triangleBatch);
+
+                    if (level.id === 10 && textureIndex === 317) {
+                        // Hack to properly scroll the waterfalls in Crescent Island
+                        level.addDrawCallScrollerForCrescentIsland(drawCall, i);
+                    }
+                });
+            } else {
+                const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, verticesOffset, trianglesOffset, null);
+                const drawCall = batchBuilder.addDrawCall(-1, null);
+                drawCall.addTriangleBatch(triangleBatch);
+            }
+        }
     }
-};
+
+    private parseBatch(levelData: ArrayBufferSlice, i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, texture: DkrTexture | null): DkrTriangleBatch {
+        const view = levelData.createDataView();
+
+        let curVertexOffset = view.getInt16(ti + 0x02);
+        let curTrisOffset = view.getInt16(ti + 0x04);
+        let nextVertexOffset = view.getInt16(tiNext + 0x02);
+        let nextTrisOffset = view.getInt16(tiNext + 0x04);
+        let batchVerticesOffset = verticesOffset + (curVertexOffset * SIZE_OF_VERTEX);
+        let batchTrianglesOffset = trianglesOffset + (curTrisOffset * SIZE_OF_TRIANGLE_FACE);
+        let numberOfTrianglesInBatch = nextTrisOffset - curTrisOffset;
+        let numberOfVerticesInBatch = nextVertexOffset - curVertexOffset;
+        let flags = view.getUint32(ti + 0x08);
+
+        const triangleDataStart = batchTrianglesOffset;
+        const triangleDataEnd = triangleDataStart + (numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE);
+        const verticesDataStart = batchVerticesOffset;
+        const verticesDataEnd = verticesDataStart + (numberOfVerticesInBatch * SIZE_OF_VERTEX);
+
+        return new DkrTriangleBatch(
+            levelData.slice(triangleDataStart, triangleDataEnd),
+            levelData.slice(verticesDataStart, verticesDataEnd),
+            0,
+            flags,
+            texture
+        );
+    }
+}
 
 export class DkrLevelModel {
-    private textureIndices = new Array<number>();
-    private segments = new Array<DkrLevelSegment>();
-
-    private opaqueTextureDrawCalls: any = {};
-    private opaqueTextureDrawCallsKeys: Array<any>;
-
-    private rootBspNode: BSPNode;
-    private segmentOrder: number[];
+    private textureIndices: number[] = [];
+    private segments: DkrLevelSegment[] = [];
+    private drawCalls: DkrDrawCall[] = [];
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: ArrayBufferSlice) {
         const view = levelData.createDataView();
@@ -52,160 +95,48 @@ export class DkrLevelModel {
         let bspSplitOffset = view.getUint32(0x14);
         let numberOfTextures = view.getUint16(0x18);
         let numberOfSegments = view.getUint16(0x1A);
-        
+
         for (let i = 0; i < numberOfTextures; i++) {
             const texIndex = view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO));
             this.textureIndices.push(texIndex);
         }
-        
+
         // Preloading all the textures makes loading much faster.
         textureCache.preload3dTextures(this.textureIndices, () => {
+            const batchBuilder = new BatchBuilder();
+
             for (let i = 0; i < numberOfSegments; i++) {
-                this.segments.push(new DkrLevelSegment(
-                        device, renderHelper, level, levelData, 
-                        segmentsOffset + (i * SIZE_OF_LEVEL_SEGMENT_HEADER), 
-                        textureCache, this.textureIndices, this.opaqueTextureDrawCalls
-                ));
+                const segment = new DkrLevelSegment(device, renderHelper, level, levelData, segmentsOffset + (i * SIZE_OF_LEVEL_SEGMENT_HEADER), textureCache, this.textureIndices, batchBuilder);
+                this.segments.push(segment);
             }
-            if(this.segments.length > 1) {
-                this.parseBSPTree(view, segmentsBspTreeOffset);
-            }
-            this.opaqueTextureDrawCallsKeys = Object.keys(this.opaqueTextureDrawCalls);
-            for(const key of this.opaqueTextureDrawCallsKeys) {
-                this.opaqueTextureDrawCalls[key].build();
-            }
+
+            this.drawCalls = batchBuilder.finish(renderHelper.renderCache, null);
         });
     }
 
     public destroy(device: GfxDevice): void {
-        if(!!this.opaqueTextureDrawCallsKeys) {
-            for(const key of this.opaqueTextureDrawCallsKeys) {
-                this.opaqueTextureDrawCalls[key].destroy(device);
-            }
-        }
-
-        for (let i = 0; i < this.segments.length; i++)
-            this.segments[i].destroy(device);
+        for (const drawCall of this.drawCalls)
+            drawCall.destroy(device);
     }
 
-    public getTextureIndices(): Array<number> {
+    public getTextureIndices(): number[] {
         return this.textureIndices;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if(this.segments.length > 0) {
-            this.updateSegmentOrder(viewerInput.camera);
-            this.textureCache.advanceTextureFrames(viewerInput.deltaTime);
-            if(!!this.opaqueTextureDrawCallsKeys) {
-                const params = {
-                    modelMatrix: IDENTITY_MATRIX,
-                    textureFrame: -1,
-                    isSkydome: false,
-                    usesNormals: false,
-                    overrideAlpha: null,
-                };
-                for(const key of this.opaqueTextureDrawCallsKeys) {
-                    this.opaqueTextureDrawCalls[key].prepareToRender(device, renderInstManager, viewerInput, params);
-                }
-                for(let i = this.segmentOrder.length - 1; i >= 0; i--) {
-                    this.segments[this.segmentOrder[i]].prepareToRender(device, renderInstManager, viewerInput);
-                }
-            }
-        }
-    }
+        this.textureCache.advanceTextureFrames(viewerInput.deltaTime);
 
-    private updateSegmentOrder(camera: Camera): void {
-        this.segmentOrder = new Array<number>();
-        this.updateSegmentOrder_traverse(camera, this.rootBspNode, 0, 0);
+        const params: DkrDrawCallParams = {
+            modelMatrix: Mat4Identity,
+            textureFrame: -1,
+            isSkydome: false,
+            usesNormals: false,
+            overrideAlpha: null,
+            objAnim: null,
+            objAnimIndex: 0,
+        };
 
-        // Note: Segments are ordered from closest to farthest, so rendering 
-        // should start from the end of the list and work backwards.
-
-        // The segment order list might contain duplicates, so I need to get rid them.
-        let checked = new Array<boolean>(this.segments.length).fill(false);
-        for(let i = this.segmentOrder.length - 1; i >= 0; i--) {
-            let segmentNum = this.segmentOrder[i];
-            if(checked[segmentNum]) {
-                this.segmentOrder.splice(i, 1);
-            } else {
-                checked[segmentNum] = true;
-            }
-        }
-
-        // Add in any missing segments.
-        for(let i = 0; i < this.segments.length; i++) {
-            if(!checked[i]) {
-                this.segmentOrder.splice(0,0,i);
-            }
-        }
-    }
-
-    // This is roughly what the game does when deciding the segment order.
-    private updateSegmentOrder_traverse(camera: Camera, currentNode: BSPNode | null, arg1: number, arg2: number): void {
-        while(true) {
-            let playerPos: number = 0;
-            if(currentNode != null) {
-                switch(currentNode.splitAxis) {
-                    case 'X': playerPos = camera.worldMatrix[12]; break; // Get X position
-                    case 'Y': playerPos = camera.worldMatrix[13]; break; // Get Y position
-                    case 'Z': playerPos = camera.worldMatrix[14]; break; // Get Z position
-                }
-                if(playerPos < currentNode.splitValue) {
-                    if(currentNode.leftNode != null) {
-                        this.updateSegmentOrder_traverse(camera, currentNode.leftNode, arg1, currentNode.segment - 1);
-                    } else {
-                        this.segmentOrder.push(arg1);
-                    }
-                    if(currentNode.rightNode == null) {
-                        this.segmentOrder.push(arg2);
-                        return;
-                    }
-                    arg1 = currentNode.segment;
-                    currentNode = currentNode.rightNode;
-                    continue;
-                } else {
-                    if(currentNode.rightNode != null) {
-                        this.updateSegmentOrder_traverse(camera, currentNode.rightNode, currentNode.segment, arg2);
-                    } else {
-                        this.segmentOrder.push(arg2);
-                    }
-                    if(currentNode.leftNode != null) {
-                        arg2 = currentNode.segment - 1;
-                        currentNode = currentNode.leftNode;
-                        continue;
-                    }
-                }
-            }
-            break;
-        }
-        this.segmentOrder.push(arg1);
-    }
-
-    private parseBSPTree(dataView: DataView, segmentsBspTreeOffset: number) {
-        this.rootBspNode = this.parseBSPNode(dataView, segmentsBspTreeOffset, 0);
-    }
-
-    private parseBSPNode(dataView: DataView, segmentsBspTreeOffset: number, index: number): BSPNode {
-        const offset = segmentsBspTreeOffset + (index * SIZE_OF_BSP_NODE);
-
-        const leftIndex = dataView.getInt16(offset); //bytesToShort(levelData, offset);
-        const rightIndex = dataView.getInt16(offset + 2); //bytesToShort(levelData, offset + 2);
-        let splitType = '';
-        
-        switch(dataView.getUint8(offset + 4)) {
-            case 0: splitType = 'X'; break;
-            case 1: splitType = 'Y'; break;
-            case 2: splitType = 'Z'; break;
-        }
-        const segment = dataView.getUint8(offset + 5);
-        const splitValue = dataView.getInt16(offset + 6);
-
-        return new BSPNode(
-            (leftIndex != -1) ? this.parseBSPNode(dataView, segmentsBspTreeOffset, leftIndex) : null,
-            (rightIndex != -1) ? this.parseBSPNode(dataView, segmentsBspTreeOffset, rightIndex) : null,
-            splitType,
-            segment,
-            splitValue
-        );
+        for (const drawCall of this.drawCalls)
+            drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
     }
 }

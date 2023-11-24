@@ -31,7 +31,7 @@ class DKRRenderer implements Viewer.SceneGfx {
 
     private level: DkrLevel | null = null;
 
-    constructor(device: GfxDevice, private camStart: Array<number>) {
+    constructor(device: GfxDevice, private camStart: number[]) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 

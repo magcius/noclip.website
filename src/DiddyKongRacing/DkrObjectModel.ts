@@ -11,12 +11,49 @@ import { DkrObjectAnimation } from "./DkrObjectAnimation.js";
 import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture.js";
 import { DkrTextureCache } from "./DkrTextureCache.js";
 import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 const SIZE_OF_BATCH_INFO = 12;
 
-export class DkrObjectModel {
-    private textureIndices: number[] = [];
+export class BatchBuilder {
+    private drawCalls: DkrDrawCall[] = [];
+    private drawCallMap = new Map<number, DkrDrawCall>();
 
+    public addDrawCall(textureIndex: number, texture: DkrTexture | null): DkrDrawCall {
+        let allowMerge = true;
+
+        if (texture !== null) {
+            const layer = texture.getLayer();
+            if (layer === GfxRendererLayer.TRANSLUCENT)
+                allowMerge = false;
+        }
+
+        let drawCall: DkrDrawCall | undefined;
+        if (allowMerge) {
+            drawCall = this.drawCallMap.get(textureIndex);
+            if (drawCall === undefined) {
+                drawCall = new DkrDrawCall(texture, textureIndex);
+                this.drawCallMap.set(textureIndex, drawCall);
+                this.drawCalls.push(drawCall);
+            }
+        } else {
+            drawCall = new DkrDrawCall(texture, textureIndex);
+            this.drawCalls.push(drawCall);
+        }
+
+        return drawCall;
+    }
+
+    public finish(cache: GfxRenderCache, objectAnimations: DkrObjectAnimation[] | null): DkrDrawCall[] {
+        for (const drawCall of this.drawCalls)
+            drawCall.build(cache, objectAnimations);
+        return this.drawCalls;
+    }
+}
+
+export type DkrTextureFrameOverride = Map<number, number>;
+
+export class DkrObjectModel {
     private drawCalls: DkrDrawCall[] = [];
 
     private verticesOffset = 0;
@@ -75,63 +112,37 @@ export class DkrObjectModel {
             drawCall.destroy(device);
     }
 
-    private loadGeometry(levelData: ArrayBufferSlice, device: GfxDevice, renderHelper: GfxRenderHelper,  textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
+    private loadGeometry(levelData: ArrayBufferSlice, device: GfxDevice, renderHelper: GfxRenderHelper, textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
         const view = levelData.createDataView();
 
-        for (let i = 0; i < numberOfTextures; i++) {
-            this.textureIndices.push(view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
-        }
+        const textureIndices: number[] = [];
+        for (let i = 0; i < numberOfTextures; i++)
+            textureIndices.push(view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
 
         const cache = renderHelper.renderCache;
-        textureCache.preload3dTextures(this.textureIndices, () => {
-            const drawCallMap = new Map<number, DkrDrawCall>();
+        const batchBuilder = new BatchBuilder();
 
+        textureCache.preload3dTextures(textureIndices, () => {
             for (let i = 0; i < this.numberOfTriangleBatches; i++) {
                 const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
                 const tiNext = ti + SIZE_OF_BATCH_INFO;
 
-                const addDrawCall = (textureIndex: number, texture: DkrTexture | null): DkrDrawCall => {
-                    let allowMerge = true;
-
-                    if (texture !== null) {
-                        const layer = texture.getLayer();
-                        if (layer === GfxRendererLayer.TRANSLUCENT)
-                            allowMerge = false;
-                    }
-
-                    let drawCall: DkrDrawCall | undefined;
-                    if (allowMerge) {
-                        drawCall = drawCallMap.get(textureIndex);
-                        if (drawCall === undefined) {
-                            drawCall = new DkrDrawCall(device, cache, texture, textureIndex);
-                            drawCallMap.set(textureIndex, drawCall);
-                            this.drawCalls.push(drawCall);
-                        }
-                    } else {
-                        drawCall = new DkrDrawCall(device, cache, texture, textureIndex);
-                        this.drawCalls.push(drawCall);
-                    }
-
-                    return drawCall;
-                };
-
                 const tii = view.getUint8(ti);
-                const textureIndex = this.textureIndices[tii];
+                const textureIndex = textureIndices[tii];
                 if (textureIndex !== undefined && tii !== 0xFF) {
                     textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
                         const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, texture);
-                        const drawCall = addDrawCall(textureIndex, texture);
+                        const drawCall = batchBuilder.addDrawCall(textureIndex, texture);
                         drawCall.addTriangleBatch(triangleBatch);
                     });
                 } else {
                     const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
-                    const drawCall = addDrawCall(-1, null);
+                    const drawCall = batchBuilder.addDrawCall(-1, null);
                     drawCall.addTriangleBatch(triangleBatch);
                 }
             }
 
-            for (const drawCall of this.drawCalls)
-                drawCall.build(this.objectAnimations);
+            this.drawCalls = batchBuilder.finish(cache, this.objectAnimations);
         });
     }
 
@@ -203,7 +214,7 @@ export class DkrObjectModel {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, params: DkrDrawCallParams, texFrameOverride: any | null = null) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, params: DkrDrawCallParams, texFrameOverride: DkrTextureFrameOverride | null = null) {
         for (let i = 0; i < this.drawCalls.length; i++) {
             if(!!this.objectAnimations) {
                 params.objAnim = this.objectAnimations[this.currObjAnimIndex];
@@ -213,10 +224,11 @@ export class DkrObjectModel {
 
             const drawCall = this.drawCalls[i];
             const textureIndex = drawCall.textureIndex;
-            if(!!texFrameOverride && texFrameOverride[textureIndex] != null && texFrameOverride[textureIndex] != undefined) {
-                params.textureFrame = texFrameOverride[textureIndex];
-            } else if(!!texFrameOverride && texFrameOverride['doNotAnimate']) {
-                params.textureFrame = 0;
+            if (texFrameOverride !== null) {
+                if (texFrameOverride.has(-1))
+                    params.textureFrame = texFrameOverride.get(-1)!;
+                else if (texFrameOverride.has(textureIndex))
+                    params.textureFrame = texFrameOverride.get(textureIndex)!;
             }
             drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
         }

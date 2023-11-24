@@ -12,7 +12,6 @@ import { DkrControlGlobals } from "./DkrControlGlobals.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { DkrObject } from './DkrObject.js';
 import { DkrTextureCache } from "./DkrTextureCache.js";
-import { updateCameraViewMatrix } from "./DkrUtil.js";
 
 // This is basically the maximum framerate that is supported.
 // More samples is always technically better, but it also means more RAM being used up.
@@ -107,8 +106,8 @@ function calcQuatFromEuler(dst: quat, x: number, y: number, z: number): void {
 export class DkrAnimationTrack {
     private actor: DkrObject;
     private actorName: string;
-    private nodes = new Array<DkrObject>();
-    private points = new Array<AnimTrackPoint>();
+    private nodes: DkrObject[] = [];
+    private points: AnimTrackPoint[] = [];
     private duration = 0; // Number of seconds it takes to complete the track.
     private hasBeenCompiled = false;
     private doesLoop = false;
@@ -172,7 +171,8 @@ export class DkrAnimationTrack {
             this.setScratches(this.points.length - 1, true);
         }
         mat4.fromRotationTranslation(camera.worldMatrix, quat_scratch, pos_scratch);
-        updateCameraViewMatrix(camera);
+        mat4.invert(camera.viewMatrix, camera.worldMatrix);
+        camera.worldMatrixUpdated();
     }
 
     private setScratches(nearestPointIndex: number, enableMirror: boolean = false) {
@@ -278,9 +278,7 @@ export class DkrAnimationTrack {
         this.actorName = this.actor.getName();
         this.hasBeenCompiled = true;
 
-        if(this.actorName === 'Whale' || this.actorName === 'PigRocketeer') {
-            this.actor.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
-        } else if(this.actorName === 'Asteroid') {
+        if (this.actorName === 'Asteroid') {
             this.actor.setUseVertexNormals(); // Hack
         }
 
@@ -727,7 +725,7 @@ export class DkrAnimationTracksChannel {
         return this.animCameraKey !== null;
     }
 
-    private internalProgresses: any = {}; // Only used for non-camera tracks.
+    private internalProgresses: { [k: string]: number } = {}; // Only used for non-camera tracks.
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         for(const key of this.actorTrackKeys) {
@@ -778,7 +776,7 @@ export class DkrAnimationTracks {
         this.channels[channel].addAnimationNode(node);
     }
 
-    public addAnimationNodes(nodes: Array<DkrObject>, device: GfxDevice, level: DkrLevel, renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache) {
+    public addAnimationNodes(nodes: DkrObject[]) {
         for(const node of nodes)
             if (node.getName() === 'Animation')
                 this.addAnimationNode(node);
@@ -795,7 +793,7 @@ export class DkrAnimationTracks {
 
     private getCameraChannels(): void {
         if(!!DkrControlGlobals.ANIM_TRACK_SELECT.trackSelectOptions) {
-            DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels = new Array<number>();
+            DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels = [];
 
             let hasFlyby = -1;
 

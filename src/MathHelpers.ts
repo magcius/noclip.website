@@ -20,6 +20,12 @@ export const Vec3UnitZ: ReadonlyVec3 = vec3.fromValues(0, 0, 1);
 export const Vec3NegX: ReadonlyVec3  = vec3.fromValues(-1, 0, 0);
 export const Vec3NegY: ReadonlyVec3  = vec3.fromValues(0, -1, 0);
 export const Vec3NegZ: ReadonlyVec3  = vec3.fromValues(0, 0, -1);
+export const Mat4Identity: ReadonlyMat4 = mat4.fromValues(
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+);
 
 /**
  * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed

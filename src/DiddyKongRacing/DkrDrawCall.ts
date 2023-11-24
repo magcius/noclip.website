@@ -63,7 +63,7 @@ export class DkrDrawCall {
     private scrollU = 0;
     private scrollV = 0;
 
-    constructor(private device: GfxDevice, private cache: GfxRenderCache, private texture?: DkrTexture | null, public textureIndex: number = -1) {
+    constructor(private texture?: DkrTexture | null, public textureIndex: number = -1) {
         this.program = new F3DDKR_Program();
     }
 
@@ -74,12 +74,12 @@ export class DkrDrawCall {
         this.vertices = this.vertices.concat(triBatch.getVertices());
     }
 
-    public build(animations: DkrObjectAnimation[] | null = null): void {
+    public build(cache: GfxRenderCache, animations: DkrObjectAnimation[] | null = null): void {
         assert(!this.isBuilt);
 
         const indexData = makeTriangleIndexBuffer(GfxTopology.Triangles, 0, this.vertices.length);
         this.indexCount = indexData.length;
-        this.indexBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Index, indexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Index, indexData.buffer);
 
         const attribBuffer = new Float32Array(this.vertices.length * 6);
         for(let i = 0; i < this.vertices.length; i++) {
@@ -141,14 +141,14 @@ export class DkrDrawCall {
             { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // XYZ
             { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex, }, // RGBA UV
         ];
-        this.inputLayout = this.cache.createInputLayout({
+        this.inputLayout = cache.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
         });
 
-        this.positionBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
-        this.attribBuffer = makeStaticDataBuffer(this.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
+        this.positionBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, positionBuffer.buffer);
+        this.attribBuffer = makeStaticDataBuffer(cache.device, GfxBufferUsage.Vertex, attribBuffer.buffer);
         this.vertexBufferDescriptors = [
             { buffer: this.positionBuffer, byteOffset: 0 },
             { buffer: this.positionBuffer, byteOffset: 0 },

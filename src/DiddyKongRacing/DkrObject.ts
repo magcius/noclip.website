@@ -1,5 +1,5 @@
 import { mat4, vec3, quat, vec4, ReadonlyVec3 } from 'gl-matrix';
-import { DkrObjectModel } from './DkrObjectModel.js';
+import { DkrObjectModel, DkrTextureFrameOverride } from './DkrObjectModel.js';
 import { DataManager } from './DataManager.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { ViewerRenderInput } from '../viewer.js';
@@ -45,12 +45,11 @@ export class DkrObject {
     private name: string;
     private propertiesIndex: number;
     private properties: any = {};
-    private texFrameOverride: any | null = null;
+    private texFrameOverride: DkrTextureFrameOverride = new Map<number, number>();
     private isDeveloperObject = false;
     private overrideAlpha: number | null = null;
     private renderBeforeLevelMap: boolean = true;
     private usesNormals = false;
-    public dontAnimateObjectTextures = false; // Hack for characters with blinking eyes.
 
     constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, private textureCache: DkrTextureCache) {
         this.headerData = dataManager.getObjectHeader(objectId);
@@ -75,22 +74,22 @@ export class DkrObject {
 
         for(let i = 0; i < numberOfModels; i++) {
             let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
-            if (this.modelType == MODEL_TYPE_3D_MODEL) {
+            if (this.modelType === MODEL_TYPE_3D_MODEL) {
                 this.modelIds[i] = modelId;
                 const modelData = dataManager.getObjectModel(modelId);
                 this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
-            } else {
+            } else if (this.modelType === MODEL_TYPE_2D_BILLBOARD) {
                 this.spriteIds[i] = modelId;
             }
         }
         this.updateModelMatrix();
     }
 
-    public getTexFrameOverride(): any | null {
-        // This is a hack to prevent characters from constantly blinking their eyes.
-        if(this.dontAnimateObjectTextures) {
-            return { doNotAnimate: true };
-        }
+    public setAllTextureOverride(frame: number): void {
+        this.texFrameOverride.set(-1, 0);
+    }
+
+    public getTexFrameOverride(): DkrTextureFrameOverride {
         return this.texFrameOverride;
     }
 
@@ -393,7 +392,7 @@ export class DkrObject {
                 break;
             case 12: // Dinosaur1, Dinosaur2, Dinosaur3, Whale, Dinoisle
                 if(this.name === 'Whale') {
-                    this.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
+                    this.setAllTextureOverride(0); // hack to stop eyes from blinking.
                 }
                 break;
             case 13: // checkpoint
@@ -411,10 +410,8 @@ export class DkrObject {
                 this.properties.numberToOpen = numberBalloonsToOpen;
                 this.modelScale *= view.getUint8(0x12) / 64.0;
                 if(this.name == 'LevelDoor' || this.name == 'WorldGate') {
-                    this.texFrameOverride = {
-                        1016: numberBalloonsToOpen % 10,                 // Tex #1016 = Ones place (0 to 9)
-                        1017: Math.floor(numberBalloonsToOpen / 10) - 1, // Tex #1017 = Tens place (1 to 8)
-                    }
+                    this.texFrameOverride.set(1016, numberBalloonsToOpen % 10); // Tex #1016 = Ones place (0 to 9)
+                    this.texFrameOverride.set(1017, Math.floor(numberBalloonsToOpen / 10) - 1); // Tex #1017 = Tens place (1 to 8)
                 }
                 break;
             case 15: // fogchanger
@@ -483,7 +480,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 31: // Stopwatch-man
-                this.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
+                this.setAllTextureOverride(0); // hack to stop eyes from blinking.
                 break;
             case 32: // Coin, BonusGem
                 break;
@@ -501,7 +498,7 @@ export class DkrObject {
             case 38: // bridge, NoentryDoor, RampWhale
                 this.rotation[1] = (view.getInt8(0x09) / 64.0) * 360.0;
                 if(this.name === 'RampWhale') {
-                    this.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
+                    this.setAllTextureOverride(0); // hack to stop eyes from blinking.
                 }
                 break;
             case 39: // RampSwitch
@@ -619,7 +616,7 @@ export class DkrObject {
             case 61: // Butterfly
                 break;
             case 62: // Parkwarden
-                this.dontAnimateObjectTextures = true;
+                this.setAllTextureOverride(0);
                 break;
             case 63: // stopwatchicon, stopwatchhand
                 break;
@@ -679,7 +676,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 80: // GBParkwarden
-                this.dontAnimateObjectTextures = true;
+                this.setAllTextureOverride(0);
                 break;
             case 81: // SpaceShip1, SpaceShip2
                 break;
@@ -693,7 +690,7 @@ export class DkrObject {
                     const modelMatrix = mat4.create();
                     mat4.fromRotationTranslationScale(modelMatrix, quatRot, this.position, vec3.fromValues(this.modelScale, this.modelScale, this.modelScale));
 
-                    const zipperParticle = new DkrParticle(this.device, this.renderHelper, zipperTexture, modelMatrix);
+                    const zipperParticle = new DkrParticle(this.renderHelper.renderCache, zipperTexture, modelMatrix);
                     this.particles.push(zipperParticle);
                 });
                 this.isDeveloperObject = true;
@@ -764,7 +761,7 @@ export class DkrObject {
             case 108: // Fireball, OctoBomb
                 break;
             case 109: // Frog
-                this.dontAnimateObjectTextures = true;
+                this.setAllTextureOverride(0);
                 break;
             case 110: // GoldCoin
                 break;
@@ -799,6 +796,7 @@ export class DkrObject {
             case 114:
                 break;
             case 115: // PigRocketeer
+                this.setAllTextureOverride(0);
                 break;
             case 116: // OctoBubble
                 break;

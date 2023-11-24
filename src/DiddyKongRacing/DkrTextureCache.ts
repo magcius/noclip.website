@@ -3,7 +3,6 @@ import { DkrTexture } from './DkrTexture.js';
 import { DataManager } from "./DataManager.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
 
 export class DkrTextureCache {
     private textures3d: { [k: string]: DkrTexture } = {};
@@ -13,7 +12,7 @@ export class DkrTextureCache {
     }
 
     // Speed up level loading by preloading all the level textures in advance.
-    public async preload3dTextures(indices: Array<number>, callback: Function) {
+    public async preload3dTextures(indices: number[], callback: Function) {
         const imageDatas = await Promise.all(indices.map((index) => {
             return this.dataManager.get3dTexture(index);
         }));
@@ -75,7 +74,7 @@ export class DkrTextureCache {
         }
     }
 
-    public scrollTextures(texScrollers: any, dt: number): void {
+    public scrollTextures(texScrollers: { texIndex: number, scrollU: number, scrollV: number }[], dt: number): void {
         for(const texScroller of texScrollers) {
             if(!!this.textures3d[texScroller.texIndex]){
                 const tex: DkrTexture = this.textures3d[texScroller.texIndex];

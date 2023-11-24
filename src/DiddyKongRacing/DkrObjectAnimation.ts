@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec3 } from "gl-matrix";
 import { assert } from "../util.js";
 import { DKR_FPS, FPS_SAMPLES_DELTA } from "./DkrAnimationTrack.js";
 import { DkrVertex } from "./DkrTriangleBatch.js";
@@ -20,7 +20,7 @@ export class DkrObjectAnimation {
     private currentFrame = 0;
     private currentProgressInFrame = 0; // Value within [0, 1)
 
-    constructor(private animationId: number, private animationData: Uint8Array, vertices: Array<DkrVertex>, animatedVertIndices: Array<number>, numOfAnimatedVertices: number) {
+    constructor(private animationId: number, private animationData: Uint8Array, vertices: DkrVertex[], animatedVertIndices: number[], numOfAnimatedVertices: number) {
         const dataView = new DataView(animationData.buffer);
         
         let numberOfKeyframes = dataView.getInt32(0);
@@ -29,7 +29,7 @@ export class DkrObjectAnimation {
         let offset = 4;
 
         for(let i = 0; i < numberOfKeyframes; i++) {
-            this.keyFrames.push(new Array<vec3>());
+            this.keyFrames.push([]);
             for(let j = 0; j < numberOfVertices; j++) {
                 if(i === 0) {
                     // If this is the first keyframe, then copy from the passed in vertices.
@@ -135,7 +135,7 @@ export class DkrObjectAnimation {
         this.currentProgressInFrame = frameProgress - this.currentFrame;
     }
 
-    public getKeyframes(): Array<Array<vec3>> {
+    public getKeyframes(): ReadonlyVec3[][] {
         return this.keyFrames;
     }
 

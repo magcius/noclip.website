@@ -1,6 +1,5 @@
 
-import { vec3 } from "gl-matrix";
-import { updateCameraViewMatrix } from "./DkrUtil.js";
+import { mat4, vec3 } from "gl-matrix";
 import { DkrLevelModel } from "./DkrLevelModel.js";
 import { colorNewFromRGBA, Color } from "../Color.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -29,12 +28,12 @@ export class DkrLevel {
 
     private objectMap1: DkrLevelObjectMap;
     private objectMap2: DkrLevelObjectMap;
-    private texScrollers = new Array<any>();
+    private texScrollers: { texIndex: number, scrollU: number, scrollV: number }[] = [];
     private cameraInMirrorMode = false;
 
     // Remove when the Animator object is properly implemented.
     public id: number = -1;
-    private hackCresIslandTexScrollers = new Array<any>();
+    private hackCresIslandTexScrollers: { drawCall: DkrDrawCall, scrollU: number, scrollV: number }[] = [];
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, id: string, private dataManager: DataManager, private sprites: DkrSprites) {
         if (id.startsWith('model:')) {
@@ -73,9 +72,9 @@ export class DkrLevel {
             this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
 
             this.objectMap1 = new DkrLevelObjectMap(objectMap1Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
-            this.animationTracks.addAnimationNodes(this.objectMap1.getObjects(), device, this, renderHelper, dataManager, textureCache);
+            this.animationTracks.addAnimationNodes(this.objectMap1.getObjects());
             this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, device, renderHelper, dataManager, textureCache, sprites);
-            this.animationTracks.addAnimationNodes(this.objectMap2.getObjects(), device, this, renderHelper, dataManager, textureCache);
+            this.animationTracks.addAnimationNodes(this.objectMap2.getObjects());
             this.animationTracks.compile(device, this, renderHelper, dataManager, textureCache);
             this.animationNodesReady();
         }
@@ -106,8 +105,12 @@ export class DkrLevel {
 
     private mirrorCamera(viewerInput: ViewerRenderInput): void {
         // Mirror X position
+        const camera = viewerInput.camera;
+
         viewerInput.camera.worldMatrix[12] = -viewerInput.camera.worldMatrix[12];
-        updateCameraViewMatrix(viewerInput.camera);
+        mat4.invert(camera.viewMatrix, camera.worldMatrix);
+        camera.worldMatrixUpdated();
+
         this.cameraInMirrorMode = DkrControlGlobals.ADV2_MIRROR.on;
     }
 
