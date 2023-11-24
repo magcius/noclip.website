@@ -438,7 +438,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GfxDevice
     private _currentActiveTexture: GLenum | null = null;
     private _currentBoundVAO: WebGLVertexArrayObject | null = null;
-    private _currentProgram: GfxProgramP_GL | null = null;
+    private _currentProgram: WebGLProgram | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
 
@@ -799,12 +799,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _setProgram(program: GfxProgramP_GL): void {
-        if (this._currentProgram === program)
+        const gl_program = program.gl_program;
+        if (this._currentProgram === gl_program)
             return;
 
         this._programCompiled(program);
-        this.gl.useProgram(program.gl_program);
-        this._currentProgram = program;
+        this.gl.useProgram(gl_program);
+        this._currentProgram = gl_program;
     }
 
     private ensureResourceExists<T>(resource: T | null): T {
