@@ -1,7 +1,5 @@
 import { DeviceProgram } from "../Program.js";
 
-export const MAX_NUM_OF_INSTANCES = 256;
-
 export const MAX_NUM_OF_OBJ_ANIM_VERTICES = 1024; 
 
 export class F3DDKR_Program extends DeviceProgram {
@@ -24,7 +22,7 @@ layout(std140) uniform ub_SceneParams {
 layout(std140) uniform ub_DrawParams {
     vec4 u_Color;
     vec4 u_Misc[1];
-    Mat4x3 u_ViewMatrix[${MAX_NUM_OF_INSTANCES}];
+    Mat4x3 u_ViewMatrix;
 };
 
 #define u_TexCoordOffset (u_Misc[0].xy)
@@ -67,7 +65,7 @@ void main() {
         pos = a_Position; // Just use the default position.
     }
 
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix[gl_InstanceID]), vec4(pos, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(pos, 1.0)));
     if(t_Options.z) {
         v_Color = vec4(1.0, 1.0, 1.0, 1.0);
     } else {

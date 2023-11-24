@@ -4,7 +4,7 @@ import { DkrTextureCache } from "./DkrTextureCache.js";
 import { IDENTITY_MATRIX } from "./DkrUtil.js";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch.js";
 import { DkrTexture } from "./DkrTexture.js";
-import { DkrDrawCall } from "./DkrDrawCall.js";
+import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall.js";
 import { DkrLevel } from "./DkrLevel.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
@@ -105,8 +105,8 @@ export class DkrLevelSegment {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const params = {
-            modelMatrices: [IDENTITY_MATRIX],
+        const params: DkrDrawCallParams = {
+            modelMatrix: IDENTITY_MATRIX,
             textureFrame: -1,
             isSkydome: false,
             usesNormals: false,

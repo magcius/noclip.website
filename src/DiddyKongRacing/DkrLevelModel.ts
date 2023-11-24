@@ -98,7 +98,7 @@ export class DkrLevelModel {
             this.textureCache.advanceTextureFrames(viewerInput.deltaTime);
             if(!!this.opaqueTextureDrawCallsKeys) {
                 const params = {
-                    modelMatrices: [IDENTITY_MATRIX],
+                    modelMatrix: IDENTITY_MATRIX,
                     textureFrame: -1,
                     isSkydome: false,
                     usesNormals: false,

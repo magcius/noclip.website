@@ -13,6 +13,7 @@ import { DkrTexture } from './DkrTexture.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { DkrDrawCallParams } from './DkrDrawCall.js';
 
 export const MODEL_TYPE_3D_MODEL = 0;
 export const MODEL_TYPE_2D_BILLBOARD = 1;
@@ -50,9 +51,6 @@ export class DkrObject {
     private renderBeforeLevelMap: boolean = true;
     private usesNormals = false;
     public dontAnimateObjectTextures = false; // Hack for characters with blinking eyes.
-
-    // Most objects can be instanced, but some like doors/world gates can't because of textures.
-    private allowInstances = true;
 
     constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, private textureCache: DkrTextureCache) {
         this.headerData = dataManager.getObjectHeader(objectId);
@@ -94,14 +92,6 @@ export class DkrObject {
             return { doNotAnimate: true };
         }
         return this.texFrameOverride;
-    }
-
-    public canBeInstanced(): boolean {
-        return this.allowInstances;
-    }
-
-    public getPropertiesIndex(): number {
-        return this.propertiesIndex;
     }
 
     public isASkydome(): boolean {
@@ -276,19 +266,17 @@ export class DkrObject {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         if(!!this.models && !!this.models[this.modelIndex]) {
-            if(this.modelType === MODEL_TYPE_3D_MODEL) {
-                const params = {
-                    modelMatrices: [this.modelMatrix],
+            if (this.modelType === MODEL_TYPE_3D_MODEL) {
+                const params: DkrDrawCallParams = {
+                    modelMatrix: this.modelMatrix,
                     usesNormals: this.usesNormals,
-                    isSkydome: this.name.startsWith('dome'),
+                    isSkydome: this.isASkydome(),
                     overrideAlpha: this.overrideAlpha,
                     textureFrame: 0,
                     objAnim: null,
                     objAnimIndex: 0,
                 }
                 this.models[this.modelIndex].prepareToRender(device, renderInstManager, viewerInput, params, this.getTexFrameOverride());
-            } else if(this.modelType === MODEL_TYPE_2D_BILLBOARD) {
-                
             }
         }
     }
@@ -422,7 +410,6 @@ export class DkrObject {
                 const numberBalloonsToOpen = view.getUint8(0xD);
                 this.properties.numberToOpen = numberBalloonsToOpen;
                 this.modelScale *= view.getUint8(0x12) / 64.0;
-                this.allowInstances = false;
                 if(this.name == 'LevelDoor' || this.name == 'WorldGate') {
                     this.texFrameOverride = {
                         1016: numberBalloonsToOpen % 10,                 // Tex #1016 = Ones place (0 to 9)
@@ -701,8 +688,12 @@ export class DkrObject {
                 this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 // Technically, GroundZippers are particles and this object just spawns one.
                 this.textureCache.get2dTexture(16, (zipperTexture: DkrTexture) => {
-                    const zipperParticle = new DkrParticle(this.device, this.renderHelper, zipperTexture);
-                    zipperParticle.addInstance(this.position, this.rotation, this.modelScale);
+                    const quatRot = quat.create();
+                    quat.fromEuler(quatRot, this.rotation[0], this.rotation[1], this.rotation[2]);
+                    const modelMatrix = mat4.create();
+                    mat4.fromRotationTranslationScale(modelMatrix, quatRot, this.position, vec3.fromValues(this.modelScale, this.modelScale, this.modelScale));
+
+                    const zipperParticle = new DkrParticle(this.device, this.renderHelper, zipperTexture, modelMatrix);
                     this.particles.push(zipperParticle);
                 });
                 this.isDeveloperObject = true;
@@ -792,12 +783,7 @@ export class DkrObject {
                     if(!!model) {
                         // Not sure why they do this, but this is correct.
                         let secondVertex = this.models[0].getVertex(1);
-                        let denom = Math.sqrt(
-                            (secondVertex[0]*secondVertex[0]) +
-                            (secondVertex[1]*secondVertex[1]) +
-                            (secondVertex[2]*secondVertex[2])
-                        );
-                        this.modelScale = view.getInt16(0x0A) / denom;
+                        this.modelScale = view.getInt16(0x0A) / vec3.length(secondVertex);
                         this.updateModelMatrix();
                     } else {
                         // Wait some more until the model loads.

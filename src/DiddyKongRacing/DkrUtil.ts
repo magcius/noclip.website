@@ -1,16 +1,16 @@
 
-import { mat4, quat } from "gl-matrix";
+import { ReadonlyMat4, mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Camera } from "../Camera.js";
 import { DkrTexture } from "./DkrTexture.js";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch.js";
 
-export const IDENTITY_MATRIX: mat4 = [
+export const IDENTITY_MATRIX: ReadonlyMat4 = mat4.fromValues(
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0,
     0, 0, 0, 1,
-];
+);
 
 export function createVertexData(vertices: any): ArrayBufferSlice {
     const out = new ArrayBuffer(vertices.length * SIZE_OF_VERTEX);

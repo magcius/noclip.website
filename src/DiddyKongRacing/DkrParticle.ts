@@ -1,21 +1,21 @@
 // TODO: Figure out how to actually parse particles.
 // At the moment this is just a hack to get the ground zippers to show up in the renderer.
 
-import { mat4, vec3, quat } from "gl-matrix";
+import { mat4, vec3, quat, ReadonlyMat4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { DkrDrawCall } from "./DkrDrawCall.js";
+import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall.js";
 import { DkrTexture } from "./DkrTexture.js";
 import { DkrTriangleBatch } from "./DkrTriangleBatch.js";
 import { createTriangleData, createVertexData } from "./DkrUtil.js";
 
 export class DkrParticle {
     private drawCall: DkrDrawCall;
-    private instances = new Array<mat4>();
+    private modelMatrix = mat4.create();
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private texture: DkrTexture) {
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, texture: DkrTexture, modelMatrix: ReadonlyMat4) {
         this.drawCall = new DkrDrawCall(device, renderHelper.renderCache, texture);
         const halfsize = 50.0;
         const vertexData = createVertexData([
@@ -39,29 +39,21 @@ export class DkrParticle {
         let triangleBatch = new DkrTriangleBatch(triangleData, vertexData, 0, 2, texture);
         this.drawCall.addTriangleBatch(triangleBatch);
         this.drawCall.build();
-    }
 
-    public addInstance(position: vec3, rotation: vec3, scale: number): void {
-        let quatRot = quat.create();
-        quat.fromEuler(quatRot, rotation[0], rotation[1], rotation[2]);
-        let instance = mat4.create();
-        mat4.fromRotationTranslationScale(instance, quatRot, position, vec3.fromValues(scale, scale, scale));
-        this.instances.push(instance);
+        mat4.copy(this.modelMatrix, modelMatrix);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if(this.instances.length > 0) {
-            const params = {
-                modelMatrices: this.instances,
-                textureFrame: 0,
-                isSkydome: false,
-                usesNormals: false,
-                overrideAlpha: null,
-                objAnim: null,
-                objAnimIndex: 0,
-            };
-            this.drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
-        }
+        const params: DkrDrawCallParams = {
+            modelMatrix: this.modelMatrix,
+            textureFrame: 0,
+            isSkydome: false,
+            usesNormals: false,
+            overrideAlpha: null,
+            objAnim: null,
+            objAnimIndex: 0,
+        };
+        this.drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
     }
 
     public destroy(device: GfxDevice): void {

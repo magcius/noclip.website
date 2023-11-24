@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { ReadonlyMat4, mat4 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
@@ -10,7 +10,7 @@ import { ViewerRenderInput } from '../viewer.js';
 import { DkrControlGlobals } from './DkrControlGlobals.js';
 import { DkrTexture } from './DkrTexture.js';
 import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch.js';
-import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program.js';
+import { F3DDKR_Program } from './F3DDKR_Program.js';
 import { DkrObjectAnimation } from './DkrObjectAnimation.js';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -33,7 +33,7 @@ const mirrorMatrix = mat4.fromValues(
 );
 
 export interface DkrDrawCallParams {
-    modelMatrices: mat4[];
+    modelMatrix: ReadonlyMat4;
     overrideAlpha: number | null;
     usesNormals: boolean;
     isSkydome: boolean;
@@ -63,7 +63,7 @@ export class DkrDrawCall {
     private scrollU = 0;
     private scrollV = 0;
 
-    constructor(private device: GfxDevice, private cache: GfxRenderCache, private texture?: DkrTexture | null) {
+    constructor(private device: GfxDevice, private cache: GfxRenderCache, private texture?: DkrTexture | null, public textureIndex: number = -1) {
         this.program = new F3DDKR_Program();
     }
 
@@ -223,7 +223,7 @@ export class DkrDrawCall {
             }
 
             // Set draw parameters
-            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + (12 * MAX_NUM_OF_INSTANCES));
+            let offs = renderInst.allocateUniformBuffer(F3DDKR_Program.ub_DrawParams, 8 + 12);
             const d = renderInst.mapUniformBufferF32(F3DDKR_Program.ub_DrawParams);
 
             // Color
@@ -270,17 +270,14 @@ export class DkrDrawCall {
                 offs += 16;
             }
 
-            assert(params.modelMatrices.length <= MAX_NUM_OF_INSTANCES);
             computeViewMatrix(viewMatrixScratch, viewerInput.camera);
-            for(let i = 0; i < params.modelMatrices.length; i++) {
-                if(DkrControlGlobals.ADV2_MIRROR.on) {
-                    mat4.mul(viewMatrixCalcScratch, mirrorMatrix, params.modelMatrices[i]);
-                    mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
-                } else {
-                    mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, params.modelMatrices[i]);
-                }
-                offs += fillMatrix4x3(d, offs, viewMatrixCalcScratch);
+            if(DkrControlGlobals.ADV2_MIRROR.on) {
+                mat4.mul(viewMatrixCalcScratch, mirrorMatrix, params.modelMatrix);
+                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, viewMatrixCalcScratch);
+            } else {
+                mat4.mul(viewMatrixCalcScratch, viewMatrixScratch, params.modelMatrix);
             }
+            offs += fillMatrix4x3(d, offs, viewMatrixCalcScratch);
 
             if(!!params.objAnim) {
                 const currentFrameIndex = params.objAnim.getCurrentFrame();
@@ -295,7 +292,7 @@ export class DkrDrawCall {
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
             renderInst.setGfxProgram(this.gfxProgram);
-            renderInst.drawIndexesInstanced(this.indexCount, params.modelMatrices.length);
+            renderInst.drawIndexes(this.indexCount);
             renderInst.setMegaStateFlags({
                 cullMode: DkrControlGlobals.ADV2_MIRROR.on ? GfxCullMode.Front : GfxCullMode.Back
             });

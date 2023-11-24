@@ -1,5 +1,5 @@
 
-import { vec3 } from "gl-matrix";
+import { ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -14,20 +14,15 @@ import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } fr
 
 const SIZE_OF_BATCH_INFO = 12;
 
-interface TransTexDrawCall { drawCall: DkrDrawCall, textureIndex: number };
-
 export class DkrObjectModel {
-    private triangleBatches: DkrTriangleBatch[];
     private textureIndices: number[] = [];
 
-    private opaqueTextureDrawCalls: any = {};
-    private opaqueTextureDrawCallsKeys: any[];
-    private transTexDrawCalls: TransTexDrawCall[] = [];
+    private drawCalls: DkrDrawCall[] = [];
 
     private verticesOffset = 0;
     private numberOfVertices = 0;
     private numberOfTriangles = 0;
-    private numberOfTriangleBatches = 0; 
+    private numberOfTriangleBatches = 0;
 
     // Used for object animations.
     private numberOfAnimatedVertices = 0;
@@ -65,8 +60,8 @@ export class DkrObjectModel {
                 this.objectAnimations.push(new DkrObjectAnimation(
                     animationIds![i],
                     animationDataBinary,
-                    this.getVertices(), 
-                    this.animatedVerticesIndices, 
+                    this.getVertices(),
+                    this.animatedVerticesIndices,
                     this.numberOfAnimatedVertices
                 ));
             }
@@ -75,16 +70,9 @@ export class DkrObjectModel {
         this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, texturesOffset, triangleBatchInfoOffset, trianglesOffset);
     }
 
-    public destroy(device: GfxDevice): void { 
-        if(!!this.opaqueTextureDrawCallsKeys) {
-            for(const key of this.opaqueTextureDrawCallsKeys) {
-                this.opaqueTextureDrawCalls[key].destroy(device);
-            }
-        }
-
-        for (const transDrawCall of this.transTexDrawCalls) {
-            transDrawCall.drawCall.destroy(device);
-        }
+    public destroy(device: GfxDevice): void {
+        for (const drawCall of this.drawCalls)
+            drawCall.destroy(device);
     }
 
     private loadGeometry(levelData: ArrayBufferSlice, device: GfxDevice, renderHelper: GfxRenderHelper,  textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
@@ -93,48 +81,61 @@ export class DkrObjectModel {
         for (let i = 0; i < numberOfTextures; i++) {
             this.textureIndices.push(view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
         }
+
         const cache = renderHelper.renderCache;
         textureCache.preload3dTextures(this.textureIndices, () => {
-            this.triangleBatches = new Array(this.numberOfTriangleBatches);
-            
+            const drawCallMap = new Map<number, DkrDrawCall>();
+
             for (let i = 0; i < this.numberOfTriangleBatches; i++) {
                 const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
                 const tiNext = ti + SIZE_OF_BATCH_INFO;
 
+                const addDrawCall = (textureIndex: number, texture: DkrTexture | null): DkrDrawCall => {
+                    let allowMerge = true;
+
+                    if (texture !== null) {
+                        const layer = texture.getLayer();
+                        if (layer === GfxRendererLayer.TRANSLUCENT)
+                            allowMerge = false;
+                    }
+
+                    let drawCall: DkrDrawCall | undefined;
+                    if (allowMerge) {
+                        drawCall = drawCallMap.get(textureIndex);
+                        if (drawCall === undefined) {
+                            drawCall = new DkrDrawCall(device, cache, texture, textureIndex);
+                            drawCallMap.set(textureIndex, drawCall);
+                            this.drawCalls.push(drawCall);
+                        }
+                    } else {
+                        drawCall = new DkrDrawCall(device, cache, texture, textureIndex);
+                        this.drawCalls.push(drawCall);
+                    }
+
+                    return drawCall;
+                };
+
                 const tii = view.getUint8(ti);
                 const textureIndex = this.textureIndices[tii];
-                if (textureIndex != undefined && tii !== 0xFF) {
+                if (textureIndex !== undefined && tii !== 0xFF) {
                     textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
-                        this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, texture);
-                        const layer = texture.getLayer()
-                        if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
-                            if(this.opaqueTextureDrawCalls[textureIndex] == undefined) {
-                                this.opaqueTextureDrawCalls[textureIndex] = new DkrDrawCall(device, cache, texture);
-                            }
-                            this.opaqueTextureDrawCalls[textureIndex].addTriangleBatch(this.triangleBatches[i]);
-                        } else {
-                            let drawCall = new DkrDrawCall(device, cache, texture);
-                            drawCall.addTriangleBatch(this.triangleBatches[i]);
-                            drawCall.build(this.objectAnimations);
-                            this.transTexDrawCalls.push({ drawCall, textureIndex });
-                        }
+                        const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, texture);
+                        const drawCall = addDrawCall(textureIndex, texture);
+                        drawCall.addTriangleBatch(triangleBatch);
                     });
                 } else {
-                    if(this.opaqueTextureDrawCalls['noTex'] == undefined) {
-                        this.opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, cache, null);
-                    }
-                    this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
-                    this.opaqueTextureDrawCalls['noTex'].addTriangleBatch(this.triangleBatches[i]);
+                    const triangleBatch = this.parseBatch(levelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
+                    const drawCall = addDrawCall(-1, null);
+                    drawCall.addTriangleBatch(triangleBatch);
                 }
             }
-            this.opaqueTextureDrawCallsKeys = Object.keys(this.opaqueTextureDrawCalls);
-            for(const key of this.opaqueTextureDrawCallsKeys) {
-                this.opaqueTextureDrawCalls[key].build(this.objectAnimations);
-            }
+
+            for (const drawCall of this.drawCalls)
+                drawCall.build(this.objectAnimations);
         });
     }
 
-    private parseBatch(levelData: ArrayBufferSlice, i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, texture: DkrTexture | null) {
+    private parseBatch(levelData: ArrayBufferSlice, i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, texture: DkrTexture | null): DkrTriangleBatch {
         const view = levelData.createDataView();
 
         let curVertexOffset = view.getInt16(ti + 0x02);
@@ -152,7 +153,7 @@ export class DkrObjectModel {
         const verticesDataStart = batchVerticesOffset;
         const verticesDataEnd = verticesDataStart + (numberOfVerticesInBatch * SIZE_OF_VERTEX);
 
-        this.triangleBatches[i] = new DkrTriangleBatch(
+        return new DkrTriangleBatch(
             levelData.slice(triangleDataStart, triangleDataEnd),
             levelData.slice(verticesDataStart, verticesDataEnd),
             curVertexOffset,
@@ -187,16 +188,12 @@ export class DkrObjectModel {
     }
 
     // Only used with the `midifadepoint` object.
-    public getVertex(index: number): vec3 {
+    public getVertex(index: number): ReadonlyVec3 {
         return vec3.fromValues(
             this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 0),
             this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 2),
             this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 4)
         );
-    }
-
-    public getVertexAlpha(index: number): number {
-        return this.modelDataView.getUint8(this.verticesOffset + (index * SIZE_OF_VERTEX) + 9);
     }
 
     public setAnimationIndexAndProgress(index: number, progress: number, loopType: number): void {
@@ -206,41 +203,22 @@ export class DkrObjectModel {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
-        params: DkrDrawCallParams, texFrameOverride: any | null = null) {
-        if(!!this.opaqueTextureDrawCallsKeys) {
-            for(const key of this.opaqueTextureDrawCallsKeys) {
-                if(!!this.objectAnimations) {
-                    params.objAnim = this.objectAnimations[this.currObjAnimIndex];
-                    params.objAnimIndex = this.currObjAnimIndex;
-                }
-                params.textureFrame = -1;
-                if(!!texFrameOverride && texFrameOverride[key] != null && texFrameOverride[key] != undefined) {
-                    params.textureFrame = texFrameOverride[key];
-                } else if(!!texFrameOverride && texFrameOverride['doNotAnimate']) {
-                    params.textureFrame = 0;
-                }
-                this.opaqueTextureDrawCalls[key].prepareToRender(device, renderInstManager, viewerInput, params);
-            }
-        }
-        for (let i = 0; i < this.transTexDrawCalls.length; i++) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, params: DkrDrawCallParams, texFrameOverride: any | null = null) {
+        for (let i = 0; i < this.drawCalls.length; i++) {
             if(!!this.objectAnimations) {
                 params.objAnim = this.objectAnimations[this.currObjAnimIndex];
                 params.objAnimIndex = this.currObjAnimIndex;
             }
             params.textureFrame = -1;
-            const key = this.transTexDrawCalls[i].textureIndex;
-            if(!!texFrameOverride && texFrameOverride[key] != null && texFrameOverride[key] != undefined) {
-                params.textureFrame = texFrameOverride[key];
+
+            const drawCall = this.drawCalls[i];
+            const textureIndex = drawCall.textureIndex;
+            if(!!texFrameOverride && texFrameOverride[textureIndex] != null && texFrameOverride[textureIndex] != undefined) {
+                params.textureFrame = texFrameOverride[textureIndex];
             } else if(!!texFrameOverride && texFrameOverride['doNotAnimate']) {
                 params.textureFrame = 0;
             }
-            this.transTexDrawCalls[i].drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
+            drawCall.prepareToRender(device, renderInstManager, viewerInput, params);
         }
-        /*
-        if(!!this.objectAnimations && !!this.objectAnimations[this.currObjAnimIndex]) {
-            this.objectAnimations[this.currObjAnimIndex].advance(viewerInput.deltaTime);
-        }
-        */
     }
 }
