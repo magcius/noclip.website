@@ -16,7 +16,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor
 import { AABB, Frustum } from "../Geometry.js";
 import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes.js";
 import { MSB, Part } from "./msb.js";
-import { computeUnitSphericalCoordinates, getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers.js";
+import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers.js";
 import { MTD, MTDTexture } from './mtd.js';
 import { interactiveVizSliderSelect } from '../DebugJunk.js';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -265,6 +265,8 @@ struct FogParams {
     vec4 FogColor;
     // R, G, B, LS BlendCoeff
     vec4 SunColor;
+    // R, G, B
+    vec4 Reflectance;
 };
 
 layout(std140) uniform ub_MeshFragParams {
@@ -548,14 +550,13 @@ void CalcToneMap(inout vec3 t_Color) {
     t_Color = t_Color * vec3(1.2) + vec3(0.05);
 }
 
-void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWorld) {
+void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionToEye) {
     float t_FogBeginZ = t_FogParams.Misc[0].x;
     float t_FogEndZ = t_FogParams.Misc[0].y;
     vec3 t_FogColor = t_FogParams.FogColor.rgb;
     float t_FogMaxDensity = t_FogParams.FogColor.a;
 
-    float t_DistanceWorld = distance(t_PositionWorld.xyz, u_CameraPosWorld.xyz);
-    float t_FogFactor = saturate(invlerp(t_FogBeginZ, t_FogEndZ, t_DistanceWorld));
+    float t_FogFactor = saturate(invlerp(t_FogBeginZ, t_FogEndZ, length(t_PositionToEye)));
     t_FogFactor = min(t_FogFactor, t_FogMaxDensity);
 
     t_FogFactor *= t_FogFactor;
@@ -564,6 +565,7 @@ void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionWor
 }
 
 const float M_PI = ${Math.PI};
+const float M_LOG2E = ${Math.LOG2E};
 
 struct LightScatteringParams {
     float BetaRay;
@@ -573,40 +575,52 @@ struct LightScatteringParams {
     float BlendCoeff;
     vec3 SunDirection;
     vec3 SunColor;
+    vec3 Reflectance;
 };
 
-void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightScatteringParams, in vec3 t_PositionWorld, in float t_Distance) {
-    // https://developer.amd.com/wordpress/media/2012/10/ATI-LightScattering.pdf
-    float t_BetaRay     = t_LightScatteringParams.BetaRay;
-    float t_BetaMie     = t_LightScatteringParams.BetaMie;
-    float t_HGg         = t_LightScatteringParams.HGg;
-    float t_DistanceMul = t_LightScatteringParams.DistanceMul;
-    float t_BlendCoeff  = t_LightScatteringParams.BlendCoeff;
-    vec3 t_SunColor     = t_LightScatteringParams.SunColor;
-    vec3 t_SunDirection = t_LightScatteringParams.SunDirection;
+void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightScatteringParams, in vec3 t_PositionToEye) {
+    // https://courses.cs.duke.edu/fall01/cps124/resources/p91-preetham.pdf
+    float BetaRay     = t_LightScatteringParams.BetaRay;
+    float BetaMie     = t_LightScatteringParams.BetaMie;
+    float HGg         = t_LightScatteringParams.HGg;
+    float DistanceMul = t_LightScatteringParams.DistanceMul;
+    float BlendCoeff  = t_LightScatteringParams.BlendCoeff;
+    vec3 SunColor     = t_LightScatteringParams.SunColor;
+    vec3 SunDirection = t_LightScatteringParams.SunDirection;
+    vec3 Reflectance  = t_LightScatteringParams.Reflectance;
 
-    t_Distance *= t_DistanceMul;
+    vec3 t_Lambda = vec3(1.0 / 650.0e-9, 1.0 / 570e-9, 1.0 / 475.0e-9);
+    vec3 t_Lambda2 = t_Lambda * t_Lambda;
+    vec3 t_Lambda4 = t_Lambda2 * t_Lambda2;
 
-    // TODO(jstpierre): Per-wavelength extinction. The game seems to scatter blue/green more than red,
-    // which is somewhat correct, but how do they do that? This is a crummy empirical model
-    vec3 t_ExtinctionCoeff = vec3(0.2, 0.3, 1.0);
-    vec3 t_Extinction = exp(t_ExtinctionCoeff * vec3(-(t_BetaRay + t_BetaMie) * t_Distance));
+    // Rayleigh scattering constants.
+    float n = 1.0003;
+    float N = 2.545e25;
+    float pn = 0.035;
+    float t_BetaRayTemp = (M_PI * M_PI) * pow(n * n - 1.0, 2.0) * (6.0 + 3.0 * pn) / (6.0 - 7.0 * pn) / N;
+    vec3 t_BetaRay = (8.0f * t_BetaRayTemp * M_PI / 3.0) * t_Lambda4 * BetaRay;
+    vec3 t_BetaDashRay = t_BetaRayTemp * 0.5 * t_Lambda4 * BetaRay;
 
-    // TODO(jstpierre): The blot from mie scattering seems a lot larger in game. Might just be HDR,
-    // might also just be some maths I did incorrectly. For now, spam up the sun color.
-    t_SunColor *= vec3(3.0);
+    // Mie scattering constants.
+    float T = 2.0;
+    float c = (6.544*T - 6.51) * 1e-17;
+    float t_BetaMieTemp = 0.434 * c * pow(M_PI * 2.0, 2.0) * 0.5;
+    vec3 t_BetaDashMie = t_BetaMieTemp * t_Lambda2 * BetaMie;
+    vec3 K = vec3(0.685, 0.679, 0.670);
+    float t_BetaMieTemp2 = 0.434 * c * M_PI * pow(M_PI * 2.0, 2.0);
+    vec3 t_BetaMie = t_BetaMieTemp2 * K * t_Lambda2 * BetaMie;
 
-    float t_Cos = dot(normalize(t_PositionWorld), t_SunDirection);
+    float t_Distance = length(t_PositionToEye) * DistanceMul;
+    vec3 t_Extinction = exp(-(t_BetaRay + t_BetaMie) * t_Distance * M_LOG2E) * Reflectance;
 
-    float t_BetaRayCos = (3.0 / (16.0 * M_PI)) * t_BetaRay * (1.0 + t_Cos * t_Cos);
-    float t_BetaMieCos = (1.0 / ( 4.0 * M_PI)) * t_BetaMie * \
-        ((1.0 - t_HGg) * (1.0 - t_HGg)) / pow(1.0 + t_HGg * t_HGg - 2.0 * t_HGg * t_Cos, 3.0 / 2.0);
+    float t_VoL = dot(normalize(t_PositionToEye), SunDirection);
+    float t_ViewRay = 1.0f + t_VoL * t_VoL;
+    float t_ViewMie = (1.0f - HGg * HGg) / pow((-2.0 * HGg) * t_VoL + (1.0 + HGg), 1.5);
 
-    float t_InScatterCoeff = (t_BetaRayCos + t_BetaMieCos) / (t_BetaRay + t_BetaMie);
-    vec3 t_InScatterColor = vec3(t_InScatterCoeff) * t_SunColor.rgb * (vec3(1.0) - t_Extinction.rgb);
+    vec3 t_InscatteringColor = ((t_BetaDashRay * t_ViewRay + t_BetaDashMie * t_ViewMie) * SunColor * (vec3(1.0) - t_Extinction)) / (t_BetaRay + t_BetaMie);
 
-    vec3 t_ScatteredColor = t_Color.rgb * t_Extinction.rgb + t_InScatterColor.rgb;
-    t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, t_BlendCoeff);
+    vec3 t_ScatteredColor = t_Color.rgb * t_Extinction + t_InscatteringColor;
+    t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, BlendCoeff);
 }
 
 vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
@@ -677,7 +691,7 @@ void main() {
 
     CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
     CalcToneMap(t_Color.rgb);
-    CalcFog(t_Color.rgb, u_FogParams, v_PositionWorld.xyz);
+    CalcFog(t_Color.rgb, u_FogParams, t_PositionToEye);
 
     LightScatteringParams t_LightScatteringParams;
     t_LightScatteringParams.BetaRay = u_HemisphereLight.ColorU.a;
@@ -687,7 +701,8 @@ void main() {
     t_LightScatteringParams.BlendCoeff = u_FogParams.SunColor.a;
     t_LightScatteringParams.SunDirection = u_FogParams.Misc[1].xyz;
     t_LightScatteringParams.SunColor = u_FogParams.SunColor.rgb;
-    CalcLightScattering(t_Color.rgb, t_LightScatteringParams, v_PositionWorld.xyz, length(t_PositionToEye));
+    t_LightScatteringParams.Reflectance = u_FogParams.Reflectance.rgb;
+    CalcLightScattering(t_Color.rgb, t_LightScatteringParams, t_PositionToEye);
 
     gl_FragColor = t_Color;
 }
@@ -891,7 +906,7 @@ class BatchInstance {
         template.setVertexInput(this.batchData.inputLayout, this.batchData.vertexBufferDescriptors, this.batchData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaState);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*16);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*17);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         offs += fillMatrix4x3(d, offs, modelMatrix);
@@ -914,13 +929,15 @@ class BatchInstance {
             materialDrawConfig.lightScatteringParams.distanceMul,
         );
 
-        computeUnitSphericalCoordinates(scratchVec3a, (90 - materialDrawConfig.lightScatteringParams.sunRotY) * MathConstants.DEG_TO_RAD, (90 + materialDrawConfig.lightScatteringParams.sunRotX) * MathConstants.DEG_TO_RAD);
-        vec3.negate(scratchVec3a, scratchVec3a);
+        const sunSinX = Math.sin(materialDrawConfig.lightScatteringParams.sunRotX * MathConstants.DEG_TO_RAD), sunCosX = Math.cos(materialDrawConfig.lightScatteringParams.sunRotX * MathConstants.DEG_TO_RAD);
+        const sunSinY = Math.sin(materialDrawConfig.lightScatteringParams.sunRotY * MathConstants.DEG_TO_RAD), sunCosY = Math.cos(materialDrawConfig.lightScatteringParams.sunRotY * MathConstants.DEG_TO_RAD);
+        vec3.set(scratchVec3a, sunSinY * sunCosX, -sunSinX, sunCosY * sunCosX);
         offs += fillVec3v(d, offs, scratchVec3a);
         offs += fillColor(d, offs, materialDrawConfig.fogParams.color);
         offs += fillColor(d, offs, materialDrawConfig.lightScatteringParams.sunColor, materialDrawConfig.lightScatteringParams.blendCoeff);
+        offs += fillColor(d, offs, materialDrawConfig.lightScatteringParams.groundReflectance);
 
-        const scrollTime = viewerInput.time / 240;
+        const scrollTime = viewerInput.time / 1000;
         offs += fillVec4(d, offs,
             scrollTime * this.texScroll[0][0], scrollTime * this.texScroll[0][1],
             scrollTime * this.texScroll[1][0], scrollTime * this.texScroll[1][1],
@@ -1011,6 +1028,8 @@ class LightScatteringParams {
     @dfShow()
     @dfRange(0, 5)
     public sunColor = colorNewCopy(White);
+    @dfShow()
+    public groundReflectance = colorNewCopy(White);
 }
 
 class MaterialDrawConfig {
@@ -1103,8 +1122,11 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstScatter.HGg = scatterBank.getF32(scatterID, `lsHGg`);
     dstScatter.betaRay = scatterBank.getF32(scatterID, `lsBetaRay`);
     dstScatter.betaMie = scatterBank.getF32(scatterID, `lsBetaMie`);
-    // dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
-    dstScatter.blendCoeff = 0.2;
+    dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
+    const reflectanceMul = scatterBank.getS16(scatterID, `reflectanceA`) / 100;
+    dstScatter.groundReflectance.r = (scatterBank.getS16(scatterID, `reflectanceR`) / 255) * reflectanceMul;
+    dstScatter.groundReflectance.g = (scatterBank.getS16(scatterID, `reflectanceG`) / 255) * reflectanceMul;
+    dstScatter.groundReflectance.b = (scatterBank.getS16(scatterID, `reflectanceB`) / 255) * reflectanceMul;
 }
 
 const bboxScratch = new AABB();
