@@ -640,6 +640,12 @@ vec3 CalcPointLightSpecular(in PointLight t_PointLight, in vec3 t_PositionWorld,
     return t_LightColor * t_DistAtten * t_DotAtten;
 }
 
+void CalcToneMap(inout vec3 t_Color) {
+    float t_Exposure = 5.0;
+    t_Color.rgb *= t_Exposure;
+    t_Color.rgb /= (t_Color.rgb + vec3(1.0));
+}
+
 void main() {
     bool t_DiffuseMapEnabled = true;
     bool t_LightmapEnabled = true;
@@ -727,6 +733,8 @@ void main() {
         t_Color.rgb = vec3(t_NormalDirWorld * 0.25 + 0.5);
         CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
     }
+
+    CalcToneMap(t_Color.rgb);
 
     gl_FragColor = t_Color;
 }
@@ -1172,7 +1180,7 @@ function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part
     dstLantern.attenEnd = pointLightBank.getF32(lanternID, `dwindleEnd`);
     // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
     dstLantern.attenEnd *= 3;
-    const lanternColorMul = 0; // pointLightBank.getS16(lanternID, `colA`) / 100;
+    const lanternColorMul = pointLightBank.getS16(lanternID, `colA`) / 100;
     dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
     dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
     dstLantern.color.b = (pointLightBank.getS16(lanternID, `colB`) / 255) * lanternColorMul;

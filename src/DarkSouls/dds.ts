@@ -125,10 +125,11 @@ function decodeRGB(level: Level): Uint8Array {
     const dst = new Uint8Array(src.length * 4 / 3);
     let srcOffs = 0;
     for (let dstOffs = 0; dstOffs < dst.length;) {
-        dst[dstOffs++] = src[srcOffs++];
-        dst[dstOffs++] = src[srcOffs++];
-        dst[dstOffs++] = src[srcOffs++];
+        dst[dstOffs++] = src[srcOffs + 2];
+        dst[dstOffs++] = src[srcOffs + 1];
+        dst[dstOffs++] = src[srcOffs + 0];
         dst[dstOffs++] = 0xFF;
+        srcOffs += 3;
     }
     return dst;
 }
