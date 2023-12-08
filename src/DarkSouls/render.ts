@@ -16,7 +16,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor
 import { AABB, Frustum } from "../Geometry.js";
 import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes.js";
 import { MSB, Part } from "./msb.js";
-import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate } from "../MathHelpers.js";
+import { computeMatrixWithoutScale, computeModelMatrixS, getMatrixAxisZ, getMatrixTranslation, lerp, MathConstants, saturate, scaleMatrix, Vec3One } from "../MathHelpers.js";
 import { MTD, MTDTexture } from './mtd.js';
 import { interactiveVizSliderSelect } from '../DebugJunk.js';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -233,9 +233,19 @@ class DKSProgram extends DeviceProgram {
 
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
+struct ToneCorrectParams {
+    Mat4x3 Matrix;
+};
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
+    ToneCorrectParams u_ToneCorrectParams;
+};
+
+struct DirectionalLight {
+    vec4 Direction;
+    vec4 Color;
 };
 
 // Light Scattering is also packed in here
@@ -249,11 +259,6 @@ struct HemisphereLight {
 struct PointLight {
     vec4 PositionAttenStart;
     vec4 ColorAttenEnd;
-};
-
-struct ToneCorrectParams {
-    vec4 BrightnessSaturation;
-    vec4 ContrastHue;
 };
 
 // Light Scattering is also packed in here
@@ -276,9 +281,9 @@ layout(std140) uniform ub_MeshFragParams {
     vec4 u_SpecularMapColor;
     vec4 u_EnvDifColor;
     vec4 u_EnvSpcColor;
+    DirectionalLight u_DirectionalLight[3];
     HemisphereLight u_HemisphereLight;
     PointLight u_PointLights[1];
-    ToneCorrectParams u_ToneCorrectParams;
     FogParams u_FogParams;
     // g_TexScroll0, g_TexScroll1
     // g_TexScroll2,
@@ -445,7 +450,7 @@ ${specularEpi}
 
         const bumpmapEpi = `
     vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-    vec3 t_NormalDirWorld = CalcTangentToWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
+    vec3 t_NormalDirWorld = normalize(CalcTangentToWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2));
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
@@ -513,17 +518,6 @@ vec3 CalcTangentToWorld(in vec3 t_TangentNormal, in vec3 t_Basis0, in vec3 t_Bas
     return t_TangentNormal.xxx * t_Basis0 + t_TangentNormal.yyy * t_Basis1 + t_TangentNormal.zzz * t_Basis2;
 }
 
-// https://gamedev.stackexchange.com/a/59808
-vec3 RGBtoHSV(in vec3 c) {
-    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-
-    float d = q.x - min(q.w, q.y);
-    float e = 1.0e-10;
-    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-}
-
 vec3 HSVtoRGB(in vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
@@ -531,23 +525,7 @@ vec3 HSVtoRGB(in vec3 c) {
 }
 
 void CalcToneCorrect(inout vec3 t_Color, in ToneCorrectParams t_Params) {
-    vec3  t_Brightness = t_Params.BrightnessSaturation.xyz;
-    float t_Saturation = t_Params.BrightnessSaturation.w;
-    vec3  t_Contrast   = t_Params.ContrastHue.xyz;
-    float t_Hue        = t_Params.ContrastHue.w;
-
-    // Apply Brightness and Contrast
-    t_Color.rgb = ((t_Color.rgb * t_Brightness.rgb) - vec3(0.5)) * t_Contrast.rgb + vec3(0.5);
-
-    vec3 t_HSV = RGBtoHSV(t_Color);
-    t_HSV.x += (t_Hue / 360.0);
-    t_HSV.y *= t_Saturation;
-    t_Color = HSVtoRGB(t_HSV);
-}
-
-void CalcToneMap(inout vec3 t_Color) {
-    // Some form of crummy tone mapping to brighten up the image.
-    t_Color = t_Color * vec3(1.2) + vec3(0.05);
+    t_Color.rgb = Mul(_Mat4x4(t_Params.Matrix), vec4(t_Color.rgb, 1.0)).rgb;
 }
 
 void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionToEye) {
@@ -623,15 +601,41 @@ void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightSca
     t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, BlendCoeff);
 }
 
-vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
+vec3 CalcDirLightDiffuse(in DirectionalLight t_DirLight, in vec3 t_NormalDirWorld) {
+    return t_DirLight.Color.rgb * saturate(dot(-t_DirLight.Direction.xyz, t_NormalDirWorld));
+}
+
+vec3 CalcDirLightSpecular(in DirectionalLight t_DirLight, in vec3 t_ReflectionWorld) {
+    return t_DirLight.Color.rgb * pow(saturate(dot(-t_DirLight.Direction.xyz, t_ReflectionWorld)), u_SpecularPower);
+}
+
+float CalcPointLightDistAtten(in PointLight t_PointLight, in vec3 t_PositionWorld) {
     vec3 t_LightPosition = t_PointLight.PositionAttenStart.xyz;
-    vec3 t_LightColor = t_PointLight.ColorAttenEnd.rgb;
     float t_AttenStart = t_PointLight.PositionAttenStart.w;
     float t_AttenEnd = t_PointLight.ColorAttenEnd.w;
 
     vec3 t_Delta = t_LightPosition - t_PositionWorld.xyz;
-    float t_DistAtten = saturate(invlerp(t_AttenEnd, t_AttenStart, length(t_Delta)));
+    return saturate(invlerp(t_AttenEnd, t_AttenStart, length(t_Delta)));
+}
+
+vec3 CalcPointLightDiffuse(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
+    vec3 t_LightPosition = t_PointLight.PositionAttenStart.xyz;
+    vec3 t_LightColor = t_PointLight.ColorAttenEnd.rgb;
+
+    vec3 t_Delta = t_LightPosition - t_PositionWorld.xyz;
+    float t_DistAtten = CalcPointLightDistAtten(t_PointLight, t_PositionWorld);
     float t_DotAtten = saturate(dot(normalize(t_Delta), t_NormalWorld));
+
+    return t_LightColor * t_DistAtten * t_DotAtten;
+}
+
+vec3 CalcPointLightSpecular(in PointLight t_PointLight, in vec3 t_PositionWorld, in vec3 t_ReflectionWorld) {
+    vec3 t_LightPosition = t_PointLight.PositionAttenStart.xyz;
+    vec3 t_LightColor = t_PointLight.ColorAttenEnd.rgb;
+
+    vec3 t_Delta = t_LightPosition - t_PositionWorld.xyz;
+    float t_DistAtten = CalcPointLightDistAtten(t_PointLight, t_PositionWorld);
+    float t_DotAtten = pow(saturate(dot(normalize(t_Delta), t_ReflectionWorld)), u_SpecularPower);
 
     return t_LightColor * t_DistAtten * t_DotAtten;
 }
@@ -647,50 +651,64 @@ void main() {
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
 
-#ifdef USE_LIGHTING
-    vec3 t_OutgoingLight = vec3(0.0);
-
-    vec3 t_IncomingDiffuseRadiance = vec3(0.0);
-    vec3 t_IncomingSpecularRadiance = vec3(0.0);
-
     ${this.genNormalDir()}
     t_NormalDirWorld *= gl_FrontFacing ? 1.0 : -1.0;
 
-    // Environment light.
-    t_IncomingDiffuseRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
+    int t_LightingType = ${getLightingType(this.mtd)};
 
-    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    vec3 t_Reflection = reflect(-t_WorldDirectionToEye.xyz, t_NormalDirWorld.xyz);
-    t_IncomingSpecularRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvSpc), t_Reflection.xyz).rgb * u_EnvSpcColor.rgb;
+    if (t_LightingType == -1) {
+        // Missing, probably a water shader.
+        t_Color *= t_Diffuse;
+    } else {
+        vec3 t_OutgoingLight = vec3(0.0);
 
-    // Light map (really a baked indirect shadow map...) only applies to the environment light.
-    ${this.genLightMap()}
+        vec3 t_IncomingDiffuseRadiance = vec3(0.0);
+        vec3 t_IncomingSpecularRadiance = vec3(0.0);
 
-    for (int i = 0; i < 1; i++) {
-        t_IncomingDiffuseRadiance.rgb += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
-        // TODO(jstpierre): Point light specular
+        vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+        vec3 t_ReflectionWorld = reflect(-t_WorldDirectionToEye.xyz, t_NormalDirWorld.xyz);
+
+        if (t_LightingType == 0) {
+            // None
+            t_IncomingDiffuseRadiance.rgb = vec3(1.0);
+            t_IncomingSpecularRadiance.rgb = vec3(0.0);
+        } else if (t_LightingType == 1) {
+            // Dir3
+            for (int i = 0; i < 3; i++) {
+                t_IncomingDiffuseRadiance.rgb += CalcDirLightDiffuse(u_DirectionalLight[i], t_NormalDirWorld);
+                t_IncomingSpecularRadiance.rgb += CalcDirLightSpecular(u_DirectionalLight[i], t_ReflectionWorld);
+            }
+        } else if (t_LightingType == 3) {
+            // Env
+            t_IncomingDiffuseRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvDif), t_NormalDirWorld).rgb * u_EnvDifColor.rgb;
+            t_IncomingSpecularRadiance.rgb += texture(SAMPLER_Cube(u_TextureEnvSpc), t_ReflectionWorld).rgb * u_EnvSpcColor.rgb;
+        }
+
+        // Light map (really a baked indirect shadow map...) only applies to environment lighting.
+        ${this.genLightMap()}
+
+        for (int i = 0; i < 1; i++) {
+            t_IncomingDiffuseRadiance.rgb += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
+            t_IncomingSpecularRadiance.rgb += CalcPointLightSpecular(u_PointLights[i], v_PositionWorld.xyz, t_ReflectionWorld);
+        }
+
+        // Hemisphere light for ambient.
+        float t_DiffuseIntensity = dot(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
+        t_IncomingDiffuseRadiance += mix(u_HemisphereLight.ColorD.rgb, u_HemisphereLight.ColorU.rgb, t_DiffuseIntensity * 0.5 + 0.5);
+
+        ${this.genSpecular()}
+
+        t_OutgoingLight += t_Diffuse.rgb * t_IncomingDiffuseRadiance;
+        t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
+
+        t_Color.rgb *= t_OutgoingLight;
+        t_Color.a *= t_Diffuse.a;
     }
-
-    // Hemisphere light for ambient.
-    float t_DiffuseIntensity = dot(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
-    t_IncomingDiffuseRadiance += mix(u_HemisphereLight.ColorD.rgb, u_HemisphereLight.ColorU.rgb, t_DiffuseIntensity * 0.5 + 0.5);
-
-    ${this.genSpecular()}
-
-    t_OutgoingLight += t_Diffuse.rgb * t_IncomingDiffuseRadiance;
-    t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
-
-    t_Color.rgb *= t_OutgoingLight;
-    t_Color.a *= t_Diffuse.a;
-#else
-    t_Color *= t_Diffuse;
-#endif
 
     t_Color *= v_Color;
     ${this.genAlphaTest()}
 
     CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
-    CalcToneMap(t_Color.rgb);
     CalcFog(t_Color.rgb, u_FogParams, t_PositionToEye);
 
     LightScatteringParams t_LightScatteringParams;
@@ -703,6 +721,12 @@ void main() {
     t_LightScatteringParams.SunColor = u_FogParams.SunColor.rgb;
     t_LightScatteringParams.Reflectance = u_FogParams.Reflectance.rgb;
     CalcLightScattering(t_Color.rgb, t_LightScatteringParams, t_PositionToEye);
+
+    bool t_DebugNormal = false;
+    if (t_DebugNormal) {
+        t_Color.rgb = vec3(t_NormalDirWorld * 0.25 + 0.5);
+        CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
+    }
 
     gl_FragColor = t_Color;
 }
@@ -718,9 +742,10 @@ function lookupTextureParameter(material: Material, paramName: string): string |
 }
 
 const enum LightingType {
-    None,
-    HemDirDifSpcx3,
-    HemEnvDifSpc,
+    Off = -1,
+    None = 0,
+    HemDirDifSpcx3 = 1,
+    HemEnvDifSpc = 3,
 }
 
 const enum BlendMode {
@@ -766,6 +791,17 @@ function getBlendMode(mtd: MTD): BlendMode {
     return blendMode;
 }
 
+function getLightingType(mtd: MTD): LightingType {
+    const v = getMaterialParam(mtd, 'g_LightingType');
+    if (!v)
+        return -1;
+
+    assert(v.length === 1);
+    const lightingType = v[0];
+    assert(lightingType === 0 || lightingType === 1 || lightingType === 3);
+    return lightingType;
+}
+
 function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: DDSTextureHolder, name: string, material: Material, mtd: MTD): void {
     const texDef = mtd.textures.find((t) => t.name === name);
     if (texDef === undefined)
@@ -795,16 +831,6 @@ class BatchInstance {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, private material: Material, private mtd: MTD) {
         this.program = new DKSProgram(mtd);
-
-        // If this is a Phong shader, then turn on lighting.
-        if (mtd.shaderPath.includes('_Phn_')) {
-            const lightingType: LightingType = assertExists(getMaterialParam(mtd, 'g_LightingType'))[0];
-
-            if (lightingType !== LightingType.None)
-                this.program.defines.set('USE_LIGHTING', '1');
-        } else if (mtd.shaderPath.includes('_Lit')) {
-            this.program.defines.set('USE_LIGHTING', '1');
-        }
 
         // If this is a Water shader, turn off by default until we RE this.
         if (mtd.shaderPath.includes('_Water_'))
@@ -906,7 +932,7 @@ class BatchInstance {
         template.setVertexInput(this.batchData.inputLayout, this.batchData.vertexBufferDescriptors, this.batchData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaState);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*17);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*4 + 4*2*3 + 4*11);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         offs += fillMatrix4x3(d, offs, modelMatrix);
@@ -916,11 +942,13 @@ class BatchInstance {
         offs += fillColor(d, offs, materialDrawConfig.envDifColor);
         offs += fillColor(d, offs, materialDrawConfig.envSpcColor);
 
+        for (let i = 0; i < materialDrawConfig.dirLight.length; i++)
+            offs += materialDrawConfig.dirLight[i].fill(d, offs);
+
         offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorU, materialDrawConfig.lightScatteringParams.betaRay);
         offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorD, materialDrawConfig.lightScatteringParams.betaMie);
         for (let i = 0; i < materialDrawConfig.pointLight.length; i++)
             offs += materialDrawConfig.pointLight[i].fill(d, offs);
-        offs += materialDrawConfig.toneCorrectParams.fill(d, offs);
 
         offs += fillVec4(d, offs,
             materialDrawConfig.fogParams.fogBeginZ,
@@ -929,9 +957,7 @@ class BatchInstance {
             materialDrawConfig.lightScatteringParams.distanceMul,
         );
 
-        const sunSinX = Math.sin(materialDrawConfig.lightScatteringParams.sunRotX * MathConstants.DEG_TO_RAD), sunCosX = Math.cos(materialDrawConfig.lightScatteringParams.sunRotX * MathConstants.DEG_TO_RAD);
-        const sunSinY = Math.sin(materialDrawConfig.lightScatteringParams.sunRotY * MathConstants.DEG_TO_RAD), sunCosY = Math.cos(materialDrawConfig.lightScatteringParams.sunRotY * MathConstants.DEG_TO_RAD);
-        vec3.set(scratchVec3a, sunSinY * sunCosX, -sunSinX, sunCosY * sunCosX);
+        calcDirFromRotXY(scratchVec3a, materialDrawConfig.lightScatteringParams.sunRotX, materialDrawConfig.lightScatteringParams.sunRotY);
         offs += fillVec3v(d, offs, scratchVec3a);
         offs += fillColor(d, offs, materialDrawConfig.fogParams.color);
         offs += fillColor(d, offs, materialDrawConfig.lightScatteringParams.sunColor, materialDrawConfig.lightScatteringParams.blendCoeff);
@@ -965,6 +991,18 @@ class BatchInstance {
     }
 }
 
+class DirectionalLight {
+    public dir = vec3.create();
+    public color = colorNewCopy(White);
+
+    public fill(d: Float32Array, offs: number): number {
+        const baseOffs = offs;
+        offs += fillVec3v(d, offs, this.dir);
+        offs += fillColor(d, offs, this.color);
+        return offs - baseOffs;
+    }
+}
+
 class HemisphereLight {
     public colorU = colorNewCopy(White);
     public colorD = colorNewCopy(White);
@@ -986,14 +1024,34 @@ class PointLight {
 }
 
 class ToneCorrectParams {
-    public brightnessSaturation = vec4.create();
-    public contrastHue = vec4.create();
+    public brightness = vec3.create();
+    public contrast = vec3.create();
+    public saturation = 1.0;
+    public hue = 0.0;
 
     public fill(d: Float32Array, offs: number): number {
-        const baseOffs = offs;
-        offs += fillVec4v(d, offs, this.brightnessSaturation);
-        offs += fillVec4v(d, offs, this.contrastHue);
-        return offs - baseOffs;
+        const adjustMat = mat4.fromValues(
+            this.brightness[0] * this.contrast[0], 0.0, 0.0, 0.0,
+            0.0, this.brightness[1] * this.contrast[1], 0.0, 0.0,
+            0.0, 0.0, this.brightness[2] * this.contrast[2], 0.0,
+            0.5 - 0.5 * this.contrast[0], 0.5 - 0.5 * this.contrast[1], 0.5 - 0.5 * this.contrast[2], 1.0,
+        );
+
+        const sat0 = 1.0 - this.saturation;
+        const linearR = 0.3086 * sat0, linearG = 0.6094 * sat0, linearB = 0.0820 * sat0;
+        const saturation = mat4.fromValues(
+            linearR + this.saturation, linearR, linearR, 0.0,
+            linearG, linearG + this.saturation, linearG, 0.0,
+            linearB, linearB, linearB + this.saturation, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        );
+
+        const hue = mat4.create();
+        mat4.fromRotation(hue, this.hue * MathConstants.DEG_TO_RAD, Vec3One);
+
+        mat4.mul(adjustMat, saturation, adjustMat);
+        mat4.mul(adjustMat, hue, adjustMat);
+        return fillMatrix4x3(d, offs, adjustMat);
     }
 }
 
@@ -1038,14 +1096,24 @@ class MaterialDrawConfig {
     public envDifColor = colorNewCopy(White);
     public envSpcColor = colorNewCopy(White);
 
+    public dirLight = nArray(3, () => new DirectionalLight());
     public hemisphereLight = new HemisphereLight();
     public pointLight = nArray(1, () => new PointLight());
-    public toneCorrectParams = new ToneCorrectParams();
     public fogParams = new FogParams();
     public lightScatteringParams = new LightScatteringParams();
 }
 
-function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank, textureHolder: DDSTextureHolder): void {
+class SceneDrawConfig {
+    public toneCorrectParams = new ToneCorrectParams();
+}
+
+function calcDirFromRotXY(dst: vec3, rotX: number, rotY: number): void {
+    const sinX = Math.sin(rotX * MathConstants.DEG_TO_RAD), cosX = Math.cos(rotX * MathConstants.DEG_TO_RAD);
+    const sinY = Math.sin(rotY * MathConstants.DEG_TO_RAD), cosY = Math.cos(rotY * MathConstants.DEG_TO_RAD);
+    vec3.set(dst, sinY * cosX, -sinX, cosY * cosX);
+}
+
+function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank, textureHolder: DDSTextureHolder): void {
     const lightBank = bank.lightBank;
     const lightID = part.lightID;
 
@@ -1064,6 +1132,18 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dst.envSpcColor.g = (lightBank.getS16(lightID, 'envSpc_colG') / 255) * envSpcColorMul;
     dst.envSpcColor.b = (lightBank.getS16(lightID, 'envSpc_colB') / 255) * envSpcColorMul;
 
+    for (let i = 0; i < 3; i++) {
+        const dstDirLight = dst.dirLight[i];
+        const rotX = lightBank.getS16(lightID, `degRotX_${i}`) / 255;
+        const rotY = lightBank.getS16(lightID, `degRotY_${i}`) / 255;
+        calcDirFromRotXY(dstDirLight.dir, rotX, rotY);
+
+        const colorMul = lightBank.getS16(lightID, `colA_${i}`) / 100;
+        dstDirLight.color.r = (lightBank.getS16(lightID, `colR_${i}`) / 255) * colorMul;
+        dstDirLight.color.g = (lightBank.getS16(lightID, `colG_${i}`) / 255) * colorMul;
+        dstDirLight.color.b = (lightBank.getS16(lightID, `colB_${i}`) / 255) * colorMul;
+    }
+
     const dstHemi = dst.hemisphereLight;
     const colorUMul = lightBank.getS16(lightID, 'colA_u') / 100;
     dstHemi.colorU.r = (lightBank.getS16(lightID, 'colR_u') / 255) * colorUMul;
@@ -1073,18 +1153,6 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstHemi.colorD.r = (lightBank.getS16(lightID, 'colR_d') / 255) * colorDMul;
     dstHemi.colorD.g = (lightBank.getS16(lightID, 'colG_d') / 255) * colorDMul;
     dstHemi.colorD.b = (lightBank.getS16(lightID, 'colB_d') / 255) * colorDMul;
-
-    const toneCorrectBank = bank.toneCorrectBank;
-    const toneCorrectID = part.toneCorrectID;
-    const dstTone = dst.toneCorrectParams;
-    dstTone.brightnessSaturation[0] = toneCorrectBank.getF32(toneCorrectID, 'brightnessR');
-    dstTone.brightnessSaturation[1] = toneCorrectBank.getF32(toneCorrectID, 'brightnessG');
-    dstTone.brightnessSaturation[2] = toneCorrectBank.getF32(toneCorrectID, 'brightnessB');
-    dstTone.brightnessSaturation[3] = toneCorrectBank.getF32(toneCorrectID, 'saturation');
-    dstTone.contrastHue[0] = toneCorrectBank.getF32(toneCorrectID, 'contrastR');
-    dstTone.contrastHue[1] = toneCorrectBank.getF32(toneCorrectID, 'contrastG');
-    dstTone.contrastHue[2] = toneCorrectBank.getF32(toneCorrectID, 'contrastB');
-    dstTone.contrastHue[3] = toneCorrectBank.getF32(toneCorrectID, 'hue');
 
     const fogBank = bank.fogBank;
     const fogID = part.fogID;
@@ -1104,7 +1172,7 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstLantern.attenEnd = pointLightBank.getF32(lanternID, `dwindleEnd`);
     // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
     dstLantern.attenEnd *= 3;
-    const lanternColorMul = pointLightBank.getS16(lanternID, `colA`) / 100;
+    const lanternColorMul = 0; // pointLightBank.getS16(lanternID, `colA`) / 100;
     dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
     dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
     dstLantern.color.b = (pointLightBank.getS16(lanternID, `colB`) / 255) * lanternColorMul;
@@ -1129,6 +1197,20 @@ function drawParamBankCalcConfig(dst: MaterialDrawConfig, part: Part, bank: Draw
     dstScatter.groundReflectance.b = (scatterBank.getS16(scatterID, `reflectanceB`) / 255) * reflectanceMul;
 }
 
+function drawParamBankCalcSceneDrawConfig(dst: SceneDrawConfig, part: Part, bank: DrawParamBank): void {
+    const toneCorrectBank = bank.toneCorrectBank;
+    const toneCorrectID = part.toneCorrectID;
+    const dstTone = dst.toneCorrectParams;
+    dstTone.brightness[0] = toneCorrectBank.getF32(toneCorrectID, 'brightnessR');
+    dstTone.brightness[1] = toneCorrectBank.getF32(toneCorrectID, 'brightnessG');
+    dstTone.brightness[2] = toneCorrectBank.getF32(toneCorrectID, 'brightnessB');
+    dstTone.saturation = toneCorrectBank.getF32(toneCorrectID, 'saturation');
+    dstTone.contrast[0] = toneCorrectBank.getF32(toneCorrectID, 'contrastR');
+    dstTone.contrast[1] = toneCorrectBank.getF32(toneCorrectID, 'contrastG');
+    dstTone.contrast[2] = toneCorrectBank.getF32(toneCorrectID, 'contrastB');
+    dstTone.hue = toneCorrectBank.getF32(toneCorrectID, 'hue');
+}
+
 const bboxScratch = new AABB();
 export class PartInstance {
     private batchInstances: BatchInstance[] = [];
@@ -1138,7 +1220,7 @@ export class PartInstance {
     public materialDrawConfig = new MaterialDrawConfig();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, drawParamBank: DrawParamBank, public flverData: FLVERData, public part: Part) {
-        drawParamBankCalcConfig(this.materialDrawConfig, this.part, drawParamBank, textureHolder);
+        drawParamBankCalcMaterialDrawConfig(this.materialDrawConfig, this.part, drawParamBank, textureHolder);
 
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
             const batchData = this.flverData.batchData[i];
@@ -1172,12 +1254,6 @@ export class PartInstance {
         for (let i = 0; i < this.batchInstances.length; i++)
             this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, view, this.modelMatrix, this.materialDrawConfig);
     }
-}
-
-function fillSceneParamsData(d: Float32Array, view: CameraView, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
-    getMatrixTranslation(scratchVec3a, view.worldFromViewMatrix);
-    offs += fillVec3v(d, offs, scratchVec3a);
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -1246,8 +1322,11 @@ class CameraView {
 export class MSBRenderer {
     public flverInstances: PartInstance[] = [];
     private cameraView = new CameraView();
+    public sceneDrawConfig = new SceneDrawConfig();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
+        let sceneDrawConfigSetup = false;
+
         for (let i = 0; i < msb.parts.length; i++) {
             const part = msb.parts[i];
             if (part.type === 0) {
@@ -1260,8 +1339,18 @@ export class MSBRenderer {
                 instance.name = part.name;
                 modelMatrixFromPart(instance.modelMatrix, part);
                 this.flverInstances.push(instance);
+            } else if (part.type === 5) {
+                // Just take the first part we find.
+                if (!sceneDrawConfigSetup) {
+                    // Game takes settings for DoF, Tonemap, ToneCorrect, and LensFlare from collision part
+                    this.parseSceneDrawConfig(part);
+                }
             }
         }
+    }
+
+    private parseSceneDrawConfig(part: Part): void {
+        drawParamBankCalcSceneDrawConfig(this.sceneDrawConfig, part, this.drawParamBank);
     }
 
     private lodModels: string[] = [];
@@ -1277,10 +1366,14 @@ export class MSBRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        const offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4);
-        const sceneParamsMapped = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4+12);
+        const d = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
         this.cameraView.setupFromCamera(viewerInput.camera);
-        fillSceneParamsData(sceneParamsMapped, this.cameraView, offs);
+
+        offs += fillMatrix4x4(d, offs, this.cameraView.clipFromWorldMatrix);
+        getMatrixTranslation(scratchVec3a, this.cameraView.worldFromViewMatrix);
+        offs += fillVec3v(d, offs, scratchVec3a);
+        offs += this.sceneDrawConfig.toneCorrectParams.fill(d, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
             this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, this.cameraView);
