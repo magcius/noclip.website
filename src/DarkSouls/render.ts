@@ -493,7 +493,7 @@ ${bumpmapEpi}
 
         if (blendMode === BlendMode.TexEdge) {
             return `
-    if (t_Color.a < 0.1)
+    if (t_Color.a < 0.5)
         discard;
 `;
         } else {
@@ -658,7 +658,6 @@ void main() {
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
 
     ${this.genNormalDir()}
-    t_NormalDirWorld *= gl_FrontFacing ? 1.0 : -1.0;
 
     int t_LightingType = ${getLightingType(this.mtd)};
 
