@@ -14,9 +14,9 @@ import * as Viewer from "../viewer.js";
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { AABB, Frustum } from "../Geometry.js";
-import { ModelHolder, MaterialDataHolder, DrawParamBank } from "./scenes.js";
+import { ModelHolder, MaterialDataHolder, ResourceSystem } from "./scenes.js";
 import { MSB, Part } from "./msb.js";
-import { computeMatrixWithoutScale, computeModelMatrixS, getMatrixAxisZ, getMatrixTranslation, lerp, MathConstants, saturate, scaleMatrix, Vec3One } from "../MathHelpers.js";
+import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate, Vec3One } from "../MathHelpers.js";
 import { MTD, MTDTexture } from './mtd.js';
 import { interactiveVizSliderSelect } from '../DebugJunk.js';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
@@ -24,6 +24,8 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { colorNewCopy, White } from "../Color.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
+import { ParamFile, parseParamDef } from "./param.js";
+import * as BND3 from "./bnd3.js";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -923,15 +925,15 @@ class BatchInstance {
         this.sortKey = makeSortKey(layer, 0);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView, modelMatrix: ReadonlyMat4, materialDrawConfig: MaterialDrawConfig): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView, modelMatrix: ReadonlyMat4, materialDrawConfig: MaterialDrawConfig, textureHolder: DDSTextureHolder): void {
         if (!this.visible)
             return;
 
-        this.textureMapping[8].gfxTexture = materialDrawConfig.envDifTexture.gfxTexture;
+        textureHolder.fillTextureMapping(this.textureMapping[8], `envdif_${materialDrawConfig.areaID}_${leftPad('' + materialDrawConfig.lightParams.envDifTextureNo, 3)}`)
 
         const envSpcSlotNo = getMaterialParam(this.mtd, `g_EnvSpcSlotNo`);
         if (envSpcSlotNo !== null)
-            this.textureMapping[9].gfxTexture = materialDrawConfig.envSpcTexture[envSpcSlotNo[0]].gfxTexture;
+            textureHolder.fillTextureMapping(this.textureMapping[9], `envspc_${materialDrawConfig.areaID}_${leftPad('' + materialDrawConfig.lightParams.envSpcTextureNo[envSpcSlotNo[0]], 3)}`)
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -946,14 +948,14 @@ class BatchInstance {
 
         offs += fillVec3v(d, offs, this.diffuseMapColor);
         offs += fillVec4v(d, offs, this.specularMapColor);
-        offs += fillColor(d, offs, materialDrawConfig.envDifColor);
-        offs += fillColor(d, offs, materialDrawConfig.envSpcColor);
+        offs += fillColor(d, offs, materialDrawConfig.lightParams.envDifColor);
+        offs += fillColor(d, offs, materialDrawConfig.lightParams.envSpcColor);
 
-        for (let i = 0; i < materialDrawConfig.dirLight.length; i++)
-            offs += materialDrawConfig.dirLight[i].fill(d, offs);
+        for (let i = 0; i < materialDrawConfig.lightParams.dirLight.length; i++)
+            offs += materialDrawConfig.lightParams.dirLight[i].fill(d, offs);
 
-        offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorU, materialDrawConfig.lightScatteringParams.betaRay);
-        offs += fillColor(d, offs, materialDrawConfig.hemisphereLight.colorD, materialDrawConfig.lightScatteringParams.betaMie);
+        offs += fillColor(d, offs, materialDrawConfig.lightParams.hemisphereLight.colorU, materialDrawConfig.lightScatteringParams.betaRay);
+        offs += fillColor(d, offs, materialDrawConfig.lightParams.hemisphereLight.colorD, materialDrawConfig.lightScatteringParams.betaMie);
         for (let i = 0; i < materialDrawConfig.pointLight.length; i++)
             offs += materialDrawConfig.pointLight[i].fill(d, offs);
 
@@ -1015,26 +1017,58 @@ class HemisphereLight {
     public colorD = colorNewCopy(White);
 }
 
-class PointLight {
+class PointLightParams {
+    public name: string = '';
     public attenStart = 0;
     public attenEnd = 0;
-    public position = vec3.create();
     public color = colorNewCopy(White);
 
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.attenStart = param.getF32(i, `dwindleBegin`);
+        this.attenEnd = param.getF32(i, `dwindleEnd`);
+        // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
+        this.attenEnd *= 3;
+        const lanternColorMul = param.getS16(i, `colA`) / 100;
+        this.color.r = (param.getS16(i, `colR`) / 255) * lanternColorMul;
+        this.color.g = (param.getS16(i, `colG`) / 255) * lanternColorMul;
+        this.color.b = (param.getS16(i, `colB`) / 255) * lanternColorMul;
+    }
+}
+
+class PointLight {
+    public position = vec3.create();
+    public params: PointLightParams | null = null;
+
     public fill(d: Float32Array, offs: number): number {
+        const params = assertExists(this.params);
         const baseOffs = offs;
-        offs += fillVec3v(d, offs, this.position, this.attenStart);
-        this.color.a = this.attenEnd;
-        offs += fillColor(d, offs, this.color);
+        offs += fillVec3v(d, offs, this.position, params.attenStart);
+        offs += fillColor(d, offs, params.color, params.attenEnd);
         return offs - baseOffs;
     }
 }
 
 class ToneCorrectParams {
+    public name: string = '';
     public brightness = vec3.create();
     public contrast = vec3.create();
     public saturation = 1.0;
     public hue = 0.0;
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.brightness[0] = param.getF32(i, 'brightnessR');
+        this.brightness[1] = param.getF32(i, 'brightnessG');
+        this.brightness[2] = param.getF32(i, 'brightnessB');
+        this.saturation = param.getF32(i, 'saturation');
+        this.contrast[0] = param.getF32(i, 'contrastR');
+        this.contrast[1] = param.getF32(i, 'contrastG');
+        this.contrast[2] = param.getF32(i, 'contrastB');
+        this.hue = param.getF32(i, 'hue');
+    }
 
     public fill(d: Float32Array, offs: number): number {
         const adjustMat = mat4.fromValues(
@@ -1063,12 +1097,80 @@ class ToneCorrectParams {
 }
 
 class FogParams {
+    public name: string = '';
     public fogBeginZ = 0;
     public fogEndZ = 0;
     public color = colorNewCopy(White);
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.fogBeginZ = param.getS16(i, `fogBeginZ`);
+        this.fogEndZ = param.getS16(i, `fogEndZ`);
+        const fogColorMul = param.getS16(i, `colA`) / 100;
+        this.color.r = (param.getS16(i, `colR`) / 255) * fogColorMul;
+        this.color.g = (param.getS16(i, `colG`) / 255) * fogColorMul;
+        this.color.b = (param.getS16(i, `colB`) / 255) * fogColorMul;
+        this.color.a = saturate(param.getS16(i, `degRotW`) / 100);
+    }
+}
+
+class LightParams {
+    public name: string = '';
+    public envDifColor = colorNewCopy(White);
+    public envSpcColor = colorNewCopy(White);
+    public envDifTextureNo = 0;
+    public envSpcTextureNo = [0, 0, 0, 0];
+
+    public dirLight = nArray(3, () => new DirectionalLight());
+    public hemisphereLight = new HemisphereLight();
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.envDifTextureNo = param.getS16(i, `envDif`);
+        const envDifColorMul = param.getS16(i, 'envDif_colA') / 100;
+        this.envDifColor.r = (param.getS16(i, 'envDif_colR') / 255) * envDifColorMul;
+        this.envDifColor.g = (param.getS16(i, 'envDif_colG') / 255) * envDifColorMul;
+        this.envDifColor.b = (param.getS16(i, 'envDif_colB') / 255) * envDifColorMul;
+
+        this.envSpcTextureNo[0] = param.getS16(i, `envSpc_0`);
+        this.envSpcTextureNo[1] = param.getS16(i, `envSpc_1`);
+        this.envSpcTextureNo[2] = param.getS16(i, `envSpc_2`);
+        this.envSpcTextureNo[3] = param.getS16(i, `envSpc_3`);
+
+        const envSpcColorMul = param.getS16(i, 'envSpc_colA') / 100;
+        this.envSpcColor.r = (param.getS16(i, 'envSpc_colR') / 255) * envSpcColorMul;
+        this.envSpcColor.g = (param.getS16(i, 'envSpc_colG') / 255) * envSpcColorMul;
+        this.envSpcColor.b = (param.getS16(i, 'envSpc_colB') / 255) * envSpcColorMul;
+
+        for (let i = 0; i < 3; i++) {
+            const dstDirLight = this.dirLight[i];
+            const rotX = param.getS16(i, `degRotX_${i}`) / 255;
+            const rotY = param.getS16(i, `degRotY_${i}`) / 255;
+            calcDirFromRotXY(dstDirLight.dir, rotX, rotY);
+
+            const colorMul = param.getS16(i, `colA_${i}`) / 100;
+            dstDirLight.color.r = (param.getS16(i, `colR_${i}`) / 255) * colorMul;
+            dstDirLight.color.g = (param.getS16(i, `colG_${i}`) / 255) * colorMul;
+            dstDirLight.color.b = (param.getS16(i, `colB_${i}`) / 255) * colorMul;
+        }
+
+        const dstHemi = this.hemisphereLight;
+        const colorUMul = param.getS16(i, 'colA_u') / 100;
+        dstHemi.colorU.r = (param.getS16(i, 'colR_u') / 255) * colorUMul;
+        dstHemi.colorU.g = (param.getS16(i, 'colG_u') / 255) * colorUMul;
+        dstHemi.colorU.b = (param.getS16(i, 'colB_u') / 255) * colorUMul;
+        const colorDMul = param.getS16(i, 'colA_d') / 100;
+        dstHemi.colorD.r = (param.getS16(i, 'colR_d') / 255) * colorDMul;
+        dstHemi.colorD.g = (param.getS16(i, 'colG_d') / 255) * colorDMul;
+        dstHemi.colorD.b = (param.getS16(i, 'colB_d') / 255) * colorDMul;
+    }
 }
 
 class LightScatteringParams {
+    public name: string = '';
+
     @dfShow()
     @dfRange(0, 1)
     public betaRay = 0;
@@ -1095,19 +1197,82 @@ class LightScatteringParams {
     public sunColor = colorNewCopy(White);
     @dfShow()
     public groundReflectance = colorNewCopy(White);
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.sunRotX = param.getS16(i, `sunRotX`);
+        this.sunRotY = param.getS16(i, `sunRotY`);
+        this.distanceMul = param.getS16(i, `distanceMul`) / 100;
+        const sunColorMul = param.getS16(i, `sunA`) / 100;
+        this.sunColor.r = (param.getS16(i, `sunR`) / 255) * sunColorMul;
+        this.sunColor.g = (param.getS16(i, `sunG`) / 255) * sunColorMul;
+        this.sunColor.b = (param.getS16(i, `sunB`) / 255) * sunColorMul;
+        this.HGg = param.getF32(i, `lsHGg`);
+        this.betaRay = param.getF32(i, `lsBetaRay`);
+        this.betaMie = param.getF32(i, `lsBetaMie`);
+        this.blendCoeff = param.getS16(i, `blendCoef`) / 100;
+        const reflectanceMul = param.getS16(i, `reflectanceA`) / 100;
+        this.groundReflectance.r = (param.getS16(i, `reflectanceR`) / 255) * reflectanceMul;
+        this.groundReflectance.g = (param.getS16(i, `reflectanceG`) / 255) * reflectanceMul;
+        this.groundReflectance.b = (param.getS16(i, `reflectanceB`) / 255) * reflectanceMul;
+    }
+}
+
+interface Parse {
+    parse(param: ParamFile, i: number): void;
+}
+
+export class DrawParamBank {
+    public fogBank: FogParams[];
+    public lightBank: LightParams[];
+    public lightScatteringBank: LightScatteringParams[];
+    public pointLightBank: PointLightParams[];
+    public toneCorrectBank: ToneCorrectParams[];
+    // public toneMapBank: ToneMapParams[];
+
+    constructor(resourceSystem: ResourceSystem, areaID: string, bankID: number = 0) {
+        const aid = `a${areaID.slice(1, 3)}`;
+        const paramdefbnd = BND3.parse(resourceSystem.lookupFile(`paramdef/paramdef.paramdefbnd`)!);
+        const drawparambnd = BND3.parse(resourceSystem.lookupFile(`param/DrawParam/${aid}_DrawParam.parambnd`)!);
+
+        let mid = areaID.slice(0, 3);
+        if (bankID !== 0)
+            mid += `_${bankID}`;
+
+        function createParamFile(name: string): ParamFile {
+            const paramdef = parseParamDef(assertExists(paramdefbnd.files.find((file) => file.name.endsWith(`${name}.paramdef`))).data);
+            return new ParamFile(assertExists(drawparambnd.files.find((file) => file.name.endsWith(`${mid}_${name}.param`))).data, paramdef);
+        }
+
+        this.fogBank = this.createBank(FogParams, createParamFile(`FogBank`));
+        this.lightBank = this.createBank(LightParams, createParamFile(`LightBank`));
+        this.lightScatteringBank = this.createBank(LightScatteringParams, createParamFile(`LightScatteringBank`));
+        this.pointLightBank = this.createBank(PointLightParams, createParamFile(`PointLightBank`));
+        this.toneCorrectBank = this.createBank(ToneCorrectParams, createParamFile(`ToneCorrectBank`));
+        // this.toneMapBank = this.createBank(ToneMapParams, createParamFile(`ToneMapBank`));
+    }
+
+    private createBank<T extends Parse>(constructor: new () => T, param: ParamFile): T[] {
+        const L: T[] = nArray(param.getNum(), () => new constructor());
+        for (let i = 0; i < param.getNum(); i++)
+            L[i].parse(param, i);
+        return L;
+    }
+
+    public static fetchResources(resourceSystem: ResourceSystem, areaID: string): void {
+        const aid = `a${areaID.slice(1, 3)}`;
+        resourceSystem.fetchLoose(`paramdef/paramdef.paramdefbnd`);
+        resourceSystem.fetchLoose(`param/DrawParam/${aid}_DrawParam.parambnd`);
+    }
 }
 
 class MaterialDrawConfig {
-    public envDifTexture = new TextureMapping();
-    public envSpcTexture = nArray(4, () => new TextureMapping());
-    public envDifColor = colorNewCopy(White);
-    public envSpcColor = colorNewCopy(White);
-
-    public dirLight = nArray(3, () => new DirectionalLight());
-    public hemisphereLight = new HemisphereLight();
+    public areaID: string;
+    public fogParams: FogParams;
+    public lightParams: LightParams;
+    public lightScatteringParams: LightScatteringParams;
     public pointLight = nArray(1, () => new PointLight());
-    public fogParams = new FogParams();
-    public lightScatteringParams = new LightScatteringParams();
 }
 
 class SceneDrawConfig {
@@ -1120,102 +1285,17 @@ function calcDirFromRotXY(dst: vec3, rotX: number, rotY: number): void {
     vec3.set(dst, sinY * cosX, -sinX, cosY * cosX);
 }
 
-function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank, textureHolder: DDSTextureHolder): void {
-    const lightBank = bank.lightBank;
-    const lightID = part.lightID;
-
-    textureHolder.fillTextureMapping(dst.envDifTexture, `envdif_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envDif`), 3)}`);
-    const envDifColorMul = lightBank.getS16(lightID, 'envDif_colA') / 100;
-    dst.envDifColor.r = (lightBank.getS16(lightID, 'envDif_colR') / 255) * envDifColorMul;
-    dst.envDifColor.g = (lightBank.getS16(lightID, 'envDif_colG') / 255) * envDifColorMul;
-    dst.envDifColor.b = (lightBank.getS16(lightID, 'envDif_colB') / 255) * envDifColorMul;
-
-    textureHolder.fillTextureMapping(dst.envSpcTexture[0], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_0`), 3)}`);
-    textureHolder.fillTextureMapping(dst.envSpcTexture[1], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_1`), 3)}`);
-    textureHolder.fillTextureMapping(dst.envSpcTexture[2], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_2`), 3)}`);
-    textureHolder.fillTextureMapping(dst.envSpcTexture[3], `envspc_${part.areaID}_${leftPad('' + lightBank.getS16(lightID, `envSpc_3`), 3)}`);
-    const envSpcColorMul = lightBank.getS16(lightID, 'envSpc_colA') / 100;
-    dst.envSpcColor.r = (lightBank.getS16(lightID, 'envSpc_colR') / 255) * envSpcColorMul;
-    dst.envSpcColor.g = (lightBank.getS16(lightID, 'envSpc_colG') / 255) * envSpcColorMul;
-    dst.envSpcColor.b = (lightBank.getS16(lightID, 'envSpc_colB') / 255) * envSpcColorMul;
-
-    for (let i = 0; i < 3; i++) {
-        const dstDirLight = dst.dirLight[i];
-        const rotX = lightBank.getS16(lightID, `degRotX_${i}`) / 255;
-        const rotY = lightBank.getS16(lightID, `degRotY_${i}`) / 255;
-        calcDirFromRotXY(dstDirLight.dir, rotX, rotY);
-
-        const colorMul = lightBank.getS16(lightID, `colA_${i}`) / 100;
-        dstDirLight.color.r = (lightBank.getS16(lightID, `colR_${i}`) / 255) * colorMul;
-        dstDirLight.color.g = (lightBank.getS16(lightID, `colG_${i}`) / 255) * colorMul;
-        dstDirLight.color.b = (lightBank.getS16(lightID, `colB_${i}`) / 255) * colorMul;
-    }
-
-    const dstHemi = dst.hemisphereLight;
-    const colorUMul = lightBank.getS16(lightID, 'colA_u') / 100;
-    dstHemi.colorU.r = (lightBank.getS16(lightID, 'colR_u') / 255) * colorUMul;
-    dstHemi.colorU.g = (lightBank.getS16(lightID, 'colG_u') / 255) * colorUMul;
-    dstHemi.colorU.b = (lightBank.getS16(lightID, 'colB_u') / 255) * colorUMul;
-    const colorDMul = lightBank.getS16(lightID, 'colA_d') / 100;
-    dstHemi.colorD.r = (lightBank.getS16(lightID, 'colR_d') / 255) * colorDMul;
-    dstHemi.colorD.g = (lightBank.getS16(lightID, 'colG_d') / 255) * colorDMul;
-    dstHemi.colorD.b = (lightBank.getS16(lightID, 'colB_d') / 255) * colorDMul;
-
-    const fogBank = bank.fogBank;
-    const fogID = part.fogID;
-    const dstFog = dst.fogParams;
-    dstFog.fogBeginZ = fogBank.getS16(fogID, `fogBeginZ`);
-    dstFog.fogEndZ = fogBank.getS16(fogID, `fogEndZ`);
-    const fogColorMul = fogBank.getS16(fogID, `colA`) / 100;
-    dstFog.color.r = (fogBank.getS16(fogID, `colR`) / 255) * fogColorMul;
-    dstFog.color.g = (fogBank.getS16(fogID, `colG`) / 255) * fogColorMul;
-    dstFog.color.b = (fogBank.getS16(fogID, `colB`) / 255) * fogColorMul;
-    dstFog.color.a = saturate(fogBank.getS16(fogID, `degRotW`) / 100);
-
-    const pointLightBank = bank.pointLightBank;
-    const lanternID = part.lanternID;
-    const dstLantern = dst.pointLight[0];
-    dstLantern.attenStart = pointLightBank.getF32(lanternID, `dwindleBegin`);
-    dstLantern.attenEnd = pointLightBank.getF32(lanternID, `dwindleEnd`);
-    // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
-    dstLantern.attenEnd *= 3;
-    const lanternColorMul = pointLightBank.getS16(lanternID, `colA`) / 100;
-    dstLantern.color.r = (pointLightBank.getS16(lanternID, `colR`) / 255) * lanternColorMul;
-    dstLantern.color.g = (pointLightBank.getS16(lanternID, `colG`) / 255) * lanternColorMul;
-    dstLantern.color.b = (pointLightBank.getS16(lanternID, `colB`) / 255) * lanternColorMul;
-
-    const dstScatter = dst.lightScatteringParams;
-    const scatterBank = bank.lightScatteringBank;
-    const scatterID = part.scatterID;
-    dstScatter.sunRotX = scatterBank.getS16(scatterID, `sunRotX`);
-    dstScatter.sunRotY = scatterBank.getS16(scatterID, `sunRotY`);
-    dstScatter.distanceMul = scatterBank.getS16(scatterID, `distanceMul`) / 100;
-    const sunColorMul = scatterBank.getS16(scatterID, `sunA`) / 100;
-    dstScatter.sunColor.r = (scatterBank.getS16(scatterID, `sunR`) / 255) * sunColorMul;
-    dstScatter.sunColor.g = (scatterBank.getS16(scatterID, `sunG`) / 255) * sunColorMul;
-    dstScatter.sunColor.b = (scatterBank.getS16(scatterID, `sunB`) / 255) * sunColorMul;
-    dstScatter.HGg = scatterBank.getF32(scatterID, `lsHGg`);
-    dstScatter.betaRay = scatterBank.getF32(scatterID, `lsBetaRay`);
-    dstScatter.betaMie = scatterBank.getF32(scatterID, `lsBetaMie`);
-    dstScatter.blendCoeff = scatterBank.getS16(scatterID, `blendCoef`) / 100;
-    const reflectanceMul = scatterBank.getS16(scatterID, `reflectanceA`) / 100;
-    dstScatter.groundReflectance.r = (scatterBank.getS16(scatterID, `reflectanceR`) / 255) * reflectanceMul;
-    dstScatter.groundReflectance.g = (scatterBank.getS16(scatterID, `reflectanceG`) / 255) * reflectanceMul;
-    dstScatter.groundReflectance.b = (scatterBank.getS16(scatterID, `reflectanceB`) / 255) * reflectanceMul;
+function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part, bank: DrawParamBank): void {
+    dst.areaID = part.areaID;
+    dst.fogParams = assertExists(bank.fogBank[Math.max(part.fogID, 0)]);
+    dst.lightParams = assertExists(bank.lightBank[Math.max(part.lightID, 0)]);
+    dst.lightScatteringParams = assertExists(bank.lightScatteringBank[Math.max(part.scatterID, 0)]);
+    // This should be from the map collision
+    dst.pointLight[0].params = assertExists(bank.pointLightBank[Math.max(part.lanternID, 0)]);
 }
 
 function drawParamBankCalcSceneDrawConfig(dst: SceneDrawConfig, part: Part, bank: DrawParamBank): void {
-    const toneCorrectBank = bank.toneCorrectBank;
-    const toneCorrectID = part.toneCorrectID;
-    const dstTone = dst.toneCorrectParams;
-    dstTone.brightness[0] = toneCorrectBank.getF32(toneCorrectID, 'brightnessR');
-    dstTone.brightness[1] = toneCorrectBank.getF32(toneCorrectID, 'brightnessG');
-    dstTone.brightness[2] = toneCorrectBank.getF32(toneCorrectID, 'brightnessB');
-    dstTone.saturation = toneCorrectBank.getF32(toneCorrectID, 'saturation');
-    dstTone.contrast[0] = toneCorrectBank.getF32(toneCorrectID, 'contrastR');
-    dstTone.contrast[1] = toneCorrectBank.getF32(toneCorrectID, 'contrastG');
-    dstTone.contrast[2] = toneCorrectBank.getF32(toneCorrectID, 'contrastB');
-    dstTone.hue = toneCorrectBank.getF32(toneCorrectID, 'hue');
+    dst.toneCorrectParams = bank.toneCorrectBank[part.toneCorrectID];
 }
 
 const bboxScratch = new AABB();
@@ -1227,7 +1307,7 @@ export class PartInstance {
     public materialDrawConfig = new MaterialDrawConfig();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, drawParamBank: DrawParamBank, public flverData: FLVERData, public part: Part) {
-        drawParamBankCalcMaterialDrawConfig(this.materialDrawConfig, this.part, drawParamBank, textureHolder);
+        drawParamBankCalcMaterialDrawConfig(this.materialDrawConfig, this.part, drawParamBank);
 
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
             const batchData = this.flverData.batchData[i];
@@ -1246,7 +1326,7 @@ export class PartInstance {
         this.visible = v;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, view: CameraView, textureHolder: DDSTextureHolder ): void {
         if (!this.visible)
             return;
 
@@ -1259,7 +1339,7 @@ export class PartInstance {
         vec3.scaleAndAdd(this.materialDrawConfig.pointLight[0].position, scratchVec3a, scratchVec3b, -2);
 
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, view, this.modelMatrix, this.materialDrawConfig);
+            this.batchInstances[i].prepareToRender(renderInstManager, viewerInput, view, this.modelMatrix, this.materialDrawConfig, textureHolder);
     }
 }
 
@@ -1383,7 +1463,7 @@ export class MSBRenderer {
         offs += this.sceneDrawConfig.toneCorrectParams.fill(d, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, this.cameraView);
+            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, this.cameraView, this.textureHolder);
 
         renderInstManager.popTemplateRenderInst();
     }

@@ -14,7 +14,7 @@ import { DataFetcher } from "../DataFetcher.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DDSTextureHolder } from "./dds.js";
 import { assert, assertExists } from "../util.js";
-import { FLVERData, MSBRenderer } from "./render.js";
+import { DrawParamBank, FLVERData, MSBRenderer } from "./render.js";
 import { Panel, LayerPanel } from "../ui.js";
 import { SceneContext } from "../SceneBase.js";
 import * as MTD from "./mtd.js";
@@ -22,7 +22,6 @@ import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFull
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { ParamFile, parseParamDef } from "./param.js";
 import { CameraController } from "../Camera.js";
 
 interface CRG1Arc {
@@ -61,7 +60,7 @@ export class MaterialDataHolder {
     }
 }
 
-class ResourceSystem {
+export class ResourceSystem {
     public files = new Map<string, ArrayBufferSlice>();
 
     constructor(public dataFetcher: DataFetcher) {
@@ -87,6 +86,11 @@ class ResourceSystem {
             return this.files.get(filename)!;
         else
             return null;
+    }
+
+    public async fetchLoose(fileName: string) {
+        const buffer = await this.dataFetcher.fetchData(`${pathBase}/${fileName}`);
+        this.mountFile(fileName, buffer);
     }
 }
 
@@ -157,54 +161,12 @@ class DKSRenderer implements Viewer.SceneGfx {
     }
 }
 
-export class DrawParamBank {
-    public fogBank: ParamFile;
-    public lightBank: ParamFile;
-    public lightScatteringBank: ParamFile;
-    public pointLightBank: ParamFile;
-    public toneCorrectBank: ParamFile;
-    public toneMapBank: ParamFile;
-
-    constructor(resourceSystem: ResourceSystem, areaID: string, bankID: number = 0) {
-        const aid = `a${areaID.slice(1, 3)}`;
-        const paramdefbnd = BND3.parse(resourceSystem.lookupFile(`paramdef/paramdef.paramdefbnd`)!);
-        const drawparambnd = BND3.parse(resourceSystem.lookupFile(`param/DrawParam/${aid}_DrawParam.parambnd`)!);
-
-        let mid = areaID.slice(0, 3);
-        if (bankID !== 0)
-            mid += `_${bankID}`;
-
-        function createParamFile(name: string): ParamFile {
-            const paramdef = parseParamDef(assertExists(paramdefbnd.files.find((file) => file.name.endsWith(`${name}.paramdef`))).data);
-            return new ParamFile(assertExists(drawparambnd.files.find((file) => file.name.endsWith(`${mid}_${name}.param`))).data, paramdef);
-        }
-
-        this.fogBank = createParamFile(`FogBank`);
-        this.lightBank = createParamFile(`LightBank`);
-        this.lightScatteringBank = createParamFile(`LightScatteringBank`);
-        this.pointLightBank = createParamFile(`PointLightBank`);
-        this.toneCorrectBank = createParamFile(`ToneCorrectBank`);
-        this.toneMapBank = createParamFile(`ToneMapBank`);
-    }
-
-    public static fetchResources(resourceSystem: ResourceSystem, areaID: string): void {
-        const aid = `a${areaID.slice(1, 3)}`;
-        fetchLoose(resourceSystem, `paramdef/paramdef.paramdefbnd`);
-        fetchLoose(resourceSystem, `param/DrawParam/${aid}_DrawParam.parambnd`);
-    }
-}
-
 const pathBase = `dks`;
 
 async function fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string) {
     const buffer = await resourceSystem.dataFetcher.fetchData(`${pathBase}/${archiveName}`);
     const crg1Arc = BYML.parse<CRG1Arc>(buffer, BYML.FileType.CRG1);
     resourceSystem.mountCRG1(crg1Arc);
-}
-
-async function fetchLoose(resourceSystem: ResourceSystem, fileName: string) {
-    const buffer = await resourceSystem.dataFetcher.fetchData(`${pathBase}/${fileName}`);
-    resourceSystem.mountFile(fileName, buffer);
 }
 
 class DKSSceneDesc implements Viewer.SceneDesc {
@@ -244,7 +206,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
 
         const arcName = `${this.id}_arc.crg1`;
         fetchCRG1Arc(resourceSystem, arcName);
-        fetchLoose(resourceSystem, `mtd/Mtd.mtdbnd`);
+        resourceSystem.fetchLoose(`mtd/Mtd.mtdbnd`);
         DrawParamBank.fetchResources(resourceSystem, areaID);
         await dataFetcher.waitForLoad();
 

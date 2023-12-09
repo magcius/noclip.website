@@ -79,6 +79,14 @@ export class ParamFile {
         }
     }
 
+    public getName(i: number): string {
+        return this.names[i];
+    }
+
+    public getNum(): number {
+        return this.names.length;
+    }
+
     public getF32(row: number, name: string): number {
         const field = assertExists(this.def.fields.find((field) => field.name === name));
         assert(field.type === 'f32');
