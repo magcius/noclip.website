@@ -591,7 +591,7 @@ void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightSca
     vec3 t_BetaMie = t_BetaMieTemp2 * K * t_Lambda2 * BetaMie;
 
     float t_Distance = length(t_PositionToEye) * DistanceMul;
-    vec3 t_Extinction = exp(-(t_BetaRay + t_BetaMie) * t_Distance * M_LOG2E) * Reflectance;
+    vec3 t_Extinction = exp(-(t_BetaRay + t_BetaMie) * t_Distance * M_LOG2E);
 
     float t_VoL = dot(normalize(t_PositionToEye), SunDirection);
     float t_ViewRay = 1.0f + t_VoL * t_VoL;
@@ -599,7 +599,7 @@ void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightSca
 
     vec3 t_InscatteringColor = ((t_BetaDashRay * t_ViewRay + t_BetaDashMie * t_ViewMie) * SunColor * (vec3(1.0) - t_Extinction)) / (t_BetaRay + t_BetaMie);
 
-    vec3 t_ScatteredColor = t_Color.rgb * t_Extinction + t_InscatteringColor;
+    vec3 t_ScatteredColor = t_Color.rgb * Reflectance * t_Extinction + t_InscatteringColor;
     t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, BlendCoeff);
 }
 
