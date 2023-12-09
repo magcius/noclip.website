@@ -569,6 +569,7 @@ void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightSca
     vec3 SunDirection = t_LightScatteringParams.SunDirection;
     vec3 Reflectance  = t_LightScatteringParams.Reflectance;
 
+#if 0
     vec3 t_Lambda = vec3(1.0 / 650.0e-9, 1.0 / 570e-9, 1.0 / 475.0e-9);
     vec3 t_Lambda2 = t_Lambda * t_Lambda;
     vec3 t_Lambda4 = t_Lambda2 * t_Lambda2;
@@ -589,15 +590,20 @@ void CalcLightScattering(inout vec3 t_Color, in LightScatteringParams t_LightSca
     vec3 K = vec3(0.685, 0.679, 0.670);
     float t_BetaMieTemp2 = 0.434 * c * M_PI * pow(M_PI * 2.0, 2.0);
     vec3 t_BetaMie = t_BetaMieTemp2 * K * t_Lambda2 * BetaMie;
+#endif
+
+    vec3 t_BetaRayMie = vec3(0.00000695264823003256, 0.000011757209601555067, 0.000024379749829784592) * BetaRay + vec3(0.0057405970869032425, 0.007399685656442677, 0.010514310340700878) * BetaMie;
+    vec3 t_BetaDashRay = vec3(4.149556250207996e-7, 7.017067593956183e-7, 0.0000014550591362827545) * BetaRay;
+    vec3 t_BetaDashMie = vec3(0.0013337874491672784, 0.0017344573631061092, 0.0024976186028727978) * BetaMie;
 
     float t_Distance = length(t_PositionToEye) * DistanceMul;
-    vec3 t_Extinction = exp(-(t_BetaRay + t_BetaMie) * t_Distance * M_LOG2E);
+    vec3 t_Extinction = exp(-t_BetaRayMie * t_Distance * M_LOG2E);
 
     float t_VoL = dot(normalize(t_PositionToEye), SunDirection);
     float t_ViewRay = 1.0f + t_VoL * t_VoL;
-    float t_ViewMie = (1.0f - HGg * HGg) / pow((-2.0 * HGg) * t_VoL + (1.0 + HGg), 1.5);
+    float t_ViewMie = (1.0f - HGg * HGg) / pow((-2.0 * HGg) * t_VoL + HGg + 1.0f, 1.5);
 
-    vec3 t_InscatteringColor = ((t_BetaDashRay * t_ViewRay + t_BetaDashMie * t_ViewMie) * SunColor * (vec3(1.0) - t_Extinction)) / (t_BetaRay + t_BetaMie);
+    vec3 t_InscatteringColor = ((t_BetaDashRay * t_ViewRay + t_BetaDashMie * t_ViewMie) * SunColor * (vec3(1.0) - t_Extinction)) / t_BetaRayMie;
 
     vec3 t_ScatteredColor = t_Color.rgb * Reflectance * t_Extinction + t_InscatteringColor;
     t_Color.rgb = mix(t_Color.rgb, t_ScatteredColor.rgb, BlendCoeff);
