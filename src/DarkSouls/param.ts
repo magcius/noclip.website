@@ -87,15 +87,17 @@ export class ParamFile {
         return this.names.length;
     }
 
-    public getF32(row: number, name: string): number {
+    public get(row: number, name: string): number {
         const field = assertExists(this.def.fields.find((field) => field.name === name));
-        assert(field.type === 'f32');
-        return this.view.getFloat32(this.dataOffs[row] + field.fieldOffs, true);
-    }
-
-    public getS16(row: number, name: string): number {
-        const field = assertExists(this.def.fields.find((field) => field.name === name));
-        assert(field.type === 's16');
-        return this.view.getInt16(this.dataOffs[row] + field.fieldOffs, true);
+        if (field.type === 'f32')
+            return this.view.getFloat32(this.dataOffs[row] + field.fieldOffs, true);
+        else if (field.type === 's16')
+            return this.view.getInt16(this.dataOffs[row] + field.fieldOffs, true);
+        else if (field.type === 's8')
+            return this.view.getInt8(this.dataOffs[row] + field.fieldOffs);
+        else if (field.type === 'u8')
+            return this.view.getUint8(this.dataOffs[row] + field.fieldOffs);
+        else
+            throw "whoops";
     }
 }

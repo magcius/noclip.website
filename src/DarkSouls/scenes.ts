@@ -2,27 +2,22 @@
 import * as Viewer from "../viewer.js";
 
 import * as BYML from "../byml.js";
-import * as MSB from "./msb.js";
-import * as DCX from "./dcx.js";
-import * as TPF from "./tpf.js";
 import * as BHD from "./bhd.js";
 import * as BND3 from "./bnd3.js";
+import * as DCX from "./dcx.js";
 import * as FLVER from "./flver.js";
+import * as MSB from "./msb.js";
+import * as TPF from "./tpf.js";
 
-import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { DataFetcher } from "../DataFetcher.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { DDSTextureHolder } from "./dds.js";
-import { assert, assertExists } from "../util.js";
-import { DrawParamBank, FLVERData, MSBRenderer } from "./render.js";
-import { Panel, LayerPanel } from "../ui.js";
+import { DataFetcher } from "../DataFetcher.js";
 import { SceneContext } from "../SceneBase.js";
-import * as MTD from "./mtd.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { CameraController } from "../Camera.js";
+import { assert, assertExists } from "../util.js";
+import { DDSTextureHolder } from "./dds.js";
+import * as MTD from "./mtd.js";
+import { DarkSoulsRenderer, DrawParamBank, FLVERData, MSBRenderer } from "./render.js";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -94,73 +89,6 @@ export class ResourceSystem {
     }
 }
 
-class DKSRenderer implements Viewer.SceneGfx {
-    public msbRenderers: MSBRenderer[] = [];
-    private renderHelper: GfxRenderHelper;
-
-    constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
-        this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public getCache(): GfxRenderCache {
-        return this.renderHelper.renderCache;
-    }
-
-    public createPanels(): Panel[] {
-        const layerPanel = new LayerPanel(this.msbRenderers[0].flverInstances);
-        return [layerPanel];
-    }
-
-    public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(1/100);
-    }
-
-    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        this.renderHelper.pushTemplateRenderInst();
-        const renderInstManager = this.renderHelper.renderInstManager;
-        for (let i = 0; i < this.msbRenderers.length; i++)
-            this.msbRenderers[i].prepareToRender(renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
-
-        this.renderHelper.prepareToRender();
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        viewerInput.camera.setClipPlanes(0.1);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
-
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
-            });
-        });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
-        this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy();
-        for (let i = 0; i < this.msbRenderers.length; i++)
-            this.msbRenderers[i].destroy(device);
-        this.textureHolder.destroy(device);
-    }
-}
-
 const pathBase = `dks`;
 
 async function fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string) {
@@ -211,7 +139,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         await dataFetcher.waitForLoad();
 
         const textureHolder = new DDSTextureHolder();
-        const renderer = new DKSRenderer(device, textureHolder);
+        const renderer = new DarkSoulsRenderer(context, textureHolder);
 
         const msbPath = `/map/MapStudio/${this.id}.msb`;
         const msbBuffer = assertExists(resourceSystem.lookupFile(msbPath));

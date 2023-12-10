@@ -4,14 +4,14 @@ import { GfxDevice, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, Gfx
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
-import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { DDSTextureHolder } from "./dds.js";
 import { nArray, assert, assertExists, leftPad } from "../util.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { mat4, ReadonlyMat4, vec2, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer.js";
-import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
+import { Camera, CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers.js";
 import { AABB, Frustum } from "../Geometry.js";
 import { ModelHolder, MaterialDataHolder, ResourceSystem } from "./scenes.js";
@@ -19,13 +19,18 @@ import { MSB, Part } from "./msb.js";
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, saturate, Vec3One } from "../MathHelpers.js";
 import { MTD, MTDTexture } from './mtd.js';
 import { interactiveVizSliderSelect } from '../DebugJunk.js';
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { colorNewCopy, White } from "../Color.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { ParamFile, parseParamDef } from "./param.js";
 import * as BND3 from "./bnd3.js";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { LayerPanel, Panel } from "../ui.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
+import { SceneContext } from "../SceneBase.js";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -235,14 +240,9 @@ class DKSProgram extends DeviceProgram {
 
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
-struct ToneCorrectParams {
-    Mat4x3 Matrix;
-};
-
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
-    ToneCorrectParams u_ToneCorrectParams;
 };
 
 struct DirectionalLight {
@@ -526,10 +526,6 @@ vec3 HSVtoRGB(in vec3 c) {
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
-void CalcToneCorrect(inout vec3 t_Color, in ToneCorrectParams t_Params) {
-    t_Color.rgb = Mul(_Mat4x4(t_Params.Matrix), vec4(t_Color.rgb, 1.0)).rgb;
-}
-
 void CalcFog(inout vec3 t_Color, in FogParams t_FogParams, in vec3 t_PositionToEye) {
     float t_FogBeginZ = t_FogParams.Misc[0].x;
     float t_FogEndZ = t_FogParams.Misc[0].y;
@@ -721,7 +717,6 @@ void main() {
     t_Color *= v_Color;
     ${this.genAlphaTest()}
 
-    CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
     CalcFog(t_Color.rgb, u_FogParams, t_PositionToEye);
 
     LightScatteringParams t_LightScatteringParams;
@@ -738,7 +733,6 @@ void main() {
     bool t_DebugNormal = false;
     if (t_DebugNormal) {
         t_Color.rgb = vec3(t_NormalDirWorld * 0.25 + 0.5);
-        CalcToneCorrect(t_Color.rgb, u_ToneCorrectParams);
     }
 
     CalcToneMap(t_Color.rgb);
@@ -1032,14 +1026,14 @@ class PointLightParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.attenStart = param.getF32(i, `dwindleBegin`);
-        this.attenEnd = param.getF32(i, `dwindleEnd`);
+        this.attenStart = param.get(i, `dwindleBegin`);
+        this.attenEnd = param.get(i, `dwindleEnd`);
         // noclip modification: to aid large-scale exploration, we up the attenEnd quite a bit
         this.attenEnd *= 3;
-        const lanternColorMul = param.getS16(i, `colA`) / 100;
-        this.color.r = (param.getS16(i, `colR`) / 255) * lanternColorMul;
-        this.color.g = (param.getS16(i, `colG`) / 255) * lanternColorMul;
-        this.color.b = (param.getS16(i, `colB`) / 255) * lanternColorMul;
+        const lanternColorMul = param.get(i, `colA`) / 100;
+        this.color.r = (param.get(i, `colR`) / 255) * lanternColorMul;
+        this.color.g = (param.get(i, `colG`) / 255) * lanternColorMul;
+        this.color.b = (param.get(i, `colB`) / 255) * lanternColorMul;
     }
 }
 
@@ -1066,14 +1060,14 @@ class ToneCorrectParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.brightness[0] = param.getF32(i, 'brightnessR');
-        this.brightness[1] = param.getF32(i, 'brightnessG');
-        this.brightness[2] = param.getF32(i, 'brightnessB');
-        this.saturation = param.getF32(i, 'saturation');
-        this.contrast[0] = param.getF32(i, 'contrastR');
-        this.contrast[1] = param.getF32(i, 'contrastG');
-        this.contrast[2] = param.getF32(i, 'contrastB');
-        this.hue = param.getF32(i, 'hue');
+        this.brightness[0] = param.get(i, 'brightnessR');
+        this.brightness[1] = param.get(i, 'brightnessG');
+        this.brightness[2] = param.get(i, 'brightnessB');
+        this.saturation = param.get(i, 'saturation');
+        this.contrast[0] = param.get(i, 'contrastR');
+        this.contrast[1] = param.get(i, 'contrastG');
+        this.contrast[2] = param.get(i, 'contrastB');
+        this.hue = param.get(i, 'hue');
     }
 
     public fill(d: Float32Array, offs: number): number {
@@ -1111,13 +1105,13 @@ class FogParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.fogBeginZ = param.getS16(i, `fogBeginZ`);
-        this.fogEndZ = param.getS16(i, `fogEndZ`);
-        const fogColorMul = param.getS16(i, `colA`) / 100;
-        this.color.r = (param.getS16(i, `colR`) / 255) * fogColorMul;
-        this.color.g = (param.getS16(i, `colG`) / 255) * fogColorMul;
-        this.color.b = (param.getS16(i, `colB`) / 255) * fogColorMul;
-        this.color.a = saturate(param.getS16(i, `degRotW`) / 100);
+        this.fogBeginZ = param.get(i, `fogBeginZ`);
+        this.fogEndZ = param.get(i, `fogEndZ`);
+        const fogColorMul = param.get(i, `colA`) / 100;
+        this.color.r = (param.get(i, `colR`) / 255) * fogColorMul;
+        this.color.g = (param.get(i, `colG`) / 255) * fogColorMul;
+        this.color.b = (param.get(i, `colB`) / 255) * fogColorMul;
+        this.color.a = saturate(param.get(i, `degRotW`) / 100);
     }
 }
 
@@ -1134,43 +1128,43 @@ class LightParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.envDifTextureNo = param.getS16(i, `envDif`);
-        const envDifColorMul = param.getS16(i, 'envDif_colA') / 100;
-        this.envDifColor.r = (param.getS16(i, 'envDif_colR') / 255) * envDifColorMul;
-        this.envDifColor.g = (param.getS16(i, 'envDif_colG') / 255) * envDifColorMul;
-        this.envDifColor.b = (param.getS16(i, 'envDif_colB') / 255) * envDifColorMul;
+        this.envDifTextureNo = param.get(i, `envDif`);
+        const envDifColorMul = param.get(i, 'envDif_colA') / 100;
+        this.envDifColor.r = (param.get(i, 'envDif_colR') / 255) * envDifColorMul;
+        this.envDifColor.g = (param.get(i, 'envDif_colG') / 255) * envDifColorMul;
+        this.envDifColor.b = (param.get(i, 'envDif_colB') / 255) * envDifColorMul;
 
-        this.envSpcTextureNo[0] = param.getS16(i, `envSpc_0`);
-        this.envSpcTextureNo[1] = param.getS16(i, `envSpc_1`);
-        this.envSpcTextureNo[2] = param.getS16(i, `envSpc_2`);
-        this.envSpcTextureNo[3] = param.getS16(i, `envSpc_3`);
+        this.envSpcTextureNo[0] = param.get(i, `envSpc_0`);
+        this.envSpcTextureNo[1] = param.get(i, `envSpc_1`);
+        this.envSpcTextureNo[2] = param.get(i, `envSpc_2`);
+        this.envSpcTextureNo[3] = param.get(i, `envSpc_3`);
 
-        const envSpcColorMul = param.getS16(i, 'envSpc_colA') / 100;
-        this.envSpcColor.r = (param.getS16(i, 'envSpc_colR') / 255) * envSpcColorMul;
-        this.envSpcColor.g = (param.getS16(i, 'envSpc_colG') / 255) * envSpcColorMul;
-        this.envSpcColor.b = (param.getS16(i, 'envSpc_colB') / 255) * envSpcColorMul;
+        const envSpcColorMul = param.get(i, 'envSpc_colA') / 100;
+        this.envSpcColor.r = (param.get(i, 'envSpc_colR') / 255) * envSpcColorMul;
+        this.envSpcColor.g = (param.get(i, 'envSpc_colG') / 255) * envSpcColorMul;
+        this.envSpcColor.b = (param.get(i, 'envSpc_colB') / 255) * envSpcColorMul;
 
         for (let i = 0; i < 3; i++) {
             const dstDirLight = this.dirLight[i];
-            const rotX = param.getS16(i, `degRotX_${i}`) / 255;
-            const rotY = param.getS16(i, `degRotY_${i}`) / 255;
+            const rotX = param.get(i, `degRotX_${i}`) / 255;
+            const rotY = param.get(i, `degRotY_${i}`) / 255;
             calcDirFromRotXY(dstDirLight.dir, rotX, rotY);
 
-            const colorMul = param.getS16(i, `colA_${i}`) / 100;
-            dstDirLight.color.r = (param.getS16(i, `colR_${i}`) / 255) * colorMul;
-            dstDirLight.color.g = (param.getS16(i, `colG_${i}`) / 255) * colorMul;
-            dstDirLight.color.b = (param.getS16(i, `colB_${i}`) / 255) * colorMul;
+            const colorMul = param.get(i, `colA_${i}`) / 100;
+            dstDirLight.color.r = (param.get(i, `colR_${i}`) / 255) * colorMul;
+            dstDirLight.color.g = (param.get(i, `colG_${i}`) / 255) * colorMul;
+            dstDirLight.color.b = (param.get(i, `colB_${i}`) / 255) * colorMul;
         }
 
         const dstHemi = this.hemisphereLight;
-        const colorUMul = param.getS16(i, 'colA_u') / 100;
-        dstHemi.colorU.r = (param.getS16(i, 'colR_u') / 255) * colorUMul;
-        dstHemi.colorU.g = (param.getS16(i, 'colG_u') / 255) * colorUMul;
-        dstHemi.colorU.b = (param.getS16(i, 'colB_u') / 255) * colorUMul;
-        const colorDMul = param.getS16(i, 'colA_d') / 100;
-        dstHemi.colorD.r = (param.getS16(i, 'colR_d') / 255) * colorDMul;
-        dstHemi.colorD.g = (param.getS16(i, 'colG_d') / 255) * colorDMul;
-        dstHemi.colorD.b = (param.getS16(i, 'colB_d') / 255) * colorDMul;
+        const colorUMul = param.get(i, 'colA_u') / 100;
+        dstHemi.colorU.r = (param.get(i, 'colR_u') / 255) * colorUMul;
+        dstHemi.colorU.g = (param.get(i, 'colG_u') / 255) * colorUMul;
+        dstHemi.colorU.b = (param.get(i, 'colB_u') / 255) * colorUMul;
+        const colorDMul = param.get(i, 'colA_d') / 100;
+        dstHemi.colorD.r = (param.get(i, 'colR_d') / 255) * colorDMul;
+        dstHemi.colorD.g = (param.get(i, 'colG_d') / 255) * colorDMul;
+        dstHemi.colorD.b = (param.get(i, 'colB_d') / 255) * colorDMul;
     }
 }
 
@@ -1207,21 +1201,79 @@ class LightScatteringParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.sunRotX = param.getS16(i, `sunRotX`);
-        this.sunRotY = param.getS16(i, `sunRotY`);
-        this.distanceMul = param.getS16(i, `distanceMul`) / 100;
-        const sunColorMul = param.getS16(i, `sunA`) / 100;
-        this.sunColor.r = (param.getS16(i, `sunR`) / 255) * sunColorMul;
-        this.sunColor.g = (param.getS16(i, `sunG`) / 255) * sunColorMul;
-        this.sunColor.b = (param.getS16(i, `sunB`) / 255) * sunColorMul;
-        this.HGg = param.getF32(i, `lsHGg`);
-        this.betaRay = param.getF32(i, `lsBetaRay`);
-        this.betaMie = param.getF32(i, `lsBetaMie`);
-        this.blendCoeff = param.getS16(i, `blendCoef`) / 100;
-        const reflectanceMul = param.getS16(i, `reflectanceA`) / 100;
-        this.groundReflectance.r = (param.getS16(i, `reflectanceR`) / 255) * reflectanceMul;
-        this.groundReflectance.g = (param.getS16(i, `reflectanceG`) / 255) * reflectanceMul;
-        this.groundReflectance.b = (param.getS16(i, `reflectanceB`) / 255) * reflectanceMul;
+        this.sunRotX = param.get(i, `sunRotX`);
+        this.sunRotY = param.get(i, `sunRotY`);
+        this.distanceMul = param.get(i, `distanceMul`) / 100;
+        const sunColorMul = param.get(i, `sunA`) / 100;
+        this.sunColor.r = (param.get(i, `sunR`) / 255) * sunColorMul;
+        this.sunColor.g = (param.get(i, `sunG`) / 255) * sunColorMul;
+        this.sunColor.b = (param.get(i, `sunB`) / 255) * sunColorMul;
+        this.HGg = param.get(i, `lsHGg`);
+        this.betaRay = param.get(i, `lsBetaRay`);
+        this.betaMie = param.get(i, `lsBetaMie`);
+        this.blendCoeff = param.get(i, `blendCoef`) / 100;
+        const reflectanceMul = param.get(i, `reflectanceA`) / 100;
+        this.groundReflectance.r = (param.get(i, `reflectanceR`) / 255) * reflectanceMul;
+        this.groundReflectance.g = (param.get(i, `reflectanceG`) / 255) * reflectanceMul;
+        this.groundReflectance.b = (param.get(i, `reflectanceB`) / 255) * reflectanceMul;
+    }
+}
+
+class ToneMapParams {
+    public name = '';
+    public bloomBegin = 0;
+    public bloomMul = 0;
+    public bloomBeginFar = 0;
+    public bloomMulFar = 0;
+    public bloomNearDist = 0;
+    public bloomFarDist = 0;
+    public grayKeyValue = 0;
+    public minAdaptedLum = 0;
+    public maxAdaptedLum = 0;
+    public adaptSpeed = 0;
+    public lightShaftBegin = 0;
+    public lightShaftPower = 0;
+    public lightShaftAttenRate = 0;
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.bloomBegin = param.get(i, 'bloomBegin');
+        this.bloomMul = param.get(i, 'bloomMul') / 100;
+        this.bloomBeginFar = param.get(i, 'bloomBeginFar');
+        this.bloomMulFar = param.get(i, 'bloomMulFar') / 100;
+        this.bloomNearDist = param.get(i, 'bloomNearDist');
+        this.bloomFarDist = param.get(i, 'bloomFarDist');
+        this.grayKeyValue = param.get(i, 'grayKeyValue');
+        this.minAdaptedLum = param.get(i, 'minAdaptedLum');
+        this.maxAdaptedLum = param.get(i, 'maxAdapredLum');
+        this.adaptSpeed = param.get(i, 'adaptSpeed');
+        this.lightShaftBegin = param.get(i, 'lightShaftBegin');
+        this.lightShaftPower = param.get(i, 'lightShaftPower');
+        this.lightShaftAttenRate = param.get(i, 'lightShaftAttenRate');
+    }
+}
+
+class DofParams {
+    public name = '';
+    public farDofBegin = 0;
+    public farDofEnd = 0;
+    public farDofMul = 0;
+    public nearDofBegin = 0;
+    public nearDofEnd = 0;
+    public nearDofMul = 0;
+    public dispersionSq = 0;
+
+    public parse(param: ParamFile, i: number): void {
+        this.name = param.getName(i);
+
+        this.farDofBegin = param.get(i, 'farDofBegin');
+        this.farDofEnd = param.get(i, 'farDofEnd');
+        this.farDofMul = param.get(i, 'farDofMul') / 100;
+        this.nearDofBegin = param.get(i, 'nearDofBegin');
+        this.nearDofEnd = param.get(i, 'nearDofEnd');
+        this.nearDofMul = param.get(i, 'nearDofMul') / 100;
+        this.dispersionSq = param.get(i, 'dispersionSq');
     }
 }
 
@@ -1235,7 +1287,8 @@ export class DrawParamBank {
     public lightScatteringBank: LightScatteringParams[];
     public pointLightBank: PointLightParams[];
     public toneCorrectBank: ToneCorrectParams[];
-    // public toneMapBank: ToneMapParams[];
+    public toneMapBank: ToneMapParams[];
+    public dofBank: DofParams[];
 
     constructor(resourceSystem: ResourceSystem, areaID: string, bankID: number = 0) {
         const aid = `a${areaID.slice(1, 3)}`;
@@ -1256,7 +1309,8 @@ export class DrawParamBank {
         this.lightScatteringBank = this.createBank(LightScatteringParams, createParamFile(`LightScatteringBank`));
         this.pointLightBank = this.createBank(PointLightParams, createParamFile(`PointLightBank`));
         this.toneCorrectBank = this.createBank(ToneCorrectParams, createParamFile(`ToneCorrectBank`));
-        // this.toneMapBank = this.createBank(ToneMapParams, createParamFile(`ToneMapBank`));
+        this.toneMapBank = this.createBank(ToneMapParams, createParamFile(`ToneMapBank`));
+        this.dofBank = this.createBank(DofParams, createParamFile(`DofBank`));
     }
 
     private createBank<T extends Parse>(constructor: new () => T, param: ParamFile): T[] {
@@ -1282,6 +1336,7 @@ class MaterialDrawConfig {
 }
 
 class SceneDrawConfig {
+    public dofParams = new DofParams();
     public toneCorrectParams = new ToneCorrectParams();
 }
 
@@ -1302,6 +1357,7 @@ function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part
 
 function drawParamBankCalcSceneDrawConfig(dst: SceneDrawConfig, part: Part, bank: DrawParamBank): void {
     dst.toneCorrectParams = bank.toneCorrectBank[part.toneCorrectID];
+    dst.dofParams = bank.dofBank[part.dofID];
 }
 
 const bboxScratch = new AABB();
@@ -1414,7 +1470,6 @@ class CameraView {
 
 export class MSBRenderer {
     public flverInstances: PartInstance[] = [];
-    private cameraView = new CameraView();
     public sceneDrawConfig = new SceneDrawConfig();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private drawParamBank: DrawParamBank, private msb: MSB) {
@@ -1437,6 +1492,7 @@ export class MSBRenderer {
                 if (!sceneDrawConfigSetup) {
                     // Game takes settings for DoF, Tonemap, ToneCorrect, and LensFlare from collision part
                     this.parseSceneDrawConfig(part);
+                    sceneDrawConfigSetup = true;
                 }
             }
         }
@@ -1455,26 +1511,481 @@ export class MSBRenderer {
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, cameraView: CameraView, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4+12);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4);
         const d = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
-        this.cameraView.setupFromCamera(viewerInput.camera);
 
-        offs += fillMatrix4x4(d, offs, this.cameraView.clipFromWorldMatrix);
-        getMatrixTranslation(scratchVec3a, this.cameraView.worldFromViewMatrix);
+        offs += fillMatrix4x4(d, offs, cameraView.clipFromWorldMatrix);
+        getMatrixTranslation(scratchVec3a, cameraView.worldFromViewMatrix);
         offs += fillVec3v(d, offs, scratchVec3a);
-        offs += this.sceneDrawConfig.toneCorrectParams.fill(d, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, this.cameraView, this.textureHolder);
+            this.flverInstances[i].prepareToRender(renderInstManager, viewerInput, cameraView, this.textureHolder);
 
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
         this.modelHolder.destroy(device);
+    }
+}
+
+class FullscreenBlitProgram extends DeviceProgram {
+    public override vert = GfxShaderLibrary.fullscreenVS;
+    public override frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
+}
+
+class DepthOfFieldBlurProgram extends DeviceProgram {
+    constructor(vertical: boolean) {
+        super();
+        if (vertical)
+            this.setDefineBool('BLUR_Y', true);
+        else
+            this.setDefineBool('BLUR_X', true);
+    }
+
+    public static Common = `
+uniform sampler2D u_TextureColor;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[1];
+};
+#define u_DispersionSq      (u_Misc[0].x)
+`;
+
+    public override vert = `
+${DepthOfFieldBlurProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${DepthOfFieldBlurProgram.Common}
+
+in vec2 v_TexCoord;
+
+vec2 CalcOffsWeight(int i) {
+    float t_Offset = 1.0 + 2.0 * float(i);
+    float t_Weight = exp(-0.5 * (t_Offset * t_Offset) / (u_DispersionSq * u_DispersionSq));
+    return vec2(t_Offset, t_Weight);
+}
+
+void main() {
+    vec2 t_Size = vec2(textureSize(TEXTURE(u_TextureColor), 0));
+
+    if (u_DispersionSq < 0.1) {
+        gl_FragColor = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+        return;
+    }
+
+    // This could probably be done with erf, but done here for simplicity for now...
+    float t_TotalWeight = 0.0;
+    int t_NumSamples = 8;
+    for (int i = 0; i < t_NumSamples; i++)
+        t_TotalWeight += CalcOffsWeight(i).y * 2.0;
+
+    vec4 t_Dst = vec4(0.0);
+    for (int i = 0; i < t_NumSamples; i++) {
+        vec2 t_OffsWeight = CalcOffsWeight(i);
+        float t_Offs = t_OffsWeight.x;
+        float t_Weight = t_OffsWeight.y / t_TotalWeight;
+
+        vec2 t_PixelOffs = vec2(0.0, 0.0);
+#if defined BLUR_X
+        t_PixelOffs.x = t_Offs;
+#endif
+#if defined BLUR_Y
+        t_PixelOffs.y = t_Offs;
+#endif
+
+        vec4 t_Pixel0 = texture(SAMPLER_2D(u_TextureColor), v_TexCoord + t_PixelOffs / t_Size);
+        vec4 t_Pixel1 = texture(SAMPLER_2D(u_TextureColor), v_TexCoord - t_PixelOffs / t_Size);
+
+        t_Dst += t_Pixel0 * t_Weight;
+        t_Dst += t_Pixel1 * t_Weight;
+    }
+
+    gl_FragColor = t_Dst;
+}
+`;
+}
+
+class DepthOfFieldCombineProgram extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+uniform sampler2D u_TextureFramebufferDepth;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[3];
+};
+#define u_IsDepthReversed      (u_Misc[0].y)
+#define u_NearParam            (u_Misc[1].xyz)
+#define u_FarParam             (u_Misc[2].xyz)
+#define u_UnprojectParams      vec4(u_Misc[0].zw, u_Misc[1].w, u_Misc[2].w)
+`;
+
+    public override vert = `
+${DepthOfFieldCombineProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${DepthOfFieldCombineProgram.Common}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+float UnprojectViewSpaceDepth(float t_DepthSample) {
+    float Viewport_Z = t_DepthSample;
+    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
+
+    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
+    // of the projection matrix, and apply it here.
+    float UnprojMtxZZ = u_UnprojectParams[0];
+    float UnprojMtxZW = u_UnprojectParams[1];
+    float UnprojMtxWZ = u_UnprojectParams[2];
+    float UnprojMtxWW = u_UnprojectParams[3];
+
+    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
+    return -ViewSpaceZ;
+}
+
+float GetBlurParam(float t_ViewZ, vec3 t_Param) {
+    return saturate(invlerp(t_Param.x, t_Param.y, t_ViewZ)) * t_Param.z;
+}
+
+void main() {
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord).r;
+    vec4 t_BlurColor = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+    float t_ViewZ = UnprojectViewSpaceDepth(t_DepthSample);
+    float t_BlurStrength = 0.0f;
+    t_BlurStrength += GetBlurParam(t_ViewZ, u_NearParam);
+    t_BlurStrength += GetBlurParam(t_ViewZ, u_FarParam);
+    t_BlurColor.a = saturate(t_BlurStrength);
+    gl_FragColor.rgba = t_BlurColor;
+}
+`;
+}
+
+const postBindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 2, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },
+    ] },
+];
+
+class DepthOfField {
+    private blitProgram: GfxProgram;
+    private blurProgramH: GfxProgram;
+    private blurProgramV: GfxProgram;
+    private combineProgram: GfxProgram;
+    private textureMapping = nArray(2, () => new TextureMapping());
+
+    private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.SrcAlpha,
+        blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+    }), fullscreenMegaState);
+
+    constructor(cache: GfxRenderCache) {
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[0].gfxSampler = linearSampler;
+
+        const nearestSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[1].gfxSampler = nearestSampler;
+
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
+        this.blurProgramH = cache.createProgram(new DepthOfFieldBlurProgram(false));
+        this.blurProgramV = cache.createProgram(new DepthOfFieldBlurProgram(true));
+        this.combineProgram = cache.createProgram(new DepthOfFieldCombineProgram());
+    }
+
+    private allocateParameterBuffer(renderInst: GfxRenderInst, params: DofParams, cameraView: CameraView) {
+        let offs = renderInst.allocateUniformBuffer(0, 12);
+        const d = renderInst.mapUniformBufferF32(0);
+
+        // Take the bottom-right quadrant of the projection matrix, and calculate the inverse.
+        const ZZ = cameraView.clipFromViewMatrix[10];
+        const ZW = cameraView.clipFromViewMatrix[14];
+        const WZ = cameraView.clipFromViewMatrix[11];
+        const WW = cameraView.clipFromViewMatrix[15];
+        const invdet = 1 / (ZZ*WW - ZW*WZ);
+        const UnprojMtxZZ = invdet * WW;
+        const UnprojMtxZW = invdet * -ZW;
+        const UnprojMtxWZ = invdet * -WZ;
+        const UnprojMtxWW = invdet * ZZ;
+
+        offs += fillVec4(d, offs, params.dispersionSq, 0.0, UnprojMtxZZ, UnprojMtxZW);
+        offs += fillVec4(d, offs, params.nearDofBegin, params.nearDofEnd, params.nearDofMul, UnprojMtxWZ);
+        offs += fillVec4(d, offs, params.farDofBegin, params.farDofEnd, params.farDofMul, UnprojMtxWW);
+    }
+
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: DofParams, cameraView: CameraView): void {
+        const halfDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        const srcColorDesc = builder.getRenderTargetDescription(srcColorTargetID);
+        halfDesc.setDimensions(srcColorDesc.width >>> 1, srcColorDesc.height >>> 1, 1);
+
+        const halfTargetID = builder.createRenderTargetID(halfDesc, 'Depth of Field 1/2');
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.setBindingLayouts(postBindingLayouts);
+        this.allocateParameterBuffer(renderInst, params, cameraView);
+        renderInst.drawPrimitives(3);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Downsample');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+
+            const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
+            pass.attachResolveTexture(srcResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(halfTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Blur H');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+
+            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            pass.attachResolveTexture(halfResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blurProgramH);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(halfTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Blur V');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+
+            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            pass.attachResolveTexture(halfResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blurProgramV);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(halfTargetID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Combine');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, srcColorTargetID);
+
+            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            pass.attachResolveTexture(halfResolveTextureID);
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(srcDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.combineProgram);
+                renderInst.setMegaStateFlags(this.combineMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
+                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+}
+
+class ToneCorrectProgram extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+
+layout(std140) uniform ub_Params {
+    Mat4x3 u_ToneCorrectMatrix;
+};
+`;
+
+    public override vert = `
+${ToneCorrectProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${ToneCorrectProgram.Common}
+
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+    t_Color.rgb = Mul(_Mat4x4(u_ToneCorrectMatrix), vec4(t_Color.rgb, 1.0)).rgb;
+    gl_FragColor = t_Color;
+}
+`;
+}
+
+class ToneCorrect {
+    private toneCorrectProgram: GfxProgram;
+    private textureMapping = nArray(1, () => new TextureMapping());
+
+    constructor(cache: GfxRenderCache) {
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[0].gfxSampler = linearSampler;
+
+        this.toneCorrectProgram = cache.createProgram(new ToneCorrectProgram());
+    }
+
+    private allocateParameterBuffer(renderInst: GfxRenderInst, params: ToneCorrectParams) {
+        let offs = renderInst.allocateUniformBuffer(0, 12);
+        const d = renderInst.mapUniformBufferF32(0);
+
+        offs += params.fill(d, offs);
+    }
+
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, params: ToneCorrectParams): void {
+        const renderInst = renderInstManager.newRenderInst();
+
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.setBindingLayouts(postBindingLayouts);
+        this.allocateParameterBuffer(renderInst, params);
+        renderInst.drawPrimitives(3);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Tone Correct');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, srcColorTargetID);
+
+            const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
+            pass.attachResolveTexture(srcResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.toneCorrectProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+}
+
+export class DarkSoulsRenderer implements Viewer.SceneGfx {
+    public msbRenderers: MSBRenderer[] = [];
+    private renderHelper: GfxRenderHelper;
+    private depthOfField: DepthOfField;
+    private toneCorrect: ToneCorrect;
+    private cameraView = new CameraView();
+
+    constructor(sceneContext: SceneContext, public textureHolder: DDSTextureHolder) {
+        this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
+
+        const cache = this.renderHelper.renderCache;
+        this.depthOfField = new DepthOfField(cache);
+        this.toneCorrect = new ToneCorrect(cache);
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.renderCache;
+    }
+
+    public createPanels(): Panel[] {
+        const layerPanel = new LayerPanel(this.msbRenderers[0].flverInstances);
+        return [layerPanel];
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1/100);
+    }
+
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.cameraView.setupFromCamera(viewerInput.camera);
+
+        this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].prepareToRender(renderInstManager, this.cameraView, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender();
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        viewerInput.camera.setClipPlanes(0.1);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        this.renderHelper.pushTemplateRenderInst();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(passRenderer);
+            });
+        });
+
+        const sceneDrawConfig = this.msbRenderers[0].sceneDrawConfig;
+        this.depthOfField.pushPasses(builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneDrawConfig.dofParams, this.cameraView);
+        this.toneCorrect.pushPasses(builder, renderInstManager, mainColorTargetID, sceneDrawConfig.toneCorrectParams);
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
+
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(builder);
+        renderInstManager.resetRenderInsts();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy();
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].destroy(device);
+        this.textureHolder.destroy(device);
     }
 }
