@@ -1238,9 +1238,9 @@ class ToneMapParams {
     public parse(param: ParamFile, i: number): void {
         this.name = param.getName(i);
 
-        this.bloomBegin = param.get(i, 'bloomBegin');
+        this.bloomBegin = param.get(i, 'bloomBegin') / 255;
         this.bloomMul = param.get(i, 'bloomMul') / 100;
-        this.bloomBeginFar = param.get(i, 'bloomBeginFar');
+        this.bloomBeginFar = param.get(i, 'bloomBeginFar') / 255;
         this.bloomMulFar = param.get(i, 'bloomMulFar') / 100;
         this.bloomNearDist = param.get(i, 'bloomNearDist');
         this.bloomFarDist = param.get(i, 'bloomFarDist');
@@ -1336,8 +1336,9 @@ class MaterialDrawConfig {
 }
 
 class SceneDrawConfig {
-    public dofParams = new DofParams();
-    public toneCorrectParams = new ToneCorrectParams();
+    public dofParams: DofParams;
+    public toneCorrectParams: ToneCorrectParams;
+    public toneMapParams: ToneMapParams;
 }
 
 function calcDirFromRotXY(dst: vec3, rotX: number, rotY: number): void {
@@ -1353,11 +1354,6 @@ function drawParamBankCalcMaterialDrawConfig(dst: MaterialDrawConfig, part: Part
     dst.lightScatteringParams = assertExists(bank.lightScatteringBank[Math.max(part.scatterID, 0)]);
     // This should be from the map collision
     dst.pointLight[0].params = assertExists(bank.pointLightBank[Math.max(part.lanternID, 0)]);
-}
-
-function drawParamBankCalcSceneDrawConfig(dst: SceneDrawConfig, part: Part, bank: DrawParamBank): void {
-    dst.toneCorrectParams = bank.toneCorrectBank[part.toneCorrectID];
-    dst.dofParams = bank.dofBank[part.dofID];
 }
 
 const bboxScratch = new AABB();
@@ -1499,7 +1495,9 @@ export class MSBRenderer {
     }
 
     private parseSceneDrawConfig(part: Part): void {
-        drawParamBankCalcSceneDrawConfig(this.sceneDrawConfig, part, this.drawParamBank);
+        this.sceneDrawConfig.dofParams = this.drawParamBank.dofBank[part.dofID];
+        this.sceneDrawConfig.toneCorrectParams = this.drawParamBank.toneCorrectBank[part.toneCorrectID];
+        this.sceneDrawConfig.toneMapParams = this.drawParamBank.toneMapBank[part.dofID];
     }
 
     private lodModels: string[] = [];
@@ -1568,7 +1566,7 @@ in vec2 v_TexCoord;
 
 vec2 CalcOffsWeight(int i) {
     float t_Offset = 1.0 + 2.0 * float(i);
-    float t_Weight = exp(-0.5 * (t_Offset * t_Offset) / (u_DispersionSq * u_DispersionSq));
+    float t_Weight = exp(-0.5 * pow(t_Offset, 2.0) / pow(u_DispersionSq, 2.0));
     return vec2(t_Offset, t_Weight);
 }
 
@@ -1620,7 +1618,6 @@ uniform sampler2D u_TextureFramebufferDepth;
 layout(std140) uniform ub_Params {
     vec4 u_Misc[3];
 };
-#define u_IsDepthReversed      (u_Misc[0].y)
 #define u_NearParam            (u_Misc[1].xyz)
 #define u_FarParam             (u_Misc[2].xyz)
 #define u_UnprojectParams      vec4(u_Misc[0].zw, u_Misc[1].w, u_Misc[2].w)
@@ -1679,8 +1676,8 @@ const postBindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 class DepthOfField {
     private blitProgram: GfxProgram;
-    private blurProgramH: GfxProgram;
-    private blurProgramV: GfxProgram;
+    private blurHProgram: GfxProgram;
+    private blurVProgram: GfxProgram;
     private combineProgram: GfxProgram;
     private textureMapping = nArray(2, () => new TextureMapping());
 
@@ -1714,8 +1711,8 @@ class DepthOfField {
         this.textureMapping[1].gfxSampler = nearestSampler;
 
         this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
-        this.blurProgramH = cache.createProgram(new DepthOfFieldBlurProgram(false));
-        this.blurProgramV = cache.createProgram(new DepthOfFieldBlurProgram(true));
+        this.blurHProgram = cache.createProgram(new DepthOfFieldBlurProgram(false));
+        this.blurVProgram = cache.createProgram(new DepthOfFieldBlurProgram(true));
         this.combineProgram = cache.createProgram(new DepthOfFieldCombineProgram());
     }
 
@@ -1740,11 +1737,12 @@ class DepthOfField {
     }
 
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: DofParams, cameraView: CameraView): void {
-        const halfDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
         const srcColorDesc = builder.getRenderTargetDescription(srcColorTargetID);
-        halfDesc.setDimensions(srcColorDesc.width >>> 1, srcColorDesc.height >>> 1, 1);
 
-        const halfTargetID = builder.createRenderTargetID(halfDesc, 'Depth of Field 1/2');
+        const target2Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        target2Desc.setDimensions(srcColorDesc.width >>> 1, srcColorDesc.height >>> 1, 1);
+
+        const target2ID = builder.createRenderTargetID(target2Desc, 'Depth of Field 1/2');
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
@@ -1755,7 +1753,7 @@ class DepthOfField {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Downsample');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target2ID);
 
             const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
             pass.attachResolveTexture(srcResolveTextureID);
@@ -1768,47 +1766,47 @@ class DepthOfField {
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-        builder.pushDebugThumbnail(halfTargetID);
+        builder.pushDebugThumbnail(target2ID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Blur H');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target2ID);
 
-            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            const halfResolveTextureID = builder.resolveRenderTarget(target2ID);
             pass.attachResolveTexture(halfResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(this.blurProgramH);
+                renderInst.setGfxProgram(this.blurHProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-        builder.pushDebugThumbnail(halfTargetID);
+        builder.pushDebugThumbnail(target2ID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Blur V');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, halfTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target2ID);
 
-            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            const halfResolveTextureID = builder.resolveRenderTarget(target2ID);
             pass.attachResolveTexture(halfResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(this.blurProgramV);
+                renderInst.setGfxProgram(this.blurVProgram);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-        builder.pushDebugThumbnail(halfTargetID);
+        builder.pushDebugThumbnail(target2ID);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Combine');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, srcColorTargetID);
 
-            const halfResolveTextureID = builder.resolveRenderTarget(halfTargetID);
+            const halfResolveTextureID = builder.resolveRenderTarget(target2ID);
             pass.attachResolveTexture(halfResolveTextureID);
             const mainDepthResolveTextureID = builder.resolveRenderTarget(srcDepthTargetID);
             pass.attachResolveTexture(mainDepthResolveTextureID);
@@ -1818,6 +1816,455 @@ class DepthOfField {
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(halfResolveTextureID);
                 this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+}
+
+class BloomFilterProgram extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+uniform sampler2D u_TextureFramebufferDepth;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[3];
+};
+#define u_NearParam            (u_Misc[0].xyz)
+#define u_FarParam             (u_Misc[1].xyz)
+#define u_UnprojectParams      (u_Misc[2].xyzw)
+`;
+
+    public override vert = `
+${BloomFilterProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${BloomFilterProgram.Common}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+float UnprojectViewSpaceDepth(float t_DepthSample) {
+    float Viewport_Z = t_DepthSample;
+    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
+
+    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
+    // of the projection matrix, and apply it here.
+    float UnprojMtxZZ = u_UnprojectParams[0];
+    float UnprojMtxZW = u_UnprojectParams[1];
+    float UnprojMtxWZ = u_UnprojectParams[2];
+    float UnprojMtxWW = u_UnprojectParams[3];
+
+    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
+    return -ViewSpaceZ;
+}
+
+vec3 ApplyBloomFilter(vec3 t_Color, in vec3 t_Param) {
+    float t_Thresh = t_Param.x;
+    float t_Mul = t_Param.y;
+    t_Color.rgb -= vec3(t_Thresh);
+    t_Color.rgb = saturate(t_Color.rgb);
+    t_Color.rgb /= vec3(1.0 - t_Thresh);
+    t_Color.rgb *= t_Mul;
+    return t_Color;
+}
+
+void main() {
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord).r;
+    float t_ViewZ = UnprojectViewSpaceDepth(t_DepthSample);
+
+    vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+
+    vec3 t_BloomNear = ApplyBloomFilter(t_Color.rgb, u_NearParam);
+    vec3 t_BloomFar = ApplyBloomFilter(t_Color.rgb, u_FarParam);
+    float t_NearFar = saturate(invlerp(u_NearParam.z, u_FarParam.z, t_ViewZ));
+    t_Color.rgb = mix(t_BloomNear, t_BloomFar, t_NearFar);
+
+    gl_FragColor.rgba = t_Color;
+}
+`;
+}
+
+class BloomBlur1Program extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+`;
+
+    public override vert = `
+${BloomBlur1Program.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${BloomBlur1Program.Common}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+void main() {
+    // Bloom Blur 1 ("Gauss5x5") appears to use a 13-tap 5x5 filter.
+    //
+    // ..x..
+    // .xxx.
+    // xxxxx
+    // .xxx.
+    // ..x..
+    //
+    vec3 t_Color = vec3(0.0);
+
+#if 0
+    float t_TotalWeightInv = ${1.0 / Math.sqrt(MathConstants.TAU)};
+    float t_Weight0 = exp(-0.5 * 0.0) * t_TotalWeightInv;
+    float t_Weight1 = exp(-0.5 * 1.0) * t_TotalWeightInv * 0.25;
+    float t_Weight2 = exp(-0.5 * 2.0) * t_TotalWeightInv * 0.25;
+    float t_Weight3 = exp(-0.5 * 4.0) * t_TotalWeightInv * 0.25;
+#else
+    float t_Weight0 = 0.3989422804014327;
+    float t_Weight1 = 0.06049268112978584;
+    float t_Weight2 = 0.03669066579343498;
+    float t_Weight3 = 0.013497741628297016;
+#endif
+
+    // Ring 0 (center)
+    t_Color += texture(SAMPLER_2D(u_TextureColor), v_TexCoord).rgb * t_Weight0;
+
+    // Ring 1 (distance 1)
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  0)).rgb * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -1)).rgb * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  0)).rgb * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  1)).rgb * t_Weight1;
+
+    // Ring 1 (distance sqrt2)
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, -1)).rgb * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1, -1)).rgb * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  1)).rgb * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  1)).rgb * t_Weight2;
+
+    // Ring 2 (distance 2)
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2,  0)).rgb * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -2)).rgb * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 2,  0)).rgb * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  2)).rgb * t_Weight3;
+
+    gl_FragColor = vec4(t_Color, 1.0);
+}
+`;
+}
+
+class BloomBlur2Program extends DeviceProgram {
+    constructor(vertical: boolean) {
+        super();
+        if (vertical)
+            this.setDefineBool('BLUR_Y', true);
+        else
+            this.setDefineBool('BLUR_X', true);
+    }
+
+    public static Common = `
+uniform sampler2D u_TextureColor;
+`;
+
+    public override vert = `
+${BloomBlur1Program.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${BloomBlur1Program.Common}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+void main() {
+    // Bloom Blur 2 ("Bloom") appears to use a massive 15-tap per pass.
+    // It also seems to use a standard deviation of 3 (hardcoded?)
+
+#if 0
+    float t_StdDevSq = pow(3.0, 2.0);
+    float t_Inv = 1.0 / sqrt(2.0f * M_PI * t_StdDevSq);
+    float t_TotalI = 0.0f;
+
+    for (int i = 0; i < 8; i++) {
+        float t_Weight = exp(-0.5 * pow(i, 2.0) / t_StdDevSq) * t_Inv;
+        print("float t_Weight", i, " = ", t_Weight);
+        t_TotalI += t_Weight;
+    }
+    print("float t_TotalI = ", t_TotalI);
+#else
+    const float t_Weight[8] = float[8](
+        0.1329807601338109,
+        0.12579440923099774,
+        0.10648266850745075,
+        0.0806569081730478,
+        0.05467002489199788,
+        0.03315904626424957,
+        0.017996988837729353,
+        0.008740629697903166
+    );
+#endif
+
+    vec3 t_Color = vec3(0.0);
+    t_Color += t_Weight[0] * texture(SAMPLER_2D(u_TextureColor), v_TexCoord).rgb;
+
+#if defined BLUR_X
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, 0)).rgb;
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(1, 0)).rgb;
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2, 0)).rgb;
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(2, 0)).rgb;
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-3, 0)).rgb;
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(3, 0)).rgb;
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-4, 0)).rgb;
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(4, 0)).rgb;
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-5, 0)).rgb;
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(5, 0)).rgb;
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-6, 0)).rgb;
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(6, 0)).rgb;
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-7, 0)).rgb;
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(7, 0)).rgb;
+#elif defined BLUR_Y
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -1)).rgb;
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 1)).rgb;
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -2)).rgb;
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 2)).rgb;
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -3)).rgb;
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 3)).rgb;
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -4)).rgb;
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 4)).rgb;
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -5)).rgb;
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 5)).rgb;
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -6)).rgb;
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 6)).rgb;
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -7)).rgb;
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 7)).rgb;
+#endif
+
+    gl_FragColor = vec4(t_Color, 1.0);
+}
+`;
+}
+
+class Bloom {
+    private blitProgram: GfxProgram;
+    private filterProgram: GfxProgram;
+    private blur1Program: GfxProgram;
+    private blur2HProgram: GfxProgram;
+    private blur2VProgram: GfxProgram;
+    private textureMapping = nArray(2, () => new TextureMapping());
+
+    private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.One,
+    }), fullscreenMegaState);
+
+    constructor(cache: GfxRenderCache) {
+        const linearSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[0].gfxSampler = linearSampler;
+
+        const nearestSampler = cache.createSampler({
+            wrapS: GfxWrapMode.Clamp,
+            wrapT: GfxWrapMode.Clamp,
+            minFilter: GfxTexFilterMode.Point,
+            magFilter: GfxTexFilterMode.Point,
+            mipFilter: GfxMipFilterMode.Nearest,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[1].gfxSampler = nearestSampler;
+
+        this.blitProgram = cache.createProgram(new FullscreenBlitProgram());
+        this.filterProgram = cache.createProgram(new BloomFilterProgram());
+        this.blur1Program = cache.createProgram(new BloomBlur1Program());
+        this.blur2HProgram = cache.createProgram(new BloomBlur2Program(false));
+        this.blur2VProgram = cache.createProgram(new BloomBlur2Program(true));
+    }
+
+    private allocateParameterBuffer(renderInst: GfxRenderInst, params: ToneMapParams, cameraView: CameraView) {
+        let offs = renderInst.allocateUniformBuffer(0, 12);
+        const d = renderInst.mapUniformBufferF32(0);
+
+        // Take the bottom-right quadrant of the projection matrix, and calculate the inverse.
+        const ZZ = cameraView.clipFromViewMatrix[10];
+        const ZW = cameraView.clipFromViewMatrix[14];
+        const WZ = cameraView.clipFromViewMatrix[11];
+        const WW = cameraView.clipFromViewMatrix[15];
+        const invdet = 1 / (ZZ*WW - ZW*WZ);
+        const UnprojMtxZZ = invdet * WW;
+        const UnprojMtxZW = invdet * -ZW;
+        const UnprojMtxWZ = invdet * -WZ;
+        const UnprojMtxWW = invdet * ZZ;
+
+        offs += fillVec4(d, offs, params.bloomBegin, params.bloomMul, params.bloomNearDist, 0.0);
+        offs += fillVec4(d, offs, params.bloomBeginFar, params.bloomMulFar, params.bloomFarDist, 0.0);
+        offs += fillVec4(d, offs, UnprojMtxZZ, UnprojMtxZW, UnprojMtxWZ, UnprojMtxWW);
+    }
+
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: ToneMapParams, cameraView: CameraView): void {
+        const srcColorDesc = builder.getRenderTargetDescription(srcColorTargetID);
+
+        const target4Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        target4Desc.setDimensions(srcColorDesc.width >>> 2, srcColorDesc.height >>> 2, 1);
+
+        const target8Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        target8Desc.setDimensions(target4Desc.width >>> 1, target4Desc.height >>> 1, 1);
+
+        const target4ID = builder.createRenderTargetID(target4Desc, 'Bloom 1/4');
+        const target8ID = builder.createRenderTargetID(target8Desc, 'Bloom 1/8');
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.setBindingLayouts(postBindingLayouts);
+        this.allocateParameterBuffer(renderInst, params, cameraView);
+        renderInst.drawPrimitives(3);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Downsample 1/4');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target4ID);
+
+            const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
+            pass.attachResolveTexture(srcResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(srcResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target4ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Filter');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target4ID);
+
+            const target4ResolveTextureID = builder.resolveRenderTarget(target4ID);
+            pass.attachResolveTexture(target4ResolveTextureID);
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(srcDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.filterProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
+                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target4ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur 1 1/4');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target4ID);
+
+            const target4ResolveTextureID = builder.resolveRenderTarget(target4ID);
+            pass.attachResolveTexture(target4ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blur1Program);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target4ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Downsample 1/8');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target8ID);
+
+            const target4ResolveTextureID = builder.resolveRenderTarget(target4ID);
+            pass.attachResolveTexture(target4ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target8ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur 1 1/8');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target8ID);
+
+            const target8ResolveTextureID = builder.resolveRenderTarget(target8ID);
+            pass.attachResolveTexture(target8ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blur1Program);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target8ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur 2 H');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target8ID);
+
+            const target8ResolveTextureID = builder.resolveRenderTarget(target8ID);
+            pass.attachResolveTexture(target8ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blur2HProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target8ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur 2 V');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, target8ID);
+
+            const target8ResolveTextureID = builder.resolveRenderTarget(target8ID);
+            pass.attachResolveTexture(target8ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blur2VProgram);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+        builder.pushDebugThumbnail(target8ID);
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Combine');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, srcColorTargetID);
+
+            const target8ResolveTextureID = builder.resolveRenderTarget(target8ID);
+            pass.attachResolveTexture(target8ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setMegaStateFlags(this.combineMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(renderInstManager.gfxRenderCache, passRenderer);
             });
@@ -1908,6 +2355,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
     public msbRenderers: MSBRenderer[] = [];
     private renderHelper: GfxRenderHelper;
     private depthOfField: DepthOfField;
+    private bloom: Bloom;
     private toneCorrect: ToneCorrect;
     private cameraView = new CameraView();
 
@@ -1916,6 +2364,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
 
         const cache = this.renderHelper.renderCache;
         this.depthOfField = new DepthOfField(cache);
+        this.bloom = new Bloom(cache);
         this.toneCorrect = new ToneCorrect(cache);
     }
 
@@ -1969,6 +2418,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
 
         const sceneDrawConfig = this.msbRenderers[0].sceneDrawConfig;
         this.depthOfField.pushPasses(builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneDrawConfig.dofParams, this.cameraView);
+        this.bloom.pushPasses(builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneDrawConfig.toneMapParams, this.cameraView);
         this.toneCorrect.pushPasses(builder, renderInstManager, mainColorTargetID, sceneDrawConfig.toneCorrectParams);
         this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
