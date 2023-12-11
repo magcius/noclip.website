@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver.js";
-import { GfxDevice, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode, GfxClipSpaceNearZ, GfxTextureDimension, GfxSamplerFormatKind, GfxChannelWriteMask } from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
@@ -28,7 +28,7 @@ import { ParamFile, parseParamDef } from "./param.js";
 import * as BND3 from "./bnd3.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { LayerPanel, Panel } from "../ui.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../gfx/render/GfxRenderGraph.js";
 import { SceneContext } from "../SceneBase.js";
 
@@ -644,12 +644,6 @@ vec3 CalcPointLightSpecular(in PointLight t_PointLight, in vec3 t_PositionWorld,
     return t_LightColor * t_DistAtten * t_DotAtten;
 }
 
-void CalcToneMap(inout vec3 t_Color) {
-    float t_Exposure = 5.0;
-    t_Color.rgb *= t_Exposure;
-    t_Color.rgb /= (t_Color.rgb + vec3(1.0));
-}
-
 void main() {
     bool t_DiffuseMapEnabled = true;
     bool t_LightmapEnabled = true;
@@ -734,8 +728,6 @@ void main() {
     if (t_DebugNormal) {
         t_Color.rgb = vec3(t_NormalDirWorld * 0.25 + 0.5);
     }
-
-    CalcToneMap(t_Color.rgb);
 
     gl_FragColor = t_Color;
 }
@@ -1739,7 +1731,7 @@ class DepthOfField {
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: DofParams, cameraView: CameraView): void {
         const srcColorDesc = builder.getRenderTargetDescription(srcColorTargetID);
 
-        const target2Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        const target2Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         target2Desc.setDimensions(srcColorDesc.width >>> 1, srcColorDesc.height >>> 1, 1);
 
         const target2ID = builder.createRenderTargetID(target2Desc, 'Depth of Field 1/2');
@@ -1863,28 +1855,17 @@ float UnprojectViewSpaceDepth(float t_DepthSample) {
     return -ViewSpaceZ;
 }
 
-vec3 ApplyBloomFilter(vec3 t_Color, in vec3 t_Param) {
-    float t_Thresh = t_Param.x;
-    float t_Mul = t_Param.y;
-    t_Color.rgb -= vec3(t_Thresh);
-    t_Color.rgb = saturate(t_Color.rgb);
-    t_Color.rgb /= vec3(1.0 - t_Thresh);
-    t_Color.rgb *= t_Mul;
-    return t_Color;
-}
-
 void main() {
     float t_DepthSample = texture(SAMPLER_2D(u_TextureFramebufferDepth), v_TexCoord).r;
     float t_ViewZ = UnprojectViewSpaceDepth(t_DepthSample);
 
     vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
 
-    vec3 t_BloomNear = ApplyBloomFilter(t_Color.rgb, u_NearParam);
-    vec3 t_BloomFar = ApplyBloomFilter(t_Color.rgb, u_FarParam);
     float t_NearFar = saturate(invlerp(u_NearParam.z, u_FarParam.z, t_ViewZ));
-    t_Color.rgb = mix(t_BloomNear, t_BloomFar, t_NearFar);
+    float t_Thresh = mix(u_NearParam.x, u_FarParam.x, t_NearFar);
+    t_Color.rgb = saturate(t_Color.rgb - vec3(t_Thresh)) / vec3(1.0 - t_Thresh);
 
-    gl_FragColor.rgba = t_Color;
+    gl_FragColor.rgba = vec4(t_Color.rgb, t_NearFar);
 }
 `;
 }
@@ -1915,7 +1896,7 @@ void main() {
     // .xxx.
     // ..x..
     //
-    vec3 t_Color = vec3(0.0);
+    vec4 t_Color = vec4(0.0);
 
 #if 0
     float t_TotalWeightInv = ${1.0 / Math.sqrt(MathConstants.TAU)};
@@ -1931,27 +1912,27 @@ void main() {
 #endif
 
     // Ring 0 (center)
-    t_Color += texture(SAMPLER_2D(u_TextureColor), v_TexCoord).rgb * t_Weight0;
+    t_Color += texture(SAMPLER_2D(u_TextureColor), v_TexCoord) * t_Weight0;
 
     // Ring 1 (distance 1)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  0)).rgb * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -1)).rgb * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  0)).rgb * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  1)).rgb * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  0)) * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -1)) * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  0)) * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  1)) * t_Weight1;
 
     // Ring 1 (distance sqrt2)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, -1)).rgb * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1, -1)).rgb * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  1)).rgb * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  1)).rgb * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, -1)) * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1, -1)) * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  1)) * t_Weight2;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  1)) * t_Weight2;
 
     // Ring 2 (distance 2)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2,  0)).rgb * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -2)).rgb * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 2,  0)).rgb * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  2)).rgb * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2,  0)) * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -2)) * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 2,  0)) * t_Weight3;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  2)) * t_Weight3;
 
-    gl_FragColor = vec4(t_Color, 1.0);
+    gl_FragColor = t_Color;
 }
 `;
 }
@@ -1970,12 +1951,12 @@ uniform sampler2D u_TextureColor;
 `;
 
     public override vert = `
-${BloomBlur1Program.Common}
+${BloomBlur2Program.Common}
 ${GfxShaderLibrary.fullscreenVS}
 `;
 
     public override frag = `
-${BloomBlur1Program.Common}
+${BloomBlur2Program.Common}
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.invlerp}
 
@@ -2009,55 +1990,91 @@ void main() {
     );
 #endif
 
-    vec3 t_Color = vec3(0.0);
-    t_Color += t_Weight[0] * texture(SAMPLER_2D(u_TextureColor), v_TexCoord).rgb;
+    vec4 t_Color = vec4(0.0);
+    t_Color += t_Weight[0] * texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
 
 #if defined BLUR_X
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, 0)).rgb;
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(1, 0)).rgb;
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2, 0)).rgb;
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(2, 0)).rgb;
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-3, 0)).rgb;
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(3, 0)).rgb;
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-4, 0)).rgb;
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(4, 0)).rgb;
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-5, 0)).rgb;
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(5, 0)).rgb;
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-6, 0)).rgb;
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(6, 0)).rgb;
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-7, 0)).rgb;
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(7, 0)).rgb;
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, 0));
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(1, 0));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2, 0));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(2, 0));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-3, 0));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(3, 0));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-4, 0));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(4, 0));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-5, 0));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(5, 0));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-6, 0));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(6, 0));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-7, 0));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(7, 0));
 #elif defined BLUR_Y
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -1)).rgb;
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 1)).rgb;
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -2)).rgb;
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 2)).rgb;
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -3)).rgb;
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 3)).rgb;
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -4)).rgb;
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 4)).rgb;
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -5)).rgb;
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 5)).rgb;
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -6)).rgb;
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 6)).rgb;
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -7)).rgb;
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 7)).rgb;
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -1));
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 1));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -2));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 2));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -3));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 3));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -4));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 4));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -5));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 5));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -6));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 6));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -7));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 7));
 #endif
 
-    gl_FragColor = vec4(t_Color, 1.0);
+    gl_FragColor = t_Color;
+}
+`;
+}
+
+class BloomCombineProgram extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[3];
+};
+#define u_NearParam            (u_Misc[0].xyz)
+#define u_FarParam             (u_Misc[1].xyz)
+`;
+
+    public override vert = `
+${BloomCombineProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public override frag = `
+${BloomCombineProgram.Common}
+${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+    float t_Mul = mix(u_NearParam.y, u_FarParam.y, t_Color.a);
+    gl_FragColor.rgba = vec4(t_Color.rgb * t_Mul, 1.0);
 }
 `;
 }
 
 class Bloom {
-    private blitProgram: GfxProgram;
+    public blitProgram: GfxProgram;
     private filterProgram: GfxProgram;
     private blur1Program: GfxProgram;
     private blur2HProgram: GfxProgram;
     private blur2VProgram: GfxProgram;
+    private combineProgram: GfxProgram;
     private textureMapping = nArray(2, () => new TextureMapping());
 
-    private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
+    private alphaMegaState = makeMegaState(setAttachmentStateSimple({}, {
+        channelWriteMask: GfxChannelWriteMask.AllChannels,
+    }), fullscreenMegaState);
+
+    private combineMegaState = makeMegaState(setAttachmentStateSimple({}, {
         blendMode: GfxBlendMode.Add,
         blendSrcFactor: GfxBlendFactor.One,
         blendDstFactor: GfxBlendFactor.One,
@@ -2091,6 +2108,7 @@ class Bloom {
         this.blur1Program = cache.createProgram(new BloomBlur1Program());
         this.blur2HProgram = cache.createProgram(new BloomBlur2Program(false));
         this.blur2VProgram = cache.createProgram(new BloomBlur2Program(true));
+        this.combineProgram = cache.createProgram(new BloomCombineProgram());
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst, params: ToneMapParams, cameraView: CameraView) {
@@ -2116,10 +2134,10 @@ class Bloom {
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, srcDepthTargetID: GfxrRenderTargetID, params: ToneMapParams, cameraView: CameraView): void {
         const srcColorDesc = builder.getRenderTargetDescription(srcColorTargetID);
 
-        const target4Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        const target4Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         target4Desc.setDimensions(srcColorDesc.width >>> 2, srcColorDesc.height >>> 2, 1);
 
-        const target8Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_NORM);
+        const target8Desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         target8Desc.setDimensions(target4Desc.width >>> 1, target4Desc.height >>> 1, 1);
 
         const target4ID = builder.createRenderTargetID(target4Desc, 'Bloom 1/4');
@@ -2160,6 +2178,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.filterProgram);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
                 this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2177,6 +2196,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur1Program);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2194,6 +2214,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target4ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2211,6 +2232,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur1Program);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2228,6 +2250,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur2HProgram);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2245,6 +2268,7 @@ class Bloom {
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur2VProgram);
+                renderInst.setMegaStateFlags(this.alphaMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -2261,7 +2285,7 @@ class Bloom {
             pass.attachResolveTexture(target8ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setGfxProgram(this.combineProgram);
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(target8ResolveTextureID);
                 this.textureMapping[1].gfxTexture = null;
@@ -2293,6 +2317,12 @@ in vec2 v_TexCoord;
 
 void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
+
+    // TODO(jstpierre): auto-exposure measurement
+    float t_Exposure = 5.0;
+    t_Color.rgb *= t_Exposure;
+    t_Color.rgb /= (t_Color.rgb + vec3(1.0));
+
     t_Color.rgb = Mul(_Mat4x4(u_ToneCorrectMatrix), vec4(t_Color.rgb, 1.0)).rgb;
     gl_FragColor = t_Color;
 }
@@ -2325,7 +2355,7 @@ class ToneCorrect {
         offs += params.fill(d, offs);
     }
 
-    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, params: ToneCorrectParams): void {
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, dstColorTargetID: GfxrRenderTargetID, params: ToneCorrectParams): void {
         const renderInst = renderInstManager.newRenderInst();
 
         renderInst.setAllowSkippingIfPipelineNotReady(false);
@@ -2336,7 +2366,7 @@ class ToneCorrect {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Tone Correct');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, srcColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, dstColorTargetID);
 
             const srcResolveTextureID = builder.resolveRenderTarget(srcColorTargetID);
             pass.attachResolveTexture(srcResolveTextureID);
@@ -2398,7 +2428,10 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+        setBackbufferDescSimple(mainColorDesc, viewerInput);
+
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -2419,11 +2452,16 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         const sceneDrawConfig = this.msbRenderers[0].sceneDrawConfig;
         this.depthOfField.pushPasses(builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneDrawConfig.dofParams, this.cameraView);
         this.bloom.pushPasses(builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneDrawConfig.toneMapParams, this.cameraView);
-        this.toneCorrect.pushPasses(builder, renderInstManager, mainColorTargetID, sceneDrawConfig.toneCorrectParams);
-        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+        const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+        mainColorGammaDesc.copyDimensions(mainColorDesc);
+        const mainColorGammaTargetID = builder.createRenderTargetID(mainColorGammaDesc, 'Main Color (Gamma)');
+        this.toneCorrect.pushPasses(builder, renderInstManager, mainColorTargetID, mainColorGammaTargetID, sceneDrawConfig.toneCorrectParams);
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorGammaTargetID, viewerInput.mouseLocation);
+
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorGammaTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
