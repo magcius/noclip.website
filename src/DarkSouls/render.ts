@@ -973,7 +973,7 @@ class BatchInstance {
             scrollTime * this.texScroll[2][0], scrollTime * this.texScroll[2][1],
         );
 
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(view.viewFromWorldMatrix, bboxScratch);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(view.viewFromWorldMatrix, bboxScratch) + bboxScratch.boundingSphereRadius();
 
         for (let j = 0; j < this.batchData.batch.primitiveIndexes.length; j++) {
             const primitive = this.flverData.flver.primitives[this.batchData.batch.primitiveIndexes[j]];
@@ -1905,32 +1905,34 @@ void main() {
     float t_Weight2 = exp(-0.5 * 2.0) * t_TotalWeightInv * 0.25;
     float t_Weight3 = exp(-0.5 * 4.0) * t_TotalWeightInv * 0.25;
 #else
-    float t_Weight0 = 0.3989422804014327;
-    float t_Weight1 = 0.06049268112978584;
-    float t_Weight2 = 0.03669066579343498;
-    float t_Weight3 = 0.013497741628297016;
+    const float t_Weight[4] = float[4](
+        0.3989422804014327,
+        0.06049268112978584,
+        0.03669066579343498,
+        0.013497741628297016
+    );
 #endif
 
     // Ring 0 (center)
-    t_Color += texture(SAMPLER_2D(u_TextureColor), v_TexCoord) * t_Weight0;
+    t_Color += texture(SAMPLER_2D(u_TextureColor), v_TexCoord) * t_Weight[0];
 
     // Ring 1 (distance 1)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  0)) * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -1)) * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  0)) * t_Weight1;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  1)) * t_Weight1;
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  0)) * t_Weight[1];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -1)) * t_Weight[1];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  0)) * t_Weight[1];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  1)) * t_Weight[1];
 
-    // Ring 1 (distance sqrt2)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, -1)) * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1, -1)) * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  1)) * t_Weight2;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  1)) * t_Weight2;
+    // Ring 2 (distance sqrt2)
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, -1)) * t_Weight[2];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1, -1)) * t_Weight[2];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 1,  1)) * t_Weight[2];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1,  1)) * t_Weight[2];
 
-    // Ring 2 (distance 2)
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2,  0)) * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -2)) * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 2,  0)) * t_Weight3;
-    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  2)) * t_Weight3;
+    // Ring 3 (distance 2)
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2,  0)) * t_Weight[3];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0, -2)) * t_Weight[3];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 2,  0)) * t_Weight[3];
+    t_Color += textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2( 0,  2)) * t_Weight[3];
 
     gl_FragColor = t_Color;
 }
@@ -1994,36 +1996,25 @@ void main() {
     t_Color += t_Weight[0] * texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
 
 #if defined BLUR_X
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-1, 0));
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(1, 0));
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-2, 0));
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(2, 0));
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-3, 0));
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(3, 0));
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-4, 0));
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(4, 0));
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-5, 0));
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(5, 0));
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-6, 0));
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(6, 0));
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(-7, 0));
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(7, 0));
+    #define BLUR_OFFSET(v) ivec2(v, 0)
 #elif defined BLUR_Y
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -1));
-    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 1));
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -2));
-    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 2));
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -3));
-    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 3));
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -4));
-    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 4));
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -5));
-    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 5));
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -6));
-    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 6));
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, -7));
-    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, ivec2(0, 7));
+    #define BLUR_OFFSET(v) ivec2(0, v)
 #endif
+
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-1));
+    t_Color += t_Weight[1] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(1));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-2));
+    t_Color += t_Weight[2] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(2));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-3));
+    t_Color += t_Weight[3] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(3));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-4));
+    t_Color += t_Weight[4] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(4));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-5));
+    t_Color += t_Weight[5] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(5));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-6));
+    t_Color += t_Weight[6] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(6));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(-7));
+    t_Color += t_Weight[7] * textureOffset(SAMPLER_2D(u_TextureColor), v_TexCoord, BLUR_OFFSET(7));
 
     gl_FragColor = t_Color;
 }

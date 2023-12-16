@@ -268,7 +268,6 @@ export class AABB {
         v[2] = (this.minZ + this.maxZ) / 2;
     }
 
-
     public setFromCenterAndExtents(center: ReadonlyVec3, extents: ReadonlyVec3): void {
         this.minX = center[0] - extents[0];
         this.minY = center[1] - extents[1];

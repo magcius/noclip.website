@@ -154,7 +154,7 @@ const scratchQuat = quat.create();
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
- export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
+export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4, aabb: AABB, v: vec3 = scratchVec3a): number {
     aabb.centerPoint(v);
     return computeViewSpaceDepthFromWorldSpacePoint(viewMatrix, v);
 }
@@ -170,7 +170,7 @@ const scratchQuat = quat.create();
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
- export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
+export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
 }
