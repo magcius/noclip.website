@@ -18,7 +18,7 @@ function readStringUTF16(buffer: ArrayBufferSlice, offs: number): string {
     return str;
 }
 
-export interface MaterialParameter {
+export interface MaterialTextureParam {
     name: string;
     value: string;
 }
@@ -26,9 +26,9 @@ export interface MaterialParameter {
 export interface Material {
     name: string;
     mtdName: string;
-    parameters: MaterialParameter[];
-    paramStart: number;
-    paramCount: number;
+    textures: MaterialTextureParam[];
+    textureStart: number;
+    textureCount: number;
     flags: number;
 }
 
@@ -59,8 +59,8 @@ export const enum VertexInputSemantic {
     JointWeight = 2,
     Normal      = 3,
     UV          = 5,
-    Tangent     = 6,
-    Bitangent   = 7,
+    Tangent0    = 6,
+    Tangent1    = 7,
     Color       = 10,
 }
 
@@ -126,7 +126,7 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
 
     const indexBufferBitSize = view.getUint8(0x48);
     assert(indexBufferBitSize === 0 || indexBufferBitSize === 16 || indexBufferBitSize === 32);
-    const isUTF8 = view.getUint8(0x49);
+    const isUTF16 = view.getUint8(0x49);
 
     const primitiveCount = view.getUint32(0x50, isLittleEndian);
     const inputLayoutCount = view.getUint32(0x54, isLittleEndian);
@@ -152,11 +152,11 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
         const mtdNameOffs = view.getUint32(offs + 0x04, isLittleEndian);
         const mtdName = readStringUTF16(buffer, mtdNameOffs);
  
-        const paramCount = view.getUint32(offs + 0x08, isLittleEndian);
-        const paramStart = view.getUint32(offs + 0x0C, isLittleEndian);
+        const textureCount = view.getUint32(offs + 0x08, isLittleEndian);
+        const textureStart = view.getUint32(offs + 0x0C, isLittleEndian);
         const flags = view.getUint32(offs + 0x10, isLittleEndian);
  
-        materials.push({ name, mtdName, parameters: [], paramCount, paramStart, flags });
+        materials.push({ name, mtdName, textures: [], textureCount, textureStart, flags });
         offs += 0x20;
     }
  
@@ -288,7 +288,7 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
         offs += 0x10;
     }
 
-    const materialParameters: MaterialParameter[] = [];
+    const materialParameters: MaterialTextureParam[] = [];
     for (let i = 0; i < mtdParamCount; i++) {
         const valueOffs = view.getUint32(offs + 0x00, isLittleEndian);
         const value = readStringUTF16(buffer, valueOffs);
@@ -302,7 +302,7 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
     // Assign material parameters
     for (let i = 0; i < materials.length; i++) {
         const material = materials[i];
-        material.parameters = materialParameters.slice(material.paramStart, material.paramStart + material.paramCount);
+        material.textures = materialParameters.slice(material.textureStart, material.textureStart + material.textureCount);
     }
 
     return { bbox, materials, joints, primitives, inputLayouts, inputStates, batches };
