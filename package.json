@@ -23,7 +23,7 @@
     "pngjs": "^3.4.0",
     "thread-loader": "^3.0.4",
     "ts-loader": "^9.4.3",
-    "ts-node": "^10.9.1",
+    "tsx": "^4.6.2",
     "typescript": "^4.9.5",
     "wasm-pack": "^0.12.0",
     "webpack": "^5.88.0",
@@ -54,7 +54,8 @@
     "nc-bcsvtool": "./src/tools/bcsvtool.ts",
     "nc-rarctool": "./src/tools/rarctool.ts",
     "nc-crg1tool": "./src/tools/crg1tool.ts",
-    "nc-witnessassettool": "./src/tools/witnessassettool.ts"
+    "nc-witnessassettool": "./src/tools/witnessassettool.ts",
+    "nc-bnd3tool": "./src/DarkSouls/tools/bnd3tool.ts"
   },
   "type": "module",
   "browserslist": [

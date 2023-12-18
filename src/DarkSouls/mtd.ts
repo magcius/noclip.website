@@ -123,17 +123,19 @@ class DataReader {
         assert(this.readUint32() === v);
     }
 
-    public readChunkArray(): number {
-        this.assertType(DataType.ChunkArray);
+    public readArray(type: DataType): number {
+        this.assertType(type);
         const num = this.readUint32();
         return num;
     }
 
-    public readChunkOptional(): boolean {
-        this.assertType(DataType.ChunkOptional);
-        const hasData = this.readUint32();
-        assert(hasData === 0 || hasData === 1);
-        return !!hasData;
+    public assertArray(type: DataType, expectedNum: number): void {
+        const num = this.readArray(type);
+        assert(num === expectedNum);
+    }
+
+    public assertChunkOptional(exists: boolean) {
+        this.assertArray(DataType.ChunkOptional, exists ? 1 : 0);
     }
 
     public readTypedData<T extends DataType>(expectedType: T): DataTypeRet<T> {
@@ -182,29 +184,27 @@ export function parse(buffer: ArrayBufferSlice): MTD {
     const shaderPath = reader.readTypedData(DataType.String);
     const description = reader.readTypedData(DataType.String);
 
-    assert(reader.readChunkArray() === 1);
+    assert(reader.readArray(DataType.ChunkArray) === 1);
     reader.assertChunk(MTDChunkID.MaterialData, 4, false);
     reader.readTypedData(DataType.String); // Name
 
-    const paramCount = reader.readChunkArray();
+    const paramCount = reader.readArray(DataType.ChunkArray);
     const params: MTDParam[] = [];
     for (let i = 0; i < paramCount; i++) {
-        reader.assertChunk(4, 4, false); // Param
+        reader.assertChunk(MTDChunkID.Param, 4, false); // Param
         const name = reader.readTypedData(DataType.String);
         const type = reader.readTypedData(DataType.String) as MTDParamType;
 
-        assert(reader.readChunkOptional());
+        reader.assertChunkOptional(true);
 
         let value: number[] = [];
         if (type === MTDParamType.Int) {
             reader.assertChunk(MTDChunkID.ParamU32, 1, false);
-            reader.assertType(DataType.U32Array);
-            reader.assertUint32(1);
+            reader.assertArray(DataType.U32Array, 1);
             value.push(reader.readUint32());
         } else if (type === MTDParamType.Int2) {
             reader.assertChunk(MTDChunkID.ParamU32, 1, false);
-            reader.assertType(DataType.U32Array);
-            reader.assertUint32(2);
+            reader.assertArray(DataType.U32Array, 2);
             value.push(reader.readUint32());
             value.push(reader.readUint32());
         } else if (type === MTDParamType.Bool) {
@@ -214,26 +214,22 @@ export function parse(buffer: ArrayBufferSlice): MTD {
             value.push(reader.readUint8());
         } else if (type === MTDParamType.Float) {
             reader.assertChunk(MTDChunkID.ParamF32, 1, false);
-            reader.assertType(DataType.F32Array);
-            reader.assertUint32(1);
+            reader.assertArray(DataType.F32Array, 1);
             value.push(reader.readFloat32());
         } else if (type === MTDParamType.Float2) {
             reader.assertChunk(MTDChunkID.ParamF32, 1, false);
-            reader.assertType(DataType.F32Array);
-            reader.assertUint32(2);
+            reader.assertArray(DataType.F32Array, 2);
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
         } else if (type === MTDParamType.Float3) {
             reader.assertChunk(MTDChunkID.ParamF32, 1, false);
-            reader.assertType(DataType.F32Array);
-            reader.assertUint32(3);
+            reader.assertArray(DataType.F32Array, 3);
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
         } else if (type === MTDParamType.Float4) {
             reader.assertChunk(MTDChunkID.ParamF32, 1, false);
-            reader.assertType(DataType.F32Array);
-            reader.assertUint32(4);
+            reader.assertArray(DataType.F32Array, 4);
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
             value.push(reader.readFloat32());
@@ -242,12 +238,12 @@ export function parse(buffer: ArrayBufferSlice): MTD {
             throw "whoops";
         }
 
-        assert(!reader.readChunkOptional());
+        reader.assertChunkOptional(false); // User data?
 
         params.push({ name, type, value });
     }
 
-    const textureCount = reader.readChunkArray();
+    const textureCount = reader.readArray(DataType.ChunkArray);
     const textures: MTDTexture[] = [];
     const uvNumberMap = new Map<number, number>();
     for (let i = 0; i < textureCount; i++) {
@@ -277,7 +273,7 @@ export function parse(buffer: ArrayBufferSlice): MTD {
         textures.push({ name, uvNumber, shaderDataIndex });
     }
 
-    assert(!reader.readChunkOptional());
+    reader.assertChunkOptional(false); // User data?
 
     return { shaderPath, description, params, textures };
 }

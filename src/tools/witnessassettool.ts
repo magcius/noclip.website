@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node-script
+#!/usr/bin/env tsx
 
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
