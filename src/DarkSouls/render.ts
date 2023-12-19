@@ -672,7 +672,7 @@ void main() {
         return `
 ${MaterialProgram_Base.FragCommon}
 
-vec4 CalcTangent() {
+vec4 CalcTangent(float t_Blend) {
 #if defined HAS_TANGENT1
     return mix(v_TangentSpaceBasisY0, v_TangentSpaceBasisY1, t_Blend);
 #else
@@ -723,7 +723,7 @@ void main() {
         }
 
         vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-        vec4 t_Tangent = CalcTangent();
+        vec4 t_Tangent = CalcTangent(t_Blend);
         t_NormalDirWorld = normalize(CalcTangentToWorld(t_NormalTangentSpace, t_Tangent, v_TangentSpaceBasisZ));
     } else {
         t_NormalDirWorld = v_TangentSpaceBasisZ;
