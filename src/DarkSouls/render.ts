@@ -353,8 +353,18 @@ class MaterialProgram_Base extends DeviceProgram {
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
-    vec4 u_CameraPosWorld;
+    vec4 u_CameraPosWorld; // DebugMode is in w
 };
+
+#define kDebugMode_None     0
+#define kDebugMode_Diffuse  1
+#define kDebugMode_Specular 2
+#define kDebugMode_Normal   3
+#define kDebugMode_Lightmap 4
+
+int GetDebugMode() {
+    return int(u_CameraPosWorld.w);
+}
 
 struct DirectionalLight {
     vec4 Direction;
@@ -390,10 +400,9 @@ struct FogParams {
 #define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
 
 vec2 DecodeTexCoord(in vec2 t_RawTexCoord) {
-    // The original game uses S16 texture coordinates and divides by 1000 in the shader.
-    // We use S16 normalized coordinates, so convert.
-    float t_Scale = float(0x7FFF) / 1000.0;
-    return t_RawTexCoord * t_Scale;
+    // The original game uses S16 texture coordinates and divides by 1024 in the shader.
+    // We don't have integer attributes, so we map to UNORM instead. 32768/1024 = 32
+    return t_RawTexCoord * 32.0f;
 }
 `;
 
@@ -545,8 +554,8 @@ vec3 CalcPointLightSpecular(in PointLight t_PointLight, in vec3 t_PositionWorld,
             return null;
     }
 
-    protected buildTexAccess(textureName: string, texParam: MTDTexture): string {
-        return `texture(SAMPLER_2D(${textureName}), v_TexCoord${texParam.uvNumber})`;
+    protected hasTexture(name: string): boolean {
+        return this.mtd.textures.some((t) => t.name === name);
     }
 }
 
@@ -586,9 +595,9 @@ layout(binding = 7) uniform samplerCube u_TextureEnvDif;
 layout(binding = 8) uniform samplerCube u_TextureEnvSpc;
 
 varying vec4 v_Color;
-varying vec2 v_TexCoord0;
-varying vec2 v_TexCoord1;
-varying vec2 v_TexCoord2;
+varying vec2 v_TexCoord0; // Texture0
+varying vec2 v_TexCoord1; // Texture1
+varying vec2 v_TexCoord2; // Lightmap
 varying vec3 v_PositionWorld;
 
 // 3x3 matrix for our tangent space basis.
@@ -600,7 +609,29 @@ varying vec4 v_TangentSpaceBasisY1;
 #endif
 `;
 
-    public override vert = `
+    constructor(mtd: MTD) {
+        super(mtd);
+        this.vert = this.genVert();
+        this.frag = this.genFrag();
+    }
+
+    private genTexCoord(textureName: string): string {
+        const texture = this.getTexture(textureName);
+        if (texture !== null) {
+            const texCoordIn = [
+                `a_TexCoord0.xy`,
+                `a_TexCoord0.zw`,
+                `a_TexCoord1.xy`,
+            ];
+            const texCoord = texCoordIn[texture.uvNumber];
+            return `DecodeTexCoord(${texCoord})`;
+        } else {
+            return `vec2(0.0)`;
+        }
+    }
+
+    private genVert(): string {
+        return `
 layout(location = ${MaterialProgram_Base.a_Position})  in vec3 a_Position;
 layout(location = ${MaterialProgram_Base.a_Color})     in vec4 a_Color;
 layout(location = ${MaterialProgram_Base.a_TexCoord0}) in vec4 a_TexCoord0;
@@ -631,157 +662,78 @@ void main() {
 #endif
 
     v_Color = a_Color;
-    v_TexCoord0 = DecodeTexCoord(a_TexCoord0.xy) + u_TexScroll0.xy;
-    v_TexCoord1 = DecodeTexCoord(a_TexCoord0.zw) + u_TexScroll1.xy;
-    v_TexCoord2 = DecodeTexCoord(a_TexCoord1.xy) + u_TexScroll2.xy;
-}
-`;
-
-    constructor(mtd: MTD) {
-        super(mtd);
-        this.frag = this.genFrag();
-    }
-
-    private genDiffuse(): string {
-        const diffuse1 = this.getTexture('g_Diffuse');
-        const diffuse2 = this.getTexture('g_Diffuse_2');
-
-        const diffuseEpi = `
-    if (!t_DiffuseMapEnabled)
-        t_Diffuse.rgb = vec3(1.0);
-    t_Diffuse.rgb *= u_DiffuseMapColor.rgb;
-`;
-
-        if (diffuse1 !== null && diffuse2 !== null) {
-            return `
-    vec4 t_Diffuse1 = ${this.buildTexAccess(`u_TextureDiffuse`, diffuse1)};
-    vec4 t_Diffuse2 = ${this.buildTexAccess(`u_TextureDiffuse2`, diffuse2)};
-    vec4 t_Diffuse = mix(t_Diffuse1, t_Diffuse2, v_Color.a);
-${diffuseEpi}
-`;
-        } else if (diffuse1 !== null) {
-            return `
-    vec4 t_Diffuse1 = ${this.buildTexAccess(`u_TextureDiffuse`, diffuse1)};
-    vec4 t_Diffuse = t_Diffuse1;
-${diffuseEpi}
-    `;
-        } else {
-            return `
-    vec4 t_Diffuse = vec4(1.0);
-${diffuseEpi}
-`;
-        }
-    }
-
-    private genSpecular(): string {
-        const specular1 = this.getTexture('g_Specular');
-        const specular2 = this.getTexture('g_Specular_2');
-
-        const specularEpi = `
-    t_Specular.rgb *= u_SpecularMapColor.rgb;
-`;
-
-        if (specular1 !== null && specular2 !== null) {
-            return `
-    vec3 t_Specular1 = ${this.buildTexAccess(`u_TextureSpecular`, specular1)}.rgb;
-    vec3 t_Specular2 = ${this.buildTexAccess(`u_TextureSpecular2`, specular2)}.rgb;
-    vec3 t_Specular = mix(t_Specular1, t_Specular2, t_Blend);
-${specularEpi}
-`;
-        } else if (specular1 !== null) {
-            return `
-    vec3 t_Specular1 = ${this.buildTexAccess(`u_TextureSpecular`, specular1)}.rgb;
-    vec3 t_Specular = t_Specular1;
-${specularEpi}
-    `;
-        } else {
-            return `
-    vec3 t_Specular = vec3(0.0);
-`;
-        }
-    }
-
-    private genNormalDir(): string {
-        const bumpmap1 = this.getTexture('g_Bumpmap');
-        const bumpmap2 = this.getTexture('g_Bumpmap_2');
-
-        const bumpmapEpi = `
-    vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-#if defined HAS_TANGENT1
-    vec4 t_Tangent = mix(v_TangentSpaceBasisY0, v_TangentSpaceBasisY1, t_Blend);
-#else
-    vec4 t_Tangent = v_TangentSpaceBasisY0;
-#endif
-    vec3 t_NormalDirWorld = normalize(CalcTangentToWorld(t_NormalTangentSpace, t_Tangent, v_TangentSpaceBasisZ));
-`;
-
-        if (bumpmap1 !== null && bumpmap2 !== null) {
-            return `
-    vec3 t_Bumpmap1 = ${this.buildTexAccess(`u_TextureBumpmap`, bumpmap1)}.rgb;
-    vec3 t_Bumpmap2 = ${this.buildTexAccess(`u_TextureBumpmap2`, bumpmap2)}.rgb;
-    vec3 t_BumpmapSample = mix(t_Bumpmap1, t_Bumpmap2, t_Blend);
-${bumpmapEpi}
-`;
-        } else if (bumpmap1 !== null) {
-            return `
-    vec3 t_Bumpmap1 = ${this.buildTexAccess(`u_TextureBumpmap`, bumpmap1)}.rgb;
-    vec3 t_BumpmapSample = t_Bumpmap1;
-${bumpmapEpi}
-`;
-        } else {
-            return `
-    vec3 t_NormalDirWorld = v_TangentSpaceBasisZ;
-`;
-        }
-    }
-
-    private genLightMap(): string {
-        const lightmap = this.getTexture('g_Lightmap');
-
-        if (lightmap !== null) {
-            return `
-    if (t_LightmapEnabled) {
-        t_IncomingDiffuseRadiance.rgb *= ${this.buildTexAccess(`u_TextureLightmap`, lightmap)}.rgb;
-        t_IncomingSpecularRadiance.rgb *= ${this.buildTexAccess(`u_TextureLightmap`, lightmap)}.rgb;
-    }
-`;
-        } else {
-            return '';
-        }
-    }
-
-    private genAlphaTest(): string {
-        const blendMode = getBlendMode(this.mtd);
-
-        if (blendMode === BlendMode.TexEdge) {
-            return `
-    if (t_Color.a < 0.5)
-        discard;
-`;
-        } else {
-            return '';
-        }
+    v_TexCoord0 = ${this.genTexCoord(`g_Diffuse`)} + u_TexScroll0.xy;
+    v_TexCoord1 = ${this.genTexCoord(`g_Diffuse_2`)} + u_TexScroll1.xy;
+    v_TexCoord2 = ${this.genTexCoord(`g_Lightmap`)} + u_TexScroll2.xy;
+}`;
     }
 
     private genFrag(): string {
         return `
 ${MaterialProgram_Base.FragCommon}
 
+vec4 CalcTangent() {
+#if defined HAS_TANGENT1
+    return mix(v_TangentSpaceBasisY0, v_TangentSpaceBasisY1, t_Blend);
+#else
+    return v_TangentSpaceBasisY0;
+#endif
+}
+
 void main() {
-    bool t_DiffuseMapEnabled = true;
-    bool t_LightmapEnabled = true;
+    int DebugMode = GetDebugMode();
+    vec4 t_DebugColor = vec4(0.0);
+
+    bool enable_Lightmap = ${this.hasTexture(`g_Lightmap`)};
 
     vec4 t_Color = vec4(1.0);
     float t_Blend = v_Color.a;
 
-    ${this.genDiffuse()}
+    bool enable_Diffuse = ${this.hasTexture(`g_Diffuse`)};
+    bool enable_Diffuse_2 = ${this.hasTexture(`g_Diffuse_2`)};
+    vec4 t_Diffuse = vec4(1.0);
+    if (enable_Diffuse) {
+        vec4 t_Diffuse1 = texture(SAMPLER_2D(u_TextureDiffuse), v_TexCoord0);
+        if (enable_Diffuse_2) {
+            vec4 t_Diffuse2 = texture(SAMPLER_2D(u_TextureDiffuse2), v_TexCoord1);
+            t_Diffuse = mix(t_Diffuse1, t_Diffuse2, t_Blend);
+        } else {
+            t_Diffuse = t_Diffuse1;
+        }
+    }
+    t_Diffuse.rgb *= u_DiffuseMapColor.rgb;
+
+    if (DebugMode == kDebugMode_Diffuse) {
+        t_DebugColor.rgba = t_Diffuse.rgba;
+    }
 
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
 
-    ${this.genNormalDir()}
+    bool enable_Bumpmap = ${this.hasTexture(`g_Bumpmap`)};
+    bool enable_Bumpmap_2 = ${this.hasTexture(`g_Bumpmap_2`)};
+    vec3 t_NormalDirWorld = vec3(0.0);
+    if (enable_Bumpmap) {
+        vec3 t_BumpmapSample;
+        vec3 t_Bumpmap1 = texture(SAMPLER_2D(u_TextureBumpmap), v_TexCoord0).rgb;
+        if (enable_Bumpmap_2) {
+            vec3 t_Bumpmap2 = texture(SAMPLER_2D(u_TextureBumpmap2), v_TexCoord1).rgb;
+            t_BumpmapSample = mix(t_Bumpmap1, t_Bumpmap2, t_Blend);
+        } else {
+            t_BumpmapSample = t_Bumpmap1;
+        }
+
+        vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
+        vec4 t_Tangent = CalcTangent();
+        t_NormalDirWorld = normalize(CalcTangentToWorld(t_NormalTangentSpace, t_Tangent, v_TangentSpaceBasisZ));
+    } else {
+        t_NormalDirWorld = v_TangentSpaceBasisZ;
+    }
+
+    if (DebugMode == kDebugMode_Normal) {
+        t_DebugColor.rgba = vec4(t_NormalDirWorld * 0.25 + 0.5, 1.0);
+    }
 
     int t_LightingType = ${getLightingType(this.mtd)};
-
     if (t_LightingType == -1) {
         // Missing, probably a water shader.
         t_Color *= t_Diffuse;
@@ -811,7 +763,13 @@ void main() {
         }
 
         // Light map (really a baked indirect shadow map...) only applies to environment lighting.
-        ${this.genLightMap()}
+        vec3 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), v_TexCoord2).rgb;
+        t_IncomingDiffuseRadiance.rgb += t_LightmapSample;
+        t_IncomingSpecularRadiance.rgb += t_LightmapSample;
+
+        if (DebugMode == kDebugMode_Lightmap) {
+            t_DebugColor.rgba = vec4(t_LightmapSample.rgb, 1.0);
+        }
 
         for (int i = 0; i < 1; i++) {
             t_IncomingDiffuseRadiance.rgb += CalcPointLightDiffuse(u_PointLights[i], v_PositionWorld.xyz, t_NormalDirWorld.xyz);
@@ -822,7 +780,23 @@ void main() {
         float t_DiffuseIntensity = dot(t_NormalDirWorld, vec3(0.0, 1.0, 0.0));
         t_IncomingDiffuseRadiance += mix(u_HemisphereLight.ColorD.rgb, u_HemisphereLight.ColorU.rgb, t_DiffuseIntensity * 0.5 + 0.5);
 
-        ${this.genSpecular()}
+        bool enable_Specular = ${this.hasTexture(`g_Specular`)};
+        bool enable_Specular_2 = ${this.hasTexture(`g_Specular_2`)};
+        vec3 t_Specular = vec3(0.0);
+        if (enable_Specular) {
+            vec3 t_Specular1 = texture(SAMPLER_2D(u_TextureSpecular), v_TexCoord0).rgb;
+            if (enable_Specular_2) {
+                vec3 t_Specular2 = texture(SAMPLER_2D(u_TextureSpecular2), v_TexCoord1).rgb;
+                t_Specular = mix(t_Specular1, t_Specular2, t_Blend);
+            } else {
+                t_Specular = t_Specular1;
+            }
+            t_Specular.rgb *= u_SpecularMapColor.rgb;
+        }
+
+        if (DebugMode == kDebugMode_Specular) {
+            t_DebugColor.rgba = vec4(t_Specular.rgb, 1.0);
+        }
 
         t_OutgoingLight += t_Diffuse.rgb * t_IncomingDiffuseRadiance;
         t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
@@ -832,7 +806,12 @@ void main() {
     }
 
     t_Color *= v_Color;
-    ${this.genAlphaTest()}
+
+    bool enable_AlphaTest = ${getBlendMode(this.mtd) === BlendMode.TexEdge};
+    if (enable_AlphaTest) {
+        if (t_Color.a < 0.5)
+            discard;
+    }
 
     CalcFog(t_Color.rgb, u_FogParams, t_PositionToEye);
 
@@ -847,10 +826,7 @@ void main() {
     t_LightScatteringParams.Reflectance = u_FogParams.Reflectance.xyz;
     CalcLightScattering(t_Color.rgb, t_LightScatteringParams, t_PositionToEye);
 
-    bool t_DebugNormal = false;
-    if (t_DebugNormal) {
-        t_Color.rgb = vec3(t_NormalDirWorld * 0.25 + 0.5);
-    }
+    t_Color.rgba = mix(t_Color.rgba, vec4(t_DebugColor.rgb, 1.0), t_DebugColor.a);
 
     gl_FragColor = t_Color;
 }
@@ -1873,6 +1849,7 @@ class RenderContext {
     public mainList = new GfxRenderInstList();
     public waterHeightList = new GfxRenderInstList();
     public waterList = new GfxRenderInstList();
+    public debugMode = 0;
 
     public reset(): void {
         this.mainList.reset();
@@ -1969,7 +1946,7 @@ export class MSBRenderer {
         const cameraView = renderContext.cameraView;
         offs += fillMatrix4x4(d, offs, cameraView.clipFromWorldMatrix);
         getMatrixTranslation(scratchVec3a, cameraView.worldFromViewMatrix);
-        offs += fillVec3v(d, offs, scratchVec3a);
+        offs += fillVec3v(d, offs, scratchVec3a, renderContext.debugMode);
 
         for (let i = 0; i < this.flverInstances.length; i++)
             this.flverInstances[i].prepareToRender(renderInstManager, renderContext);
@@ -2752,6 +2729,7 @@ uniform sampler2D u_TextureColor;
 
 layout(std140) uniform ub_Params {
     Mat4x3 u_ToneCorrectMatrix;
+    vec4 u_Misc[1];
 };
 `;
 
@@ -2769,7 +2747,7 @@ void main() {
     vec4 t_Color = texture(SAMPLER_2D(u_TextureColor), v_TexCoord);
 
     // TODO(jstpierre): auto-exposure measurement
-    float t_Exposure = 5.0;
+    float t_Exposure = u_Misc[0].x;
     t_Color.rgb *= t_Exposure;
     t_Color.rgb /= (t_Color.rgb + vec3(1.0));
 
@@ -2782,6 +2760,7 @@ void main() {
 class ToneCorrect {
     private toneCorrectProgram: GfxProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
+    private exposure = 5;
 
     constructor(cache: GfxRenderCache) {
         const linearSampler = cache.createSampler({
@@ -2799,10 +2778,11 @@ class ToneCorrect {
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst, params: ToneCorrectParams) {
-        let offs = renderInst.allocateUniformBuffer(0, 12);
+        let offs = renderInst.allocateUniformBuffer(0, 12 + 4);
         const d = renderInst.mapUniformBufferF32(0);
 
         offs += params.fill(d, offs);
+        offs += fillVec4(d, offs, this.exposure);
     }
 
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, srcColorTargetID: GfxrRenderTargetID, dstColorTargetID: GfxrRenderTargetID, params: ToneCorrectParams): void {
