@@ -272,6 +272,7 @@ export interface GfxMegaStateDescriptor {
     cullMode: GfxCullMode;
     frontFace: GfxFrontFaceMode;
     polygonOffset: boolean;
+    wireframe: boolean;
 }
 
 export interface GfxRenderPipelineDescriptor {
@@ -322,6 +323,7 @@ export interface GfxDeviceLimits {
     readonly supportedSampleCounts: number[];
     occlusionQueriesRecommended: boolean;
     computeShadersSupported: boolean;
+    wireframeSupported: boolean;
 }
 
 export interface GfxDebugGroup {

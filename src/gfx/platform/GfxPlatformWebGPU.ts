@@ -1653,6 +1653,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             supportedSampleCounts: [1],
             occlusionQueriesRecommended: true,
             computeShadersSupported: true,
+            wireframeSupported: false,
         };
     }
 

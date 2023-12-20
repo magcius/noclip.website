@@ -48,6 +48,7 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
     dst.cullMode = fallbackUndefined(src.cullMode, dst.cullMode);
     dst.frontFace = fallbackUndefined(src.frontFace, dst.frontFace);
     dst.polygonOffset = fallbackUndefined(src.polygonOffset, dst.polygonOffset);
+    dst.wireframe = fallbackUndefined(src.wireframe, dst.wireframe);
 }
 
 export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescriptor {
@@ -125,6 +126,7 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
     cullMode: GfxCullMode.None,
     frontFace: GfxFrontFaceMode.CCW,
     polygonOffset: false,
+    wireframe: false,
 };
 
 export const fullscreenMegaState = makeMegaState({ depthCompare: GfxCompareMode.Always, depthWrite: false }, defaultMegaState);

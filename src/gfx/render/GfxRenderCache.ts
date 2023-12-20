@@ -53,6 +53,7 @@ function gfxMegaStateDescriptorHash(hash: number, a: GfxMegaStateDescriptor): nu
     hash = hashCodeNumberUpdate(hash, a.cullMode);
     hash = hashCodeNumberUpdate(hash, a.frontFace ? 1 : 0);
     hash = hashCodeNumberUpdate(hash, a.polygonOffset ? 1 : 0);
+    hash = hashCodeNumberUpdate(hash, a.wireframe ? 1 : 0);
     return hash;
 }
 

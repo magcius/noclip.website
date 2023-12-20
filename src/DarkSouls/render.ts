@@ -205,17 +205,6 @@ export class FLVERData {
     }
 }
 
-function getTexAssign(mtd: MTD, name: string): number {
-    return mtd.textures.findIndex((t) => t.name === name);
-}
-
-function lookupTextureParameter(material: Material, paramName: string): string | null {
-    const param = material.textures.find((param) => param.name === paramName);
-    if (param === undefined)
-        return null;
-    return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
-}
-
 const enum LightingType {
     Off = -1,
     None = 0,
@@ -274,18 +263,6 @@ function getMaterialParamVec2(dst: vec2, mtd: MTD, name: string): boolean {
     }
 }
 
-function getMaterialParamVec3(dst: vec3, mtd: MTD, name: string): boolean {
-    const param = getMaterialParam(mtd, name);
-    if (param !== null) {
-        assert(param.length >= 3);
-        vec3.set(dst, param[0], param[1], param[2]);
-        return true;
-    } else {
-        vec3.zero(dst);
-        return false;
-    }
-}
-
 function getMaterialParamColor(dst: Color, mtd: MTD, name: string): boolean {
     const param = getMaterialParam(mtd, name);
     if (param !== null) {
@@ -319,6 +296,13 @@ function getLightingType(mtd: MTD): LightingType {
     const lightingType = v[0];
     assert(lightingType === LightingType.None || lightingType === LightingType.HemDirDifSpcx3 || lightingType === LightingType.HemEnvDifSpc);
     return lightingType;
+}
+
+function lookupTextureParameter(material: Material, paramName: string): string | null {
+    const param = material.textures.find((param) => param.name === paramName);
+    if (param === undefined)
+        return null;
+    return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
 }
 
 function linkTextureParameter(textureMapping: TextureMapping, textureHolder: DDSTextureHolder, material: Material, mtd: MTD, name: string): void {
@@ -854,6 +838,14 @@ function calcBlendMode(dst: Partial<GfxMegaStateDescriptor>, blendMode: BlendMod
             blendDstFactor: GfxBlendFactor.One,
         });
         isTranslucent = true;
+    } else if (blendMode === BlendMode.Sub) {
+        dst.depthWrite = false;
+        setAttachmentStateSimple(dst, {
+            blendMode: GfxBlendMode.ReverseSubtract,
+            blendSrcFactor: GfxBlendFactor.SrcAlpha,
+            blendDstFactor: GfxBlendFactor.One,
+        });
+        isTranslucent = true;
     } else {
         console.warn(`Unknown blend mode ${blendMode}`);
     }
@@ -918,7 +910,10 @@ class MaterialInstance_Phn {
             getMaterialParamVec2(this.texScroll[i], mtd, `g_TexScroll_${i}`);
         }
 
-        const isTranslucent = calcBlendMode(this.megaState, getBlendMode(mtd));
+        let blendMode = getBlendMode(mtd);
+        if (blendMode === BlendMode.Water)
+            blendMode = BlendMode.Normal; // this is likely snow
+        const isTranslucent = calcBlendMode(this.megaState, blendMode);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer, 0);
@@ -2760,7 +2755,7 @@ void main() {
 class ToneCorrect {
     private toneCorrectProgram: GfxProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
-    private exposure = 5;
+    private exposure = 2;
 
     constructor(cache: GfxRenderCache) {
         const linearSampler = cache.createSampler({

@@ -373,10 +373,6 @@ class ResourceCreationTracker {
     }
 }
 
-interface KHR_parallel_shader_compile {
-    COMPLETION_STATUS_KHR: number;
-}
-
 function prependLineNo(str: string, lineStart: number = 1) {
     const lines = str.split('\n');
     return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
@@ -385,24 +381,6 @@ function prependLineNo(str: string, lineStart: number = 1) {
 export class GfxPlatformWebGL2Config {
     public trackResources: boolean = false;
     public shaderDebug: boolean = false;
-}
-
-interface EXT_texture_compression_rgtc {
-    COMPRESSED_RED_RGTC1_EXT: GLenum;
-    COMPRESSED_SIGNED_RED_RGTC1_EXT: GLenum;
-    COMPRESSED_RED_GREEN_RGTC2_EXT: GLenum;
-    COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT: GLenum;
-}
-
-interface EXT_texture_norm16 {
-    R16_EXT: GLenum;
-    RG16_EXT: GLenum;
-    RGB16_EXT: GLenum;
-    RGBA16_EXT: GLenum;
-    R16_SNORM_EXT: GLenum;
-    RG16_SNORM_EXT: GLenum;
-    RGB16_SNORM_EXT: GLenum;
-    RGBA16_SNORM_EXT: GLenum;
 }
 
 interface OES_draw_buffers_indexed {
@@ -415,6 +393,20 @@ interface OES_draw_buffers_indexed {
     colorMaskiOES(buf: GLuint, r: GLboolean, g: GLboolean, b: GLboolean, a: GLboolean): void;
 }
 
+interface EXT_clip_control {
+    readonly LOWER_LEFT_EXT: 0x8CA1;
+    readonly UPPER_LEFT_EXT: 0x8CA1;
+    readonly NEGATIVE_ONE_TO_ONE_EXT: 0x935E;
+    readonly ZERO_TO_ONE_EXT: 0x935F;
+    clipControlEXT(origin: GLenum, depth: GLenum): void;
+}
+
+interface WEBGL_polygon_mode {
+    readonly LINE_WEBGL: 0x1B01;
+    readonly FILL_WEBGL: 0x1B02;
+    polygonModeWEBGL(face: GLenum, mode: GLenum): void;
+}
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Configuration
     private _shaderDebug = false;
@@ -423,6 +415,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GL extension
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
+    private _EXT_clip_control: EXT_clip_control | null = null;
     private _EXT_texture_compression_rgtc: EXT_texture_compression_rgtc | null = null;
     private _EXT_texture_filter_anisotropic: EXT_texture_filter_anisotropic | null = null;
     private _EXT_texture_norm16: EXT_texture_norm16 | null = null;
@@ -430,6 +423,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _OES_draw_buffers_indexed: OES_draw_buffers_indexed | null = null;
     private _OES_texture_float_linear: OES_texture_float_linear | null = null;
     private _OES_texture_half_float_linear: OES_texture_half_float_linear | null = null;
+    private _WEBGL_polygon_mode: WEBGL_polygon_mode | null = null;
 
     // Swap Chain
     private _scTexture: GfxTexture | null = null;
@@ -485,8 +479,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly glslVersion = `#version 300 es`;
     public readonly explicitBindingLocations = false;
     public readonly separateSamplerTextures = false;
-    public readonly viewportOrigin = GfxViewportOrigin.LowerLeft;
-    public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
+    public readonly viewportOrigin: GfxViewportOrigin;
+    public readonly clipSpaceNearZ: GfxClipSpaceNearZ;
 
     // GfxLimits
     private _uniformBufferMaxPageByteSize: number;
@@ -495,12 +489,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public supportedSampleCounts: number[];
     public occlusionQueriesRecommended: boolean;
     public computeShadersSupported: boolean = false;
+    public wireframeSupported: boolean = false;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());
 
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+        this._EXT_clip_control = gl.getExtension('EXT_clip_control');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
         this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
         this._EXT_texture_norm16 = gl.getExtension('EXT_texture_norm16');
@@ -508,8 +504,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._OES_texture_float_linear = gl.getExtension('OES_texture_float_linear');
         this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
         // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
+        this._WEBGL_polygon_mode = gl.getExtension('WEBGL_polygon_mode') as WEBGL_polygon_mode;
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
+
+        // Set up clip space
+        if (this._EXT_clip_control !== null) {
+            this._EXT_clip_control.clipControlEXT(this._EXT_clip_control.UPPER_LEFT_EXT, this._EXT_clip_control.ZERO_TO_ONE_EXT);
+            this.viewportOrigin = GfxViewportOrigin.UpperLeft;
+            this.clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
+        } else {
+            this.viewportOrigin = GfxViewportOrigin.LowerLeft;
+            this.clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
+        }
 
         // Create our fake swap-chain texture.
         this._scTexture = {
@@ -579,6 +586,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this.supportedSampleCounts.sort((a, b) => (a - b));
 
         this.occlusionQueriesRecommended = true;
+
+        if (this._WEBGL_polygon_mode !== null)
+            this.wireframeSupported = true;
     }
 
     private _checkForBugQuirks(): void {
@@ -2129,6 +2139,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.disable(gl.POLYGON_OFFSET_FILL);
             }
             currentMegaState.polygonOffset = newMegaState.polygonOffset;
+        }
+
+        if (currentMegaState.wireframe !== newMegaState.wireframe) {
+            assert(this.wireframeSupported || !currentMegaState.wireframe);
+            if (newMegaState.wireframe) {
+                this._WEBGL_polygon_mode!.polygonModeWEBGL(gl.FRONT_AND_BACK, this._WEBGL_polygon_mode!.LINE_WEBGL);
+            } else {
+                this._WEBGL_polygon_mode!.polygonModeWEBGL(gl.FRONT_AND_BACK, this._WEBGL_polygon_mode!.FILL_WEBGL);
+            }
+            currentMegaState.wireframe = newMegaState.wireframe;
         }
     }
 

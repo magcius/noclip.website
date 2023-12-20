@@ -107,6 +107,7 @@ class MarioKartWiiRenderer {
     public renderHelper: GXRenderHelperGfx;
     public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
     public enablePostProcessing = true;
+    public wireframe = false;
 
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
@@ -172,6 +173,15 @@ class MarioKartWiiRenderer {
         };
         renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
 
+        if (this.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                const v = wireframe.checked;
+                this.wireframe = v;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
+        }
+
         return [renderHacksPanel];
     }
 
@@ -186,6 +196,8 @@ class MarioKartWiiRenderer {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
+        if (this.wireframe)
+            template.setMegaStateFlags({ wireframe: true });
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender();

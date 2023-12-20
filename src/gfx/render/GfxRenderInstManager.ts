@@ -679,7 +679,7 @@ class RenderInstPool {
 
 export class GfxRenderInstManager {
     public instPool = new RenderInstPool();
-    public templatePool = new RenderInstPool();
+    public templateStack: GfxRenderInst[] = [];
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     public currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
@@ -692,12 +692,11 @@ export class GfxRenderInstManager {
      * render inst.
      */
     public newRenderInst(): GfxRenderInst {
-        const templateIndex = this.templatePool.allocCount - 1;
         const renderInstIndex = this.instPool.allocRenderInstIndex();
         const renderInst = this.instPool.pool[renderInstIndex];
         renderInst.debug = null;
-        if (templateIndex >= 0)
-            renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
+        if (this.templateStack.length > 0)
+            renderInst.setFromTemplate(this.getTemplateRenderInst());
         return renderInst;
     }
 
@@ -729,25 +728,23 @@ export class GfxRenderInstManager {
      * {@param popTemplateRenderInst} to pop it off the template stack.
      */
     public pushTemplateRenderInst(): GfxRenderInst {
-        const templateIndex = this.templatePool.allocCount - 1;
-        const newTemplateIndex = this.templatePool.allocRenderInstIndex();
-        const newTemplate = this.templatePool.pool[newTemplateIndex];
-        if (templateIndex >= 0)
-            newTemplate.setFromTemplate(this.templatePool.pool[templateIndex]);
+        const newTemplate = new GfxRenderInst();
+        if (this.templateStack.length > 0)
+            newTemplate.setFromTemplate(this.getTemplateRenderInst());
         newTemplate._flags |= GfxRenderInstFlags.Template;
+        this.templateStack.push(newTemplate);
         return newTemplate;
     }
 
     public popTemplateRenderInst(): void {
-        this.templatePool.popRenderInst();
+        this.templateStack.pop();
     }
 
     /**
      * Retrieves the current template render inst on the top of the template stack.
      */
     public getTemplateRenderInst(): GfxRenderInst {
-        const templateIndex = this.templatePool.allocCount - 1;
-        return this.templatePool.pool[templateIndex];
+        return this.templateStack[this.templateStack.length - 1];
     }
 
     /**
@@ -760,7 +757,7 @@ export class GfxRenderInstManager {
         if (this.simpleRenderInstList !== null)
             this.simpleRenderInstList.reset();
         // Ensure we aren't leaking templates.
-        assert(this.templatePool.allocCount === 0);
+        assert(this.templateStack.length === 0);
     }
 
     public destroy(): void {
