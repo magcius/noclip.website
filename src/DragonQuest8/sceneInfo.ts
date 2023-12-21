@@ -29,6 +29,8 @@ export class SceneInfo {
     public currentGameProgress: number;
     //Vcol
     public bUseVColors: boolean;
+    //Wireframe
+    public bWireframe: boolean;
 
     //Game progress breakdown (used by the scripts)
     public stbMainProgress: number;
