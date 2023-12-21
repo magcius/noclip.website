@@ -54,6 +54,8 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
+        if(SINFO.gDQ8SINFO.bWireframe)
+            template.setMegaStateFlags({ wireframe: true });
 
         //Renderers
         for (let i = 0; i < this.MAPRenderers.length; i++)
@@ -137,7 +139,18 @@ export class DQ8Renderer implements Viewer.SceneGfx {
             SINFO.gDQ8SINFO.bUseVColors = enableVertexColorsCheckbox.checked;
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        if (this.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                SINFO.gDQ8SINFO.bWireframe = wireframe.checked;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
+        }
+
         return renderHacksPanel;
+
+        
     }
 
     public createPanels(): UI.Panel[] {
