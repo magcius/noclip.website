@@ -147,8 +147,7 @@ export class GTA3SceneDesc implements SceneDesc {
         for (let i = 0; i < n; i++) {
             const sid = basename + '_stream' + i;
             const sbuffer = await this.fetch(dataFetcher, `models/gta3/${sid}.ipl`);
-            const instances = parseItemPlacementBinary(sbuffer!.createDataView());
-            ipl.instances = ipl.instances.concat(instances);
+            parseItemPlacementBinary(ipl.instances, sbuffer!.createDataView());
         }
         return ipl;
     }
@@ -284,7 +283,6 @@ export class GTA3SceneDesc implements SceneDesc {
         const dataFetcher = context.dataFetcher;
         const objects = new Map<string, ObjectDefinition>();
         const objectIDs = new Map<number, string>();
-        const lodnames = new Set<string>();
 
         this.assetCache = await context.dataShare.ensureObject<AssetCache>(this.meta.id, async () => new AssetCache());
         if (this.meta.basisTextures) {
@@ -300,7 +298,6 @@ export class GTA3SceneDesc implements SceneDesc {
         for (const ide of ides) for (const obj of ide.objects) {
             objects.set(obj.modelName, obj);
             if (obj.id !== undefined) objectIDs.set(obj.id, obj.modelName);
-            if (obj.modelName.startsWith('lod')) lodnames.add(obj.modelName.substr(3));
         }
         objects.set('water', waterDefinition);
 
@@ -318,10 +315,14 @@ export class GTA3SceneDesc implements SceneDesc {
         for (const ipl of ipls) {
             for (let itemIndex = 0; itemIndex < ipl.instances.length; itemIndex++) {
                 const item = ipl.instances[itemIndex];
-                if (item.lod !== undefined && item.lod >= 0) {
-                    const obj = objects.get(item.modelName!)!;
+                const name = item.modelName;
+                if (name === undefined)
+                    continue;
+                if (item.lod >= 0) {
                     const lod = ipl.instances[item.lod];
-                    lod.lodDistance = obj.drawDistance;
+                    lod.isLOD = true;
+                } else if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) {
+                    item.isLOD = true;
                 }
             }
         }
@@ -344,18 +345,19 @@ export class GTA3SceneDesc implements SceneDesc {
                 continue;
             }
             const name = item.modelName;
-            const haslod = lodnames.has(name.substr(3)) || (item.lod !== undefined && item.lod >= 0);
             const obj = objects.get(name);
             if (!obj) {
                 console.warn('No definition for object', name);
                 continue;
             }
-            if (item.lod === undefined) {
-                if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) continue; // ignore LOD objects
-            }
+
+            if (item.isLOD)
+                continue;
+
             const interior = item.interior! & 0xFF;
             const visible = (interior === this.interior || interior === INTERIOR_EVERYWHERE);
-            if (!visible) continue;
+            if (!visible)
+                continue;
 
             if (!modelCache.meshData.has(obj.modelName))
                 await this.fetchDFF(dataFetcher, obj.modelName, clump => modelCache.addModel(clump, obj));
@@ -380,10 +382,7 @@ export class GTA3SceneDesc implements SceneDesc {
                 }
             }
 
-            const drawDistanceLimit = 100;
             let params = new DrawParams();
-            if (!(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
-                params.maxDistance = Math.ceil(obj.drawDistance / 50) * 50;
             if (obj.tobj) {
                 params.timeOn = obj.timeOn;
                 params.timeOff = obj.timeOff;
@@ -393,10 +392,6 @@ export class GTA3SceneDesc implements SceneDesc {
             params.backface = !!(obj.flags & ObjectFlags.DISABLE_BACKFACE_CULLING);
             if (transparent || !!(obj.flags & ObjectFlags.DRAW_LAST))
                 params.renderLayer = GfxRendererLayer.TRANSLUCENT;
-            if (item.lodDistance !== undefined)
-                params.minDistance = Math.ceil(item.lodDistance / 50) * 50;
-            if (this.interior !== 0 || (item.lod === undefined && (haslod || params.maxDistance >= drawDistanceLimit)) || item.lodDistance !== undefined || name.startsWith('lod'))
-                params.maxDistance = Infinity;
             params = params.intern();
 
             const key = ipl.id;
@@ -409,6 +404,7 @@ export class GTA3SceneDesc implements SceneDesc {
 
         const textureSets = new Map<string, Set<Texture>>();
         const textureArrays: TextureArray[] = [];
+        renderer.textureArrays = textureArrays;
         function handleTexture(texture: Texture) {
             const key = [texture.width, texture.height, texture.pixelFormat, texture.transparent, texture.levels.length].join();
             if (!textureSets.has(key)) textureSets.set(key, new Set());

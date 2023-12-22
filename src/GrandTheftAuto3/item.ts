@@ -92,8 +92,8 @@ export interface ItemInstance {
     scale: vec3;
     rotation: quat;
     interior: number;
-    lod?: number;
-    lodDistance?: number;
+    lod: number;
+    isLOD: boolean;
 }
 
 export const INTERIOR_EVERYWHERE = 13;
@@ -105,6 +105,8 @@ export function createItemInstance(modelName: string): ItemInstance {
         scale: vec3.fromValues(1,1,1),
         rotation: quat.fromValues(0,0,0,1),
         interior: INTERIOR_EVERYWHERE,
+        lod: -1,
+        isLOD: false,
     };
 }
 
@@ -128,7 +130,8 @@ function parseItemInstance(line: string[]): ItemInstance {
         scale: vec3.fromValues(Number(scaleX), Number(scaleY), Number(scaleZ)),
         rotation: quat.fromValues(Number(rotX), Number(rotY), Number(rotZ), -Number(rotW)),
         interior: Number(interior),
-        lod: (lod === undefined) ? undefined : Number(lod),
+        lod: (lod === undefined) ? -1 : Number(lod),
+        isLOD: false,
     };
 }
 
@@ -172,8 +175,7 @@ export function parseItemPlacement(id: string, text: string): ItemPlacement {
     return { id, instances, interiors };
 }
 
-export function parseItemPlacementBinary(view: DataView) {
-    const instances = [] as ItemInstance[];
+export function parseItemPlacementBinary(instances: ItemInstance[], view: DataView) {
     const n = view.getUint32(4, true);
     const offset = view.getUint32(7 * 4, true);
     assert(offset === 0x4c);
@@ -195,10 +197,10 @@ export function parseItemPlacementBinary(view: DataView) {
             scale: vec3.fromValues(1, 1, 1),
             rotation: quat.fromValues(rotX, rotY, rotZ, -rotW),
             interior,
-            lod,
+            lod: lod,
+            isLOD: false,
         });
     }
-    return instances;
 }
 
 export function parseZones(text: string): Map<string, AABB> {

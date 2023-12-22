@@ -27,7 +27,9 @@ export function parseWaterPro(view: DataView, [originX, originY]: number[]): Ite
                     j * size + originY - 2048,
                     heights[level]
                 ),
-                scale, rotation
+                scale, rotation,
+                lod: -1,
+                isLOD: false,
             });
         }
     }

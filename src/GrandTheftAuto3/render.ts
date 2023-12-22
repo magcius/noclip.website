@@ -26,7 +26,6 @@ import { GraphObjBase } from "../SceneBase.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
-const DRAW_DISTANCE_FACTOR = 2.5;
 
 export interface Texture extends TextureBase {
     levels: Uint8Array[];
@@ -237,8 +236,6 @@ class BaseRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        if (this.atlas !== undefined)
-            this.atlas.destroy(device);
     }
 }
 
@@ -397,8 +394,6 @@ export class MeshInstance {
 
 export class DrawParams {
     public renderLayer = GfxRendererLayer.OPAQUE;
-    public minDistance = -Infinity;
-    public maxDistance = Infinity;
     public timeOn?: number;
     public timeOff?: number;
     public water = false;
@@ -427,8 +422,8 @@ const scratchVec3 = vec3.create();
 const scratchColor = colorNewCopy(White);
 export class SceneRenderer extends BaseRenderer {
     public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
-
     private sortKey: number;
+    private visible = true;
 
     private static programFor(params: DrawParams, dual: boolean) {
         if (params.water) return waterProgram;
@@ -457,7 +452,7 @@ export class SceneRenderer extends BaseRenderer {
         return false;
     }
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public params: DrawParams, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public params: DrawParams, private meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
         super(SceneRenderer.programFor(params, dual), atlas);
 
         let vertices = 0;
@@ -555,7 +550,11 @@ export class SceneRenderer extends BaseRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        if (!viewerInput.camera.frustum.contains(this.bbox)) return;
+        if (!this.visible)
+            return;
+
+        if (!viewerInput.camera.frustum.contains(this.bbox))
+            return;
 
         const hour = (viewerInput.time / TIME_FACTOR) % 24;
         const { timeOn, timeOff } = this.params;
@@ -574,6 +573,7 @@ export class SceneRenderer extends BaseRenderer {
 export class AreaRenderer {
     private renderers: SceneRenderer[] = [];
     private bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    private visible = true;
 
     public push(renderer: SceneRenderer) {
         this.renderers.push(renderer);
@@ -581,14 +581,14 @@ export class AreaRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        if (!viewerInput.camera.frustum.contains(this.bbox)) return;
+        if (!this.visible)
+            return;
 
-        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera.viewMatrix, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
-        for (let i = 0; i < this.renderers.length; i++) {
-            const renderer = this.renderers[i];
-            if (renderer.params.minDistance <= depth && depth < renderer.params.maxDistance)
-                renderer.prepareToRender(device, renderInstManager, viewerInput);
-        }
+        if (!viewerInput.camera.frustum.contains(this.bbox))
+            return;
+
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -605,6 +605,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 export class GTA3Renderer implements Viewer.SceneGfx {
     public renderers: GraphObjBase[] = [];
+    public textureArrays: TextureArray[] = [];
     public onstatechanged!: () => void;
 
     private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
@@ -708,6 +709,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
+        for (let i = 0; i < this.textureArrays.length; i++)
+            this.textureArrays[i].destroy(device);
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
     }
