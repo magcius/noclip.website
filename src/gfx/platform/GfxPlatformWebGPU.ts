@@ -1,11 +1,11 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxTextureUsage, GfxViewportOrigin, GfxQueryPoolType, GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxComputePipelineDescriptor, GfxComputePass, GfxComputeProgramDescriptor, GfxShadingLanguage } from "./GfxPlatform.js";
-import { _T, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl.js";
-import { assertExists, assert, align, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil.js";
-import { FormatTypeFlags, getFormatTypeFlags, getFormatByteSize, getFormatSamplerKind, FormatFlags, getFormatFlags } from "./GfxPlatformFormat.js";
-import { HashMap, nullHashFunc } from "../../HashMap.js";
 import type { glsl_compile as glsl_compile_ } from "../../../rust/pkg/index.js";
+import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxDebugGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from "./GfxPlatform.js";
+import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
+import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { align, assert, assertExists, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil.js";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
     gpuBuffer: GPUBuffer;

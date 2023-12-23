@@ -1,10 +1,10 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState, GfxChannelWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTargetDescriptor, GfxClipSpaceNearZ, GfxViewportOrigin, GfxQueryPoolType, GfxSamplerFormatKind, GfxTextureUsage, GfxComputeProgramDescriptor, GfxComputePipelineDescriptor, GfxComputePass } from './GfxPlatform.js';
-import { _T, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback, GfxQueryPool, defaultBindingLayoutSamplerDescriptor, GfxComputePipeline } from "./GfxPlatformImpl.js";
-import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize, getFormatSamplerKind } from "./GfxPlatformFormat.js";
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxDebugGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from './GfxPlatform.js';
+import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
+import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
-import { gfxColorEqual, assert, assertExists, leftPad, gfxColorCopy, nullify, nArray } from './GfxPlatformUtil.js';
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
+import { assert, assertExists, gfxColorCopy, gfxColorEqual, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -479,7 +479,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly glslVersion = `#version 300 es`;
     public readonly explicitBindingLocations = false;
     public readonly separateSamplerTextures = false;
-    public readonly viewportOrigin: GfxViewportOrigin;
+    public readonly viewportOrigin: GfxViewportOrigin = GfxViewportOrigin.LowerLeft;
     public readonly clipSpaceNearZ: GfxClipSpaceNearZ;
 
     // GfxLimits
@@ -503,18 +503,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
         this._OES_texture_float_linear = gl.getExtension('OES_texture_float_linear');
         this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
-        // this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
+        this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
         this._WEBGL_polygon_mode = gl.getExtension('WEBGL_polygon_mode') as WEBGL_polygon_mode;
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
         // Set up clip space
         if (this._EXT_clip_control !== null) {
-            this._EXT_clip_control.clipControlEXT(this._EXT_clip_control.UPPER_LEFT_EXT, this._EXT_clip_control.ZERO_TO_ONE_EXT);
-            this.viewportOrigin = GfxViewportOrigin.UpperLeft;
+            this._EXT_clip_control.clipControlEXT(this._EXT_clip_control.LOWER_LEFT_EXT, this._EXT_clip_control.ZERO_TO_ONE_EXT);
             this.clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
         } else {
-            this.viewportOrigin = GfxViewportOrigin.LowerLeft;
             this.clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
         }
 
