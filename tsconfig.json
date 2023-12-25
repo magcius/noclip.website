@@ -29,8 +29,7 @@
         "types": [
             "gl-matrix",
             "pako",
-            "filesystem",
-            "webmidi"
+            "filesystem"
         ]
     },
     "include": [

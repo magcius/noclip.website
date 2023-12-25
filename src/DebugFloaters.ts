@@ -4,7 +4,7 @@
 import { objIsColor } from "./Color.js";
 import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted, Checkbox } from "./ui.js";
 import { GlobalGrabManager } from "./GrabManager.js";
-import { arrayRemove, assert, nullify } from "./util.js";
+import { assert, nullify } from "./util.js";
 import { invlerp, lerp } from "./MathHelpers.js";
 import { IS_DEVELOPMENT } from "./BuildVersion.js";
 import "reflect-metadata";
@@ -587,11 +587,13 @@ class MIDIDevice {
     private boundControls: BoundMIDIControl[] = [];
     public oncontrolmessage: ((device: MIDIDevice, boundControl: BoundMIDIControl | null, channel: number, controlNumber: number, value: number | null) => void) | null = null;
 
-    constructor(public midiInput: WebMidi.MIDIInput) {
+    constructor(public midiInput: MIDIInput) {
         this.midiInput.onmidimessage = this.onMessage;
     }
 
-    private onMessage = (e: WebMidi.MIDIMessageEvent): void => {
+    private onMessage = (ev: Event): void => {
+        const e = ev as MIDIMessageEvent;
+
         const messageType = e.data[0];
 
         if (messageType >= 0xB0 && messageType <= 0xBF && this.oncontrolmessage !== null) {
@@ -631,7 +633,7 @@ class MIDIDevice {
 
 type BoundMIDIControl = BoundMIDIControlValue | BoundMIDIControlButton;
 class GlobalMIDIControls {
-    private midiAccess: WebMidi.MIDIAccess | null = null;
+    private midiAccess: MIDIAccess | null = null;
     private devices: MIDIDevice[] = [];
 
     public async init() {
@@ -650,15 +652,14 @@ class GlobalMIDIControls {
     }
 
     private scanDevices(): void {
-        const inputs = [...this.midiAccess!.inputs.values()];
-        for (const input of inputs) {
+        this.midiAccess!.inputs.forEach((input, key) => {
             let device = this.devices.find((device) => device.midiInput === input);
             if (device === undefined) {
                 device = new MIDIDevice(input);
                 device.oncontrolmessage = this.onControlMessage;
                 this.devices.push(device);
             }
-        }
+        });
     }
 
     private nextListener: MIDIControlListenerValue | null = null;

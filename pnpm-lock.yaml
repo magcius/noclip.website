@@ -34,9 +34,6 @@ devDependencies:
   '@types/puppeteer':
     specifier: ^1.20.10
     version: 1.20.10
-  '@types/webmidi':
-    specifier: ^2.0.10
-    version: 2.0.10
   '@wasm-tool/wasm-pack-plugin':
     specifier: ^1.7.0
     version: 1.7.0
@@ -596,10 +593,6 @@ packages:
     resolution: {integrity: sha512-Hm/T0kV3ywpJyMGNbsItdivRhYNCQQf1IIsYsXnoVPES4t+FMLyDe0/K+Ea7ahWtMtSNb22ZdY7MIyoD9rqARg==}
     dependencies:
       source-map: 0.6.1
-    dev: true
-
-  /@types/webmidi@2.0.10:
-    resolution: {integrity: sha512-4RmTFMB6mN2h8XbJa1x3cOs9IOkXvFyHGcPUpUvWfmATuKg/J+dsFiMVgCE2EkpS+/8a8AP2tE3rQT1mLG7vEg==}
     dev: true
 
   /@types/webpack-sources@3.2.3:

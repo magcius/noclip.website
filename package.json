@@ -8,7 +8,6 @@
     "@types/pako": "^1.0.7",
     "@types/pngjs": "^3.4.2",
     "@types/puppeteer": "^1.20.10",
-    "@types/webmidi": "^2.0.10",
     "@wasm-tool/wasm-pack-plugin": "^1.7.0",
     "@webgpu/types": "^0.1.40",
     "buffer": "^6.0.3",
