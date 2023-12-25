@@ -15,7 +15,6 @@ import { Endianness } from '../endian.js';
 import { AABB } from '../Geometry.js';
 import { TextureMapping } from '../TextureHolder.js';
 import AnimationController from '../AnimationController.js';
-import { cv, Graph } from '../DebugJunk.js';
 import { GXTextureHolder } from '../gx/gx_render.js';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat.js';
 import { getPointHermite } from '../Spline.js';
@@ -2235,53 +2234,6 @@ export class CHR0NodesAnimator {
     constructor(public animationController: AnimationController, public chr0: CHR0, private nodeData: CHR0_NodeData[]) {
     }
 
-    private vizNodeId: number | undefined = undefined;
-    private vizGraph: Graph;
-    public viz(nodeId: number) {
-        this.vizNodeId = nodeId;
-        this.vizGraph = new Graph(cv());
-    }
-
-    private updviz(animFrame: number, nodeData: CHR0_NodeData) {
-        const numFrames = this.chr0.duration;
-        const ctx = this.vizGraph.ctx;
-
-        const scale = 10;
-        const maxt = (numFrames / scale) | 0;
-        const offt = animFrame - maxt / 2;
-
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-        if (nodeData.rotationX) {
-            this.vizGraph.graphF('red', (t: number) => {
-                const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationX!, animFrame);
-            }, maxt);
-        }
-
-        if (nodeData.rotationY) {
-            this.vizGraph.graphF('green', (t: number) => {
-                const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationY!, animFrame);
-            }, maxt);
-        }
-
-        if (nodeData.rotationZ) {
-            this.vizGraph.graphF('blue', (t: number) => {
-                const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationZ!, animFrame);
-            }, maxt);
-        }
-
-        // const xa = (animFrame / numFrames) * ctx.canvas.width;
-        const xa = (0.5) * ctx.canvas.width;
-        ctx.beginPath();
-        ctx.strokeStyle = 'black';
-        ctx.lineTo(xa, 0);
-        ctx.lineTo(xa, ctx.canvas.height);
-        ctx.stroke();
-    }
 
     public calcModelMtx(dst: mat4, nodeId: number): boolean {
         const nodeData = this.nodeData[nodeId];
@@ -2293,9 +2245,6 @@ export class CHR0NodesAnimator {
 
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.chr0, frame);
-
-        if (this.vizNodeId === nodeId)
-            this.updviz(animFrame, nodeData);
 
         const scaleX = nodeData.scaleX ? sampleFloatAnimationTrack(nodeData.scaleX, animFrame) : 1;
         const scaleY = nodeData.scaleY ? sampleFloatAnimationTrack(nodeData.scaleY, animFrame) : 1;

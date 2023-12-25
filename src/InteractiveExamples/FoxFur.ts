@@ -16,7 +16,7 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helper
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { captureScene } from '../CaptureHelpers.js';
+import { captureSceneToZip } from '../CaptureHelpers.js';
 import { downloadBuffer } from '../DownloadUtils.js';
 import { makeZipFile } from '../ZipFile.js';
 import { GridPlane } from './GridPlane.js';
@@ -456,7 +456,7 @@ class SceneRenderer implements SceneGfx {
 
     public async film() {
         const width = 1920, height = 1080;
-        const scene0 = await captureScene(window.main.viewer, {
+        const scene0 = await captureSceneToZip(window.main.viewer, {
             width, height,
             opaque: false,
             frameCount: 12,

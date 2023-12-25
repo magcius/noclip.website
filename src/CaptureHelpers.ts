@@ -24,7 +24,7 @@ async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     return await new Response(blob).arrayBuffer();
 }
 
-export async function captureScene(viewer: Viewer, options: CaptureOptions): Promise<ZipFileEntry[]> {
+export async function captureSceneToZip(viewer: Viewer, options: CaptureOptions): Promise<ZipFileEntry[]> {
     const fileEntries: ZipFileEntry[] = [];
 
     // This is some ugliness to take over the main code... in an ideal world we'd do this offscreen...

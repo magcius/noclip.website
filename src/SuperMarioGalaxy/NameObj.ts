@@ -134,6 +134,8 @@ export const enum DrawBufferType {
     GlaringLight                        = 0x22,
     AstroDomeSky                        = 0x23,
     Model3DFor2D                        = 0x24,
+    DrawBufferType_0x25                 = 0x25,
+    DrawBufferType_0x26                 = 0x26,
     MirrorMapObj                        = 0x27,
 
     // noclip additions

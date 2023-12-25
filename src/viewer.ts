@@ -97,6 +97,7 @@ export class Viewer {
     // requestAnimationFrame time. Used to calculate dt from the new time.
     public rafTime: number = 0;
     public sceneTimeScale: number = 1;
+    public externalControl: boolean = false;
 
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
@@ -286,7 +287,7 @@ export class Viewer {
         this.updateDT(dt, updateInfo);
     }
 
-    public updateDT(dt: number, updateInfo: ViewerUpdateInfo): void {
+    private updateDT(dt: number, updateInfo: ViewerUpdateInfo): void {
         if (dt < 0)
             return;
         this.rafTime += dt;

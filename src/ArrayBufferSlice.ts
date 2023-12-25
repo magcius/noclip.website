@@ -25,9 +25,9 @@ declare global {
 
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
-ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
-    throw new Error("Do not use ArrayBuffer.prototype.slice");
-};
+// ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
+//     throw new Error("Do not use ArrayBuffer.prototype.slice");
+// };
 
 interface _TypedArrayConstructor<T extends ArrayBufferView> {
     readonly BYTES_PER_ELEMENT: number;

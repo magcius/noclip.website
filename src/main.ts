@@ -473,8 +473,10 @@ class Main {
             }
         }
 
-        this.viewer.sceneTimeScale = sceneTimeScale;
-        this.viewer.update(updateInfo);
+        if (!this.viewer.externalControl) {
+            this.viewer.sceneTimeScale = sceneTimeScale;
+            this.viewer.update(updateInfo);
+        }
 
         if (shouldTakeScreenshot)
             this._takeScreenshot();

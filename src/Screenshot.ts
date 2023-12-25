@@ -27,25 +27,6 @@ function readPixelsCommon(gl: WebGL2RenderingContext, width: number, height: num
     ctx.restore();
 }
 
-export function downloadRenderbufferToCanvas(gl: WebGL2RenderingContext, renderbuffer: WebGLTexture, canvas: HTMLCanvasElement, opaque: boolean): void {
-    const fb = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
-    gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, renderbuffer);
-    const width = gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_WIDTH);
-    const height = gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_HEIGHT);
-    readPixelsCommon(gl, width, height, canvas, opaque);
-    gl.deleteFramebuffer(fb);
-}
-
-export function downloadTextureToCanvas(gl: WebGL2RenderingContext, texture: WebGLTexture, width: number, height: number, canvas: HTMLCanvasElement, opaque: boolean): void {
-    const fb = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
-    gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    readPixelsCommon(gl, width, height, canvas, opaque);
-    gl.deleteFramebuffer(fb);
-}
-
 export function downloadFrontBufferToCanvas(gl: WebGL2RenderingContext, width: number, height: number, canvas: HTMLCanvasElement, opaque: boolean): void {
     readPixelsCommon(gl, width, height, canvas, opaque);
 }
