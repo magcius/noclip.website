@@ -319,108 +319,15 @@ export class AABB {
     }
 }
 
-class FrustumVisualizer {
-    private canvas: HTMLCanvasElement;
-    public ctx: CanvasRenderingContext2D;
-    public scale: number = 1/100000;
-
-    constructor() {
-        this.canvas = document.createElement('canvas');
-        this.canvas.width = 1080;
-        this.canvas.height = 768;
-        document.body.appendChild(this.canvas);
-        this.canvas.style.position = 'absolute';
-        this.canvas.style.top = '0';
-        this.canvas.style.left = '0';
-        this.canvas.style.opacity = '0.5';
-        this.canvas.style.pointerEvents = 'none';
-        this.ctx = this.canvas.getContext('2d')!;
-    }
-
-    public newFrame(): void {
-        this.ctx.fillStyle = 'white';
-        this.ctx.save();
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.restore();
-    }
-
-    public dsx(n: number): number {
-        return ((n*this.scale) + 0.5) * this.canvas.width;
-    }
-
-    public dsy(n: number): number {
-        return ((n*this.scale) + 0.5) * this.canvas.height;
-    }
-
-    public daabb/* on the haters */(aabb: AABB): void {
-        const x1 = this.dsx(aabb.minX);
-        const y1 = this.dsy(aabb.minZ);
-        const x2 = this.dsx(aabb.maxX);
-        const y2 = this.dsy(aabb.maxZ);
-        this.ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-    }
-
-    public dsph(v: ReadonlyVec3, rad: number): void {
-        const xc = this.dsx(v[0]);
-        const yc = this.dsy(v[2]);
-        this.ctx.beginPath();
-        this.ctx.ellipse(xc, yc, rad*this.scale*this.canvas.width, rad*this.scale*this.canvas.height, 0, 0, Math.PI * 2);
-        this.ctx.closePath();
-        this.ctx.stroke();
-    }
-}
-
 export enum IntersectionState {
-    FULLY_INSIDE,
-    FULLY_OUTSIDE,
-    PARTIAL_INTERSECT,
+    Inside,
+    Outside,
+    Intersection,
 }
 
 export class Frustum {
     // Left, Right, Near, Far, Top, Bottom
     public planes: Plane[] = nArray(6, () => new Plane());
-
-    private visualizer: FrustumVisualizer | null = null;
-    public makeVisualizer(): FrustumVisualizer {
-        if (this.visualizer === null)
-            this.visualizer = new FrustumVisualizer();
-        return this.visualizer;
-    }
-
-    private vizp(planes: Plane[], color: string): void {
-        if (this.visualizer) {
-            const ctx = this.visualizer.ctx;
-            ctx.strokeStyle = color;
-            ctx.beginPath();
-            const drawLine = (x1: number, z1: number, x2: number, z2: number) => {
-                ctx.moveTo(this.visualizer!.dsx(x1), this.visualizer!.dsy(z1));
-                ctx.lineTo(this.visualizer!.dsx(x2), this.visualizer!.dsy(z2));
-            };
-            const p0 = planes[0], p1 = planes[1], pn = planes[4];
-            // Find the intersection of p0 & p1
-            // line eq = ax + 0y + cz + d = 0
-            const i0 = (p0.n[2]*p1.d - p0.d*p1.n[2]), i1 = (p0.d*p1.n[0] - p0.n[0]*p1.d), i2 = (p0.n[0]*p1.n[2] - p0.n[2]*p1.n[0]);
-            const ix = i0/i2, iz = i1/i2;
-            const G = 10;
-            ctx.fillStyle = 'black';
-            ctx.fillRect(this.visualizer!.dsx(ix) - G/2, this.visualizer!.dsy(iz) - G/2, G, G);
-            const drawPlane = (p: Plane) => {
-                // ax + 0y + cz + d = 0, solve for z, z = -(ax + d) / c
-                const x1 = -100000, x2 = -x1;
-                const z1 = -(p.d + p.n[0] * x1) / p.n[2];
-                const z2 = -(p.d + p.n[0] * x2) / p.n[2];
-                const dot = (pn.n[0]*x1 + pn.n[2]*z1);
-                const px = dot >= 0 ? x2 : x1;
-                const pz = dot >= 0 ? z2 : z1;
-                drawLine(px, pz, ix, iz);
-            };
-            drawPlane(p0);
-            drawPlane(p1);
-            ctx.closePath();
-            ctx.stroke();
-        }
-    }
 
     public updateClipFrustum(m: ReadonlyMat4, clipSpaceNearZ: GfxClipSpaceNearZ): void {
         // http://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
@@ -438,19 +345,10 @@ export class Frustum {
         }
 
         this.planes[5].set4Unnormalized(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Far
-
-        if (IS_DEPTH_REVERSED) {
-            // swap
-            this.planes[4].getVec4v(scratchVec4);
-            this.planes[4].copy(this.planes[5]);
-            this.planes[5].setVec4v(scratchVec4);
-        }
-
-        this.vizp(this.planes, 'green');
     }
 
-    public _intersect(aabb: AABB): IntersectionState {
-        let ret = IntersectionState.FULLY_INSIDE;
+    public intersect(aabb: AABB): IntersectionState {
+        let ret = IntersectionState.Inside;
         // Test planes.
         for (let i = 0; i < 6; i++) {
             const plane = this.planes[i];
@@ -459,61 +357,37 @@ export class Frustum {
             const py = plane.n[1] >= 0 ? aabb.minY : aabb.maxY;
             const pz = plane.n[2] >= 0 ? aabb.minZ : aabb.maxZ;
             if (plane.distance(px, py, pz) > 0)
-                return IntersectionState.FULLY_OUTSIDE;
+                return IntersectionState.Outside;
             // Farthest point from the frustum.
             const fx = plane.n[0] >= 0 ? aabb.maxX : aabb.minX;
             const fy = plane.n[1] >= 0 ? aabb.maxY : aabb.minY;
             const fz = plane.n[2] >= 0 ? aabb.maxZ : aabb.minZ;
             if (plane.distance(fx, fy, fz) > 0)
-                ret = IntersectionState.PARTIAL_INTERSECT;
+                ret = IntersectionState.Intersection;
         }
 
         return ret;
     }
 
-    public intersect(aabb: AABB): IntersectionState {
-        const res = this._intersect(aabb);
-
-        if (this.visualizer) {
-            const ctx = this.visualizer.ctx;
-            ctx.strokeStyle = res === IntersectionState.FULLY_INSIDE ? 'black' : res === IntersectionState.FULLY_OUTSIDE ? 'red' : 'cyan';
-            this.visualizer.daabb(aabb);
-        }
-
-        return res;
-    }
-
     public contains(aabb: AABB): boolean {
-        return this.intersect(aabb) !== IntersectionState.FULLY_OUTSIDE;
+        return this.intersect(aabb) !== IntersectionState.Outside;
     }
 
-    private _intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
-        let res = IntersectionState.FULLY_INSIDE;
+    private intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
+        let res = IntersectionState.Inside;
         for (let i = 0; i < 6; i++) {
             const dist = this.planes[i].distance(v[0], v[1], v[2]);
             if (dist > radius)
-                return IntersectionState.FULLY_OUTSIDE;
+                return IntersectionState.Outside;
             else if (dist > -radius)
-                res = IntersectionState.PARTIAL_INTERSECT;
-        }
-
-        return res;
-    }
-
-    public intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
-        const res = this._intersectSphere(v, radius);
-
-        if (this.visualizer) {
-            const ctx = this.visualizer.ctx;
-            ctx.strokeStyle = res === IntersectionState.FULLY_INSIDE ? 'black' : res === IntersectionState.FULLY_OUTSIDE ? 'red' : 'cyan';
-            this.visualizer.dsph(v, radius);
+                res = IntersectionState.Intersection;
         }
 
         return res;
     }
 
     public containsSphere(v: ReadonlyVec3, radius: number): boolean {
-        return this.intersectSphere(v, radius) !== IntersectionState.FULLY_OUTSIDE;
+        return this.intersectSphere(v, radius) !== IntersectionState.Outside;
     }
 
     public containsPoint(v: ReadonlyVec3): boolean {
@@ -522,11 +396,6 @@ export class Frustum {
                 return false;
 
         return true;
-    }
-
-    public newFrame(): void {
-        if (this.visualizer)
-            this.visualizer.newFrame();
     }
 }
 

@@ -116,7 +116,6 @@ export class Camera {
     }
 
     public newFrame(): void {
-        this.frustum.newFrame();
     }
 }
 

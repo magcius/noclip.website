@@ -417,11 +417,11 @@ export class NfsBoundingVolumeGroup {
     public children: NfsBoundingVolume[];
 
     public collectInstancesToRender(collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) {
-        if(!fullyInside) {
+        if (!fullyInside) {
             const state = frustum.intersect(this.boundingBox);
-            if(state == IntersectionState.FULLY_OUTSIDE)
+            if (state == IntersectionState.Outside)
                 return;
-            fullyInside = state == IntersectionState.FULLY_INSIDE;
+            fullyInside = state == IntersectionState.Inside;
         }
 
         this.children.forEach(c => c.collectInstancesToRender(collection, frustum, fullyInside));
@@ -437,7 +437,7 @@ export class NfsInstance {
     public invertedFaces: boolean;
 
     public collectInstancesToRender(collection: NfsInstance[], frustum: Frustum, fullyInside: boolean) {
-        if(!fullyInside && frustum.intersect(this.boundingBox) == IntersectionState.FULLY_OUTSIDE)
+        if(!fullyInside && frustum.intersect(this.boundingBox) == IntersectionState.Outside)
             return;
 
         collection.push(this);

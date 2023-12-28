@@ -1875,7 +1875,6 @@ class CameraView {
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
         this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
-        this.frustum.newFrame();
     }
 
     public setupFromCamera(camera: Camera): void {

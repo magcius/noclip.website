@@ -104,7 +104,7 @@ class ShapeInstance {
 
                     mat4.copy(drawParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
 
-                    if (instanceStateData.jointToWorldMatrixVisibility[j] !== IntersectionState.FULLY_OUTSIDE)
+                    if (instanceStateData.jointToWorldMatrixVisibility[j] !== IntersectionState.Outside)
                         instVisible = true;
                 }
             } else {
@@ -584,7 +584,7 @@ export class MDL0ModelInstance {
 
     private isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.instanceStateData.jointToWorldMatrixVisibility.length; i++)
-            if (this.instanceStateData.jointToWorldMatrixVisibility[i] !== IntersectionState.FULLY_OUTSIDE)
+            if (this.instanceStateData.jointToWorldMatrixVisibility[i] !== IntersectionState.Outside)
                 return true;
         return false;
     }
@@ -640,31 +640,31 @@ export class MDL0ModelInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
+        let modelVisibility = this.visible ? IntersectionState.Intersection : IntersectionState.Outside;
         const mdl0 = this.mdl0Model.mdl0;
         const camera = viewerInput.camera;
 
-        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
+        if (modelVisibility !== IntersectionState.Outside) {
             if (this.isSkybox) {
-                modelVisibility = IntersectionState.FULLY_INSIDE;
+                modelVisibility = IntersectionState.Inside;
             } else if (mdl0.bbox !== null) {
                 // Frustum cull.
                 bboxScratch.transform(mdl0.bbox, this.modelMatrix);
                 if (!viewerInput.camera.frustum.contains(bboxScratch))
-                    modelVisibility = IntersectionState.FULLY_OUTSIDE;
+                    modelVisibility = IntersectionState.Outside;
             }
         }
 
-        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
+        if (modelVisibility !== IntersectionState.Outside) {
             this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput.camera, modelVisibility);
             this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
 
             if (!this.isAnyShapeVisible())
-                modelVisibility = IntersectionState.FULLY_OUTSIDE;
+                modelVisibility = IntersectionState.Outside;
         }
 
         let depth = -1;
-        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
+        if (modelVisibility !== IntersectionState.Outside) {
             const rootJoint = mdl0.nodes[0];
             if (rootJoint.bbox != null) {
                 bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
@@ -737,15 +737,15 @@ export class MDL0ModelInstance {
                 }
                 mat4.mul(this.instanceStateData.jointToWorldMatrixArray[dstMtxId], this.instanceStateData.jointToWorldMatrixArray[parentMtxId], modelMatrix);
 
-                if (rootVisibility !== IntersectionState.FULLY_OUTSIDE) {
-                    if (rootVisibility === IntersectionState.FULLY_INSIDE || node.bbox === null) {
-                        this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
+                if (rootVisibility !== IntersectionState.Outside) {
+                    if (rootVisibility === IntersectionState.Inside || node.bbox === null) {
+                        this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.Inside;
                     } else {
                         bboxScratch.transform(node.bbox, this.instanceStateData.jointToWorldMatrixArray[dstMtxId]);
                         this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = camera.frustum.intersect(bboxScratch);
                     }
                 } else {
-                    this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
+                    this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.Outside;
                 }
 
                 this.instanceStateData.jointToWorldMatrixAttribs[dstMtxId] = node.billboardMode;

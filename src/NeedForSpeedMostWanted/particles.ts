@@ -1,5 +1,4 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { IntersectionState } from "../Geometry.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
@@ -127,7 +126,7 @@ export class NfsParticleEmitter {
         const props = this.emitterProperties;
         const center = vec3.create();
             transformVec3Mat4w1(center, this.parent.transformationMatrix, props.volumeOffset);
-        if(viewerInput.camera.frustum.intersectSphere(center, props.frustumSphereRadius) == IntersectionState.FULLY_OUTSIDE)
+        if (!viewerInput.camera.frustum.containsSphere(center, props.frustumSphereRadius))
             return;
         const deltaTime = viewerInput.deltaTime / 1000;
         this.update(deltaTime);
