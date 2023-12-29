@@ -2057,19 +2057,12 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-float UnprojectViewSpaceDepth(float t_DepthSample) {
-    float Viewport_Z = t_DepthSample;
-    float NDC_Z = Viewport_Z * 2.0 - 1.0; // Expand from 0..1 to -1..1
-
-    // To get the view-space depth from NDC depth, we calculate the inverse of the bottom-right quadrant
-    // of the projection matrix, and apply it here.
-    float UnprojMtxZZ = u_UnprojectParams[0];
-    float UnprojMtxZW = u_UnprojectParams[1];
-    float UnprojMtxWZ = u_UnprojectParams[2];
-    float UnprojMtxWW = u_UnprojectParams[3];
-
-    float ViewSpaceZ = (NDC_Z*UnprojMtxZZ + UnprojMtxZW) / (NDC_Z*UnprojMtxWZ + UnprojMtxWW);
-    return -ViewSpaceZ;
+float UnprojectViewSpaceDepth(float z) {
+#if !defined GFX_CLIPSPACE_NEAR_ZERO
+    z = z * 2.0 - 1.0;
+#endif
+    vec4 v = u_UnprojectParams;
+    return -(z*v.x + v.y) / (z*v.z + v.w);
 }
 
 float GetBlurParam(float t_ViewZ, vec3 t_Param) {
