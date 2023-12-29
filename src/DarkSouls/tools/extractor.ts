@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
-import * as BHD5 from "../bhd5.js";
+import * as BHD5 from "./bhd5.js";
 import * as MSB from "../msb.js";
 import * as BYML from "../../byml.js";
 import { readFileSync, openSync, readSync, closeSync, fstat, writeFileSync } from "fs";
@@ -38,7 +38,7 @@ class ResourceSystem {
     public hashToDataFilename = new Map<number, string>();
 
     public mountBHD5(bhd5: BHD5.BHD5, dataFilename: string): void {
-        const records = bhd5.fileRecords;
+        const records = bhd5.files;
         for (let i = 0; i < records.length; i++) {
             this.hashToRecord.set(records[i].nameHash, records[i]);
             this.hashToDataFilename.set(records[i].nameHash, dataFilename);
@@ -52,8 +52,8 @@ class ResourceSystem {
 
     public fetchDataFromFilename(filename: string): ArrayBufferSlice {
         const nameHash = hashString(filename);
-        const record = this.hashToRecord.get(nameHash);
-        const dataFilename = this.hashToDataFilename.get(nameHash);
+        const record = this.hashToRecord.get(nameHash)!;
+        const dataFilename = this.hashToDataFilename.get(nameHash)!;
         return fetchDataFragmentSync(dataFilename, record.byteOffset, record.byteSize);
     }
 }

@@ -14,11 +14,19 @@ export interface BND {
     files: BNDFile[];
 }
 
-export function parse(buffer: ArrayBufferSlice): BND {
+export function parse(buffer: ArrayBufferSlice, dataBuffer: ArrayBufferSlice | null = null): BND {
     const view = buffer.createDataView();
 
-    const magic = readString(buffer, 0x00, 0x04, false);
-    assert(magic === 'BND3');
+    if (dataBuffer === null) {
+        assert(readString(buffer, 0x00, 0x04, false) === 'BND3');
+        dataBuffer = buffer;
+    } else {
+        assert(readString(buffer, 0x00, 0x04, false) === 'BHF3');
+        assert(readString(dataBuffer, 0x00, 0x04, false) === 'BDF3');
+    }
+
+    if (dataBuffer === null)
+        dataBuffer = buffer;
 
     const fileCount = view.getUint32(0x10, true);
     const fileHeadersEnd = view.getUint32(0x14, true);
@@ -36,7 +44,7 @@ export function parse(buffer: ArrayBufferSlice): BND {
         const uncompressedSize = view.getUint32(fileTableIdx + 0x14, true);
 
         const name = readString(buffer, fileNameOffs, -1, true);
-        const data = buffer.subarray(fileDataOffs, compressedSize);
+        const data = dataBuffer.subarray(fileDataOffs, compressedSize);
         files.push({ name, data });
 
         fileTableIdx += 0x18;

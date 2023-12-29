@@ -2,7 +2,6 @@
 import * as Viewer from "../viewer.js";
 
 import * as BYML from "../byml.js";
-import * as BHD from "./bhd.js";
 import * as BND3 from "./bnd3.js";
 import * as DCX from "./dcx.js";
 import * as FLVER from "./flver.js";
@@ -111,17 +110,16 @@ class DKSSceneDesc implements Viewer.SceneDesc {
     private loadTextureBHD(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
         const bhdBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbhd`));
         const bdtBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbdt`));
-        const bhd = BHD.parse(bhdBuffer, bdtBuffer);
-        for (let i = 0; i < bhd.fileRecords.length; i++) {
-            const r = bhd.fileRecords[i];
+        const bhd = BND3.parse(bhdBuffer, bdtBuffer);
+        for (let i = 0; i < bhd.files.length; i++) {
+            const r = bhd.files[i];
             assert(r.name.endsWith('.tpf.dcx'));
-            const decompressed = DCX.decompressBuffer(r.buffer);
+            const decompressed = DCX.decompressBuffer(r.data);
             const tpf = TPF.parse(decompressed);
             assert(tpf.textures.length === 1);
             const key1 = r.name.replace(/\\/g, '').replace('.tpf.dcx', '').toLowerCase();
             const key2 = tpf.textures[0].name.toLowerCase();
             assert(key1 === key2);
-            // WTF do we do if we have more than one texture?
             textureHolder.addTextures(device, tpf.textures);
         }
     }

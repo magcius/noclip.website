@@ -1,6 +1,6 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assert, readString } from "../util.js";
+import ArrayBufferSlice from "../../ArrayBufferSlice.js";
+import { assert, readString } from "../../util.js";
 
 export interface FileRecord {
     nameHash: number;
@@ -9,7 +9,7 @@ export interface FileRecord {
 }
 
 export interface BHD5 {
-    fileRecords: FileRecord[];
+    files: FileRecord[];
 }
 
 export function parse(buffer: ArrayBufferSlice): BHD5 {
@@ -51,5 +51,5 @@ export function parse(buffer: ArrayBufferSlice): BHD5 {
         }
     }
 
-    return { fileRecords };
+    return { files: fileRecords };
 }

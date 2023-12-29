@@ -2,7 +2,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BND3 from "../bnd3.js";
-import { readFileSync, openSync, readSync, closeSync, fstat, writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
