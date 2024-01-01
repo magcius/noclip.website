@@ -11,7 +11,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers.js';
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxSampler, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
@@ -37,6 +37,8 @@ export class DQ8Program extends DeviceProgram {
     public static a_JointWeights = 5;
 
     public override both = `
+#define SMOOTH_SKINNING() (SKINNING_MATRIX_COUNT > 0)
+
 precision mediump float;
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
@@ -44,7 +46,9 @@ layout(std140) uniform ub_SceneParams {
 layout(std140) uniform ub_MDTSubmeshParams {
     Mat4x4 u_ModelView;
     Mat4x4 u_RigidTrans;
+#if SMOOTH_SKINNING()
     Mat4x3 u_JointMatrix[SKINNING_MATRIX_COUNT];
+#endif
     vec4 u_BGColor;
     vec4 u_BGColor2;
     vec4 u_Misc;
@@ -62,27 +66,29 @@ layout(location = ${DQ8Program.a_Position}) attribute vec3 a_Position;
 layout(location = ${DQ8Program.a_Normal}) attribute vec3 a_Normal;
 layout(location = ${DQ8Program.a_TexCoord}) attribute vec2 a_TexCoord;
 layout(location = ${DQ8Program.a_vColor}) attribute vec4 a_vColor;
+
+#if SMOOTH_SKINNING()
 layout(location = ${DQ8Program.a_JointIndices}) attribute vec4 a_JointIndices;
 layout(location = ${DQ8Program.a_JointWeights}) attribute vec4 a_JointWeights;
+#endif
+
 out vec2 v_TexCoord;
 out vec4 v_col;
 
 void mainVS() {
-    Mat4x3 t_JointMatrix;
     vec4 pos = vec4(a_Position, 1.0);
-    if(u_jointPerVertCount > 0.0)
-    {
-        t_JointMatrix = _Mat4x3(0.0);
-        Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.x)], a_JointWeights.x);
-        Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.y)], a_JointWeights.y);
-        Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.z)], a_JointWeights.z);
-        Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.w)], a_JointWeights.w);
-        pos = Mul(_Mat4x4(t_JointMatrix), pos);
-    }
-    else
-    {
-        pos = Mul(u_RigidTrans,pos);
-    }
+
+#if SMOOTH_SKINNING()
+    Mat4x3 t_JointMatrix = _Mat4x3(0.0);
+    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.x)], a_JointWeights.x);
+    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.y)], a_JointWeights.y);
+    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.z)], a_JointWeights.z);
+    Fma(t_JointMatrix, u_JointMatrix[int(a_JointIndices.w)], a_JointWeights.w);
+    pos = Mul(_Mat4x4(t_JointMatrix), pos);
+#else
+    pos = Mul(u_RigidTrans,pos);
+#endif
+
     if (u_bIsSkybox > 0.0)
         pos = Mul(u_RigidTrans,pos);
     if (u_bIsSkybox > 0.0)
@@ -134,25 +140,29 @@ class MDTData {
     public indexBuffer: GfxBuffer;
     public mdtSubmeshData: MDTSubmeshData[] = [];
     public index: number;
+    public program: GfxProgram;
+    public smoothSkinning = false;
+
     constructor(cache: GfxRenderCache, vertexBuffer: GfxBuffer, public mdt: MDS.MDT) {
         const device = cache.device;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
         const perInstanceBufferData = new Float32Array(32);
         const perInstanceBufferWordOffset = 0;
 
-        const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number) => {
-            const format = makeFormat(FormatTypeFlags.F32, size as FormatCompFlags, normalized ? FormatFlags.Normalized : FormatFlags.None);
+        const bindVertexAttrib = (location: number, size: number, bufferOffs: number) => {
+            const format = makeFormat(FormatTypeFlags.F32, size as FormatCompFlags, FormatFlags.None);
             vertexAttributeDescriptors.push({ location, format, bufferIndex: 1, bufferByteOffset: bufferOffs });
         };
 
-        bindVertexAttrib(DQ8Program.a_Position, 3, false, 0);
-        bindVertexAttrib(DQ8Program.a_Normal, 3, true, 12);
-        bindVertexAttrib(DQ8Program.a_TexCoord, 2, false, 24);
-        bindVertexAttrib(DQ8Program.a_vColor, 4, false, 32);
+        bindVertexAttrib(DQ8Program.a_Position, 3, 0);
+        bindVertexAttrib(DQ8Program.a_Normal, 3, 12);
+        bindVertexAttrib(DQ8Program.a_TexCoord, 2, 24);
+        bindVertexAttrib(DQ8Program.a_vColor, 4, 32);
 
         if (this.mdt.jointPerVertCount) {
-            bindVertexAttrib(DQ8Program.a_JointIndices, 4, false, 48);
-            bindVertexAttrib(DQ8Program.a_JointWeights, 4, false, 64);
+            bindVertexAttrib(DQ8Program.a_JointIndices, 4, 48);
+            bindVertexAttrib(DQ8Program.a_JointWeights, 4, 64);
+            this.smoothSkinning = true;
         }
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
@@ -185,6 +195,10 @@ class MDTData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData.buffer);
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        const program = new DQ8Program();
+        program.defines.set("SKINNING_MATRIX_COUNT", this.smoothSkinning ? MDS.MDS.maxJointCount.toString() : `0`);
+        this.program = cache.createProgram(program);
 
         this.vertexBufferDescriptors = [perInstanceBinding, { buffer: vertexBuffer, byteOffset: 0 }];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
@@ -233,6 +247,7 @@ export class MDTSubmeshInstance {
         const jointPerVertCount = mdt.jointPerVertCount;
 
         const materialTemplate = renderInstManager.pushTemplateRenderInst();
+        materialTemplate.setGfxProgram(this.mdtData.program);
         materialTemplate.setVertexInput(this.mdtData.inputLayout, this.mdtData.vertexBufferDescriptors, this.mdtData.indexBufferDescriptor);
         for (let i = 0; i < this.mdtData.mdt.submeshes.length; i++) {
             const submeshData = this.mdtData.mdtSubmeshData[i];
@@ -288,33 +303,36 @@ export class MDTSubmeshInstance {
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
             renderInst.drawIndexes(submesh.indexData.length, submeshData.indexBufferOffset);
 
-            let offs = renderInst.allocateUniformBuffer(DQ8Program.ub_MDTSubmeshParams, 16 * 2 + 12 + 16 * MDS.MDS.maxJointCount);
-            const smParamsMapped = renderInst.mapUniformBufferF32(DQ8Program.ub_MDTSubmeshParams);
-            offs += fillMatrix4x4(smParamsMapped, offs, viewMatrix);
+            let offs = renderInst.allocateUniformBuffer(DQ8Program.ub_MDTSubmeshParams, 16 * 2 + 12 + 16 * (this.mdtData.smoothSkinning ? MDS.MDS.maxJointCount : 0));
+            const d = renderInst.mapUniformBufferF32(DQ8Program.ub_MDTSubmeshParams);
+            offs += fillMatrix4x4(d, offs, viewMatrix);
+
             if (jointPerVertCount && !bIsSkybox) {
                 mat4.invert(scratchMatrix, modelMatrix);
                 mat4.mul(scratchMatrix, scratchMatrix, boneMatrices[this.rigidJointId]);
-                offs += fillMatrix4x4(smParamsMapped, offs, scratchMatrix);
-            }
-            else {
+                offs += fillMatrix4x4(d, offs, scratchMatrix);
+            } else {
                 if (!bIsSkybox)
-                    offs += fillMatrix4x4(smParamsMapped, offs, boneMatrices[this.rigidJointId]);
+                    offs += fillMatrix4x4(d, offs, boneMatrices[this.rigidJointId]);
                 else
-                    offs += fillMatrix4x4(smParamsMapped, offs, modelMatrix);
-            }
-            for (let j = 0; j < MDS.MDS.maxJointCount; j++) {
-                if (j < jPalette.length) {
-                    mat4.mul(scratchMatrix, boneMatrices[jPalette[j]], inverseBindPoseMatrices[jPalette[j]]);
+                    offs += fillMatrix4x4(d, offs, modelMatrix);
+            } 
+
+            if (this.mdtData.smoothSkinning) {
+                for (let j = 0; j < MDS.MDS.maxJointCount; j++) {
+                    if (j < jPalette.length) {
+                        mat4.mul(scratchMatrix, boneMatrices[jPalette[j]], inverseBindPoseMatrices[jPalette[j]]);
+                    }
+                    else {
+                        mat4.identity(scratchMatrix);
+                    }
+                    offs += fillMatrix4x3(d, offs, scratchMatrix);
                 }
-                else {
-                    mat4.identity(scratchMatrix);
-                }
-                offs += fillMatrix4x3(smParamsMapped, offs, scratchMatrix);
             }
 
-            offs += fillColor(smParamsMapped, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor : colorNewFromRGBA(1, 0, 0, 1));
-            offs += fillColor(smParamsMapped, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor2 : colorNewFromRGBA(0, 0, 1, 1));
-            offs += fillVec4(smParamsMapped, offs, jointPerVertCount, this.mdtData.mdt.parentMDS.materials[submesh.materialIdx].bIsAlphaTest ? 1 : 0, (bIsSkybox) ? 1 : 0, (SINFO.gDQ8SINFO.bUseVColors ? 1 : 0));
+            offs += fillColor(d, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor : colorNewFromRGBA(1, 0, 0, 1));
+            offs += fillColor(d, offs, SINFO.gDQ8SINFO.currentLightSet ? SINFO.gDQ8SINFO.currentLightSet.bgcolor2 : colorNewFromRGBA(0, 0, 1, 1));
+            offs += fillVec4(d, offs, jointPerVertCount, this.mdtData.mdt.parentMDS.materials[submesh.materialIdx].bIsAlphaTest ? 1 : 0, (bIsSkybox) ? 1 : 0, (SINFO.gDQ8SINFO.bUseVColors ? 1 : 0));
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -330,9 +348,6 @@ export function fillSceneParamsDataOnTemplate(template: GfxRenderInst, camera: C
     const d = template.mapUniformBufferF32(DQ8Program.ub_SceneParams);
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
-
-
-
 
 export class MDSInstance {
     public animationController = new AnimationController();

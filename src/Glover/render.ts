@@ -133,9 +133,9 @@ export class DrawCallRenderData {
         if (drawCall.dynamicGeometry) {
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic
+                GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic,
+                new Uint8Array(this.vertexBufferData.buffer),
             );
-            device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
         } else {
             this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.vertexBufferData.buffer);
         }

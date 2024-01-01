@@ -839,10 +839,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
-        // Temporarily unbind VAO when creating buffers to not stomp on the VAO configuration.
-        this.gl.bindVertexArray(null);
-
+    public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
         const byteSize = wordCount * 4;
         const gl_buffer_pages: WebGLBuffer[] = [];
 
@@ -857,8 +854,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             pageByteSize = this._uniformBufferMaxPageByteSize;
         } else {
+            // Temporarily unbind VAO when creating buffers to not stomp on the VAO configuration.
+            this.gl.bindVertexArray(null);
+
             gl_buffer_pages.push(this._createBufferPage(byteSize, usage, hint));
             pageByteSize = byteSize;
+
+            this.gl.bindVertexArray(this._currentBoundVAO);
         }
 
         const gl_target = translateBufferUsageToTarget(usage);
@@ -866,8 +868,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(buffer);
 
-        this.gl.bindVertexArray(this._currentBoundVAO);
-
+        if (initialData !== undefined)
+            this.uploadBufferData(buffer, 0, initialData);
+    
         return buffer;
     }
 

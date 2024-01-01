@@ -422,7 +422,7 @@ export type GfxPass = GfxRenderPass | GfxComputePass;
  * this happens on the GPU timeline. Where possible, do try to upload data at the beginning of the frame.
  */
 export interface GfxDevice {
-    createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
+    createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;

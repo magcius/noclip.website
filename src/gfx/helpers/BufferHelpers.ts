@@ -108,13 +108,9 @@ export class GfxBufferCoalescerCombo {
 }
 
 export function makeStaticDataBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferLike): GfxBuffer {
-    const gfxBuffer = device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static);
-    device.uploadBufferData(gfxBuffer, 0, new Uint8Array(data));
-    return gfxBuffer;
+    return device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static, new Uint8Array(data));
 }
 
 export function makeStaticDataBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferSlice): GfxBuffer {
-    const gfxBuffer = device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static);
-    device.uploadBufferData(gfxBuffer, 0, data.createTypedArray(Uint8Array));
-    return gfxBuffer;
+    return device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.Static, data.createTypedArray(Uint8Array));
 }

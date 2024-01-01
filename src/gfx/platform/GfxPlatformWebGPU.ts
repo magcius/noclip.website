@@ -997,10 +997,17 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return ++this._resourceUniqueId;
     }
 
-    public createBuffer(wordCount: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
+    public createBuffer(wordCount: number, usage_: GfxBufferUsage, hint: GfxBufferFrequencyHint, initialData?: Uint8Array): GfxBuffer {
         let usage = translateBufferUsage(usage_);
         const size = wordCount * 4;
-        const gpuBuffer = this.device.createBuffer({ usage, size });
+        const gpuBuffer = this.device.createBuffer({ usage, size, mappedAtCreation: initialData !== undefined });
+
+        if (initialData !== undefined) {
+            const dst = new Uint8Array(gpuBuffer.getMappedRange());
+            dst.set(initialData);
+            gpuBuffer.unmap();
+        }
+
         const buffer: GfxBufferP_WebGPU = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gpuBuffer, size };
         return buffer;
     }

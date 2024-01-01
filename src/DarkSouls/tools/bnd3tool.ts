@@ -3,6 +3,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BND3 from "../bnd3.js";
 import { readFileSync, writeFileSync } from "fs";
+import * as path from "path";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -17,7 +18,7 @@ function main() {
     for (let i = 0; i < bnd3.files.length; i++) {
         const file = bnd3.files[i];
         console.log(file.name);
-        writeFileSync(file.name, Buffer.from(file.data.copyToBuffer()));
+        writeFileSync(path.basename(file.name), Buffer.from(file.data.copyToBuffer()));
     }
 }
 
