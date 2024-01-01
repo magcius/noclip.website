@@ -30,13 +30,9 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     public CHRRenderers: CHRRenderer[] = [];
     public MDSRenderers: MDSInstance[] = [];
     private renderHelper: GfxRenderHelper;
-    private program: GfxProgram;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
         this.renderHelper = new GfxRenderHelper(device);
-        const program = new DQ8Program();
-        program.defines.set("SKINNING_MATRIX_COUNT", MDS.MDS.maxJointCount.toString());
-        this.program = this.renderHelper.renderCache.createProgram(program);
         SINFO.gDQ8SINFO.reset();
     }
 
@@ -52,7 +48,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(this.program);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
         if(SINFO.gDQ8SINFO.bWireframe)
             template.setMegaStateFlags({ wireframe: true });
