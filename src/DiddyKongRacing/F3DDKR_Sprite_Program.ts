@@ -1,7 +1,7 @@
 
 import { DeviceProgram } from "../Program.js";
 
-export const MAX_NUM_OF_SPRITE_INSTANCES = 512;
+export const MAX_NUM_OF_SPRITE_INSTANCES = 150;
 export const MAX_NUM_OF_SPRITE_FRAMES = 1024; // There are about ~900 textures, so 1024 should be a good number.
 
 export class F3DDKR_Sprite_Program extends DeviceProgram {

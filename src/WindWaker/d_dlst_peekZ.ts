@@ -221,7 +221,6 @@ void main() {
                 }
 
                 this.returnFrame(frame);
-                break;
             }
         }
     }

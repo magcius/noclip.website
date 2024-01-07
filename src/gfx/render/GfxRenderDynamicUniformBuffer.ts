@@ -26,7 +26,7 @@ export class GfxRenderDynamicUniformBuffer {
 
     public allocateChunk(wordCount: number): number {
         wordCount = alignNonPowerOfTwo(wordCount, this.uniformBufferWordAlignment);
-        assert(wordCount < this.uniformBufferMaxPageWordSize);
+        assert(wordCount <= this.uniformBufferMaxPageWordSize);
 
         let wordOffset = this.currentWordOffset;
 
