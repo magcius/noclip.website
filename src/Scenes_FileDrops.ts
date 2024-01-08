@@ -20,7 +20,7 @@ import { SceneContext } from "./SceneBase.js";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher.js";
 
 function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedArrayBufferSlice> {
-    const progressMeter = dataFetcher.progressMeter;
+    const progressMeter = dataFetcher.progressMeter!;
 
     const request = new FileReader();
     request.readAsArrayBuffer(file);

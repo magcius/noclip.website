@@ -5,7 +5,6 @@ const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const webpack = require('webpack');
-const { NormalModuleReplacementPlugin } = require('webpack');
 
 module.exports = {
   entry: {
@@ -70,7 +69,6 @@ module.exports = {
         { from: 'node_modules/librw/lib/librw.wasm', to: '[name].[ext]' },
       ],
     }),
-    new NormalModuleReplacementPlugin(/iconv-lite/, './dummy-iconv-lite.js'),
   ],
   experiments: {
     syncWebAssembly: true,

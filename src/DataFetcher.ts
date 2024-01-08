@@ -40,12 +40,12 @@ class DataFetcherRequest {
     private retriesLeft = 2;
 
     constructor(private cache: Cache | null, public url: string, private options: DataFetcherOptions) {
-        this.request = new Request(this.url);
+        this.request = new Request(this.url, { signal: this.abortController.signal });
 
         if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
             const rangeStart = this.options.rangeStart;
             const rangeEnd = rangeStart + this.options.rangeSize - 1; // Range header is inclusive.
-            this.request.headers.set('Range', `bytes=${rangeStart}-${rangeEnd}`);
+            this.request.headers.set('range', `bytes=${rangeStart}-${rangeEnd}`);
 
             // Partial responses are unsupported with Cache, for some lovely reason.
             this.cache = null;
@@ -129,7 +129,7 @@ class DataFetcherRequest {
 
         assert(this.response === null);
         try {
-            this.response = await fetch(this.request, { signal: this.abortController.signal });
+            this.response = await fetch(this.request);
         } catch(e) {
             // Error handling below.
         }
@@ -283,7 +283,7 @@ export class DataFetcher {
     private cache: Cache | null = null;
     private mounts: DataFetcherMount[] = [];
 
-    constructor(public progressMeter: ProgressMeter) {
+    constructor(public progressMeter: ProgressMeter | null = null) {
     }
 
     public async init() {
@@ -353,7 +353,8 @@ export class DataFetcher {
     }
 
     public setProgress(): void {
-        this.progressMeter.setProgress(this.calcProgress());
+        if (this.progressMeter !== null)
+            this.progressMeter.setProgress(this.calcProgress());
     }
 
     private pump(): void {
@@ -363,7 +364,7 @@ export class DataFetcher {
         }
     }
 
-    public fetchURL(url: string, options: DataFetcherOptions): Promise<NamedArrayBufferSlice> {
+    public fetchURL(url: string, options: DataFetcherOptions = {}): Promise<NamedArrayBufferSlice> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
@@ -387,7 +388,7 @@ export class DataFetcher {
         return getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
     }
 
-    public async fetchData(path: string, options: DataFetcherOptions = { }): Promise<NamedArrayBufferSlice> {
+    public async fetchData(path: string, options: DataFetcherOptions = {}): Promise<NamedArrayBufferSlice> {
         for (let i = 0; i < this.mounts.length; i++) {
             const mount = this.mounts[i];
             const fileData = await mount.fetchData(path, options);

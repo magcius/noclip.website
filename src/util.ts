@@ -49,23 +49,7 @@ function copyBufferToString(buffer: ArrayBufferSlice, offs: number, byteLength: 
 }
 
 export function decodeString(buffer: ArrayBufferSlice, offs: number | undefined = undefined, byteLength: number | undefined = undefined, encoding = 'utf8'): string {
-    // ts-ignore here is required for node / tool builds, which doesn't specify TextDecoder.
-    // TODO(jstpierre): Support both node and browser through a different method, this is
-    // a bit ugly here...
-
-    // @ts-ignore
-    if (typeof TextDecoder !== 'undefined') {
-        // @ts-ignore
-        return new TextDecoder(encoding)!.decode(buffer.copyToBuffer(offs, byteLength));
-    // @ts-ignore
-    } else if (typeof require !== 'undefined') {
-        // @ts-ignore
-        const iconv = require('iconv-lite');
-        // @ts-ignore
-        return iconv.decode(Buffer.from(buffer.copyToBuffer(offs, byteLength)), encoding);
-    } else {
-        throw "whoops";
-    }
+    return new TextDecoder(encoding)!.decode(buffer.copyToBuffer(offs, byteLength));
 }
 
 // Requires that multiple is a power of two.

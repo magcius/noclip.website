@@ -104,7 +104,6 @@ import { RenderStatistics } from './RenderStatistics.js';
 import { Color } from './Color.js';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers.js';
 
-import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion.js';
 import { SceneDesc, SceneGroup, SceneContext, Destroyable } from './SceneBase.js';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk.js';
 import { downloadBlob } from './DownloadUtils.js';
@@ -113,7 +112,7 @@ import InputManager from './InputManager.js';
 import { WebXRContext } from './WebXR.js';
 import { debugJunk } from './DebugJunk.js';
 
-const sceneGroups = [
+const sceneGroups: (string | SceneGroup)[] = [
     "Wii",
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,

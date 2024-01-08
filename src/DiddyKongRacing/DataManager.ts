@@ -88,7 +88,7 @@ export class DataManager {
     }
 
     public isLoading(): boolean {
-        const meter = this.context.dataFetcher.progressMeter;
+        const meter = this.context.dataFetcher.progressMeter!;
         return meter.loadProgress < 1.0;
     }
 
