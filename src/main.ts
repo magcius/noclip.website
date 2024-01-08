@@ -85,6 +85,7 @@ import * as Scenes_MarioKart8Deluxe from './MarioKart8Deluxe/Scenes.js';
 import * as Scenes_JetSetRadio from './JetSetRadio/Scenes.js';
 import * as Scenes_Subnautica from './Subnautica/scenes.js';
 import * as Scenes_Halo1 from './Halo1/scenes.js';
+import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
@@ -209,6 +210,9 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_Infra.sceneGroup,
     Scenes_JetSetRadio.sceneGroup,
     Scenes_Subnautica.sceneGroup,
+    Scenes_WorldOfWarcraft.vanillaSceneGroup,
+    Scenes_WorldOfWarcraft.bcSceneGroup,
+    Scenes_WorldOfWarcraft.wotlkSceneGroup,
     Scenes_HalfLife.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,

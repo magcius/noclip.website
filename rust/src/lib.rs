@@ -12,3 +12,4 @@ pub mod tegra_texture;
 pub mod unity;
 pub mod util;
 pub mod yaz0;
+pub mod wow;

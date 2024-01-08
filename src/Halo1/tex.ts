@@ -41,7 +41,6 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
             throw new Error(`couldn't recognize bitmap format ${rust.BitmapFormat[format]}`);
     }
 }
-
 function getImageFormatByteLength(fmt: GfxFormat, width: number, height: number): number {
     if (isimageFormatCompressed(fmt)) {
         width = Math.max(width, 4);

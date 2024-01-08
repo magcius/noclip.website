@@ -317,6 +317,11 @@ export class AABB {
         this.extents(scratchVec3a);
         return scratchVec3a[0] === 0 && scratchVec3a[1] === 0 && scratchVec3a[2] === 0;
     }
+
+    public distanceVec3(point: vec3): number {
+        this.centerPoint(scratchVec3a);
+        return vec3.distance(point, scratchVec3a);
+    }
 }
 
 export enum IntersectionState {
@@ -326,7 +331,7 @@ export enum IntersectionState {
 }
 
 export class Frustum {
-    // Left, Right, Near, Far, Top, Bottom
+    // Left, Right, Top, Bottom, Near, Far
     public planes: Plane[] = nArray(6, () => new Plane());
 
     public updateClipFrustum(m: ReadonlyMat4, clipSpaceNearZ: GfxClipSpaceNearZ): void {
@@ -396,6 +401,13 @@ export class Frustum {
                 return false;
 
         return true;
+    }
+
+    public transform(src: Frustum, m: ReadonlyMat4): void {
+        for (let i in this.planes) {
+            this.planes[i].copy(src.planes[i]);
+            this.planes[i].transform(m);
+        }
     }
 }
 

@@ -6,12 +6,13 @@ import * as path from 'path';
 import { inflateSync } from 'zlib';
 import { existsSync, writeFileSync, promises as fs } from 'fs';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { createServer } from 'http';
 
 const patchServer = `http://us.patch.battle.net:1119`;
 const product = `wow_classic`;
 const region = `us`;
 
-const cachePath = `../../../data/WorldOfWarcraft/wowtool_cache`;
+const cachePath = `./data/WorldOfWarcraftCache/`;
 
 async function fetchDataFragment(path: string, byteOffset: number, byteLength: number): Promise<ArrayBufferSlice> {
     const fd = await fs.open(path, 'r');
@@ -35,7 +36,7 @@ class CDNHost {
 }
 
 class CDNCache {
-    public fetchMode: 'full-archives' | 'partial-files' = 'full-archives';
+    public fetchMode: 'full-archives' | 'partial-files' = 'partial-files';
     public directory = `/data`;
 
     constructor(public dataFetcher: DataFetcher, public cachePath: string) {}
@@ -67,7 +68,7 @@ class CDNCache {
         await fs.writeFile(archiveFilePath, buffer.createTypedArray(Uint8Array));
     }
 
-    public async fetchArchivePartial(host: CDNHost, archive: TASCArchiveIndex, file: TASCArchiveFileEntry) {
+    public async fetchArchivePartial(host: CDNHost, archive: TASCArchiveIndex, file: TASCArchiveFileEntry): Promise<ArrayBufferSlice> {
         const archiveFilename = archive.key;
         const archiveFilePath = path.join(this.cachePath, this.directory, archiveFilename);
         if (existsSync(archiveFilePath))
@@ -77,7 +78,7 @@ class CDNCache {
         const partialFilename = `${file.dataOffset}`;
         const partialFilePath = path.join(this.cachePath, this.directory, archiveDirectory, partialFilename);
         if (existsSync(partialFilePath))
-            return fs.readFile(partialFilePath);
+            return new ArrayBufferSlice((await fs.readFile(partialFilePath)).buffer);
 
         const url = host.makeURL(archive.key, '/data');
         if (this.fetchMode === 'full-archives') {
@@ -88,6 +89,8 @@ class CDNCache {
             await fs.mkdir(path.join(this.cachePath, this.directory, archiveDirectory), { recursive: true });
             await fs.writeFile(partialFilePath, buffer.createTypedArray(Uint8Array));
             return buffer;
+        } else {
+            throw 'whoops'
         }
     }
 }
@@ -363,6 +366,7 @@ class CDNFetcher {
         const buildConfigKey = this.versionsManifest.getField(versionRow, `BuildConfig`);
         const cdnConfigKey = this.versionsManifest.getField(versionRow, `CDNConfig`);
 
+        console.log('fetching CDN config')
         this.cdnConfig = parseKeyValues(decodeString(await this.cache.fetchData(this.selectHost(), '/config', cdnConfigKey)));
         this.buildConfig = parseKeyValues(decodeString(await this.cache.fetchData(this.selectHost(), '/config', buildConfigKey)));
 
@@ -389,12 +393,15 @@ class CDNFetcher {
     }
 
     public async bootstrap() {
+        console.log('fetching TASC encoding file')
         this.encoding = TASCEncodingFile.parse(await this.cache.fetchData(this.selectHost(), `/data`, `${this.buildConfig['encoding'][1]}`));
 
+        console.log('fetching archives')
         await Promise.all(this.cdnConfig['archives'].map(async (key) => {
             this.archiveIndex.push(TASCArchiveIndex.parse(key, await this.cache.fetchData(this.selectHost(), `/data`, `${key}.index`)));
         }));
 
+        console.log('fetching root file')
         this.root = WoWRootFile.parse(await this.fetchCKeyFromCDN(this.buildConfig['root'][0]));
     }
 
@@ -404,7 +411,8 @@ class CDNFetcher {
 
     public fetchFileID(fileID: number) {
         const CKey = this.root.getCKeyForFileID(fileID);
-        this.fetchCKeyFromArchive(CKey);
+        console.log(`fetching ${CKey}`)
+        return this.fetchCKeyFromArchive(CKey);
     }
 }
 
@@ -444,13 +452,39 @@ async function main_decompress(inPath: string, outPath: string) {
 }
 
 async function main() {
-    const mode = process.argv[2];
-    if (mode === 'fetch')
-        return main_fetch(parseInt(process.argv[3]));
-    else if (mode === 'fetch_archives')
-        return main_fetch_archives();
-    else if (mode === 'decompress')
-        return main_decompress(process.argv[3], process.argv[4]);
+    const dataFetcher = new DataFetcher();
+    const cache = new CDNCache(dataFetcher, cachePath);
+
+    const versions = TASCManifest.parse(decodeString(await dataFetcher.fetchURL(`${patchServer}/${product}/versions`)));
+    const cdns = TASCManifest.parse(decodeString(await dataFetcher.fetchURL(`${patchServer}/${product}/cdns`)));
+
+    const fetcher = new CDNFetcher(cache, versions, cdns, region);
+    await fetcher.init();
+
+    const server = createServer(async (req, res) => {
+        const fileIdStr = req.url!.split('/')[1];
+        const fileId = parseInt(fileIdStr);
+        console.log(`req ${fileId}`);
+        if (isNaN(fileId)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end(`bad file id ${fileIdStr}`)
+            return;
+        }
+
+        try {
+            const compressed = await fetcher.fetchFileID(fileId);
+            const uncompressed = decodeBLTE(compressed)!.createTypedArray(Uint8Array);
+            res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+            res.end(uncompressed);
+        } catch (e) {
+            console.log(e)
+            res.writeHead(400, { 'Content-Type': 'application/octet-stream' });
+            res.end(`error: ${e}`);
+        }
+    });
+    server.listen(8081, () => {
+        console.log('serving')
+    });
 }
 
 main();
