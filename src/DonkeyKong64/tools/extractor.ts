@@ -3,8 +3,8 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
 
 import * as BYML from '../../byml.js';
-import * as Pako from 'pako';
 import { assert } from "../../util.js";
+import { Zlib, inflateRawSync } from "zlib";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -18,13 +18,9 @@ function determineSizeOfZlibStream(buffer: ArrayBufferSlice, srcOffs: number): n
     const view = buffer.createDataView();
     assert(view.getUint32(srcOffs + 0x00) === 0x1F8B0800);
 
-    const inflator = new Pako.Inflate({ raw: true });
-    const data = buffer.createTypedArray(Uint8Array, srcOffs + 0x0A);
-    inflator.push(data, true);
-
-    // Munge internals to retrieve size
-    const strm = (inflator as any).strm;
-    const size = data.byteLength - strm.avail_in;
+    // typescript types are wrong, when info = true, then it returns a buffer and an engine
+    const { engine } = inflateRawSync(buffer.createTypedArray(Uint8Array, srcOffs + 0x0A), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
+    const size = buffer.byteLength - engine.bytesWritten;
 
     return 0x0A + size;
 }

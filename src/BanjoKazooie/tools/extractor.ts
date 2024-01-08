@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
 import { assert, hexzero, nArray } from "../../util.js";
-import * as Pako from 'pako';
+import { Zlib, inflateRawSync } from 'zlib';
 import * as BYML from "../../byml.js";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
@@ -46,7 +46,7 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     assert(view.getUint16(0x00) === 0x1172, `bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);
 
     let srcOffs = 0x06;
-    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
+    const decompressed = inflateRawSync(buffer.createTypedArray(Uint8Array, srcOffs));
     return new ArrayBufferSlice(decompressed.buffer);
 }
 
@@ -60,11 +60,11 @@ function decompressPairedFiles(buffer: ArrayBufferSlice, ram: number): RAMRegion
     const decompressedCodeSize = view.getUint32(0x02);
     let srcOffs = 0x06;
 
-    const inflator = new Pako.Inflate({ raw: true });
-    inflator.push(buffer.createTypedArray(Uint8Array, srcOffs), true);
-    out.push({ data: new ArrayBufferSlice((inflator.result as Uint8Array).buffer), start: ram });
+    // typescript types are wrong, when info = true, then it returns a buffer and an engine
+    const { buffer: outBuffer, engine } = inflateRawSync(buffer.createTypedArray(Uint8Array, srcOffs), { info: true }) as unknown as { buffer: Buffer, engine: Zlib };
+    out.push({ data: new ArrayBufferSlice(outBuffer.buffer), start: ram });
 
-    const startPoint = srcOffs + ((inflator as any).strm.next_in as number); // read internal zlib stream state to find the next file
+    const startPoint = srcOffs + engine.bytesWritten;
     const dataFile = decompress(buffer.slice(startPoint));
     out.push({ data: dataFile, start: ram + decompressedCodeSize }); // files are placed consecutively
     return out;

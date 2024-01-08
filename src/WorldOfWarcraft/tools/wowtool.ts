@@ -37,7 +37,7 @@ class CDNHost {
 class CDNCache {
     constructor(public dataFetcher: DataFetcher, public cachePath: string) {}
 
-    public async ensureData(host: CDNHost, directory: string, key: string): string {
+    public async ensureData(host: CDNHost, directory: string, key: string): Promise<string> {
         const filePath = path.join(this.cachePath, directory, key);
         if (!existsSync(filePath)) {
             const url = host.makeURL(key, directory);

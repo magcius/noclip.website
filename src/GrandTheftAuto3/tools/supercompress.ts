@@ -90,7 +90,7 @@ async function main() {
             const name = asset.name.toLowerCase();
             const buffer = loadAsset(img.buffer, asset);
             if (name.endsWith('.txd')) {
-                const txdName = name.substr(0, name.length - 4);
+                const txdName = name.slice(0, -4);
                 const stream = new rw.StreamMemory(buffer);
                 const header = new rw.ChunkHeaderInfo(stream);
                 if (header.type !== rw.PluginID.ID_TEXDICTIONARY) throw new Error('invalid TXD');
@@ -117,8 +117,8 @@ async function main() {
 
                     const list = transparent ? texturesTransparent : texturesOpaque;
                     const index = list.length.toString(0x10).padStart(4, '0');
-                    const path = `${transparent ? 'transparent' : 'opaque'}/${index.substr(0, 2)}`;
-                    const fname = `${path}/${index.substr(2, 2)}.png`;
+                    const path = `${transparent ? 'transparent' : 'opaque'}/${index.slice(0, 4)}`;
+                    const fname = `${path}/${index.slice(2, 4)}.png`;
                     list.push(`${txdName}/${texName}\n`);
                     await fs.mkdir(`${pathBase}/textures/${path}`, { recursive: true });
                     await finished(png.pack().pipe(createWriteStream(`${pathBase}/textures/${fname}`)));
