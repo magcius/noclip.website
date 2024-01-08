@@ -28,7 +28,6 @@
         "module": "esNext",
         "types": [
             "gl-matrix",
-            "pako",
             "filesystem"
         ]
     },
