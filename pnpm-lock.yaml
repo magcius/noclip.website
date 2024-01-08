@@ -25,9 +25,6 @@ devDependencies:
   '@types/node':
     specifier: ^11.15.54
     version: 11.15.54
-  '@types/pako':
-    specifier: ^1.0.7
-    version: 1.0.7
   '@types/pngjs':
     specifier: ^3.4.2
     version: 3.4.2
@@ -61,9 +58,6 @@ devDependencies:
   ignore-loader:
     specifier: ^0.1.2
     version: 0.1.2
-  pako:
-    specifier: ^1.0.11
-    version: 1.0.11
   pngjs:
     specifier: ^3.4.0
     version: 3.4.0
@@ -517,10 +511,6 @@ packages:
 
   /@types/node@11.15.54:
     resolution: {integrity: sha512-1RWYiq+5UfozGsU6MwJyFX6BtktcT10XRjvcAQmskCtMcW3tPske88lM/nHv7BQG1w9KBXI1zPGuu5PnNCX14g==}
-    dev: true
-
-  /@types/pako@1.0.7:
-    resolution: {integrity: sha512-YBtzT2ztNF6R/9+UXj2wTGFnC9NklAnASt3sC0h2m1bbH7G6FyBIkt4AN8ThZpNfxUo1b2iMVO0UawiJymEt8A==}
     dev: true
 
   /@types/parse-json@4.0.2:
@@ -2517,10 +2507,6 @@ packages:
   /p-try@2.2.0:
     resolution: {integrity: sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==}
     engines: {node: '>=6'}
-    dev: true
-
-  /pako@1.0.11:
-    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
     dev: true
 
   /param-case@3.0.4:
