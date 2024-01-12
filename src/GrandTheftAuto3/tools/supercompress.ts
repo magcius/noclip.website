@@ -14,7 +14,7 @@ import * as stream from 'stream';
 import { TextDecoder, promisify, TextEncoder } from 'util';
 import { PNG } from 'pngjs';
 import * as rw from 'librw';
-import { deflate } from 'pako';
+import { deflateSync } from 'zlib';
 
 const finished = promisify(stream.finished);
 
@@ -68,7 +68,7 @@ function writeIMGZ(path: string, assets: Asset[], size: number) {
         console.log(asset.name);
     }
 
-    const gz = deflate(bytes, { level: 9 });
+    const gz = deflateSync(bytes, { level: 9 });
     console.log('Compressed', bytes.byteLength / 1e6, 'MB to', gz.byteLength / 1e6, 'MB');
     writeFileSync(path, gz); // somehow using fs.writeFile here hangs...
 }

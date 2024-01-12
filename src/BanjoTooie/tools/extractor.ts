@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readFileSync, writeFileSync } from "fs";
 import { assert, hexzero, align, readString } from "../../util.js";
-import * as Pako from 'pako';
+import { inflateRawSync } from 'zlib';
 import * as BYML from "../../byml.js";
 import { TextDecoder } from "util";
 import { Endianness } from "../../endian.js";
@@ -36,7 +36,7 @@ function getFileBuffer(fs: FS, index: number): ArrayBufferSlice {
 }
 
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
-    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, 2), { raw: true });
+    const decompressed = inflateRawSync(buffer.createTypedArray(Uint8Array, 2));
     return new ArrayBufferSlice(decompressed.buffer);
 }
 
