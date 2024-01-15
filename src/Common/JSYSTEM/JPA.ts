@@ -1453,6 +1453,10 @@ export class JPABaseEmitter {
         JPASetRMtxTVecfromMtx(m, this.globalRotation, this.globalTranslation);
     }
 
+    public setGlobalRotation(v: ReadonlyVec3): void {
+        computeModelMatrixR(this.globalRotation, v[0], v[1], v[2]);
+    }
+
     public init(resData: JPAResourceData): void {
         this.resData = resData;
         const bem1 = this.resData.res.bem1;

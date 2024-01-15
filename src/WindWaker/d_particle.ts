@@ -76,7 +76,8 @@ export class dPa_control_c {
         getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
         for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
             const emitter = this.emitterManager.aliveEmitters[i];
-            if (vec3.distance(emitter.globalTranslation, scratchVec3a) > 5000) {
+            const cullDistance = (emitter as any).cullDistance ?? 5000;
+            if (vec3.distance(emitter.globalTranslation, scratchVec3a) > cullDistance) {
                 emitter.stopCalcEmitter();
                 emitter.stopDrawParticle();
             } else {

@@ -1,5 +1,5 @@
 
-import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3, vec4 } from "gl-matrix";
+import { ReadonlyVec2, ReadonlyVec3, mat4, vec2, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, White, colorCopy, colorFromRGBA, colorFromRGBA8, colorLerp, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
@@ -7,7 +7,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
-import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } from "../MathHelpers.js";
+import { MathConstants, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, invlerp, saturate, vec3SetAll } from "../MathHelpers.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ, GfxCompareMode, GfxDevice } from "../gfx/platform/GfxPlatform.js";
@@ -26,7 +26,6 @@ import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, 
 import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
 import { dGlobals } from "./zww_scenes.js";
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -983,9 +982,21 @@ class WIND_EFF {
     public animPos = vec3.create();
 }
 
+class KAMOME_EFF {
+    public emitter: JPABaseEmitter | null = null;
+    public state: number = 0;
+    public pos = vec3.create();
+    public angleY: number = 0;
+    public angleX: number = 0;
+    public angleYSpeed: number = 0;
+    public scale: number = 0;
+    public timer: number = cM_rndF(1800.0);
+}
+
 export class dKankyo__Windline {
     // Modification for noclip: Increased the number of possible wind lines from 30 to 50.
     public windEff: WIND_EFF[] = nArray(50, () => new WIND_EFF());
+    public kamomeEff: KAMOME_EFF[] = nArray(2, () => new KAMOME_EFF());
     public count: number = 0;
     public frameCounter: number = 0;
     public hasCustomWindPower: boolean = false;
@@ -1521,8 +1532,6 @@ export class dKankyo_moya_Packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-
-            drawWorldSpaceLine
         }
 
         ddraw.end();
@@ -1730,8 +1739,98 @@ function wether_move_thunder(globals: dGlobals): void {
     }
 }
 
+function dKyr_kamome_move(globals: dGlobals, deltaTimeFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    const pkt = envLight.windline!;
+
+    let spawnBirds = false;
+    if (globals.stageName === 'sea' && !((envLight.colpatCurr == 1 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev == 1 && envLight.colpatBlend < 1.0) || (envLight.colpatCurr == 2 && envLight.colpatBlend > 0.0) || (envLight.colpatPrev == 2 && envLight.colpatBlend < 1.0)))
+        spawnBirds = true;
+
+    for (let i = 0; i < pkt.kamomeEff.length; i++) {
+        const eff = pkt.kamomeEff[i];
+        if (eff.state === 0) {
+            if (spawnBirds) {
+                if (eff.timer <= 0.0) {
+                    eff.angleY = cM_rndFX(Math.PI);
+                    eff.angleX = cM_rndFX(Math.PI);
+                    eff.pos[0] = globals.cameraPosition[0] + Math.sin(eff.angleY) * 7000.0;
+                    eff.pos[1] = 4500.0;
+                    eff.pos[2] = globals.cameraPosition[2] + Math.cos(eff.angleY) * 7000.0;
+                    eff.angleYSpeed = cM_rndFX(1.0);
+                    eff.scale = 0.0;
+                    eff.timer = 300.0 + cM_rndF(180.0);
+                    eff.emitter = globals.particleCtrl.set(globals, 0, 0x429, eff.pos);
+                    (eff.emitter as any).cullDistance = 10000;
+                    eff.state = 1;
+                } else {
+                    eff.timer -= deltaTimeFrames;
+                }
+            }
+        } else if (eff.state === 1) {
+            if (eff.emitter !== null) {
+                const sign = Math.sign(eff.angleYSpeed);
+                eff.angleYSpeed = clamp(Math.abs(eff.angleYSpeed) + cM_rndFX(deltaTimeFrames), 80.0, 100.0) * sign;
+
+                const oldTargetX = Math.sin(eff.angleY) * 7000.0;
+                const oldTargetY = Math.abs(Math.sin(eff.angleX) * 3200.0);
+                const oldTargetZ = Math.cos(eff.angleY) * 7000.0;
+
+                eff.angleY += cM__Short2Rad(eff.angleYSpeed) * eff.scale;
+                eff.angleX += cM__Short2Rad(15) * deltaTimeFrames;
+
+                const newTargetX = Math.sin(eff.angleY) * 7000.0;
+                const newTargetY = Math.abs(Math.sin(eff.angleX) * 3200.0);
+                const newTargetZ = Math.cos(eff.angleY) * 7000.0;
+
+                eff.pos[0] = globals.cameraPosition[0] + newTargetX;
+                eff.pos[1] = newTargetY + 4800;
+                eff.pos[2] = globals.cameraPosition[2] + newTargetZ;
+                eff.emitter.setGlobalTranslation(eff.pos);
+
+                if (eff.timer > 0 && spawnBirds) {
+                    eff.scale = cLib_addCalc(eff.scale, 1.0, 0.1, 0.003 * deltaTimeFrames, 0.000001);
+                    eff.timer -= deltaTimeFrames;
+                } else {
+                    eff.scale = cLib_addCalc(eff.scale, 0.0, 0.1, 0.003 * deltaTimeFrames, 0.000001);
+                    if (eff.scale < 0.001)
+                        eff.state = 2;
+                }
+
+                scratchVec3a[0] = newTargetX - oldTargetX;
+                scratchVec3a[1] = newTargetY - oldTargetY;
+                scratchVec3a[2] = newTargetZ - oldTargetZ;
+                vec3.normalize(scratchVec3a, scratchVec3a);
+                const globalRotY = Math.atan2(scratchVec3a[0], scratchVec3a[2]);
+                computeModelMatrixR(eff.emitter.globalRotation, 0, globalRotY, 0);
+            }
+        } else if (eff.state === 2) {
+            if (eff.emitter !== null) {
+                eff.emitter.deleteAllParticle();
+                eff.emitter.becomeInvalidEmitter();
+                eff.emitter = null;
+            }
+            eff.state = 0;
+            eff.timer = cM_rndF(600.0) + 900.0;
+        }
+
+        if (eff.emitter !== null) {
+            const fovYAdj = 1.0;
+            const scale = eff.scale * fovYAdj * 1.6;
+            vec3SetAll(scratchVec3a, scale);
+            eff.emitter.setGlobalScale(scratchVec3a);
+            eff.emitter.globalColorPrm.r = envLight.bgCol[0].K0.r;
+            eff.emitter.globalColorPrm.g = envLight.bgCol[0].K0.g;
+            eff.emitter.globalColorPrm.b = envLight.bgCol[0].K0.b;
+        }
+    }
+}
+
 function dKyr_windline_move(globals: dGlobals, deltaTimeFrames: number): void {
     const envLight = globals.g_env_light;
+
+    dKyr_kamome_move(globals, deltaTimeFrames);
 
     const pkt = envLight.windline!;
     const windVec = dKyw_get_wind_vec(envLight);
