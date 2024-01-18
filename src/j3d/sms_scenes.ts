@@ -497,9 +497,9 @@ class LightConfig {
 
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
-    private renderInstListSky = new GfxRenderInstList();
-    private renderInstListMain = new GfxRenderInstList();
-    private renderInstListInd = new GfxRenderInstList();
+    public renderInstListSky = new GfxRenderInstList();
+    public renderInstListMain = new GfxRenderInstList();
+    public renderInstListInd = new GfxRenderInstList();
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();

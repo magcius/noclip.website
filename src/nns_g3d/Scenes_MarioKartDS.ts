@@ -8,13 +8,13 @@ import * as NARC from './narc.js';
 import { DataFetcher } from '../DataFetcher.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render.js';
+import { MDL0Renderer, nnsG3dBindingLayouts } from './render.js';
 import { assert, readString, assertExists } from '../util.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { SceneContext } from '../SceneBase.js';
 import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D.js';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
@@ -66,6 +66,8 @@ class ModelCache {
 
 export class MKDSRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
 
     public courseRenderer: MDL0Renderer;
     public skyboxRenderer: MDL0Renderer | null = null;
@@ -73,6 +75,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public getCache() {
@@ -88,13 +91,17 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
-        this.courseRenderer.prepareToRender(renderInstManager, viewerInput);
-        if (this.skyboxRenderer !== null)
+        if (this.skyboxRenderer !== null) {
+            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
             this.skyboxRenderer.prepareToRender(renderInstManager, viewerInput);
+        }
+
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.courseRenderer.prepareToRender(renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
 
+        renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
 
@@ -112,7 +119,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, G3DPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -121,7 +128,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, G3DPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -129,6 +136,8 @@ export class MKDSRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

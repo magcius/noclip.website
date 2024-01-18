@@ -6,8 +6,8 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { SceneContext } from '../SceneBase.js';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
-import { SnapPass, ModelRenderer, buildTransform } from './render.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { ModelRenderer, buildTransform } from './render.js';
 import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room.js';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render.js';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder.js';
@@ -28,6 +28,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     constructor(context: SceneContext, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(context.device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.globals = new LevelGlobals(context, id);
         context.destroyablePool.push(this.globals);
     }
@@ -103,6 +104,7 @@ class SnapRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const globals = this.globals;
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -116,7 +118,7 @@ class SnapRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SnapPass.SKYBOX);
+                globals.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -125,7 +127,7 @@ class SnapRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SnapPass.MAIN);
+                globals.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -133,6 +135,8 @@ class SnapRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        globals.renderInstListSky.reset();
+        globals.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

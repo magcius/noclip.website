@@ -9,7 +9,7 @@ import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength
 import { getPathPoint, getPathTangent } from "./animation.js";
 import { ObjectDef } from "./room.js";
 import { ParticleManager } from "./particles.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneContext } from "../SceneBase.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -41,6 +41,9 @@ export class LevelGlobals {
 
     private zeroOneData: RenderData;
     private projData: RenderData[] = [];
+
+    public renderInstListSky = new GfxRenderInstList();
+    public renderInstListMain = new GfxRenderInstList();
 
     constructor(private context: SceneContext, public id: string) { }
 
@@ -276,6 +279,7 @@ export class LevelGlobals {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         this.particles.prepareToRender(device, renderInstManager, viewerInput);
 
         this.zeroOne.prepareToRender(device, renderInstManager, viewerInput, this);

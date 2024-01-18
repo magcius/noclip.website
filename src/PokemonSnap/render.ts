@@ -17,11 +17,6 @@ import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY, calcBillboa
 import { LevelGlobals } from './actor.js';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP.js';
 
-export const enum SnapPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -434,7 +429,6 @@ export class ModelRenderer {
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(this.renderData.inputLayout, this.renderData.vertexBufferDescriptors, this.renderData.indexBufferDescriptor);
 
-        template.filterKey = this.isSkybox ? SnapPass.SKYBOX : SnapPass.MAIN;
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16 + 2 * 4);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
@@ -446,6 +440,7 @@ export class ModelRenderer {
         offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
         offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
 
+        renderInstManager.setCurrentRenderInstList(this.isSkybox ? globals.renderInstListSky : globals.renderInstListMain);
         this.renderers[0].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
