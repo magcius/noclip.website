@@ -157,11 +157,6 @@ function mat4_from_mat2d(dst: mat4, m: mat2d): void {
     dst[15] = 1;
 }
 
-export const enum SM64DSPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 class BatchData {
     public vertexData: VertexData;
 
@@ -452,12 +447,9 @@ export class BMDModelInstance {
 
         this.computeJointMatrices();
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.isSkybox ? SM64DSPass.SKYBOX : SM64DSPass.MAIN;
         this.computeNormalMatrix(scratchNormalMatrix, viewerInput);
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, viewerInput, scratchNormalMatrix, this.extraTexCoordMat, this);
-        renderInstManager.popTemplateRenderInst();
     }
 
     public computeViewMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {

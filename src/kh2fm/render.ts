@@ -7,7 +7,7 @@ import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program.js";
 import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
@@ -59,10 +59,6 @@ class KingdomHeartsIIProgram extends DeviceProgram {
 
     private static program = program_glsl;
     public override both = KingdomHeartsIIProgram.program;
-}
-
-const enum RenderPass {
-    MAIN = 0x1
 }
 
 class Layer implements UI.Layer {
@@ -586,7 +582,6 @@ class SceneRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
-        template.filterKey = RenderPass.MAIN;
 
         let offs = template.allocateUniformBuffer(KingdomHeartsIIProgram.ub_SceneParams, 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsIIProgram.ub_SceneParams);
@@ -614,14 +609,16 @@ class SceneRenderer {
 
 export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
-    private sceneRenderers: SceneRenderer[] = [];
-
+    private renderInstListMain = new GfxRenderInstList();
+    private mapRenderer: SceneRenderer;
     private mapData: MapData;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
+
         this.mapData = new MapData(device, this.renderHelper.renderCache, map);
-        this.sceneRenderers.push(new SceneRenderer(device, this.mapData, this.mapData.drawCalls));
+        this.mapRenderer = new SceneRenderer(device, this.mapData, this.mapData.drawCalls);
     }
 
     public createPanels(): UI.Panel[] {
@@ -630,16 +627,12 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            this.sceneRenderers.forEach((sceneRenderer: SceneRenderer) => {
-                sceneRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-            });
+            this.mapRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            this.sceneRenderers.forEach((sceneRenderer: SceneRenderer) => {
-                sceneRenderer.setTexturesEnabled(enableTextures.checked);
-            });
+            this.mapRenderer.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -650,11 +643,12 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        const renderInstManager = this.renderHelper.renderInstManager;
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        renderInstManager.popTemplateRenderInst();
 
+        const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.mapRenderer.prepareToRender(device, renderInstManager, viewerInput);
+
+        renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
 
@@ -672,7 +666,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, RenderPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -680,6 +674,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

@@ -10,12 +10,12 @@ import * as BCA from './sm64ds_bca.js';
 
 import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render.js';
+import { BMDData, Sm64DSCRG1, BMDModelInstance, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util.js';
 import AnimationController from '../AnimationController.js';
-import { executeOnPass, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { DataFetcher } from '../DataFetcher.js';
@@ -471,8 +471,11 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 class SM64DSRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
     public objectRenderers: ObjectRenderer[] = [];
     public bmdRenderers: BMDModelInstance[] = [];
+    public skyRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
 
     private currentScenarioIndex: number = -1;
@@ -482,6 +485,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -495,6 +499,10 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
+        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        for (let i = 0; i < this.skyRenderers.length; i++)
+            this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.bmdRenderers.length; i++)
             this.bmdRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
@@ -519,7 +527,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SM64DSPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -528,7 +536,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SM64DSPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -536,6 +544,8 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
+        this.renderInstListSky.reset();
         renderInstManager.resetRenderInsts();
     }
 

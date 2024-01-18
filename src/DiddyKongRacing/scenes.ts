@@ -7,7 +7,7 @@ import { GfxrAttachmentClearDescriptor, makeAttachmentClearDescriptor, makeBackb
 import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { COOL_BLUE_COLOR, Checkbox, Panel, SingleSelect, Slider } from '../ui.js';
 import { DataManager } from './DataManager.js';
 import { DkrControlGlobals } from './DkrControlGlobals.js';
@@ -25,6 +25,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 class DKRRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     private hasStarted = false;
 
     public renderPassDescriptor: GfxrAttachmentClearDescriptor;
@@ -33,6 +34,7 @@ class DKRRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private camStart: number[]) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public adjustCameraController(c: CameraController) {
@@ -48,6 +50,7 @@ class DKRRenderer implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         if(!!this.level) {
             this.level.prepareToRender(device, renderInstManager, viewerInput);
@@ -84,13 +87,14 @@ class DKRRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, 0);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

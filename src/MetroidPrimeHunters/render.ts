@@ -224,11 +224,6 @@ class ShapeInstance {
     }
 }
 
-export const enum G3DPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
 const enum BillboardMode {
@@ -300,7 +295,6 @@ export class MPHRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.filterKey = G3DPass.MAIN;
         template.setGfxProgram(this.gfxProgram);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);

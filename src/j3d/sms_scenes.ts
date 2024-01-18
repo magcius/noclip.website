@@ -1,29 +1,29 @@
 
-import * as Viewer from '../viewer.js';
-import * as UI from '../ui.js';
 import * as Yaz0 from '../Common/Compression/Yaz0.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { readString, assert, assertExists } from '../util.js';
+import { assert, assertExists, readString } from '../util.js';
 
-import { J3DModelData, J3DModelMaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
-import * as JPA from '../Common/JSYSTEM/JPA.js';
-import { lightSetWorldPosition, EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BMT, BCK, BPK, BTP, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { colorFromRGBA, colorNewCopy, OpaqueBlack } from '../Color.js';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { SceneContext, Destroyable } from '../SceneBase.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager.js';
-import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { Camera } from '../Camera.js';
+import { colorFromRGBA } from '../Color.js';
+import { J3DModelData, J3DModelInstance, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
+import { BCK, BMD, BMT, BPK, BRK, BTK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader.js';
+import * as JPA from '../Common/JSYSTEM/JPA.js';
 import { transformVec3Mat4w1 } from '../MathHelpers.js';
+import { Destroyable, SceneContext } from '../SceneBase.js';
+import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { EFB_HEIGHT, EFB_WIDTH, Light, lightSetWorldPosition } from '../gx/gx_material.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 
@@ -451,9 +451,8 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
 
 export const enum SMSPass {
     SKYBOX = 1 << 0,
-    OPAQUE = 1 << 1,
+    MAIN = 1 << 1,
     INDIRECT = 1 << 2,
-    TRANSPARENT = 1 << 3,
 }
 
 class LightConfig {
@@ -498,16 +497,19 @@ class LightConfig {
 
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
+    private renderInstListInd = new GfxRenderInstList();
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
     public effectsCache = new Map<RARC.RARCFile, JPA.JPACData>();
-    private clearDescriptor = makeAttachmentClearDescriptor(colorNewCopy(OpaqueBlack));
 
     public objLightConfig: LightConfig | null = null;
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public createPanels(): UI.Panel[] {
@@ -546,28 +548,27 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private LARGE_NUMBER = -1048576.0;
-    private initSpecularDir(lit: Light, nx: number, ny: number, nz: number) {
-        // Compute half-angle vector
-        const hx = -nx, hy = -ny, hz = -(nz - 1.0);
-        vec3.set(lit.Direction, hx, hy, hz);
-        vec3.normalize(lit.Direction, lit.Direction);
-
-        const px  = (nx * this.LARGE_NUMBER);
-        const py  = (ny * this.LARGE_NUMBER);
-        const pz  = (nz * this.LARGE_NUMBER);
-
-        vec3.set(lit.Position, px, py, pz);
+    private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(list);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const m = this.modelInstances[i];
+            if (!(m.passMask & passMask))
+                continue;
+            m.prepareToRender(device, renderInstManager, viewerInput);
+        }
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
         if (this.objLightConfig !== null)
             for (let i = 0; i < this.modelInstances.length; i++)
                 this.objLightConfig.setOnModelInstance(this.modelInstances[i], viewerInput.camera);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+        this.preparePass(device, this.renderInstListSky, SMSPass.SKYBOX, viewerInput);
+        this.preparePass(device, this.renderInstListMain, SMSPass.MAIN, viewerInput);
+        this.preparePass(device, this.renderInstListInd, SMSPass.INDIRECT, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
@@ -589,7 +590,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SMSPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
@@ -599,11 +600,11 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SMSPass.OPAQUE);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
-        if (hasAnyVisible(renderInstManager, SMSPass.INDIRECT)) {
+        if (this.renderInstListInd.renderInsts.length > 0) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Indirect');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -613,26 +614,20 @@ export class SunshineRenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(opaqueSceneTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    renderInstManager.setVisibleByFilterKeyExact(SMSPass.INDIRECT);
-                    renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(passRenderer);
+                    this.renderInstListInd.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
+                    this.renderInstListInd.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
                 });
             });
         }
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Transparent');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, SMSPass.TRANSPARENT);
-            });
-        });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
+        this.renderInstListInd.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -703,10 +698,10 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const sky = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
             if (sky !== null)
                 renderer.modelInstances.push(sky);
-            const map = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/map', false);
+            const map = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.MAIN, rarc, 'map/map/map', false);
             if (map !== null)
                 renderer.modelInstances.push(map);
-            const sea = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.OPAQUE, rarc, 'map/map/sea', false);
+            const sea = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.MAIN, rarc, 'map/map/sea', false);
             if (sea !== null)
                 renderer.modelInstances.push(sea);
             const seaIndirect = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.INDIRECT, rarc, 'map/map/seaindirect', false);
@@ -1001,7 +996,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
             const bmdModel = lookupModel(bmdFile);
             modelInstance = new J3DModelInstanceSimple(bmdModel);
-            modelInstance.passMask = SMSPass.OPAQUE;
+            modelInstance.passMask = SMSPass.MAIN;
         }
 
         if (modelInstance === null) {
@@ -1105,26 +1100,26 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
 
         const modelLookup: ModelLookup[] = [
-{ k: 'BiancoBossEffectLight', p: 'map/map/ms_wmlin_light.jpa' },
-{ k: 'BiancoRiver', m: 'BiancoRiver' },
-{ k: 'BiaWaterPollution', m: 'BiaWaterPollution' },
-{ k: 'IndirectObj', m: 'IndirectObj' },
-{ k: 'Mare5ExGate', m: 'Mare5ExGate' },
-{ k: 'mareSeaPollutionS0', m: 'mareSeaPollutionS0' },
-{ k: 'mareSeaPollutionS12', m: 'mareSeaPollutionS12' },
-{ k: 'MonteRiver', m: 'MonteRiver' },
-//{ k: 'ReflectParts', m: 'ReflectParts' },
-//{ k: 'ReflectSky', m: 'ReflectSky' },
-{ k: 'riccoSeaPollutionS0', m: 'riccoSeaPollutionS0' },
-{ k: 'riccoSeaPollutionS1', m: 'riccoSeaPollutionS1' },
-{ k: 'riccoSeaPollutionS2', m: 'riccoSeaPollutionS2' },
-{ k: 'riccoSeaPollutionS3', m: 'riccoSeaPollutionS3' },
-{ k: 'riccoSeaPollutionS4', m: 'riccoSeaPollutionS4' },
-//{ k: 'SeaIndirect', m: 'SeaIndirect' },
-//{ k: 'sea', m: 'sea' },
-{ k: 'sun_mirror', m: 'sun_mirror' },
-{ k: 'TargetArrow', m: 'TargetArrow' },
-{ k: 'TopOfCorona', p: 'mapObj/ms_coronasmoke.jpa' },
+            { k: 'BiancoBossEffectLight', p: 'map/map/ms_wmlin_light.jpa' },
+            { k: 'BiancoRiver', m: 'BiancoRiver' },
+            { k: 'BiaWaterPollution', m: 'BiaWaterPollution' },
+            { k: 'IndirectObj', m: 'IndirectObj' },
+            { k: 'Mare5ExGate', m: 'Mare5ExGate' },
+            { k: 'mareSeaPollutionS0', m: 'mareSeaPollutionS0' },
+            { k: 'mareSeaPollutionS12', m: 'mareSeaPollutionS12' },
+            { k: 'MonteRiver', m: 'MonteRiver' },
+            //{ k: 'ReflectParts', m: 'ReflectParts' },
+            //{ k: 'ReflectSky', m: 'ReflectSky' },
+            { k: 'riccoSeaPollutionS0', m: 'riccoSeaPollutionS0' },
+            { k: 'riccoSeaPollutionS1', m: 'riccoSeaPollutionS1' },
+            { k: 'riccoSeaPollutionS2', m: 'riccoSeaPollutionS2' },
+            { k: 'riccoSeaPollutionS3', m: 'riccoSeaPollutionS3' },
+            { k: 'riccoSeaPollutionS4', m: 'riccoSeaPollutionS4' },
+            //{ k: 'SeaIndirect', m: 'SeaIndirect' },
+            //{ k: 'sea', m: 'sea' },
+            { k: 'sun_mirror', m: 'sun_mirror' },
+            { k: 'TargetArrow', m: 'TargetArrow' },
+            { k: 'TopOfCorona', p: 'mapObj/ms_coronasmoke.jpa' },
         ];
 
         let modelEntry = modelLookup.find((lt) => obj.model === lt.k);
@@ -1140,7 +1135,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdFile = assertExists(rarc.findFile(bmdFilename), bmdFilename);
             const bmdModel = lookupModel(bmdFile);
             modelInstance = new J3DModelInstanceSimple(bmdModel);
-            modelInstance.passMask = SMSPass.OPAQUE;
+            modelInstance.passMask = SMSPass.MAIN;
         }
 
         if (modelEntry.p !== undefined) {

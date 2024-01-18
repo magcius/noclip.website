@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder.js';
 import { nArray, assertExists } from '../util.js';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -47,11 +47,6 @@ class KingdomHeartsProgram extends DeviceProgram {
 
     private static program = program_glsl;
     public override both = KingdomHeartsProgram.program;
-}
-
-const enum RenderPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
 }
 
 class Layer implements UI.Layer {
@@ -500,7 +495,6 @@ export class SceneRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
-        template.filterKey = this.isSkybox ? RenderPass.SKYBOX : RenderPass.MAIN;
 
         viewerInput.camera.setClipPlanes(20, 5000000);
 
@@ -528,19 +522,21 @@ export class SceneRenderer {
 
 export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
-    private sceneRenderers: SceneRenderer[] = [];
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
+    private skyRenderer: SceneRenderer;
+    private mapRenderer: SceneRenderer;
 
     private mapData: MapData;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, bin: Bin.BIN) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.mapData = new MapData(device, this.renderHelper.renderCache, bin);
 
-        const mapSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.mapDrawCalls, /*isSkybox=*/false);
-        this.sceneRenderers.push(mapSceneRenderer);
-        const skyboxSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.skyboxDrawCalls, /*isSkybox=*/true);
-        this.sceneRenderers.push(skyboxSceneRenderer);
+        this.mapRenderer = new SceneRenderer(device, this.mapData, this.mapData.mapDrawCalls, /*isSkybox=*/false);
+        this.skyRenderer = new SceneRenderer(device, this.mapData, this.mapData.skyboxDrawCalls, /*isSkybox=*/true);
     }
 
     public createPanels(): UI.Panel[] {
@@ -549,16 +545,14 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            this.sceneRenderers.forEach((sceneRenderer: SceneRenderer) => {
-                sceneRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-            });
+            this.mapRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            this.skyRenderer.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            this.sceneRenderers.forEach((sceneRenderer: SceneRenderer) => {
-                sceneRenderer.setTexturesEnabled(enableTextures.checked);
-            });
+            this.mapRenderer.setTexturesEnabled(enableTextures.checked);
+            this.skyRenderer.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -570,8 +564,10 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        this.mapRenderer.prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+        this.skyRenderer.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender();
@@ -591,7 +587,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, RenderPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -600,7 +596,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, RenderPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -608,6 +604,8 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
+        this.renderInstListSky.reset();
         renderInstManager.resetRenderInsts();
     }
 
