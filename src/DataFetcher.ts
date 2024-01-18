@@ -282,6 +282,7 @@ export class DataFetcher {
     public useDevelopmentStorage: boolean | null = null;
     private cache: Cache | null = null;
     private mounts: DataFetcherMount[] = [];
+    public debug = IS_DEVELOPMENT;
 
     constructor(public progressMeter: ProgressMeter | null = null) {
     }
@@ -341,6 +342,34 @@ export class DataFetcher {
         return Promise.all(this.requests.map((request) => request.promise)) as Promise<any>;
     }
 
+    private debugDisplay: HTMLElement | null = null;
+    private debugCalcProgress(): void {
+        if (!this.debug) {
+            if (this.debugDisplay !== null)
+                this.debugDisplay.parentElement!.removeChild(this.debugDisplay)
+
+            return;
+        }
+
+        if (this.debugDisplay == null) {
+            this.debugDisplay = document.createElement('div');
+            this.debugDisplay.style.position = 'absolute';
+            this.debugDisplay.style.bottom = '16px';
+            this.debugDisplay.style.right = '16px';
+            this.debugDisplay.style.color = 'white';
+            this.debugDisplay.style.textShadow = '1px 1px 2px black';
+            this.debugDisplay.style.font = '12pt monospace';
+            this.debugDisplay.style.whiteSpace = `pre`;
+            this.debugDisplay.style.textAlign = 'right';
+            window.main.ui.elem.appendChild(this.debugDisplay);
+        }
+
+        let S = '';
+        for (let i = 0; i < this.requests.length; i++)
+            S += `${this.requests[i].url} ${(this.requests[i].progress * 100) | 0}%\n`;
+        this.debugDisplay.textContent = S;
+    }
+
     private calcProgress(): number {
         if (this.requests.length === 0)
             return 1;
@@ -376,8 +405,10 @@ export class DataFetcher {
             this.requests.splice(this.requests.indexOf(request), 1);
             this.pump();
             this.manageCache();
+            this.debugCalcProgress();
         };
         request.onprogress = () => {
+            this.debugCalcProgress();
             this.setProgress();
         };
         this.pump();
