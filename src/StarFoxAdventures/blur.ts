@@ -117,7 +117,7 @@ export class BlurFilter {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst, inputDesc);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName(name);

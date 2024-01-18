@@ -356,7 +356,7 @@ export class DetailPropLeafRenderer {
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
 
         const indexCount = sortList.length * 6;
-        renderInst.drawIndexes(indexCount);
+        renderInst.setDrawCount(indexCount);
         renderInst.debug = this;
         this.materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
     }

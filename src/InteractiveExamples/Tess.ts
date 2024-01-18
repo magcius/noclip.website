@@ -570,7 +570,7 @@ class PatchLibrary {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
         const variation = this.patchVariation[variationNo];
-        renderInst.drawIndexes(variation.indexCount, variation.startIndex);
+        renderInst.setDrawCount(variation.indexCount, variation.startIndex);
     }
 
     public destroy(device: GfxDevice): void {

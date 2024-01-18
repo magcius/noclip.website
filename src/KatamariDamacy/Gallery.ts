@@ -86,7 +86,7 @@ class GalleryCircleRenderer {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);

@@ -228,7 +228,7 @@ export class TDDraw extends TDDrawBase {
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
+        renderInst.setDrawCount(this.currentIndex - this.startIndex, this.startIndex);
     }
 
     public hasIndicesToDraw(): boolean {
@@ -318,7 +318,7 @@ export class TSDraw extends TDDrawBase {
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.currentIndex);
+        renderInst.setDrawCount(this.currentIndex);
     }
 
     public endDraw(cache: GfxRenderCache): void {

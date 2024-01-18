@@ -1902,7 +1902,7 @@ class MaterialInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
+        renderInst.setDrawCount(3 * this.materialData.triCount, this.materialData.indexOffset);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -2437,7 +2437,7 @@ class SnowRenderer {
 
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(this.snowProgram));
-        renderInst.drawIndexes(6 * this.flakeCount);
+        renderInst.setDrawCount(6 * this.flakeCount);
         renderInstManager.submitRenderInst(renderInst);
     }
 

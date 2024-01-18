@@ -277,7 +277,7 @@ export class BloomEffect extends ImageEffectBase {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         // Downsample and threshold.
         builder.pushPass((pass) => {
@@ -513,7 +513,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         renderInst.setAllowSkippingIfPipelineNotReady(false);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         // Downsample and threshold.
         builder.pushPass((pass) => {
@@ -672,7 +672,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         let targetDesc = builder.getRenderTargetDescription(mainColorTargetID);
         let downsampleColorTargetID: GfxrRenderTargetID;

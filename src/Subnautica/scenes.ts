@@ -82,7 +82,7 @@ class MeshRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.mesh.inputLayout, this.mesh.vertexBufferDescriptors, this.mesh.indexBufferDescriptor);
-        renderInst.drawIndexes(this.mesh.numIndices);
+        renderInst.setDrawCount(this.mesh.numIndices);
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }

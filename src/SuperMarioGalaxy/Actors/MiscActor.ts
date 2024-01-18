@@ -5471,7 +5471,7 @@ class OceanRingPipeOutside extends LiveActor {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
-        renderInst.drawIndexes(this.pipe.indexCount);
+        renderInst.setDrawCount(this.pipe.indexCount);
 
         materialParams.clear();
         this.waterPipeIndirect.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -5570,7 +5570,7 @@ class OceanRingPipeInside extends LiveActor {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.pipe.inputLayout, this.pipe.vertexBufferDescriptors, this.pipe.indexBufferDescriptor);
-        renderInst.drawIndexes(this.pipe.indexCount);
+        renderInst.setDrawCount(this.pipe.indexCount);
 
         materialParams.clear();
         this.waterPipeInside.fillTextureMapping(materialParams.m_TextureMapping[0]);

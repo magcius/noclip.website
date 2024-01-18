@@ -513,7 +513,7 @@ class DrawCallInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-        renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
+        renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.firstIndex);
 
         let offs = renderInst.allocateUniformBuffer(KingdomHeartsIIProgram.ub_DrawParams, 32);
         const mapped = renderInst.mapUniformBufferF32(KingdomHeartsIIProgram.ub_DrawParams);

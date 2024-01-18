@@ -319,7 +319,7 @@ export class TranslucentPlaneRenderer {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
 
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexes(6, 0);
+        renderInst.setDrawCount(6, 0);
         renderInstManager.submitRenderInst(renderInst);
     }
 

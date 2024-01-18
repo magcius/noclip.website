@@ -197,7 +197,7 @@ export class BackgroundBillboardRenderer {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
@@ -423,7 +423,7 @@ class ModelTreeLeafInstance {
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++) {
             const drawCall = this.n64Data.rspOutput.drawCalls[i];
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
+            renderInst.setDrawCount(drawCall.indexCount, drawCall.firstIndex);
             const megaStateFlags = renderInst.getMegaStateFlags();
             megaStateFlags.cullMode = translateCullMode(drawCall.SP_GeometryMode);
 

@@ -578,7 +578,7 @@ export class GXShapeHelperGfx {
             draw = loadedVertexData.draws[0];
         }
 
-        renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
+        renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
     }
 
     public destroy(device: GfxDevice): void {

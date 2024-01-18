@@ -259,7 +259,7 @@ export class EggDrawPathBloom {
         renderInst.setAllowSkippingIfPipelineNotReady(false);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         this.textureMapping[0].gfxTexture = null;
         this.textureMapping[1].gfxTexture = null;
@@ -591,7 +591,7 @@ export class EggDrawPathDOF {
             offs += fillVec4(d, offs, focusZClipSpace, indTexIndScaleS, indTexIndScaleT);
         }
 
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         this.textureMapping[0].gfxTexture = null;
 

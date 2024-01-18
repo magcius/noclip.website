@@ -138,7 +138,7 @@ class PlaneShape {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 10);
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indexCount);
+        renderInst.setDrawCount(this.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
 

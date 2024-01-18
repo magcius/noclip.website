@@ -2041,7 +2041,7 @@ export class JPABaseEmitter {
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, oneStripVertexCount);
 
         const renderInst1 = renderInstManager.newRenderInst();
-        renderInst1.drawIndexes(oneStripIndexCount);
+        renderInst1.setDrawCount(oneStripIndexCount);
         renderInstManager.submitRenderInst(renderInst1);
 
         if (isCross) {
@@ -2050,7 +2050,7 @@ export class JPABaseEmitter {
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
             const renderInst2 = renderInstManager.newRenderInst();
-            renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
+            renderInst2.setDrawCount(oneStripIndexCount, oneStripIndexCount + 6);
             renderInstManager.submitRenderInst(renderInst2);
         }
 
@@ -3274,7 +3274,7 @@ export class JPABaseParticle {
             // materialParams.u_TexMtx[0][0] = 0.0;
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
-            renderInst.drawIndexes(6, 0);
+            renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
 
@@ -3287,7 +3287,7 @@ export class JPABaseParticle {
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, drawParams.u_PosMtx[0]);
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
-            renderInst.drawIndexes(6, 0);
+            renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
             vec3.normalize(scratchVec3a, scratchVec3a);
@@ -3330,9 +3330,9 @@ export class JPABaseParticle {
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             if (shapeType === ShapeType.DirectionCross)
-                renderInst.drawIndexes(12, 0);
+                renderInst.setDrawCount(10);
             else
-                renderInst.drawIndexes(6, 0);
+                renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross) {
             const dst = drawParams.u_PosMtx[0];
             this.applyRot(dst, this.rotateAngle, sp1.rotType);
@@ -3347,9 +3347,9 @@ export class JPABaseParticle {
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             if (shapeType === ShapeType.RotationCross)
-                renderInst.drawIndexes(12, 0);
+                renderInst.setDrawCount(10);
             else
-                renderInst.drawIndexes(6, 0);
+                renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.DirBillboard) {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
             vec3.set(scratchVec3b, workData.posCamMtx[2], workData.posCamMtx[6], workData.posCamMtx[10]);
@@ -3380,7 +3380,7 @@ export class JPABaseParticle {
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
-            renderInst.drawIndexes(6, 0);
+            renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.YBillboard) {
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
             vec3.normalize(scratchVec3a, scratchVec3a);
@@ -3417,7 +3417,7 @@ export class JPABaseParticle {
             this.loadTexMtx(materialParams.u_TexMtx[0], materialParams.m_TextureMapping[0], workData, dst);
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
-            renderInst.drawIndexes(6, 0);
+            renderInst.setDrawCount(6);
         } else {
             throw "whoops";
         }

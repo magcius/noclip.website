@@ -2365,7 +2365,7 @@ export class mDoGph_bloom_c {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         const mainResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 

@@ -291,7 +291,7 @@ class ImplConservativeOccl {
                 renderInst.setGfxProgram(this.gfxProgram);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 1 }]);
-                renderInst.drawPrimitives(3);
+                renderInst.setDrawCount(3);
 
                 let offs = renderInst.allocateUniformBuffer(0, 8);
                 const d = renderInst.mapUniformBufferF32(0);

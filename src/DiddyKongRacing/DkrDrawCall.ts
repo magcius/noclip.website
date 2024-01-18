@@ -292,7 +292,7 @@ export class DkrDrawCall {
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
 
             renderInst.setGfxProgram(this.gfxProgram);
-            renderInst.drawIndexes(this.indexCount);
+            renderInst.setDrawCount(this.indexCount);
             renderInst.setMegaStateFlags({
                 cullMode: DkrControlGlobals.ADV2_MIRROR.on ? GfxCullMode.Front : GfxCullMode.Back
             });

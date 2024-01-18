@@ -288,7 +288,7 @@ export class BINModelPartInstance {
             this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(this.textureMapping[0], scratchTextureMatrix, currentPalette);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-        renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
+        renderInst.setDrawCount(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
         let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+4);
         const d = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);

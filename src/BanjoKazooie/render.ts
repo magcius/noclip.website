@@ -641,7 +641,7 @@ class DrawCallInstance {
             renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, depthKey)
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
+        renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.firstIndex);
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
@@ -1652,7 +1652,7 @@ export class FlipbookRenderer {
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(texMappingScratch);
-        renderInst.drawIndexes(6);
+        renderInst.setDrawCount(6);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
         const draw = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);

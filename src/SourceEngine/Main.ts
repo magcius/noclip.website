@@ -351,7 +351,7 @@ export class SkyboxRenderer {
             materialInstance.setOnRenderInstModelMatrix(renderInst, this.modelMatrix);
             // Overwrite the filter key from the material instance.
             renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
-            renderInst.drawIndexes(6, i*6);
+            renderInst.setDrawCount(6, i*6);
             materialInstance.getRenderInstListForView(view).submitRenderInst(renderInst);
         }
 
@@ -413,7 +413,7 @@ export class BSPSurfaceRenderer {
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, this.lightmapManagerPage);
         this.materialInstance.setOnRenderInstModelMatrix(renderInst, modelMatrix);
-        renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
+        renderInst.setDrawCount(this.surface.indexCount, this.surface.startIndex);
         renderInst.debug = this;
 
         if (this.surface.center !== null) {
@@ -1915,7 +1915,7 @@ export class SourceRenderer implements SceneGfx {
         renderInst.setBindingLayouts(bindingLayoutsBloom);
         renderInst.setVertexInput(null, null, null);
         renderInst.setMegaStateFlags(fullscreenMegaState);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         let offs = renderInst.allocateUniformBuffer(0, 8);
         const d = renderInst.mapUniformBufferF32(0);
@@ -2044,7 +2044,7 @@ export class SourceRenderer implements SceneGfx {
             postRenderInst.setVertexInput(null, null, null);
             postRenderInst.setGfxProgram(postProgram);
             postRenderInst.setMegaStateFlags(fullscreenMegaState);
-            postRenderInst.drawPrimitives(3);
+            postRenderInst.setDrawCount(3);
 
             pass.exec((passRenderer, scope) => {
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);

@@ -150,7 +150,7 @@ export class GridPlane {
             blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
             blendSrcFactor: GfxBlendFactor.SrcAlpha,
         });
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         let offs = renderInst.allocateUniformBuffer(GridPlaneProgram.a_Position, 4*4 + 4*4 + 4 + 4);
         const d = renderInst.mapUniformBufferF32(GridPlaneProgram.a_Position);

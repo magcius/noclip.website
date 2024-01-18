@@ -966,7 +966,7 @@ class Particle {
         mappingScratch[0].gfxSampler = this.textures[this.texIndex].sampler;
         mappingScratch[0].gfxTexture = this.textures[this.texIndex].texture;
         renderInst.setSamplerBindingsFromTextureMappings(mappingScratch);
-        renderInst.drawIndexes(6);
+        renderInst.setDrawCount(6);
 
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_DrawParams, 12 + 4 * 2);
         const draw = renderInst.mapUniformBufferF32(ParticleProgram.ub_DrawParams);

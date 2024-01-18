@@ -75,7 +75,7 @@ export class NfsPostProcessing {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setVertexInput(null, null, null);
         renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Downsample');

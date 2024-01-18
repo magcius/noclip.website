@@ -69,9 +69,9 @@ class MyShapeHelper {
     public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
         if (draw !== null)
-            renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
+            renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
         else
-            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
+            renderInst.setDrawCount(this.loadedVertexData.totalIndexCount);
     }
 
     public destroy(device: GfxDevice): void {

@@ -388,7 +388,7 @@ export class OceanBowl extends LiveActor {
         // Now create our draw instance.
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indexCount);
+        renderInst.setDrawCount(this.indexCount);
 
         this.materialHelper.setOnRenderInst(cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
@@ -421,7 +421,7 @@ export class OceanBowl extends LiveActor {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indexCount);
+        renderInst.setDrawCount(this.indexCount);
 
         this.materialHelperBloom.setOnRenderInst(cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelperBloom.programKey);

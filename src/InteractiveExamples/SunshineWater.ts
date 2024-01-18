@@ -97,7 +97,7 @@ class PlaneShape {
         renderInst.filterKey = SMSPass.OPAQUE;
         renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(6);
+        renderInst.setDrawCount(6);
         renderInstManager.submitRenderInst(renderInst);
     }
 

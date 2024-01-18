@@ -474,7 +474,7 @@ class MeshRenderer {
             offs2 += fillVec4(d2, offs2, 0, 0, 0, 0);
         }
 
-        renderInst.drawIndexes(this.geometryData.indexCount);
+        renderInst.setDrawCount(this.geometryData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
 

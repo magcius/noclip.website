@@ -614,9 +614,9 @@ class Device_Mesh {
         renderInst.setVertexInput(this.input_layout, this.vertex_buffer_descriptors, this.index_buffer_descriptor);
 
         if (this.index_count > 0)
-            renderInst.drawIndexesInstanced(this.index_count, this.instance_count);
+            renderInst.setDrawCount(this.index_count, 0, this.instance_count);
         else
-            renderInst.drawPrimitives(this.vertex_count);
+            renderInst.setDrawCount(this.vertex_count);
     }
 
     public destroy(device: GfxDevice): void {

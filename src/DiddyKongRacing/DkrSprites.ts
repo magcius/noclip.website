@@ -268,7 +268,7 @@ export class DkrSprites {
         d2.set(this.spriteData, offs2);
 
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexesInstanced(6, layerInstances.length);
+        renderInst.setDrawCount(6, 0, layerInstances.length);
 
         renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();

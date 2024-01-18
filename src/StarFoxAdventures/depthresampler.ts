@@ -64,7 +64,7 @@ export class DepthResampler {
         renderInst.setGfxProgram(this.program);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Resample Depth');

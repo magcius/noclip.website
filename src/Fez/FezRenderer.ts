@@ -298,7 +298,7 @@ export class FezObjectRenderer {
         offs += fillVec4v(d, offs, levelRenderData.shadowTexScaleBias);
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 1, 0);
 
-        renderInst.drawIndexes(this.geometryData.indexCount);
+        renderInst.setDrawCount(this.geometryData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -391,7 +391,7 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4v(d, offs, levelRenderData.shadowTexScaleBias);
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
-        renderInst.drawIndexes(this.staticData.indexCount);
+        renderInst.setDrawCount(this.staticData.indexCount);
         renderInstManager.submitRenderInst(renderInst);
     }
 

@@ -191,7 +191,7 @@ void main() {
                     numSamplers: 1,
                     samplerEntries: [{ dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, }],
                 }]);
-                renderInst.drawPrimitives(3);
+                renderInst.setDrawCount(3);
 
                 const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler, lateBinding: null }];
                 renderInst.setSamplerBindingsFromTextureMappings(samplerBindings);

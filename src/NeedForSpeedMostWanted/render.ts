@@ -131,7 +131,7 @@ export class NfsRenderer implements SceneGfx {
                 offs += fillMatrix4x3(d, offs, instance.worldMatrix);
                 fillVec4v(d, offs, [0, 0, 0, 0]);
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
-                renderInst.drawIndexes(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
+                renderInst.setDrawCount(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
                 renderInstManager.submitRenderInst(renderInst);
             });
         });
@@ -230,7 +230,7 @@ export class NfsRenderer implements SceneGfx {
                         texMappings[i].gfxSampler = texMappings[0].gfxSampler;
                 }
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
-                renderInst.drawIndexes(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
+                renderInst.setDrawCount(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
                 renderInstManager.submitRenderInst(renderInst);
             });
         });
@@ -243,7 +243,7 @@ export class NfsRenderer implements SceneGfx {
         template.setGfxProgram(this.particleGfxProgram);
         template.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent, depthWrite: false, cullMode: GfxCullMode.None});
         template.setVertexInput(NfsParticleEmitter.inputLayout, NfsParticleEmitter.vertexBufferDescriptors, NfsParticleEmitter.indexBufferDescriptor);
-        template.drawIndexes(6);
+        template.setDrawCount(6);
         template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
         let offs = template.allocateUniformBuffer(NfsParticleProgram.ub_SceneParams, 16);
         const d = template.mapUniformBufferF32(NfsParticleProgram.ub_SceneParams);

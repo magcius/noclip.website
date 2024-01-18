@@ -126,7 +126,7 @@ class Chunk {
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, null);
-        renderInst.drawPrimitives(this.numVertices);
+        renderInst.setDrawCount(this.numVertices);
         renderInstManager.submitRenderInst(renderInst);
     }
 

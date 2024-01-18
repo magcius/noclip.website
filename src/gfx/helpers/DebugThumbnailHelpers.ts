@@ -140,7 +140,7 @@ void main() {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
         renderInst.setMegaStateFlags(fullscreenMegaState);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         const thumbnailWidth = this.thumbnailWidth * window.devicePixelRatio;
         const thumbnailHeight = this.thumbnailHeight * window.devicePixelRatio;

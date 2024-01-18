@@ -980,7 +980,7 @@ class MaterialRender_TransparencyWater {
         template.setGfxProgram(this.rippleCompositeProgram);
         template.setMegaStateFlags(fullscreenMegaState);
         template.setSamplerBindingsFromTextureMappings(this.rippleCompositeMapping);
-        template.drawPrimitives(3);
+        template.setDrawCount(3);
 
         for (let i = 0; i < this.shader.ripple_mipmap_levels; i++) {
             builder.pushPass((pass) => {
@@ -1552,7 +1552,7 @@ class LightmapModelData {
         offs += fillMatrix4x4(mapped, offs, this.modelMatrix);
 
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indexCount, this.indexOffset);
+        renderInst.setDrawCount(this.indexCount, this.indexOffset);
     }
 
     public destroy(device: GfxDevice) {
@@ -1676,7 +1676,7 @@ class ModelPartData {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.drawIndexes(this.indexCount, this.indexStart);
+        renderInst.setDrawCount(this.indexCount, this.indexStart);
     }
 
     public destroy(device: GfxDevice): void {

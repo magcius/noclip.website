@@ -212,7 +212,7 @@ class ShapeInstance {
         for (let i = 0; i < this.vertexData.nitroVertexData.drawCalls.length; i++) {
             const drawCall = this.vertexData.nitroVertexData.drawCalls[i];
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.drawIndexes(drawCall.numIndices, drawCall.startIndex);
+            renderInst.setDrawCount(drawCall.numIndices, drawCall.startIndex);
             renderInstManager.submitRenderInst(renderInst);
         }
 

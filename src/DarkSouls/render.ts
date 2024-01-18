@@ -1394,7 +1394,7 @@ class BatchInstance {
             renderInst.setVertexInput(this.batchData.inputLayout, this.batchData.vertexBufferDescriptors, this.batchData.indexBufferDescriptor);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.Back;
-            renderInst.drawIndexes(this.batchData.primitiveIndexCounts[i], this.batchData.primitiveIndexStarts[i]);
+            renderInst.setDrawCount(this.batchData.primitiveIndexCounts[i], this.batchData.primitiveIndexStarts[i]);
 
             this.materialInstance.submitRenderInst(renderContext, renderInstManager, renderInst);
         }
@@ -2164,7 +2164,7 @@ class DepthOfField {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(postBindingLayouts);
         this.allocateParameterBuffer(renderInst, params, cameraView);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Downsample');
@@ -2562,7 +2562,7 @@ class Bloom {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(postBindingLayouts);
         this.allocateParameterBuffer(renderInst, params, cameraView);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample 1/4');
@@ -2779,7 +2779,7 @@ class ToneCorrect {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(postBindingLayouts);
         this.allocateParameterBuffer(renderInst, params);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Tone Correct');

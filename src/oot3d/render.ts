@@ -865,7 +865,7 @@ class ShapeInstance {
             const prmsData = this.sepdData.prmsData[i];
             const prms = prmsData.prms;
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.drawIndexes(prms.prm.count, prmsData.indexBufferOffset);
+            renderInst.setDrawCount(prms.prm.count, prmsData.indexBufferOffset);
 
             let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12+4*2);
             const prmParamsMapped = renderInst.mapUniformBufferF32(DMPProgram.ub_PrmParams);

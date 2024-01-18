@@ -388,7 +388,7 @@ class FurObj {
                 });
             }
 
-            renderInst.drawIndexes(this.indexCount);
+            renderInst.setDrawCount(this.indexCount);
             renderInstManager.submitRenderInst(renderInst);
         }
 

@@ -370,7 +370,7 @@ class MeshFragInstance {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.meshFragData.inputLayout, this.meshFragData.vertexBufferDescriptors, this.meshFragData.indexBufferDescriptor);
-        renderInst.drawIndexes(this.meshFragData.indexCount);
+        renderInst.setDrawCount(this.meshFragData.indexCount);
 
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);

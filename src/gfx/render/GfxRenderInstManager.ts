@@ -149,15 +149,14 @@ export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number
 // TODO(jstpierre): Very little of this is used, could be removed.
 const enum GfxRenderInstFlags {
     None = 0,
-    Indexed = 1 << 0,
-    AllowSkippingIfPipelineNotReady = 1 << 1,
+    AllowSkippingIfPipelineNotReady = 1 << 0,
 
     // Mostly for error checking.
-    Template = 1 << 2,
-    Draw = 1 << 3,
+    Template = 1 << 1,
+    Draw = 1 << 2,
 
     // Which flags are inherited from templates...
-    InheritedFlags = Indexed | AllowSkippingIfPipelineNotReady,
+    InheritedFlags = AllowSkippingIfPipelineNotReady,
 }
 
 export class GfxRenderInst {
@@ -318,25 +317,22 @@ export class GfxRenderInst {
         this._setBindingLayout(bindingLayouts[0]);
     }
 
-    public drawIndexes(indexCount: number, indexStart: number = 0): void {
-        this._flags = setBitFlagEnabled(this._flags, GfxRenderInstFlags.Indexed, true);
-        this._drawCount = indexCount;
-        this._drawStart = indexStart;
-        this._drawInstanceCount = 1;
-    }
-
-    public drawIndexesInstanced(indexCount: number, instanceCount: number, indexStart: number = 0): void {
-        this._flags = setBitFlagEnabled(this._flags, GfxRenderInstFlags.Indexed, true);
-        this._drawCount = indexCount;
-        this._drawStart = indexStart;
+    /**
+     * Sets the draw count parameters for this render inst. Whether this is an indexed or an unindexed draw is
+     * determined by whether an index buffer is bound in the input layout. If this is an indexed draw, then
+     * the counts are index counts. If this is an unindexed draw, then this is a vertex count.
+     *
+     * Instance counts are the same for both indexed and unindexed draws, however instanced draws are (currently)
+     * only supported for indexed draws.
+     *
+     * @param count The index count, or vertex count.
+     * @param start The first index, or first vertex to render with.
+     * @param instanceCount The number of instances to render.
+     */
+    public setDrawCount(count: number, start: number = 0, instanceCount: number = 1): void {
+        this._drawCount = count;
+        this._drawStart = start;
         this._drawInstanceCount = instanceCount;
-    }
-
-    public drawPrimitives(primitiveCount: number, primitiveStart: number = 0): void {
-        this._flags = setBitFlagEnabled(this._flags, GfxRenderInstFlags.Indexed, false);
-        this._drawCount = primitiveCount;
-        this._drawStart = primitiveStart;
-        this._drawInstanceCount = 1;
     }
 
     public setUniformBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer): void {
@@ -524,10 +520,11 @@ export class GfxRenderInst {
         const gfxBindings = cache.createBindings(this._bindingDescriptors[0]);
         passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
 
+        const indexed = this._indexBuffer !== null;
         if (this._drawInstanceCount > 1) {
-            assert(!!(this._flags & GfxRenderInstFlags.Indexed));
+            assert(indexed);
             passRenderer.drawIndexedInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
-        } else if ((this._flags & GfxRenderInstFlags.Indexed)) {
+        } else if (indexed) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);

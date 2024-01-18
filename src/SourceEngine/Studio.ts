@@ -1805,7 +1805,7 @@ class StudioModelMeshInstance {
                 const stripData = stripGroupData.stripData[j];
                 const renderInst = renderInstManager.newRenderInst();
                 this.materialInstance.setOnRenderInstSkinningParams(renderInst, boneMatrix, stripData.hardwareBoneTable);
-                renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
+                renderInst.setDrawCount(stripData.indexCount, stripData.firstIndex);
                 renderInst.debug = this;
                 renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
                 this.materialInstance.getRenderInstListForView(renderContext.currentView).submitRenderInst(renderInst);

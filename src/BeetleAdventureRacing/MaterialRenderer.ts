@@ -362,7 +362,7 @@ export class MaterialRenderer {
 
         let gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
         renderInst.setGfxProgram(gfxProgram);
-        renderInst.drawIndexes(this.indexCount, 0);
+        renderInst.setDrawCount(this.indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);
 
         if (DEBUGGING_TOOLS_STATE.showTextureIndices && this.isTextured)

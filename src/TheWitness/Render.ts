@@ -976,7 +976,7 @@ export class TheWitnessRenderer implements SceneGfx {
 
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-                renderInst.drawPrimitives(3);
+                renderInst.setDrawCount(3);
 
                 const copyProgram = new DepthCopyProgram();
                 const gfxProgram = renderHelper.renderCache.createProgram(copyProgram);

@@ -206,7 +206,7 @@ class BSPSurfaceRenderer {
         this.textureMapping[1].gfxTexture = lightmapManager.gfxTexture;
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
+        renderInst.setDrawCount(this.surface.indexCount, this.surface.startIndex);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInstManager.submitRenderInst(renderInst);
     }

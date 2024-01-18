@@ -4646,7 +4646,7 @@ class StaticQuad {
 
     public setQuadOnRenderInst(renderInst: GfxRenderInst): void {
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptorsQuad, this.indexBufferDescriptorQuad);
-        renderInst.drawIndexes(6);
+        renderInst.setDrawCount(6);
     }
 
     public destroy(device: GfxDevice): void {

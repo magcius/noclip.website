@@ -221,7 +221,7 @@ class BaseRenderer {
     protected prepare(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indices);
+        renderInst.setDrawCount(this.indices);
 
         if (this.gfxProgram === undefined)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);

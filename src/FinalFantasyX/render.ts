@@ -314,7 +314,7 @@ export class DrawCallInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.indexOffset);
+        renderInst.setDrawCount(this.drawCall.indexCount, this.drawCall.indexOffset);
 
         if (this.textureMappings.length > 0) {
             const newTex = textureRemaps[this.drawCall.textureIndex];

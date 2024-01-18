@@ -730,7 +730,7 @@ export class FallOutFieldDraw extends NameObj {
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
-        renderInst.drawPrimitives(3);
+        renderInst.setDrawCount(3);
 
         const clipAreaMaskTextureID = builder.resolveRenderTarget(clipAreaMaskTargetID);
 

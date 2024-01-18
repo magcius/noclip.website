@@ -650,7 +650,7 @@ export class DrawCallInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.drawPrimitives(this.drawCall.vertexCount);
+        renderInst.setDrawCount(this.drawCall.vertexCount);
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);

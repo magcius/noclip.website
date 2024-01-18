@@ -354,7 +354,7 @@ export class NjsMeshInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        renderInst.drawIndexes(this.data.indexCount, 0);
+        renderInst.setDrawCount(this.data.indexCount, 0);
 
         if (this.textureMappings.length > 0) {
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);

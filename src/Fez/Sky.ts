@@ -191,7 +191,7 @@ export class SkyRenderer {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.drawPrimitives(3);
+        template.setDrawCount(3);
         template.setVertexInput(null, null, null);
         template.setBindingLayouts(backgroundBindingLayouts);
         template.setGfxProgram(this.skyData.backgroundProgram);

@@ -666,7 +666,7 @@ export class FragRenderer extends BaseRenderer {
     public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        renderInst.drawIndexes(this.indices);
+        renderInst.setDrawCount(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
 
         const oldCullMode = this.megaStateFlags.cullMode;

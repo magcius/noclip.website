@@ -301,7 +301,7 @@ export class MDTSubmeshInstance {
             }
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-            renderInst.drawIndexes(submesh.indexData.length, submeshData.indexBufferOffset);
+            renderInst.setDrawCount(submesh.indexData.length, submeshData.indexBufferOffset);
 
             let offs = renderInst.allocateUniformBuffer(DQ8Program.ub_MDTSubmeshParams, 16 * 2 + 12 + 16 * (this.mdtData.smoothSkinning ? MDS.MDS.maxJointCount : 0));
             const d = renderInst.mapUniformBufferF32(DQ8Program.ub_MDTSubmeshParams);
