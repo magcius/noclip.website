@@ -82,7 +82,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     constructor(context: SceneContext, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
         this.renderHelper = new GXRenderHelperGfx(context.device, context, this.materialFactory.cache);
-        this.renderHelper.renderInstManager.disableSimpleMode();
+
 
         this.depthResampler = new DepthResampler(context.device, this.renderHelper.renderInstManager.gfxRenderCache);
 

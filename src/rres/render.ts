@@ -679,8 +679,6 @@ export class MDL0ModelInstance {
 
         this.calcView(camera);
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeInstance = this.shapeInstances[i];
             const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.sortVizNode.id) : shapeInstance.sortVizNode.visible);
@@ -688,7 +686,6 @@ export class MDL0ModelInstance {
                 continue;
             shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, this.instanceStateData, this.isSkybox);
         }
-        renderInstManager.popTemplateRenderInst();
     }
 
     private execDrawOpList(opList: BRRES.DrawOp[], translucent: boolean): void {

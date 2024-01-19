@@ -94,7 +94,6 @@ export class Renderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-        renderInstManager.disableSimpleMode();
 
         const mainColorDesc = makeBackbufferDescSimple(
             GfxrAttachmentSlot.Color0,

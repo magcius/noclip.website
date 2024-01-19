@@ -1657,7 +1657,6 @@ export class SourceRenderer implements SceneGfx {
         this.reflectViewRenderer.renderObjectMask &= ~(RenderObjectKind.DetailProps);
 
         this.renderHelper = new GfxRenderHelper(renderContext.device, sceneContext, renderContext.renderCache);
-        this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.luminanceHistogram = new LuminanceHistogram(this.renderContext.renderCache);
 

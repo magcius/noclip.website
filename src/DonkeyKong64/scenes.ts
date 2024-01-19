@@ -447,7 +447,6 @@ class DK64Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public adjustCameraController(c: CameraController) {

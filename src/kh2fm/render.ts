@@ -615,7 +615,6 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.mapData = new MapData(device, this.renderHelper.renderCache, map);
         this.mapRenderer = new SceneRenderer(device, this.mapData, this.mapData.drawCalls);

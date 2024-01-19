@@ -35,7 +35,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
         SINFO.gDQ8SINFO.reset();
     }
 

@@ -1,20 +1,20 @@
 
 import * as Viewer from '../viewer.js';
-import * as U8 from './u8.js';
 import * as BRRES from './brres.js';
+import * as U8 from './u8.js';
 
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { vec3 } from "gl-matrix";
-import { readString, assert, assertExists } from "../util.js";
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render.js';
 import AnimationController from '../AnimationController.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GXMaterialHacks } from '../gx/gx_material.js';
-import { GfxRenderInstList, executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { SceneContext } from '../SceneBase.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { GXMaterialHacks } from '../gx/gx_material.js';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { assert, assertExists, readString } from "../util.js";
+import { MDL0Model, MDL0ModelInstance, RRESTextureHolder } from './render.js';
 
 interface MapEntry {
     index: number;
@@ -69,7 +69,6 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {

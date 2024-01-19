@@ -2810,7 +2810,6 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
 
     constructor(sceneContext: SceneContext, public textureHolder: DDSTextureHolder) {
         this.renderHelper = new GfxRenderHelper(sceneContext.device, sceneContext);
-        this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.renderContext.cameraView = this.cameraView;
         this.renderContext.textureHolder = this.textureHolder;

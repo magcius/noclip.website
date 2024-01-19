@@ -164,7 +164,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
             this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
 
-        this.renderHelper.renderInstManager.disableSimpleMode();
         this.applyCurrentScenario();
     }
 

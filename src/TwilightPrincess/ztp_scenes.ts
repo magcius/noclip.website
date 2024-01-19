@@ -256,7 +256,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
+
         
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
         this.applyCurrentLayer();

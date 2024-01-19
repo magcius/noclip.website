@@ -279,11 +279,6 @@ class DrawCallInstance {
     }
 }
 
-export const enum BKPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
@@ -410,8 +405,6 @@ export class RootMeshRenderer {
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(renderData.inputLayout, renderData.vertexBufferDescriptors, renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
-
-        template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
         template.sortKey = this.sortKeyBase;
 
         const computeLookAt = false; // FIXME: or true?

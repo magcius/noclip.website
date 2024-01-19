@@ -1056,11 +1056,8 @@ export class CmbInstance {
             }
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, this.textureHolder, this.boneMatrices, scratchViewMatrix, this.cmbData.inverseBindPoseMatrices);
-        renderInstManager.popTemplateRenderInst();
     }
 
     public setVisible(visible: boolean): void {

@@ -75,7 +75,6 @@ export class MKDSRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public getCache() {

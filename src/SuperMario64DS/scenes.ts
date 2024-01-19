@@ -485,7 +485,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
+
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {

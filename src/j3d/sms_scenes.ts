@@ -509,7 +509,6 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     public createPanels(): UI.Panel[] {

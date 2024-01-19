@@ -282,7 +282,7 @@ export class GallerySceneRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
-                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
+                this.renderInstListMain.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });

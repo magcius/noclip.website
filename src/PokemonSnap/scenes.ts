@@ -28,7 +28,6 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     constructor(context: SceneContext, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(context.device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
         this.globals = new LevelGlobals(context, id);
         context.destroyablePool.push(this.globals);
     }

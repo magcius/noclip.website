@@ -165,7 +165,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
         this.textureHolder = new ZSSTextureHolder();
         this.animationController = new AnimationController();
 

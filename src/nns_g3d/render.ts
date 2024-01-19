@@ -225,11 +225,6 @@ class ShapeInstance {
     }
 }
 
-export const enum G3DPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 export const nnsG3dBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
 const enum BillboardMode {
@@ -361,7 +356,6 @@ export class MDL0Renderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(nnsG3dBindingLayouts);
-        template.filterKey = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
         template.setGfxProgram(this.gfxProgram);
 
         for (let i = 0; i < this.shapeInstances.length; i++)

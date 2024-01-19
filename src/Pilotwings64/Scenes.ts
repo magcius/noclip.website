@@ -2834,7 +2834,7 @@ class Pilotwings64Renderer implements SceneGfx {
 
     constructor(device: GfxDevice, private dataHolder: DataHolder, private modelBuilder: ModelBuilder) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
+
     }
 
     public adjustCameraController(c: CameraController) {

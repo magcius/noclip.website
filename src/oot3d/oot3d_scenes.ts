@@ -1,39 +1,42 @@
 
-import * as CMB from './cmb.js';
+import * as LzS from './LzS.js';
 import * as CMAB from './cmab.js';
+import * as CMB from './cmb.js';
 import * as CSAB from './csab.js';
 import * as ZAR from './zar.js';
 import * as ZSI from './zsi.js';
-import * as LzS from './LzS.js';
 
-import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render.js';
-import { SceneGroup } from '../viewer.js';
-import { assert, assertExists, hexzero } from '../util.js';
-import { DataFetcher } from '../DataFetcher.js';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
-import { TransparentBlack, colorNewFromRGBA, White} from '../Color.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
-import { SceneContext } from '../SceneBase.js';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { MathConstants, scaleMatrix } from "../MathHelpers.js";
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
+import { DataFetcher } from '../DataFetcher.js';
+import { MathConstants, scaleMatrix } from "../MathHelpers.js";
+import { SceneContext } from '../SceneBase.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { assert, assertExists, hexzero } from '../util.js';
+import { SceneGroup } from '../viewer.js';
+import { CmbData, CmbInstance, CtrTextureHolder, RoomRenderer, fillSceneParamsDataOnTemplate } from './render.js';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
+    public skyRenderers: CmbInstance[] = [];
     public roomRenderers: RoomRenderer[] = [];
     public environmentSettingsIndex = 0;
     private renderHelper: GfxRenderHelper;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -52,8 +55,16 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
+        const renderInstManager = this.renderHelper.renderInstManager;
+        if (this.skyRenderers.length > 0) {
+            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        }
+
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -73,7 +84,7 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, OoT3DPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -82,7 +93,7 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, OoT3DPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -90,6 +101,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -107,6 +120,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
@@ -114,6 +129,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].setTexturesEnabled(enableTextures.checked);
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
@@ -121,6 +138,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
@@ -128,6 +147,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
         const enableVertexNormals = new UI.Checkbox('Show Vertex Normals', false);
         enableVertexNormals.onchanged = () => {
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].setVertexNormalsEnabled(enableVertexNormals.checked);
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setShowVertexNormals(enableVertexNormals.checked);
         };
@@ -135,6 +156,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
         const enableUV = new UI.Checkbox('Show Texture Coordinates', false);
         enableUV.onchanged = () => {
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].setUVEnabled(enableUV.checked);
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setShowTextureCoordinates(enableUV.checked);
         };
@@ -2357,7 +2380,6 @@ class SceneDesc implements Viewer.SceneDesc {
 
     private spawnSkybox(renderer: OoT3DRenderer, zar: ZAR.ZAR, skyboxSettings: number): void {
         // Attach the skybox to the first roomRenderer.
-        const roomRenderer = renderer.roomRenderers[0];
         const cache = renderer.getRenderCache();
 
         function buildModel(zar: ZAR.ZAR, modelPath: string): CmbInstance {
@@ -2365,8 +2387,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const cmbRenderer = new CmbInstance(cache, renderer.textureHolder, cmbData);
             cmbRenderer.isSkybox = true;
             cmbRenderer.animationController.fps = 20;
-            cmbRenderer.passMask = OoT3DPass.SKYBOX;
-            roomRenderer.objectRenderers.push(cmbRenderer);
+            renderer.skyRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
         function parseCMAB(zar: ZAR.ZAR, filename: string) { return CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename))); }

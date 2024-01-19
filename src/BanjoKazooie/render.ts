@@ -790,11 +790,6 @@ export class BoneAnimator {
     }
 }
 
-export const enum BKPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
@@ -1377,8 +1372,6 @@ export class GeometryRenderer {
         template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
-
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
         mat4.getTranslation(lookatScratch, this.modelMatrix);
         template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.distance(depthScratch, lookatScratch));
@@ -1644,7 +1637,6 @@ export class FlipbookRenderer {
         mat4.getTranslation(flipbookScratch[1], this.modelMatrix);
         vec3.sub(flipbookScratch[0], flipbookScratch[0], flipbookScratch[1]);
         renderInst.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(flipbookScratch[0]));
-        renderInst.filterKey = BKPass.MAIN;
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
         const scene = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);

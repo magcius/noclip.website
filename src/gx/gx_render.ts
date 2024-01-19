@@ -613,7 +613,6 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     protected abstract prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void;

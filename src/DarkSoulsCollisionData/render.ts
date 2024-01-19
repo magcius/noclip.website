@@ -187,7 +187,6 @@ export class Scene implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderHelper.renderInstManager.disableSimpleMode();
         this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [

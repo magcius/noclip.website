@@ -8,11 +8,11 @@ import * as Actors from './actors.js';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render.js';
+import { textureToCanvas, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render.js';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { assert, hexzero, assertExists } from '../util.js';
@@ -33,6 +33,8 @@ class BKRenderer implements Viewer.SceneGfx {
     public rails: Actors.Rail[] = [];
 
     public renderHelper: GfxRenderHelper;
+    public renderInstListSky = new GfxRenderInstList();
+    public renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -98,8 +100,11 @@ class BKRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        for (let i = 0; i < this.geoRenderers.length; i++)
+        for (let i = 0; i < this.geoRenderers.length; i++) {
+            this.renderHelper.renderInstManager.setCurrentRenderInstList(this.geoRenderers[i].isSkybox ? this.renderInstListSky : this.renderInstListMain);
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.flipbookRenderers.length; i++)
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -122,7 +127,7 @@ class BKRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, BKPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -131,7 +136,7 @@ class BKRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, BKPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -139,6 +144,8 @@ class BKRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

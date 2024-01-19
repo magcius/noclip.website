@@ -374,11 +374,6 @@ function sampleAnimationTrackLinear(track: AnimationTrack, frame: number): numbe
     return lerp(k0.value, k1.value, t);
 }
 
-export const enum BKPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
@@ -844,8 +839,6 @@ export class GeometryRenderer {
         template.setBindingLayouts(bindingLayouts);
         template.setVertexInput(this.geometryData.renderData.inputLayout, this.vertexBufferDescriptors, this.geometryData.renderData.indexBufferDescriptor);
         template.setMegaStateFlags(this.megaStateFlags);
-
-        template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
 
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
         mat4.getTranslation(lookatScratch[0], this.modelMatrix);

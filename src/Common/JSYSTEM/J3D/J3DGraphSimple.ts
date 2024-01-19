@@ -294,11 +294,8 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
             return;
 
         const depth = this.computeDepth(viewerInput.camera);
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, this.modelData, this.materialInstanceState, this.shapeInstanceState);
-        renderInstManager.popTemplateRenderInst();
     }
 
     public override destroy(device: GfxDevice): void {

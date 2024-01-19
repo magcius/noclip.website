@@ -6,12 +6,12 @@ import * as BYML from '../byml.js';
 
 import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform.js';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder.js';
-import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
+import { textureToCanvas, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render.js';
 import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
@@ -30,6 +30,8 @@ class BTRenderer implements Viewer.SceneGfx {
     public geoDatas: RenderData[] = [];
 
     public renderHelper: GfxRenderHelper;
+    public renderInstListSky = new GfxRenderInstList();
+    public renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public modelCache: ModelCache, public id: string) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -75,8 +77,10 @@ class BTRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        for (let i = 0; i < this.geoRenderers.length; i++)
+        for (let i = 0; i < this.geoRenderers.length; i++) {
+            this.renderHelper.renderInstManager.setCurrentRenderInstList(this.geoRenderers[i].isSkybox ? this.renderInstListSky : this.renderInstListMain);
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
     }
@@ -96,7 +100,7 @@ class BTRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, BKPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -105,7 +109,7 @@ class BTRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, BKPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -113,6 +117,8 @@ class BTRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
