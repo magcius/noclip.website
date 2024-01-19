@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import { GfxDevice, GfxBindingLayoutDescriptor, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform.js";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderInstManager.js";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewMatrix, CameraController } from "../Camera.js";
@@ -111,6 +111,7 @@ class FezLevelRenderData {
 export class FezRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     private modelMatrix: mat4 = mat4.create();
     private backgroundPlaneStaticData: BackgroundPlaneStaticData;
     private skyData: SkyData;
@@ -203,6 +204,8 @@ export class FezRenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(FezProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+
         this.skyRenderer.prepareToRender(renderInstManager, viewerInput);
         vec4.transformMat4(this.levelRenderData.lightDirection, this.lightDirection, viewerInput.camera.viewMatrix);
 
@@ -237,7 +240,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);

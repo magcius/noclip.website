@@ -6,7 +6,7 @@ import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '..
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { UnityAssetManager, MeshMetadata, UnityMesh, UnityChannel } from '../Common/Unity/AssetManager.js';
 import { AABB } from '../Geometry.js';
@@ -100,6 +100,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
     public scaleFactor = 20;
     private meshRenderers: MeshRenderer[];
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public program: GfxProgram;
 
     constructor(public device: GfxDevice) {
@@ -130,6 +131,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
@@ -152,7 +154,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -160,6 +162,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

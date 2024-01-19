@@ -9,7 +9,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { DeviceProgram } from "../Program.js";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, getMatrixAxisZ, MathConstants, transformVec3Mat4w1 } from "../MathHelpers.js";
@@ -1030,6 +1030,7 @@ class TessSphere {
 class TessRenderer implements SceneGfx {
     private patchLibrary: PatchLibrary;
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     private objects: TessObject[] = [];
 
     constructor(device: GfxDevice, context: SceneContext, private sceneData: SceneData) {
@@ -1043,6 +1044,7 @@ class TessRenderer implements SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
 
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.objects.length; i++)
             this.objects[i].prepareToRender(renderInstManager, this.patchLibrary, viewerInput);
         renderInstManager.popTemplateRenderInst();
@@ -1064,7 +1066,7 @@ class TessRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -1072,6 +1074,7 @@ class TessRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

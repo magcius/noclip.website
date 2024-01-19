@@ -11,7 +11,7 @@ import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, 
 import { GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { setMatrixTranslation } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -897,6 +897,7 @@ export class Cached_Shadow_Map {
 
 export class TheWitnessRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     private skydome: Skydome;
     private cached_shadow_map: Cached_Shadow_Map | null = null;
@@ -921,6 +922,8 @@ export class TheWitnessRenderer implements SceneGfx {
         globals.scene_time = viewerInput.time / 1000;
         const viewpoint = globals.viewpoint;
         const misc = globals.all_variables.misc;
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         viewpoint.setupFromCamera(viewerInput.camera);
         let offs = template.allocateUniformBuffer(TheWitnessShaderTemplate.ub_SceneParams, 44);
@@ -1000,7 +1003,7 @@ export class TheWitnessRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -1008,6 +1011,7 @@ export class TheWitnessRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

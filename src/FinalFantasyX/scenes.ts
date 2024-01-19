@@ -14,6 +14,7 @@ import AnimationController from "../AnimationController.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 import { activateEffect, EventScript, LevelObjectHolder } from "./script.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 const pathBase = `ffx`;
 
@@ -21,6 +22,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, nu
 
 class FFXRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public textureHolder = new FakeTextureHolder([]);
 
     public modelData: LevelModelData[] = [];
@@ -57,7 +59,7 @@ class FFXRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -65,6 +67,7 @@ class FFXRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -81,6 +84,8 @@ class FFXRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(FFXProgram.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         for (let i = 0; i < this.levelObjects.activeEffects.length; i++) {
             const effect = this.levelObjects.activeEffects[i];

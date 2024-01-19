@@ -5,6 +5,7 @@ import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform.
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import InputManager from "../InputManager.js";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import * as UI from '../ui.js';
@@ -55,6 +56,7 @@ const bindingLayouts = [{ numUniformBuffers: 3, numSamplers: 2 }];
 
 class BARRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     private uvtrRenderer: UVTRRenderer;
     private uvenRenderer: UVENRenderer | null;
@@ -245,6 +247,7 @@ class BARRenderer implements SceneGfx {
         topTemplate.setBindingLayouts(bindingLayouts);
 
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         // Prep rendering of level and environment
         this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
@@ -289,7 +292,7 @@ class BARRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
@@ -300,6 +303,7 @@ class BARRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

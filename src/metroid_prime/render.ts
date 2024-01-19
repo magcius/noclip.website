@@ -57,11 +57,6 @@ export const primeSpaceFromNoclipSpace = mat4.fromValues(
     0,  0, 0, 1,
 );
 
-export const enum RetroPass {
-    MAIN = 0x01,
-    SKYBOX = 0x02,
-}
-
 const scratchVec3 = vec3.create();
 const scratchParticleNodes = new Array<ParticlePOINode>(20);
 
@@ -709,9 +704,6 @@ export class MREARenderer {
         if (!this.visible)
             return;
 
-        const templateRenderInst = renderer.renderHelper.renderInstManager.pushTemplateRenderInst();
-        templateRenderInst.filterKey = RetroPass.MAIN;
-
         if (renderer.enableParticles) {
             for (let i = 0; i < this.particleEmitters.length; i++) {
                 const emitter = this.particleEmitters[i];
@@ -742,8 +734,6 @@ export class MREARenderer {
                 emitter.generator.prepareToRender(renderer, viewerInput);
             }
         }
-
-        renderer.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
@@ -1385,16 +1375,11 @@ export class CMDLRenderer {
             }
         }
 
-        const templateRenderInst = renderer.renderHelper.renderInstManager.pushTemplateRenderInst();
-        templateRenderInst.filterKey = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
-
         for (let i = 0; i < this.materialGroupInstances.length; i++)
             if (this.materialGroupInstances[i] !== undefined)
                 this.materialGroupInstances[i].prepareToRender(renderer, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights, OpaqueBlack);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(renderer, viewerInput, this.isSkybox, this.cmdlData.hasSkinIndexData ? null : this.envelopeMats, this.bbox);
-
-        renderer.renderHelper.renderInstManager.popTemplateRenderInst();
 
         if (this.particleDatabase && renderer.enableParticles) {
             this.particleDatabase.prepareToRender(renderer, viewerInput);

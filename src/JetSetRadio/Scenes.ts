@@ -21,6 +21,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
 import { Cyan, Magenta, Yellow , White} from "../Color.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 const pathBase = `JetSetRadio`;
 
@@ -53,6 +54,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, nu
 
 class JetSetRadioRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public clearPass = standardFullClearRenderPassDescriptor;
     public modelCache: ModelCache;
 
@@ -84,7 +86,7 @@ class JetSetRadioRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -92,6 +94,7 @@ class JetSetRadioRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -108,6 +111,7 @@ class JetSetRadioRenderer implements SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.actions.length; i++) {
             // this.actions[i].update(mat4.create(), 0);
             this.actions[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);

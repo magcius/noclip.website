@@ -18,7 +18,7 @@ import { SceneContext } from '../SceneBase.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { assert } from '../util.js';
 
 import { CameraController } from '../Camera.js';
@@ -1125,15 +1125,13 @@ class GloverRenderer implements Viewer.SceneGfx {
     public platformByTag = new Map<number, GloverPlatform>();
 
     public waterVolumes: GloverWaterVolume[] = [];
-
     public sceneLights: SceneLighting = new SceneLighting();
 
     public renderHelper: GfxRenderHelper;
-
+    private renderInstListMain = new GfxRenderInstList();
     public renderPassDescriptor = standardFullClearRenderPassDescriptor; 
 
     private initTime: number;
-
     private originalVisibility = new Map<Object, boolean>();
 
     constructor(device: GfxDevice, public textureHolder: GloverTextureHolder) {
@@ -1254,6 +1252,8 @@ class GloverRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+
         this.textureHolder.animatePalettes(viewerInput);
 
         for (let platform of this.platforms) {
@@ -1309,7 +1309,7 @@ class GloverRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -1318,6 +1318,7 @@ class GloverRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

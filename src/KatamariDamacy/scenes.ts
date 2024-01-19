@@ -8,7 +8,7 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
@@ -169,6 +169,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
     private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public modelSectorData: BINModelSectorData[] = [];
     public framebufferTextureMapping = new TextureMapping();
     public textureHolder = new FakeTextureHolder([]);
@@ -233,7 +234,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -249,6 +250,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
@@ -279,6 +281,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         updateCameraGameState(this.cameraGameState, this.currentAreaNo, this.missionSetupBin.activeStageAreas, this.missionSetupBin.zones, this.areaCollision, viewerInput);
         if (this.isTutorial)

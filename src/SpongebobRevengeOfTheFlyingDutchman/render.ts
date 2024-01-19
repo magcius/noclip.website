@@ -35,7 +35,7 @@ import {
 import { GfxBuffer, GfxInputLayout, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler.js";
 import { hashCodeNumberFinish, hashCodeNumberUpdate, HashMap } from "../HashMap.js";
 import { CalcBillboardFlags, calcBillboardMatrix, getMatrixTranslation, lerp } from "../MathHelpers.js";
@@ -527,6 +527,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
     private gfxProgram: GfxProgram;
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public sampler: GfxSampler;
     public warpSampler: GfxSampler;
     public renderHackState: RenderHackState;
@@ -666,6 +667,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         let offs = template.allocateUniformBuffer(RotfdProgram.ub_SceneParams, RotfdProgram.SCENEPARAM_SIZE);
         const d = template.mapUniformBufferF32(RotfdProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (const instance of this.meshRenderers) {
             instance.prepareToRender(renderInstManager, viewerInput, this);
         }
@@ -688,7 +690,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -697,6 +699,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput, renderInstManager);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

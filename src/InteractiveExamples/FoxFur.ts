@@ -7,7 +7,7 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureMapping } from '../TextureHolder.js';
 import { nArray } from '../util.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
@@ -403,6 +403,7 @@ class FurObj {
 const clearPass = makeAttachmentClearDescriptor(TransparentBlack);
 class SceneRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public fur: FurObj;
     public obj: GraphObjBase[] = [];
 
@@ -422,6 +423,7 @@ class SceneRenderer implements SceneGfx {
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.obj.length; i++)
             this.obj[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
@@ -443,7 +445,7 @@ class SceneRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -451,6 +453,7 @@ class SceneRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

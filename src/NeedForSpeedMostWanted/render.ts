@@ -4,7 +4,7 @@ import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pus
 import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { InstanceType, NfsInstance, NfsRegion,  NfsTexture, RegionType } from "./region.js";
@@ -47,10 +47,11 @@ export const attachmentStatesSubtractive: GfxAttachmentState[] = [{
 }];
 
 export class NfsRenderer implements SceneGfx {
-
     private map: NfsMap;
     private activeRegion: NfsRegion;
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
+    private renderInstListShadows = new GfxRenderInstList();
     private closestPathVertex: PathVertex;
     private devicePrograms: DeviceProgram[] = [];
     private particleProgram: DeviceProgram;
@@ -132,11 +133,10 @@ export class NfsRenderer implements SceneGfx {
                 fillVec4v(d, offs, [0, 0, 0, 0]);
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
                 renderInst.setDrawCount(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
-                renderInstManager.submitRenderInst(renderInst);
+                this.renderInstListShadows.submitRenderInst(renderInst);
             });
         });
 
-        this.renderHelper.prepareToRender();
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -222,7 +222,7 @@ export class NfsRenderer implements SceneGfx {
                 else {
                     fillVec4v(d, offs, [0, 0, fog, 0]);
                 }
-                texMappings[3] = this.shadowPassTexture;
+                texMappings[3] = { lateBinding: 'shadow-map', gfxTexture: null, gfxSampler: null };
 
                 // Use the diffuse sampler state for all textures
                 for(let i = 1; i < texMappings.length; i++) {
@@ -231,7 +231,7 @@ export class NfsRenderer implements SceneGfx {
                 }
                 renderInst.setSamplerBindingsFromTextureMappings(texMappings);
                 renderInst.setDrawCount(vInfo.drawCall.indexCount, vInfo.drawCall.indexOffset);
-                renderInstManager.submitRenderInst(renderInst);
+                this.renderInstListMain.submitRenderInst(renderInst);
             });
         });
 
@@ -278,10 +278,10 @@ export class NfsRenderer implements SceneGfx {
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, shadowTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, shadowDepthTargetID);
                 pass.exec((passRenderer) => {
-                    this.prepareToRenderShadows(viewerInput, cameraPos, instancesToRender);
-                    renderInstManager.drawOnPassRenderer(passRenderer);
+                    this.renderInstListShadows.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
                 });
             });
+            builder.pushDebugThumbnail(shadowTargetID);
         }
 
         builder.pushPass((pass) => {
@@ -295,18 +295,17 @@ export class NfsRenderer implements SceneGfx {
             }
             pass.exec((passRenderer, scope) => {
                 this.shadowPassTexture.gfxTexture = this.showShadows ? scope.getResolveTextureForID(shadowTexId) : null;
-                this.prepareToRender(viewerInput, cameraPos, instancesToRender);
-                if(this.enableParticles)
-                    this.prepareToRenderParticles(viewerInput, renderInstManager, regionsToRender.flatMap(r => r.region.emitterGroups));
-                this.renderHelper.prepareToRender();
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.resolveLateSamplerBinding('shadow-map', this.shadowPassTexture);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
         let finalImage = mainColorTargetID;
 
-        if(this.usePostProcessing)
+        if (this.usePostProcessing)
             finalImage = this.postProcessing.render(builder, this.renderHelper, viewerInput, mainColorTargetID);
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, finalImage, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, finalImage);
         builder.resolveRenderTargetToExternalTexture(finalImage, viewerInput.onscreenTexture);
@@ -344,10 +343,18 @@ export class NfsRenderer implements SceneGfx {
         this.sortKeyTranslucent = makeSortKey(GfxRendererLayer.TRANSLUCENT);
         this.sortKeySky = makeSortKey(GfxRendererLayer.BACKGROUND);
 
-        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 4}]);
+        template.setBindingLayouts([{ numUniformBuffers: 2, numSamplers: 4 }]);
+        this.prepareToRenderShadows(viewerInput, cameraPos, instancesToRender);
+        this.prepareToRender(viewerInput, cameraPos, instancesToRender);
+        if(this.enableParticles)
+            this.prepareToRenderParticles(viewerInput, renderInstManager, regionsToRender.flatMap(r => r.region.emitterGroups));
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender();
 
         this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.popTemplateRenderInst();
+        this.renderInstListMain.reset();
+        this.renderInstListShadows.reset();
         renderInstManager.resetRenderInsts();
 
         viewerInput.debugConsole.addInfoLine(`Region ID: ${this.activeRegion.id}`);

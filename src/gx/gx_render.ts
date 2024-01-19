@@ -17,7 +17,7 @@ import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/Bu
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color.js';
@@ -608,10 +608,12 @@ export class GXRenderHelperGfx extends GfxRenderHelper {
 
 export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
+    public renderInstListMain = new GfxRenderInstList();
     public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
     }
 
     protected abstract prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void;
@@ -635,14 +637,16 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

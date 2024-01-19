@@ -8,7 +8,7 @@ import { SceneGfx, Texture, ViewerRenderInput } from "../viewer.js";
 import { DeviceProgram } from "../Program.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { BSPFile, Surface, SurfaceLightmapData } from "./BSPFile.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { mat4 } from "gl-matrix";
 import { Camera, CameraController } from "../Camera.js";
@@ -376,6 +376,7 @@ export class GoldSrcRenderer implements SceneGfx {
     public textureCache: TextureCache;
     public bspRenderers: BSPRenderer[] = [];
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -388,6 +389,8 @@ export class GoldSrcRenderer implements SceneGfx {
 
     private prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].prepareToRender(renderInstManager, viewerInput);
@@ -410,7 +413,7 @@ export class GoldSrcRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -418,6 +421,7 @@ export class GoldSrcRenderer implements SceneGfx {
 
         this.prepareToRender(renderInstManager, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

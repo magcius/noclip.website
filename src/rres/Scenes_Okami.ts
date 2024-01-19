@@ -17,6 +17,7 @@ import { CameraController, Camera } from "../Camera.js";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { SceneContext } from "../SceneBase.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     mat4.identity(out);
@@ -273,6 +274,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
     public animationController = new AnimationController();
     public textureHolder = new RRESTextureHolder();
     public renderHelper: GXRenderHelperGfx;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -288,6 +290,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.mapPartInstances.length; i++)
             this.mapPartInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.objectInstances.length; i++)
@@ -310,7 +313,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -318,6 +321,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

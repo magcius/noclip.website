@@ -14,7 +14,7 @@ import { DrawParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBuf
 import { GXRenderHelperGfx } from '../gx/gx_render.js';
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
-import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { OrbitCameraController } from '../Camera.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { SceneContext, SceneDesc } from '../SceneBase.js';
@@ -261,6 +261,7 @@ class FakeWaterModelInstance {
 
 class SlimySpringWaterRenderer implements SceneGfx {
     public renderHelper: GXRenderHelperGfx;
+    private renderInstListMain = new GfxRenderInstList();
 
     public skybox: J3DModelInstanceSimple;
     public flowerBox: J3DModelInstanceSimple;
@@ -287,6 +288,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.flowerBox.visible = this.showFlowerBox;
 
         const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -315,7 +317,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -323,6 +325,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

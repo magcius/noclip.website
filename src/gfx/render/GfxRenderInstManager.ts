@@ -714,7 +714,7 @@ export class GfxRenderInstManager {
      * so might cause memory leaks or other problems.
      */
     public setCurrentRenderInstList(list: GfxRenderInstList): void {
-        assert(this.simpleRenderInstList === null);
+        // assert(this.simpleRenderInstList === null);
         this.currentRenderInstList = list;
     }
 
@@ -785,11 +785,6 @@ export class GfxRenderInstManager {
 
         return list;
     }
-
-    public drawOnPassRenderer(passRenderer: GfxRenderPass): void {
-        const list = assertExists(this.simpleRenderInstList);
-        list.drawOnPassRenderer(this.gfxRenderCache, passRenderer);
-    }
     //#endregion
 }
 
@@ -798,7 +793,7 @@ export class GfxRenderInstManager {
  */
 export function executeOnPass(renderInstManager: GfxRenderInstManager, passRenderer: GfxRenderPass, passMask: number): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(passRenderer);
+    renderInstManager.simpleRenderInstList!.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
 }
 
 /**

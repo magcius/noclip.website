@@ -9,7 +9,7 @@ import * as BNTX from './bntx.js';
 import { surfaceToCanvas } from '../Common/bc_texture.js';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture.js';
 import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres.js';
-import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager, GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum.js';
 import { nArray, assert, assertExists } from '../util.js';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
@@ -815,6 +815,7 @@ export class FMDLRenderer {
 
 export class BasicFRESRenderer {
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public fmdlRenderers: FMDLRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: BRTITextureHolder) {
@@ -829,6 +830,8 @@ export class BasicFRESRenderer {
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.fmdlRenderers.length; i++)
@@ -853,7 +856,7 @@ export class BasicFRESRenderer {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -861,6 +864,7 @@ export class BasicFRESRenderer {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

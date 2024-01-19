@@ -3,7 +3,7 @@ import * as MLVL from './mlvl.js';
 import * as MREA from './mrea.js';
 import { MaterialSet } from './mrea.js';
 import { ResourceGame, ResourceSystem } from './resource.js';
-import { CMDLData, CMDLRenderer, ModelCache, MREARenderer, RetroPass } from './render.js';
+import { CMDLData, CMDLRenderer, ModelCache, MREARenderer } from './render.js';
 
 import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
@@ -19,7 +19,7 @@ import BitMap, { bitMapDeserialize, bitMapGetSerializedByteLength, bitMapSeriali
 import { CMDL } from './cmdl.js';
 import { colorNewCopy, OpaqueBlack } from '../Color.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { executeOnPass } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { Vec3One } from '../MathHelpers.js';
 import { parseMP1Tweaks, parseMP2Tweaks } from './tweaks.js';
 import { GeneratorMaterialHelpers } from './particles/base_generator.js';
@@ -39,6 +39,8 @@ function layerVisibilitySyncFromBitMap(layers: UI.Layer[], b: BitMap): void {
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
     public renderCache: GfxRenderCache;
     public modelCache = new ModelCache();
     public textureHolder = new GXTextureHolder<TXTR>();
@@ -60,6 +62,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     constructor(public device: GfxDevice, public mlvl: MLVL.MLVL, public game: ResourceGame) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.renderCache = this.renderHelper.renderCache;
     }
 
@@ -71,6 +74,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(0.2);
         fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(this, viewerInput);
         this.prepareToRenderSkybox(viewerInput);
@@ -92,8 +96,10 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             }
         }
 
-        if (skybox !== null)
+        if (skybox !== null) {
+            this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
             skybox.prepareToRender(this, viewerInput);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -111,7 +117,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, RetroPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderCache, passRenderer);
             });
         });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -120,7 +126,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, passRenderer, RetroPass.MAIN);
+                this.renderInstListMain.drawOnPassRenderer(this.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -128,6 +134,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

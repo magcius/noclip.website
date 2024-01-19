@@ -9,7 +9,7 @@ import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { DeviceProgram } from '../Program.js';
 import { SceneContext } from '../SceneBase.js';
@@ -117,6 +117,7 @@ const scratchVec = vec3.create();
 export class GallerySceneRenderer implements SceneGfx {
     private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public modelSectorData: BINModelSectorData[] = [];
     public objectRenderers: ObjectRenderer[] = [];
     public framebufferTextureMapping = new TextureMapping();
@@ -249,6 +250,8 @@ export class GallerySceneRenderer implements SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, 0, offs);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+
         this.circle.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
@@ -280,7 +283,7 @@ export class GallerySceneRenderer implements SceneGfx {
             pass.exec((passRenderer) => {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -296,6 +299,7 @@ export class GallerySceneRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

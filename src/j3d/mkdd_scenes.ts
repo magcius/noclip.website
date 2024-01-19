@@ -16,12 +16,14 @@ import { SceneContext } from '../SceneBase.js';
 import { computeModelMatrixS } from '../MathHelpers.js';
 import { CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
 
 class MKDDRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
+    private renderInstListMain = new GfxRenderInstList();
     public modelInstances: J3DModelInstanceSimple[] = [];
     public rarc: RARC.JKRArchive[] = [];
 
@@ -79,6 +81,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
@@ -100,7 +103,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -108,6 +111,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

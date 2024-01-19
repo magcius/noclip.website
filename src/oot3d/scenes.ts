@@ -17,6 +17,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { OrbitCameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {
@@ -48,6 +49,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUnifo
 
 export class MultiCmbScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public cmbData: CmbData[] = [];
     public cmbRenderers: CmbInstance[] = [];
     public cmab: CMAB.CMAB[] = [];
@@ -67,6 +69,7 @@ export class MultiCmbScene implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
+        renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
@@ -88,7 +91,7 @@ export class MultiCmbScene implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -96,6 +99,7 @@ export class MultiCmbScene implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -168,10 +172,10 @@ class SometimesMultiSelect extends UI.ScrollSelect {
 
 class ArchiveCmbScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     public textureHolder = new GrezzoTextureHolder();
     public cmbData: CmbData[] = [];
     public cmbRenderers: CmbInstance[] = [];
-    private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     constructor(private device: GfxDevice, private archive: ZAR.ZAR) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -182,8 +186,8 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
-        for (let i = 0; i < this.cmbRenderers.length; i++)
-        {
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+        for (let i = 0; i < this.cmbRenderers.length; i++) {
             this.cmbRenderers[i].setIsActor(true)
             this.cmbRenderers[i].setRenderFog(false)
             this.cmbRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -207,7 +211,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -215,6 +219,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

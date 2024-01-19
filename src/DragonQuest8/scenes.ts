@@ -20,6 +20,7 @@ import * as MDS from './mds.js';
 import { CHRRenderer, DQ8Program, MAPRenderer, MDSInstance, fillSceneParamsDataOnTemplate, textureToCanvas } from './render.js';
 import * as STB from "./stb.js";
 import { assert } from "../util.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 }, // ub_SceneParams, ub_SubmeshParams
@@ -30,9 +31,11 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     public CHRRenderers: CHRRenderer[] = [];
     public MDSRenderers: MDSInstance[] = [];
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public sceneDesc: SceneDesc, public texNameToTextureData: Map<string, IMG.TextureData>) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         SINFO.gDQ8SINFO.reset();
     }
 
@@ -45,12 +48,13 @@ export class DQ8Renderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
         if(SINFO.gDQ8SINFO.bWireframe)
             template.setMegaStateFlags({ wireframe: true });
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         //Renderers
         for (let i = 0; i < this.MAPRenderers.length; i++)
@@ -85,7 +89,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -93,6 +97,7 @@ export class DQ8Renderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

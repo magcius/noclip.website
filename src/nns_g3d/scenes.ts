@@ -12,9 +12,11 @@ import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
 class BasicNSBMDRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     public mdl0Renderers: MDL0Renderer[] = [];
 
@@ -34,6 +36,8 @@ class BasicNSBMDRenderer implements SceneGfx {
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
         for (let i = 0; i < this.mdl0Renderers.length; i++)
             this.mdl0Renderers[i].prepareToRender(renderInstManager, viewerInput);
@@ -56,7 +60,7 @@ class BasicNSBMDRenderer implements SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -64,6 +68,7 @@ class BasicNSBMDRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

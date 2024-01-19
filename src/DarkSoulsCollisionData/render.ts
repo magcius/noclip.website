@@ -11,7 +11,7 @@ import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 
@@ -183,9 +183,11 @@ export class Scene implements Viewer.SceneGfx {
     private program: GfxProgram;
     private ivRenderers: IVRenderer[] = [];
     private renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.program = this.renderHelper.renderCache.createProgram(new IVProgram());
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -220,6 +222,8 @@ export class Scene implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+
         for (let i = 0; i < this.ivRenderers.length; i++)
             this.ivRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
 
@@ -242,7 +246,7 @@ export class Scene implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -250,6 +254,7 @@ export class Scene implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

@@ -15,7 +15,7 @@ import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Ca
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { align, assert } from "../util.js";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { ItemInstance, ObjectDefinition } from "./item.js";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color.js";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time.js";
@@ -611,6 +611,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
     private currentColors = emptyColorSet();
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
     private weather = 0;
     private scenarioSelect: UI.SingleSelect;
 
@@ -652,6 +653,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         mapped[offs++] = this.waterOrigin[3];
         mapped[offs++] = viewerInput.time / 1e3;
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
@@ -673,7 +675,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -681,6 +683,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 

@@ -1,28 +1,27 @@
 
 // Skyward Sword
 
-import * as Viewer from '../viewer.js';
-import * as UI from '../ui.js';
 import * as CX from '../Common/Compression/CX.js';
+import * as UI from '../ui.js';
+import * as Viewer from '../viewer.js';
 import * as BRRES from './brres.js';
 import * as U8 from './u8.js';
 
-import { assert, readString, assertExists, hexzero } from '../util.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render.js';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material.js';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
-import { GfxDevice, GfxTexture, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
-import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { ColorKind } from '../gx/gx_render.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { TransparentBlack, White, colorNewCopy } from '../Color.js';
 import { SceneContext } from '../SceneBase.js';
-import { colorNewCopy, TransparentBlack, White } from '../Color.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
+import { GfxDevice, GfxTexture } from '../gfx/platform/GfxPlatform.js';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxRenderInstList, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
+import { EFB_HEIGHT, EFB_WIDTH, GXMaterialHacks } from '../gx/gx_material.js';
+import { ColorKind, GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
+import { assert, assertExists, hexzero, readString } from '../util.js';
+import { MDL0Model, MDL0ModelInstance, RRESTextureHolder } from './render.js';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -128,7 +127,7 @@ class ModelCache {
 
 const enum ZSSPass {
     SKYBOX = 1 << 0,
-    OPAQUE = 1 << 1,
+    MAIN = 1 << 1,
     INDIRECT = 1 << 2,
 }
 
@@ -157,12 +156,16 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
     private resourceSystem = new ResourceSystem();
     private modelCache = new ModelCache();
     private renderHelper: GXRenderHelperGfx;
+    private renderInstListSky = new GfxRenderInstList();
+    private renderInstListMain = new GfxRenderInstList();
+    private renderInstListInd = new GfxRenderInstList();
     private blackTexture: GfxTexture;
 
     public modelInstances: MDL0ModelInstance[] = [];
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.textureHolder = new ZSSTextureHolder();
         this.animationController = new AnimationController();
 
@@ -212,7 +215,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                     modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA01`);
                     modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA02`);
                     modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA04`);
-                    modelInstance.passMask = ZSSPass.OPAQUE;
+                    modelInstance.passMask = ZSSPass.MAIN;
                     this.modelInstances.push(modelInstance);
 
                     // Detail / transparent meshes end with '_s'. Typical depth sorting won't work, we have to explicitly bias.
@@ -311,6 +314,17 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         device.destroyTexture(this.blackTexture);
     }
 
+    private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        renderInstManager.setCurrentRenderInstList(list);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const m = this.modelInstances[i];
+            if (!(m.passMask & passMask))
+                continue;
+            m.prepareToRender(device, renderInstManager, viewerInput);
+        }
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -318,8 +332,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.preparePass(device, this.renderInstListSky, ZSSPass.SKYBOX, viewerInput);
+        this.preparePass(device, this.renderInstListMain, ZSSPass.MAIN, viewerInput);
+        this.preparePass(device, this.renderInstListInd, ZSSPass.INDIRECT, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -333,7 +348,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.SKYBOX);
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
@@ -343,11 +358,11 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(this.renderHelper.renderInstManager, passRenderer, ZSSPass.OPAQUE);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
 
-        if (hasAnyVisible(this.renderHelper.renderInstManager, ZSSPass.INDIRECT)) {
+        if (this.renderInstListInd.renderInsts.length > 0) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Indirect');
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -357,9 +372,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 pass.attachResolveTexture(opaqueSceneTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    renderInstManager.setVisibleByFilterKeyExact(ZSSPass.INDIRECT);
-                    renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
-                    renderInstManager.drawOnPassRenderer(passRenderer);
+                    this.renderInstListInd.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), gfxSampler: null, lateBinding: null });
+                    this.renderInstListInd.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
                 });
             });
         }
@@ -368,6 +382,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
+        this.renderInstListMain.reset();
+        this.renderInstListInd.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -384,7 +401,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
             const modelRenderer = new MDL0ModelInstance(this.textureHolder, model, obj.name);
-            modelRenderer.passMask = ZSSPass.OPAQUE;
+            modelRenderer.passMask = ZSSPass.MAIN;
             mat4.copy(modelRenderer.modelMatrix, modelMatrix);
             this.modelInstances.push(modelRenderer);
 

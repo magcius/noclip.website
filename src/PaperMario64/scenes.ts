@@ -16,6 +16,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { assert, mod } from '../util.js';
 import { mat4 } from 'gl-matrix';
 import { MathConstants, scaleMatrix } from '../MathHelpers.js';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
 const pathBase = `pm64`;
 
@@ -28,6 +29,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public evtmgr: evtmgr | null = null;
 
     public renderHelper: GfxRenderHelper;
+    private renderInstListMain = new GfxRenderInstList();
 
     constructor(device: GfxDevice, public name: string) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -41,6 +43,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         if (this.evtmgr !== null)
             this.evtmgr.update(viewerInput.deltaTime);
         if (this.bgTextureRenderer !== null)
@@ -66,7 +69,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(passRenderer);
+                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
@@ -74,6 +77,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListMain.reset();
         renderInstManager.resetRenderInsts();
     }
 
