@@ -775,7 +775,10 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const bmdRenderer = new BMDModelInstance(bmdData, level);
         scaleMatrix(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, scale);
         bmdRenderer.isSkybox = isSkybox;
-        renderer.bmdRenderers.push(bmdRenderer);
+        if (isSkybox)
+            renderer.skyRenderers.push(bmdRenderer);
+        else
+            renderer.bmdRenderers.push(bmdRenderer);
         return bmdRenderer;
     }
 
