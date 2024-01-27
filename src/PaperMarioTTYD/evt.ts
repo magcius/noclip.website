@@ -204,9 +204,6 @@ export class rommap {
     }
 }
 
-// records execution state for one evt
-const enum evt_state { running, waitonexpr, waitonfrm, waitonevt, userfuncblock, stopped, end, }
-
 const enum evt_user_func_ret { advance, block, stop, }
 
 interface evt_loop_record {
@@ -218,15 +215,22 @@ interface evt_switch_record {
     operand: number | null;
 }
 
-class evt_exec {
-    public state = evt_state.running;
-    public waitonexpr: number | null = null;
+enum evt_flags {
+    active        = 0x01,
+    stopped       = 0x02,
+    userfuncblock = 0x04,
+}
+
+export class evt_exec {
+    public flags = evt_flags.active;
     public waitonfrm: number | null = null;
     public waitonevtid: number | null = null;
+    public waitonexpr: number | null = null;
     public uf: Uint32Array;
     public uw: Float32Array;
     public lf: Uint8Array = new Uint8Array(512);
     public lw: Float32Array = new Float32Array(512);
+    public funcwork: Float32Array = new Float32Array(4);
     public typeMask: number = 0xEF;
 
     public opcode: op;
@@ -238,6 +242,10 @@ class evt_exec {
 
     constructor(public id: number, public pc: number, public readonly entry: mapentry) {
         this.entryAddress = this.pc;
+    }
+
+    public is_initial_call(): boolean {
+        return !(this.flags & evt_flags.userfuncblock);
     }
 
     public copy(o: evt_exec): void {
@@ -275,7 +283,7 @@ export class evtmgr {
         if (parent !== null)
             evt.copy(parent);
         if (entry === null)
-            evt.state = evt_state.end;
+            evt.flags &= ~evt_flags.active;
         this.evt.push(evt);
         return evt;
     }
@@ -537,10 +545,10 @@ export class evtmgr {
     private execone(evt: evt_exec): void {
         this.evtdecode(evt);
         const oldpc = evt.pc;
-        let nextpc: number | null = this.evtnextpc(evt);
+        let nextpc = this.evtnextpc(evt);
 
         if (evt.debug)
-            console.log(hexzero(evt.pc, 8), op[evt.opcode]);
+            console.log(evt.id, hexzero(evt.pc, 8), op[evt.opcode]);
 
         // Dispatch opcode.
         switch (evt.opcode) {
@@ -550,7 +558,7 @@ export class evtmgr {
         case op.end_evt:
         case op.end_inline:
         case op.end_brother: {
-            evt.state = evt_state.end;
+            evt.flags &= ~evt_flags.active;
         } break;
         case op.lbl: break;
         case op.goto: {
@@ -575,15 +583,12 @@ export class evtmgr {
                 evt.loopRecord.shift();
         } break;
         case op.wait_frm: {
-            evt.state = evt_state.waitonfrm;
             evt.waitonfrm = this.evt_eval_arg(evt, 0);
         } break;
         case op.wait_msec: {
-            evt.state = evt_state.waitonfrm;
             evt.waitonfrm = this.evt_eval_arg(evt, 0) * (60/1000);
         } break;
         case op.halt: {
-            evt.state = evt_state.waitonexpr;
             evt.waitonexpr = this.evt_raw_arg(evt, 0);
         } break;
         case op.if_str_equal: {
@@ -821,6 +826,14 @@ export class evtmgr {
             this.evt_set_arg(evt, 2, 0);
             this.evt_set_arg(evt, 3, 0);
         } break;
+        case op.set_user_flg:
+        case op.set_user_wrk:
+            // TODO
+            break;
+        case op.alloc_user_wrk: {
+            const size = this.evt_eval_arg(evt, 0);
+            evt.uw = new Float32Array(size);
+        } break;
         case op.and: {
             const op0 = this.evt_eval_arg(evt, 0);
             const op1 = this.evt_eval_arg(evt, 1);
@@ -862,9 +875,9 @@ export class evtmgr {
             const ret = this.handler.user_func(this, evt, func_addr);
 
             if (ret === evt_user_func_ret.block)
-                evt.state = evt_state.userfuncblock;
+                evt.flags |= evt_flags.userfuncblock;
             else if (ret === evt_user_func_ret.stop)
-                evt.state = evt_state.stopped;
+                evt.flags &= ~evt_flags.active;
         } break;
         case op.run_evt: {
             const addr = this.evt_eval_arg(evt, 0);
@@ -879,16 +892,33 @@ export class evtmgr {
             const addr = this.evt_eval_arg(evt, 0);
             const subevt = this.evtnew(addr, evt);
             evt.waitonevtid = subevt.id;
-            evt.state = evt_state.waitonevt;
         } break;
         case op.delete_evt: {
             const id = this.evt_eval_arg(evt, 0);
             const subevt = this.evtgetbyid(id);
             if (subevt !== null)
-                subevt.state = evt_state.end;
+                subevt.flags &= ~evt_flags.active;
         } break;
         case op.set_type: {
             evt.typeMask = this.evt_eval_arg(evt, 0);
+        } break;
+        case op.stop_all: {
+            const typeMask = this.evt_eval_arg(evt, 0);
+            for (let i = 0; i < this.evt.length; i++) {
+                const e = this.evt[i];
+                if (!(e.typeMask & typeMask))
+                    continue;
+                e.flags |= evt_flags.stopped;
+            }
+        } break;
+        case op.start_all: {
+            const typeMask = this.evt_eval_arg(evt, 0);
+            for (let i = 0; i < this.evt.length; i++) {
+                const e = this.evt[i];
+                if (!(e.typeMask & typeMask))
+                    continue;
+                e.flags &= ~evt_flags.stopped;
+            }
         } break;
         case op.stop_other: {
             const typeMask = this.evt_eval_arg(evt, 0);
@@ -898,7 +928,7 @@ export class evtmgr {
                     continue;
                 if (!(e.typeMask & typeMask))
                     continue;
-                e.state = evt_state.stopped;
+                e.flags |= evt_flags.stopped;
             }
         } break;
         case op.start_other: {
@@ -909,13 +939,13 @@ export class evtmgr {
                     continue;
                 if (!(e.typeMask & typeMask))
                     continue;
-                e.state = evt_state.running;
+                e.flags &= ~evt_flags.stopped;
             }
         } break;
         case op.chk_evt: {
             const id = this.evt_eval_arg(evt, 0);
             const subevt = this.evtgetbyid(id);
-            const is_running = subevt !== null ? subevt.state === evt_state.running : false;
+            const is_running = subevt !== null ? !!(subevt.flags & evt_flags.active) : false;
             this.evt_set_arg(evt, 1, is_running ? 1 : 0);
         } break;
         case op.inline_evt: {
@@ -945,34 +975,43 @@ export class evtmgr {
             throw "whoops";
         }
 
-        if (evt.pc === oldpc && evt.state !== evt_state.userfuncblock)
+        if (evt.pc === oldpc && !(evt.flags & evt_flags.userfuncblock))
             evt.pc = nextpc;
+    }
+
+    private runevtcmd(evt: evt_exec): boolean {
+        if (!(evt.flags & evt_flags.active))
+            return false;
+        if (evt.flags & evt_flags.stopped)
+            return false;
+        if (evt.waitonevtid !== null || evt.waitonfrm !== null || evt.waitonexpr !== null)
+            return false;
+        return true;
     }
 
     private execevt(evt: evt_exec): void {
         let instCount = 0;
 
-        while (evt.state === evt_state.running || evt.state === evt_state.userfuncblock) {
+        while (this.runevtcmd(evt)) {
             this.execone(evt);
-
-            if (evt.state !== evt_state.running)
-                break;
 
             // Yield to another thread, for now.
             if (instCount++ > 1000)
                 break;
         }
 
-        if (evt.state === evt_state.waitonfrm) {
-            if (--evt.waitonfrm! <= 0)
-                evt.state = evt_state.running;
-        } else if (evt.state === evt_state.waitonevt) {
-            const subevt = this.evtgetbyid(evt.waitonevtid!);
-            if (subevt === null || subevt.state === evt_state.end)
-                evt.state = evt_state.running;
-        } else if (evt.state === evt_state.waitonexpr) {
-            if (this.evtevalexpr(evt, evt.waitonexpr!) === 0)
-                evt.state = evt_state.running;
+        if (evt.flags & evt_flags.active) {
+            if (evt.waitonfrm !== null) {
+                if (--evt.waitonfrm <= 0)
+                    evt.waitonfrm = null;
+            } else if (evt.waitonevtid !== null) {
+                const subevt = this.evtgetbyid(evt.waitonevtid);
+                if (subevt === null || !(subevt.flags & evt_flags.active))
+                    evt.waitonevtid = null;
+            } else if (evt.waitonexpr !== null) {
+                if (this.evtevalexpr(evt, evt.waitonexpr) === 0)
+                    evt.waitonexpr = null;
+            }
         }
     }
 
