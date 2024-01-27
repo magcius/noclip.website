@@ -919,7 +919,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (objName === `MiiStatueL3`) {
             spawnSimpleObject(`MiiStatueL3`);
         } else if (objName === `MiiSignWario`) {
-            spawnSimpleObject(`MiiSignWario`);
+            const b = spawnSimpleObject(`MiiSignWario`);
+            const rres = getRRES(`MiiSignWario`);
+            b.modelInstance.bindPAT0(animFrame(0), rres.pat0[0]);
         } else if (objName === `MiiStatueBL1`) {
             spawnSimpleObject(`MiiStatueBL1`);
         } else if (objName === `MiiStatueBD1`) {
