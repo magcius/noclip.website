@@ -4637,7 +4637,7 @@ class SwingRopePoint {
         vec3.add(this.vel, this.vel, v);
     }
 
-    public restrict(pos: vec3, limit: number, vel: vec3 | null): void {
+    public restrict(pos: vec3, limit: number, vel: ReadonlyVec3 | null): void {
         vec3.add(scratchVec3a, this.position, this.vel);
         vec3.sub(scratchVec3a, scratchVec3a, pos);
         if (vel !== null)
@@ -4655,9 +4655,9 @@ class SwingRopePoint {
         }
     }
 
-    public updatePos(drag: number): void {
-        vec3.add(this.position, this.position, this.vel);
-        vec3.scale(this.vel, this.vel, drag);
+    public updatePos(drag: number, deltaTimeFrames: number): void {
+        vec3.scaleAndAdd(this.position, this.position, this.vel, deltaTimeFrames);
+        vec3.scale(this.vel, this.vel, drag ** deltaTimeFrames);
     }
 
     public updateAxis(axisZ: vec3): void {
@@ -4668,8 +4668,8 @@ class SwingRopePoint {
         vec3.normalize(this.axisZ, this.axisZ);
     }
 
-    public updatePosAndAxis(axisZ: vec3, drag: number): void {
-        this.updatePos(drag);
+    public updatePosAndAxis(axisZ: vec3, drag: number, deltaTimeFrames: number): void {
+        this.updatePos(drag, deltaTimeFrames);
         this.updateAxis(axisZ);
     }
 }
@@ -4880,7 +4880,7 @@ export class Trapeze extends LiveActor {
 
         vec3.set(scratchVec3, this.translation[0], this.translation[1] - this.height, this.translation[2]);
         this.swingRopePoint = new SwingRopePoint(scratchVec3);
-        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995);
+        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995, sceneObjHolder.deltaTimeFrames);
 
         // I think this is a bug in the original game -- it uses ENEMY rather than RIDE?
         this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.Enemy, this.stickMtx);
@@ -6269,7 +6269,7 @@ export class Flag extends LiveActor {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    private updateFlag(camera: Camera): void {
+    private updateFlag(camera: Camera, deltaTimeFrames: number): void {
         vec3.cross(this.axisX, this.windDirection, this.axisY);
         vec3.normalize(this.axisX, this.axisX);
 
@@ -6348,7 +6348,7 @@ export class Flag extends LiveActor {
             for (let j = 0; j < this.swingPointCount; j++) {
                 const drag = lerp(this.dragMin, this.dragMax, 1.0 - (j / (this.swingPointCount - 1)));
                 const sp = fp.points[j];
-                sp.updatePos(drag);
+                sp.updatePos(drag, deltaTimeFrames);
 
                 if (!this.noColorTint) {
                     const dot = vec3.dot(sp.axisY, this.axisX);
@@ -6364,7 +6364,7 @@ export class Flag extends LiveActor {
 
         this.animCounter += sceneObjHolder.deltaTimeFrames * 5.0;
 
-        this.updateFlag(sceneObjHolder.viewerInput.camera);
+        this.updateFlag(sceneObjHolder.viewerInput.camera, sceneObjHolder.deltaTimeFrames);
     }
 
     public override destroy(device: GfxDevice): void {
