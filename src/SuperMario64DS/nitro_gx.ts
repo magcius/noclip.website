@@ -4,8 +4,8 @@
 import { bgr5 as _bgr5 } from './nitro_tex.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
-
-// tslint:disable:variable-name
+import { ReadonlyVec2, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { Color, colorNewCopy } from '../Color.js';
 
 enum CmdType {
     MTX_RESTORE = 0x14,
@@ -38,10 +38,11 @@ export const VERTEX_SIZE = 13;
 export const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 const tmp = new Uint8Array(3);
-export function bgr5(pixel: number): Color {
+export function bgr5(dst: Color, pixel: number): void {
     _bgr5(tmp, 0, pixel);
-    const r = tmp[0], g = tmp[1], b = tmp[2];
-    return { r, g, b };
+    dst.r = tmp[0] / 0xFF;
+    dst.g = tmp[1] / 0xFF;
+    dst.b = tmp[2] / 0xFF;
 }
 
 function cmd_MTX_RESTORE(ctx: ContextInternal) {
@@ -50,7 +51,7 @@ function cmd_MTX_RESTORE(ctx: ContextInternal) {
 
 function cmd_COLOR(ctx: ContextInternal) {
     const param = ctx.readParam();
-    ctx.s_color = bgr5(param);
+    bgr5(ctx.s_color, param);
 }
 
 function cmd_NORMAL(ctx: ContextInternal) {
@@ -68,7 +69,9 @@ function cmd_NORMAL(ctx: ContextInternal) {
     x = x / 1024.0;
     y = y / 1024.0;
     z = z / 1024.0;
-    ctx.s_nrm = {x, y, z};
+
+    vec3.set(ctx.s_nrm, x, y, z);
+    ctx.s_color.r = -1;
 }
 
 function cmd_TEXCOORD(ctx: ContextInternal) {
@@ -84,7 +87,7 @@ function cmd_TEXCOORD(ctx: ContextInternal) {
     s = s / 16.0;
     t = t / 16.0;
 
-    ctx.s_texCoord = { s, t };
+    vec2.set(ctx.s_texCoord, s, t);
 }
 
 function cmd_VTX_16(ctx: ContextInternal) {
@@ -139,7 +142,7 @@ function cmd_VTX_XY(ctx: ContextInternal) {
     x = x / 4096.0;
     y = y / 4096.0;
 
-    ctx.vtx(x, y, ctx.s_vtx.z);
+    ctx.vtx(x, y, ctx.s_vtx[2]);
 }
 
 function cmd_VTX_XZ(ctx: ContextInternal) {
@@ -155,7 +158,7 @@ function cmd_VTX_XZ(ctx: ContextInternal) {
     x = x / 4096.0;
     z = z / 4096.0;
 
-    ctx.vtx(x, ctx.s_vtx.y, z);
+    ctx.vtx(x, ctx.s_vtx[1], z);
 }
 
 function cmd_VTX_YZ(ctx: ContextInternal) {
@@ -171,7 +174,7 @@ function cmd_VTX_YZ(ctx: ContextInternal) {
     y = y / 4096.0;
     z = z / 4096.0;
 
-    ctx.vtx(ctx.s_vtx.x, y, z);
+    ctx.vtx(ctx.s_vtx[0], y, z);
 }
 
 function cmd_VTX_DIFF(ctx: ContextInternal) {
@@ -192,9 +195,9 @@ function cmd_VTX_DIFF(ctx: ContextInternal) {
     z = z / 4096.0;
 
     // Add on the difference...
-    x += ctx.s_vtx.x;
-    y += ctx.s_vtx.y;
-    z += ctx.s_vtx.z;
+    x += ctx.s_vtx[0];
+    y += ctx.s_vtx[1];
+    z += ctx.s_vtx[2];
 
     ctx.vtx(x, y, z);
 }
@@ -258,28 +261,11 @@ function runCmd(ctx: ContextInternal, cmd: number) {
     }
 }
 
-export interface Color {
-    r: number;
-    g: number;
-    b: number;
-}
-
-export interface TexCoord {
-    s: number;
-    t: number;
-}
-
-interface Point {
-    x: number;
-    y: number;
-    z: number;
-}
-
 interface Vertex {
-    pos: Point;
-    nrm: Point;
+    pos: ReadonlyVec3;
+    nrm: ReadonlyVec3;
     color: Color;
-    uv: TexCoord;
+    uv: ReadonlyVec2;
     mtxId: number;
 }
 
@@ -294,9 +280,9 @@ class ContextInternal {
 
     public alpha: number;
     public s_color: Color;
-    public s_texCoord: TexCoord;
-    public s_vtx: Point;
-    public s_nrm: Point;
+    public s_texCoord = vec2.create();
+    public s_vtx = vec3.create();
+    public s_nrm = vec3.create();
     public s_polyType: PolyType;
     public s_mtxId: number = 0;
     public s_startVertexIndex: number = 0;
@@ -309,8 +295,6 @@ class ContextInternal {
         this.view = buffer.createDataView();
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
-        this.s_texCoord = { s: 0, t: 0 };
-        this.s_nrm = { x: 0, y: 0, z: 0 };
     }
 
     public readParam(): number {
@@ -318,8 +302,8 @@ class ContextInternal {
     }
 
     public vtx(x: number, y: number, z: number) {
-        this.s_vtx = { x, y, z };
-        this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord, mtxId: this.s_mtxId });
+        vec3.set(this.s_vtx, x, y, z);
+        this.vtxs.push({ pos: vec3.clone(this.s_vtx), nrm: vec3.clone(this.s_nrm), color: colorNewCopy(this.s_color), uv: vec2.clone(this.s_texCoord), mtxId: this.s_mtxId });
     }
 
     public makePackedVertexBuffer(): Float32Array {
@@ -327,18 +311,18 @@ class ContextInternal {
 
         for (let i = 0; i < this.vtxs.length; i++) {
             const v = this.vtxs[i];
-            vtxBuffer[i * VERTEX_SIZE + 0] = v.pos.x * this.posScale;
-            vtxBuffer[i * VERTEX_SIZE + 1] = v.pos.y * this.posScale;
-            vtxBuffer[i * VERTEX_SIZE + 2] = v.pos.z * this.posScale;
-            vtxBuffer[i * VERTEX_SIZE + 3] = v.color.r  / 0xFF;
-            vtxBuffer[i * VERTEX_SIZE + 4] = v.color.g  / 0xFF;
-            vtxBuffer[i * VERTEX_SIZE + 5] = v.color.b  / 0xFF;
+            vtxBuffer[i * VERTEX_SIZE + 0] = v.pos[0] * this.posScale;
+            vtxBuffer[i * VERTEX_SIZE + 1] = v.pos[1] * this.posScale;
+            vtxBuffer[i * VERTEX_SIZE + 2] = v.pos[2] * this.posScale;
+            vtxBuffer[i * VERTEX_SIZE + 3] = v.color.r;
+            vtxBuffer[i * VERTEX_SIZE + 4] = v.color.g;
+            vtxBuffer[i * VERTEX_SIZE + 5] = v.color.b;
             vtxBuffer[i * VERTEX_SIZE + 6] = this.alpha / 0xFF;
-            vtxBuffer[i * VERTEX_SIZE + 7] = v.uv.s;
-            vtxBuffer[i * VERTEX_SIZE + 8] = v.uv.t;
-            vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm.x;
-            vtxBuffer[i * VERTEX_SIZE + 10] = v.nrm.y;
-            vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm.z;
+            vtxBuffer[i * VERTEX_SIZE + 7] = v.uv[0];
+            vtxBuffer[i * VERTEX_SIZE + 8] = v.uv[1];
+            vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm[0];
+            vtxBuffer[i * VERTEX_SIZE + 10] = v.nrm[1];
+            vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm[2];
             vtxBuffer[i * VERTEX_SIZE + 12] = v.mtxId;
         }
 
@@ -368,6 +352,7 @@ export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context, posScale: n
         runCmd(ctx, cmd3);
     }
 
+    // TODO(jstpierre): Remove draw call array
     const packedVertexBuffer = ctx.makePackedVertexBuffer();
     const indexBuffer = new Uint16Array(ctx.indexes);
     ctx.drawCalls.push({ startIndex: 0, numIndices: indexBuffer.length });

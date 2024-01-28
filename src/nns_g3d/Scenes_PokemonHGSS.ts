@@ -4,16 +4,16 @@
 import * as Viewer from '../viewer.js';
 import * as NARC from './narc.js';
 
-import { DataFetcher } from '../DataFetcher.js';
-import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { MDL0Renderer } from './render.js';
-import { assert, assertExists } from '../util.js';
 import { mat4 } from 'gl-matrix';
-import { SceneContext } from '../SceneBase.js';
-import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D.js';
+import ArrayBufferSlice from '../ArrayBufferSlice.js';
+import { DataFetcher } from '../DataFetcher.js';
 import { AABB } from '../Geometry.js';
+import { SceneContext } from '../SceneBase.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { assert, assertExists } from '../util.js';
+import { BTX0, fx32, parseNSBMD, parseNSBTX } from './NNS_G3D.js';
 import { PlatinumMapRenderer, tryMDL0 } from './Scenes_PokemonPlatinum.js';
+import { MDL0Renderer } from './render.js';
 
 const pathBase = `PokemonSoulSilver`;
 class ModelCache {
@@ -84,7 +84,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
         const objectRoot = (this.isRoom ? 'bm_room' : 'build_model');
 
         const mapHeaders = (await dataFetcher.fetchData(`${pathBase}/maps.bin`)).createDataView();
-        
+
         const mapHeaderIndex = parseInt(this.id);
         const mapFallbackTileset = mapHeaders.getUint8(mapHeaderIndex*24 + 0x01);
         const matrixIndex = mapHeaders.getUint8(mapHeaderIndex*24 + 0x04);
@@ -98,7 +98,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
         const height = mapMatrixData.getUint8(0x01);
         const hasHeightLayer = mapMatrixData.getUint8(0x02) == 1;
         const hasHeaderLayer = mapMatrixData.getUint8(0x03) == 1;
-        
+
         //Read header or file layer and set default height, if the header layer is included this is header, if its not its file
         let currentMatrixOffset = 0x05 + mapMatrixData.getUint8(0x04);
         for (let y = 0; y < height; y++) {
@@ -107,20 +107,20 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
             map_matrix_headers[y] = [];
             for (let x = 0; x < width; x++) {
                 const idx = mapMatrixData.getUint16(currentMatrixOffset, true);
-                
+
                 map_matrix_height[y][x] = 0;
                 map_matrix_files[y][x] = idx;
                 map_matrix_headers[y][x] = idx;
                 currentMatrixOffset += 2;
-            }   
+            }
         }
-        
+
         if(hasHeightLayer){
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     map_matrix_height[y][x] = mapMatrixData.getUint8(currentMatrixOffset);
                     currentMatrixOffset += 1;
-                }   
+                }
             }
         }
 
@@ -130,7 +130,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
                 for (let x = 0; x < width; x++) {
                     map_matrix_files[y][x] = mapMatrixData.getUint16(currentMatrixOffset, true);
                     currentMatrixOffset += 2;
-                }   
+                }
             }
         }
 
@@ -178,7 +178,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
                     const modelID = mapData.getUint32(currentObjOffset, true);
                     if (modelID > 338) // just a quick check to make sure the model exists.
                         continue;
-                    
+
                     const posX = fx32(mapData.getInt32(currentObjOffset + 0x04, true));
                     const posY = fx32(mapData.getInt32(currentObjOffset + 0x08, true));
                     const posZ = fx32(mapData.getInt32(currentObjOffset + 0x0C, true));

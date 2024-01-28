@@ -9,6 +9,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxCullMode } from '../gfx/platform/GfxPlatform.js';
 import { Endianness } from '../endian.js';
 import { computeModelMatrixSRT } from '../MathHelpers.js';
+import { Color, White, colorNewCopy } from '../Color.js';
 
 // Super Mario 64 DS .bmd format
 
@@ -17,7 +18,7 @@ export class Material {
     public isTranslucent: boolean;
     public depthWrite: boolean;
     public cullMode: GfxCullMode;
-    public diffuse: NITRO_GX.Color;
+    public diffuse: Color;
     public alpha: number;
     public texCoordMat: mat2d;
     public texture: Texture | null;
@@ -182,10 +183,9 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
         material.depthWrite = !material.isTranslucent;
 
     const difAmb = view.getUint32(offs + 0x28, true);
+    material.diffuse = colorNewCopy(White);
     if (difAmb & 0x8000)
-        material.diffuse = NITRO_GX.bgr5(difAmb);
-    else
-        material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
+        NITRO_GX.bgr5(material.diffuse, difAmb);
 
     return material;
 }

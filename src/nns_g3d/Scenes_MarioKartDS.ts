@@ -86,7 +86,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         template.setBindingLayouts(nnsG3dBindingLayouts);
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16+32);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 

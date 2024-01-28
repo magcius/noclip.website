@@ -4,7 +4,7 @@
 import * as Viewer from '../viewer.js';
 import * as NARC from './narc.js';
 
-import { mat4 } from 'gl-matrix';
+import { ReadonlyVec3, mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
 import { DataFetcher } from '../DataFetcher.js';
@@ -12,15 +12,17 @@ import { AABB } from '../Geometry.js';
 import { SceneContext } from '../SceneBase.js';
 import { NITRO_Program } from '../SuperMario64DS/render.js';
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
+import { fillColor, fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
-import { assert, assertExists } from '../util.js';
+import { assert, assertExists, nArray } from '../util.js';
 import { BTX0, MDL0Model, TEX0, fx32, parseNSBMD, parseNSBTX } from './NNS_G3D.js';
 import { MDL0Renderer, nnsG3dBindingLayouts } from './render.js';
+import { Color, White, colorCopy, colorFromRGBA, colorLerp, colorNewCopy, colorNewFromRGBA } from '../Color.js';
+import { invlerp, transformVec3Mat4w0 } from '../MathHelpers.js';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {
@@ -63,14 +65,228 @@ class ModelCache {
     }
 }
 
+export class LightSetting {
+    public time: number = 0;
+    public lightColor: Color[] = nArray(4, () => colorNewCopy(White));
+    public direction: vec3[] = nArray(4, () => vec3.create());
+    public diffuseColor: Color = colorNewCopy(White);
+    public ambientColor: Color = colorNewCopy(White);
+    public specularColor: Color = colorNewCopy(White);
+    public emissionColor: Color = colorNewCopy(White);
+};
+
+function parseLightSettings(S: string): LightSetting[] {
+    const settings = S.split('\n\n');
+    return settings.map((v) => {
+        const lightSetting = new LightSetting();
+
+        const lines = v.split('\n');
+        lightSetting.time = parseInt(lines[0]);
+        for (let i = 0; i < 4; i++) {
+            const [flag, r, g, b, x, y, z] = lines[i + 1].split(',').map((f) => parseInt(f));
+            colorFromRGBA(lightSetting.lightColor[i], r/0x1F, g/0x1F, b/0x1F);
+            vec3.set(lightSetting.direction[i], x/4096, y/4096, z/4096);
+        }
+
+        const parseColor = (dst: Color, S: string) => {
+            const [r, g, b] = S.split(',').map((f) => parseInt(f));
+            colorFromRGBA(dst, r/0x1F, g/0x1F, b/0x1F);
+        };
+        parseColor(lightSetting.diffuseColor, lines[5]);
+        parseColor(lightSetting.ambientColor, lines[6]);
+        parseColor(lightSetting.specularColor, lines[7]);
+        parseColor(lightSetting.emissionColor, lines[8]);
+        return lightSetting;
+    });
+}
+
+// arealight00.txt
+const lightSettingsArea0 = parseLightSettings(`0,
+1,11,11,16,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,18,10,0,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,16,
+10,10,10,
+14,14,16,
+8,8,11,
+
+7200,
+1,11,11,16,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,0,6,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,16,
+10,10,10,
+14,14,16,
+8,8,11,
+
+8100,
+1,12,12,18,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,1,6,0,0,4096,
+0,0,0,0,0,0,0,
+10,10,14,
+13,13,13,
+8,8,14,
+10,10,12,
+
+9000,
+1,12,12,22,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,1,6,0,0,4096,
+0,0,0,0,0,0,0,
+11,11,13,
+10,10,10,
+10,10,14,
+13,13,14,
+
+14400,
+1,15,15,22,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,1,6,0,0,4096,
+0,0,0,0,0,0,0,
+12,12,12,
+8,8,8,
+12,12,14,
+14,14,18,
+
+20700,
+1,18,18,21,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,4,9,0,0,4096,
+0,0,0,0,0,0,0,
+13,13,13,
+9,9,9,
+14,14,15,
+14,14,16,
+
+21600,
+1,22,22,20,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,4,9,0,0,4096,
+0,0,0,0,0,0,0,
+15,15,15,
+9,11,11,
+16,16,16,
+14,14,14,
+
+27000,
+1,24,24,20,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,0,4,9,0,0,4096,
+0,0,0,0,0,0,0,
+16,16,16,
+10,12,12,
+18,18,18,
+14,14,14,
+
+27900,
+1,22,22,18,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,4,4,10,0,0,4096,
+0,0,0,0,0,0,0,
+15,15,15,
+11,12,12,
+17,17,17,
+13,13,13,
+
+30600,
+1,20,18,16,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,3,4,10,0,0,4096,
+0,0,0,0,0,0,0,
+15,15,15,
+11,12,12,
+17,17,17,
+12,11,11,
+
+32400,
+1,19,16,12,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,16,6,0,0,0,4096,
+0,0,0,0,0,0,0,
+15,15,15,
+11,12,12,
+17,17,17,
+8,8,7,
+
+33300,
+1,17,13,10,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,14,6,0,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,14,
+12,12,12,
+16,16,16,
+9,7,7,
+
+34200,
+1,16,13,10,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,12,4,0,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,14,
+12,12,12,
+14,14,16,
+9,8,7,
+
+36000,
+1,11,12,15,-1934,-3548,-296,
+0,0,0,0,0,0,0,
+1,18,10,0,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,14,
+12,12,12,
+14,14,16,
+8,8,9,
+
+43200,
+1,11,11,16,-1914,-3548,-296,
+0,0,0,0,0,0,0,
+1,18,10,0,0,0,4096,
+0,0,0,0,0,0,0,
+14,14,16,
+10,10,10,
+14,14,16,
+8,8,11,
+`);
+
+function blendLightSetting(dst: LightSetting, settings: LightSetting[], time: number): void {
+    // Find the bounding light settings
+    for (let i = 0; i < settings.length - 1; i++) {
+        const a = settings[i];
+        const b = settings[i + 1];
+        if (time >= a.time && time < b.time) {
+            const t = invlerp(a.time, b.time, time);
+
+            for (let i = 0; i < 4; i++) {
+                vec3.lerp(dst.direction[i], a.direction[i], b.direction[i], t);
+                vec3.normalize(dst.direction[i], dst.direction[i]);
+                colorLerp(dst.lightColor[i], a.lightColor[i], b.lightColor[i], t);
+            }
+
+            colorLerp(dst.ambientColor, a.ambientColor, b.ambientColor, t);
+            colorLerp(dst.diffuseColor, a.diffuseColor, b.diffuseColor, t);
+            colorLerp(dst.specularColor, a.specularColor, b.specularColor, t);
+            colorLerp(dst.emissionColor, a.emissionColor, b.emissionColor, t);
+        }
+    }
+}
+
 export class PlatinumMapRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     public objectRenderers: MDL0Renderer[] = [];
+    public lightSettings: LightSetting[] = lightSettingsArea0;
+    public lightSetting: LightSetting = new LightSetting();
+    public currentTime: number = 0;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
 
+        const today = new Date();
+        this.currentTime = today.getHours() * 60*30;
     }
 
     public getCache() {
@@ -82,13 +298,39 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.currentTime += (viewerInput.deltaTime / 1000) * 300;
+        if (this.currentTime > 24*60*30)
+            this.currentTime = 0;
+
+        blendLightSetting(this.lightSetting, this.lightSettings, this.currentTime);
+
+        for (let i = 0; i < this.objectRenderers.length; i++) {
+            const obj = this.objectRenderers[i];
+            for (let j = 0; j < obj.materialInstances.length; j++) {
+                const materialInstance = obj.materialInstances[j];
+                materialInstance.lightMask = 0x0F;
+                colorCopy(materialInstance.diffuseColor, this.lightSetting.diffuseColor);
+                colorCopy(materialInstance.ambientColor, this.lightSetting.ambientColor);
+                colorCopy(materialInstance.specularColor, this.lightSetting.specularColor);
+                colorCopy(materialInstance.emissionColor, this.lightSetting.emissionColor);
+            }
+        }
+
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
         template.setBindingLayouts(nnsG3dBindingLayouts);
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
-        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
-        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16+32);
+        const d = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+
+        for (let i = 0; i < 4; i++) {
+            const lightDirView = vec3.create();
+            transformVec3Mat4w0(lightDirView, viewerInput.camera.viewMatrix, this.lightSetting.direction[i]);
+            offs += fillVec3v(d, offs, lightDirView);
+        }
+        for (let i = 0; i < 4; i++)
+            offs += fillColor(d, offs, this.lightSetting.lightColor[i]);
 
         renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.objectRenderers.length; i++)
