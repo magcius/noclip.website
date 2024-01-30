@@ -97,7 +97,7 @@ class DataFetcherRequest {
 
         if (this.retriesLeft > 0) {
             this.retriesLeft--;
-            this.destroy();
+            this.response = null;
             this.start();
             return true;
         } else {
