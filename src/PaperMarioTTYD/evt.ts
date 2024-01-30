@@ -805,29 +805,34 @@ export class evtmgr {
             const op1 = this.evt_eval_arg(evt, 1);
             this.evt_set_arg(evt, 0, op0 % op1);
         } break;
-        case op.set_read: {
+        case op.set_read:
+        case op.set_readf: {
             // TODO
         } break;
-        case op.read: {
+        case op.read:
+        case op.readf: {
             this.evt_set_arg(evt, 0, 0);
         } break;
-        case op.read2: {
+        case op.read2:
+        case op.readf2: {
             this.evt_set_arg(evt, 0, 0);
             this.evt_set_arg(evt, 1, 0);
         } break;
-        case op.read3: {
+        case op.read3:
+        case op.readf3: {
             this.evt_set_arg(evt, 0, 0);
             this.evt_set_arg(evt, 1, 0);
             this.evt_set_arg(evt, 2, 0);
         } break;
-        case op.read4: {
+        case op.read4:
+        case op.readf4: {
             this.evt_set_arg(evt, 0, 0);
             this.evt_set_arg(evt, 1, 0);
             this.evt_set_arg(evt, 2, 0);
             this.evt_set_arg(evt, 3, 0);
         } break;
-        case op.set_user_flg:
         case op.set_user_wrk:
+        case op.set_user_flg:
             // TODO
             break;
         case op.alloc_user_wrk: {
