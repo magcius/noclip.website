@@ -289,7 +289,6 @@ class ContextInternal {
 
     public vtxs: Vertex[] = [];
     public indexes: number[] = [];
-    public drawCalls: DrawCall[] = [];
 
     constructor(buffer: ArrayBufferSlice, baseCtx: Context, public posScale: number) {
         this.view = buffer.createDataView();
@@ -333,7 +332,7 @@ class ContextInternal {
 export interface VertexData {
     packedVertexBuffer: Float32Array;
     indexBuffer: Uint16Array;
-    drawCalls: DrawCall[];
+    drawCall: DrawCall;
 }
 
 export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context, posScale: number = 1): VertexData {
@@ -352,10 +351,9 @@ export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context, posScale: n
         runCmd(ctx, cmd3);
     }
 
-    // TODO(jstpierre): Remove draw call array
     const packedVertexBuffer = ctx.makePackedVertexBuffer();
     const indexBuffer = new Uint16Array(ctx.indexes);
-    ctx.drawCalls.push({ startIndex: 0, numIndices: indexBuffer.length });
+    const drawCall = { startIndex: 0, numIndices: indexBuffer.length };
 
-    return { packedVertexBuffer, indexBuffer, drawCalls: ctx.drawCalls };
+    return { packedVertexBuffer, indexBuffer, drawCall };
 }

@@ -398,12 +398,12 @@ class ShapeInstance {
 
         const vertexData = this.batchData.vertexData;
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setVertexInput(vertexData.inputLayout, vertexData.vertexBufferDescriptors, vertexData.indexBufferDescriptor);
-        this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setVertexInput(vertexData.inputLayout, vertexData.vertexBufferDescriptors, vertexData.indexBufferDescriptor);
+        this.materialInstance.prepareToRender(device, renderInstManager, renderInst, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
-        const d = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
+        const d = renderInst.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
             const matrixId = this.batchData.batch.matrixTable[i];
@@ -411,14 +411,9 @@ class ShapeInstance {
             offs += fillMatrix4x3(d, offs, scratchMatrix);
         }
 
-        const nitroData = vertexData.nitroVertexData;
-        for (let i = 0; i < nitroData.drawCalls.length; i++) {
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setDrawCount(nitroData.drawCalls[i].numIndices, nitroData.drawCalls[i].startIndex);
-            renderInstManager.submitRenderInst(renderInst);
-        }
-
-        renderInstManager.popTemplateRenderInst();
+        const drawCall = vertexData.nitroVertexData.drawCall;
+        renderInst.setDrawCount(drawCall.numIndices, drawCall.startIndex);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 

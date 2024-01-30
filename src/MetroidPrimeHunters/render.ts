@@ -207,25 +207,20 @@ class ShapeInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setVertexInput(this.vertexData.inputLayout, this.vertexData.vertexBufferDescriptors, this.vertexData.indexBufferDescriptor);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
-        const drawParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(NITRO_Program.ub_DrawParams, 12*32);
+        const drawParamsMapped = renderInst.mapUniformBufferF32(NITRO_Program.ub_DrawParams);
 
         this.computeModelView(scratchMat4, viewerInput);
         offs += fillMatrix4x3(drawParamsMapped, offs, scratchMat4);
 
-        this.materialInstance.setOnRenderInst(template, viewerInput);
+        this.materialInstance.setOnRenderInst(renderInst, viewerInput);
 
-        for (let i = 0; i < this.vertexData.nitroVertexData.drawCalls.length; i++) {
-            const drawCall = this.vertexData.nitroVertexData.drawCalls[i];
-            const renderInst = renderInstManager.newRenderInst();
-            renderInst.setDrawCount(drawCall.numIndices, drawCall.startIndex);
-            renderInstManager.submitRenderInst(renderInst);
-        }
-
-        renderInstManager.popTemplateRenderInst();
+        const drawCall = this.vertexData.nitroVertexData.drawCall;
+        renderInst.setDrawCount(drawCall.numIndices, drawCall.startIndex);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
