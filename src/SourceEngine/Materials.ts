@@ -3097,6 +3097,8 @@ layout(std140) uniform ub_ObjectParams {
 #if defined USE_FLOWMAP
     vec4 u_BaseTextureScaleBias;
     vec4 u_Misc[3];
+#else
+    vec4 u_Misc[1];
 #endif
 };
 
@@ -3120,6 +3122,12 @@ layout(std140) uniform ub_ObjectParams {
 #define u_FlowColorDisplacementStrength    (u_Misc[2].y)
 #define u_FlowColorLerpExp                 (u_Misc[2].z)
 #define u_WaterBlendFactor                 (u_Misc[2].w)
+
+#define u_FrameBlend                       (0.0)
+
+#else
+
+#define u_FrameBlend                       (u_Misc[0].x)
 
 #endif
 
@@ -3220,6 +3228,16 @@ vec3 ReconstructNormal(in vec2 t_NormalXY) {
     return vec3(t_NormalXY.xy, t_NormalZ);
 }
 
+vec4 SampleBumpmap(PD_SAMPLER_2D(t_Texture0), PD_SAMPLER_2D(t_Texture1), vec2 t_TexCoord, float t_Blend) {
+    vec4 t_Sample0 = texture(PU_SAMPLER_2D(t_Texture0), t_TexCoord.xy);
+#if defined USE_FLOWMAP
+    return t_Sample0;
+#else
+    vec4 t_Sample1 = texture(PU_SAMPLER_2D(t_Texture1), t_TexCoord.xy);
+    return mix(t_Sample0, t_Sample1, t_Blend);
+#endif
+}
+
 void mainPS() {
     bool use_flowmap = ${getDefineBool(m, `USE_FLOWMAP`)};
 
@@ -3248,12 +3266,12 @@ void mainPS() {
 #else
 
     // Sample our normal map with scroll offsets.
-    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord0);
+    vec4 t_BumpmapSample0 = SampleBumpmap(PP_SAMPLER_2D(u_TextureNormalmap), PP_SAMPLER_2D(u_TextureFlowmap), t_BumpmapCoord0, u_FrameBlend);
 #if defined USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = CalcScaleBias(vec2(v_TexCoord1.x + v_TexCoord1.y, -v_TexCoord1.x + v_TexCoord1.y) * 0.1, u_TexScroll0ScaleBias);
-    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord1);
+    vec4 t_BumpmapSample1 = SampleBumpmap(PP_SAMPLER_2D(u_TextureNormalmap), PP_SAMPLER_2D(u_TextureFlowmap), t_BumpmapCoord1, u_FrameBlend);
     vec2 t_BumpmapCoord2 = CalcScaleBias(v_TexCoord1.yx * 0.45, u_TexScroll1ScaleBias);
-    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_TextureNormalmap), t_BumpmapCoord2);
+    vec4 t_BumpmapSample2 = SampleBumpmap(PP_SAMPLER_2D(u_TextureNormalmap), PP_SAMPLER_2D(u_TextureFlowmap), t_BumpmapCoord2, u_FrameBlend);
     vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
     vec4 t_BumpmapSample = t_BumpmapSample0;
@@ -3573,6 +3591,9 @@ class Material_Water extends BaseMaterial {
                 this.paramGetNumber('$color_flow_displacebynormalstrength'),
                 this.paramGetNumber('$color_flow_lerpexp'),
                 this.paramGetNumber('$waterblendfactor'));
+        } else {
+            this.paramGetTexture('$normalmap').fillTextureMapping(textureMappings[4], this.paramGetInt('$bumpframe') + 1);
+            offs += fillVec4(d, offs, this.paramGetNumber('$bumpframe') % 1);
         }
 
         this.recacheProgram(renderContext.renderCache);
