@@ -123,10 +123,11 @@ export default class ArrayBufferSlice {
      * A good use case for this is if you wish to save off a smaller portion of a larger buffer while
      * letting the larger buffer be garbage collected.
      */
-    public copyToBuffer(begin: number = 0, byteLength: number = 0): ArrayBuffer {
-        const start = this.byteOffset + begin;
-        const end = byteLength !== 0 ? start + byteLength : this.byteOffset + this.byteLength;
-        return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
+    public copyToBuffer(begin: number = 0, byteLength?: number): ArrayBuffer {
+        const absBegin = this.byteOffset + begin;
+        if (byteLength === undefined)
+            byteLength = this.byteLength - begin;
+        return ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absBegin + byteLength);
     }
 
     public createDataView(offs: number = 0, length?: number): DataView {

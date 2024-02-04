@@ -2032,16 +2032,13 @@ export class JPABaseEmitter {
 
         const globalRes = workData.emitterManager.globalRes;
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.sortKey = workData.particleSortKey;
-        template.setVertexInput(globalRes.inputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
-
-        workData.fillParticleRenderInst(device, renderInstManager, template);
-
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, oneStripVertexCount);
 
         const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.setDrawCount(oneStripIndexCount);
+        renderInst1.sortKey = workData.particleSortKey;
+        renderInst1.setVertexInput(globalRes.inputLayout, entry.vertexBufferDescriptors, entry.indexBufferDescriptor);
+        workData.fillParticleRenderInst(device, renderInstManager, renderInst1);
         renderInstManager.submitRenderInst(renderInst1);
 
         if (isCross) {
@@ -2050,11 +2047,10 @@ export class JPABaseEmitter {
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
             const renderInst2 = renderInstManager.newRenderInst();
+            renderInst2.setFromTemplate(renderInst1);
             renderInst2.setDrawCount(oneStripIndexCount, oneStripIndexCount + 6);
             renderInstManager.submitRenderInst(renderInst2);
         }
-
-        renderInstManager.popTemplateRenderInst();
     }
 
     private drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
