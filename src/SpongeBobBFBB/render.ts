@@ -477,8 +477,6 @@ export class BaseRenderer {
             this.isCulled = true;
             return;
         }
-
-        renderState.instManager.setCurrentRenderInstList(renderState.renderInstListMain);
     }
 
     public destroy(device: GfxDevice) {
@@ -853,7 +851,7 @@ export class EntRenderer extends BaseRenderer {
         if (this.color.a === 0) return;
 
         super.prepareToRender(renderState);
-        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
+        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities) || (this.isSkydome && !renderState.hacks.skydome)) return;
 
         if (this.isSkydome)
             renderState.instManager.setCurrentRenderInstList(renderState.renderInstListSky);
@@ -863,6 +861,8 @@ export class EntRenderer extends BaseRenderer {
             modelRenderer.color = this.color;
             modelRenderer.prepareToRender(renderState);
         }
+
+        renderState.instManager.setCurrentRenderInstList(renderState.renderInstListMain);
     }
 
     public override destroy(device: GfxDevice) {
@@ -1061,6 +1061,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         else
             offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
 
+        renderState.instManager.setCurrentRenderInstList(renderState.renderInstListMain);
+        
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(renderState);
 
