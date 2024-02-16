@@ -851,7 +851,7 @@ export class EntRenderer extends BaseRenderer {
         if (this.color.a === 0) return;
 
         super.prepareToRender(renderState);
-        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
+        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities) || (this.isSkydome && !renderState.hacks.skydome)) return;
 
         if (this.isSkydome)
             renderState.instManager.setCurrentRenderInstList(renderState.renderInstListSky);
