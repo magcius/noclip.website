@@ -407,6 +407,11 @@ interface WEBGL_polygon_mode {
     polygonModeWEBGL(face: GLenum, mode: GLenum): void;
 }
 
+interface WEBGL_provoking_vertex {
+    readonly FIRST_VERTEX_CONVENTION_WEBGL: 0x8E4D;
+    provokingVertexWEBGL(provokeMode: GLenum): void;
+}
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Configuration
     private _shaderDebug = false;
@@ -424,6 +429,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _OES_texture_float_linear: OES_texture_float_linear | null = null;
     private _OES_texture_half_float_linear: OES_texture_half_float_linear | null = null;
     private _WEBGL_polygon_mode: WEBGL_polygon_mode | null = null;
+    private _WEBGL_provoking_vertex: WEBGL_provoking_vertex | null = null;
 
     // Swap Chain
     private _scTexture: GfxTexture | null = null;
@@ -505,6 +511,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._OES_texture_half_float_linear = gl.getExtension('OES_texture_half_float_linear');
         this._OES_draw_buffers_indexed = gl.getExtension('OES_draw_buffers_indexed');
         this._WEBGL_polygon_mode = gl.getExtension('WEBGL_polygon_mode') as WEBGL_polygon_mode;
+        this._WEBGL_provoking_vertex = gl.getExtension('WEBGL_provoking_vertex') as WEBGL_provoking_vertex;
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
@@ -515,6 +522,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         } else {
             this.clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
         }
+
+        if (this._WEBGL_provoking_vertex !== null)
+            this._WEBGL_provoking_vertex.provokingVertexWEBGL(this._WEBGL_provoking_vertex.FIRST_VERTEX_CONVENTION_WEBGL);
 
         // Create our fake swap-chain texture.
         this._scTexture = {
