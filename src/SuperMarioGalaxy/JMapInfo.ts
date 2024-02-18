@@ -1,5 +1,5 @@
 
-import * as BCSV from '../luigis_mansion/bcsv.js';
+import * as BCSV from '../LuigisMansion/bcsv.js';
 import { vec3 } from 'gl-matrix';
 import type { SceneObjHolder } from './Main.js';
 import type { ZoneAndLayer } from './LiveActor.js';

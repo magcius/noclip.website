@@ -4,7 +4,7 @@
 import * as CMB from './cmb.js';
 import * as CMAB from './cmab.js';
 import * as ZAR from './zar.js';
-import * as BCSV from '../luigis_mansion/bcsv.js';
+import * as BCSV from '../LuigisMansion/bcsv.js';
 import * as CTXB from './ctxb.js';
 
 import * as Viewer from '../viewer.js';
