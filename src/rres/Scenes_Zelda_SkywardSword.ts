@@ -654,10 +654,10 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const basePath = `zss`;
-        const systemPath = `${basePath}/Object/System.arc`;
-        const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;
-        const stagePath = `${basePath}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
+        const pathBase = `ZeldaSkywardSword`;
+        const systemPath = `${pathBase}/Object/System.arc`;
+        const objPackPath = `${pathBase}/Object/ObjectPack.arc.LZ`;
+        const stagePath = `${pathBase}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
         const dataFetcher = context.dataFetcher;
         return Promise.all([dataFetcher.fetchData(systemPath), dataFetcher.fetchData(objPackPath), dataFetcher.fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;

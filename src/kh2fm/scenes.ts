@@ -6,13 +6,15 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { textureToCanvas, textureAnimationToCanvas, KingdomHeartsIIRenderer } from './render.js';
 
+const pathBase = `KingdomHearts2FinalMix`;
+
 export class KingdomHeartsIISceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const mapData = await dataFetcher.fetchData(`kh2fm/${this.id}.map`);
+        const mapData = await dataFetcher.fetchData(`${pathBase}/${this.id}.map`);
         const map = MAP.parseMap(mapData);
 
         const viewerTextures: Viewer.Texture[] = [];

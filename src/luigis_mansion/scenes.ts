@@ -9,8 +9,10 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { assertExists } from '../util.js';
 
+const pathBase = `LuigisMansion`;
+
 function fetchBin(path: string, dataFetcher: DataFetcher): Promise<BIN.BIN> {
-    return dataFetcher.fetchData(`luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
+    return dataFetcher.fetchData(`${pathBase}/${path}`).then((buffer: ArrayBufferSlice) => {
         let binBuffer: ArrayBufferSlice;
         if (path.endsWith('.bin')) {
             binBuffer = buffer;

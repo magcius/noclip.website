@@ -5,7 +5,7 @@ import * as BYML from '../byml.js';
 import { DataFetcher } from '../DataFetcher.js';
 import * as SARC from './sarc.js';
 import * as BFRES from './bfres.js';
-import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { assert, assertExists } from '../util.js';
@@ -14,7 +14,7 @@ import { SceneContext } from '../SceneBase.js';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
-const pathBase = `smo`;
+const pathBase = `SuperMarioOdyssey`;
 
 class ResourceSystem {
     public textureHolder = new BRTITextureHolder();

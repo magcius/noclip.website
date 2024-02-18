@@ -3,7 +3,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import {  GfxBufferUsage,GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxBuffer, GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { CalcBillboardFlags, calcBillboardMatrix, lerp, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { assert } from "../util.js";
@@ -14,15 +14,14 @@ import { attachmentStatesAdditive, attachmentStatesTranslucent } from "./render.
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 
 export class NfsParticleEmitterGroup {
-
     private children: NfsParticleEmitter[];
 
     constructor(public transformationMatrix: mat4, emitterType: number, map: NfsMap) {
         this.children = emitterGroups[emitterType].map(e => new NfsParticleEmitter(this, e, map));
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        this.children.forEach(e => e.prepareToRender(renderInstManager, viewerInput));
+    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInstList: GfxRenderInstList, viewerInput: ViewerRenderInput) {
+        this.children.forEach(e => e.prepareToRender(renderInstManager, renderInstList, viewerInput));
     }
 }
 
@@ -116,7 +115,7 @@ export class NfsParticleEmitter {
         this.timerToNextParticle -= deltaTime;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInstList: GfxRenderInstList, viewerInput: ViewerRenderInput) {
         assert(this.emitterProperties !== undefined);
         const camPos: vec3 = [viewerInput.camera.worldMatrix[12], viewerInput.camera.worldMatrix[13], viewerInput.camera.worldMatrix[14]];
         const thisPos: vec3 = [this.parent.transformationMatrix[12], this.parent.transformationMatrix[13], this.parent.transformationMatrix[14]];
@@ -170,7 +169,7 @@ export class NfsParticleEmitter {
             offs += fillMatrix4x3(d, offs, worldMat);
             offs += fillVec4v(d, offs, color);
             offs += fillVec4(d, offs, Math.floor(particle.texFrameCounter), this.emitterProperties.texAnimSize, 0, 0);
-            renderInstManager.submitRenderInst(renderInst);
+            renderInstList.submitRenderInst(renderInst);
         }
         if(props.additiveBlend)
             template.setMegaStateFlags({attachmentsState: attachmentStatesTranslucent});

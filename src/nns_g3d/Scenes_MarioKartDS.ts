@@ -23,7 +23,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
-const pathBase = `mkds`;
+const pathBase = `MarioKartDS`;
 class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();

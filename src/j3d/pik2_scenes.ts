@@ -13,8 +13,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader.js';
 import { SceneContext } from '../SceneBase.js';
 
-const id = "pik2";
-const name = "Pikmin 2";
+const pathBase = `Pikmin2`;
 
 class Pik2SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -36,7 +35,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const path = `j3d/pik2/${this.path}`;
+        const path = `${pathBase}/${this.path}`;
         return dataFetcher.fetchData(path).then((result) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
@@ -60,6 +59,9 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         });
     }
 }
+
+const id = "pik2";
+const name = "Pikmin 2";
 
 const sceneDescs = [
     "Areas",

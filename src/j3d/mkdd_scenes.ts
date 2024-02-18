@@ -18,8 +18,7 @@ import { CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
-const id = "mkdd";
-const name = "Mario Kart: Double Dash!!";
+const pathBase = `MarioKartDoubleDash`;
 
 class MKDDRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
@@ -220,7 +219,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const path = `j3d/mkdd/Course/${this.path}`;
+        const path = `${pathBase}/Course/${this.path}`;
 
         return dataFetcher.fetchData(path).then((buffer) => {
             const rarc = RARC.parse(buffer);
@@ -622,6 +621,9 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         });
     }
 }
+
+const id = "mkdd";
+const name = "Mario Kart: Double Dash!!";
 
 // Courses named and organized by Starschulz
 // Extra courses added by Wexos

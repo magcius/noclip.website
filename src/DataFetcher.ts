@@ -12,10 +12,10 @@ function getDataStorageBaseURL(isDevelopment: boolean): string {
     if (isDevelopment)
         return `/data`;
     else
-        return `https://noclip.beyond3d.com`;
+        return `https://z.noclip.website`;
 }
 
-function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
+function getDataURLForPath(url: string, isDevelopment: boolean): string {
     if (url.startsWith('https://') || url.startsWith('http://'))
         return url;
 
@@ -67,11 +67,8 @@ class DataFetcherRequest {
         if (response === null)
             return false;
 
+        // In production environments, 404s sometimes show up as CORS errors, which come back as status 200.
         if (response.status === 404)
-            return true;
-
-        // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
-        if (response.status === 0)
             return true;
 
         return false;
@@ -130,7 +127,7 @@ class DataFetcherRequest {
         assert(this.response === null);
         try {
             this.response = await fetch(this.request);
-        } catch(e) {
+        } catch (e: unknown) {
             // Error handling below.
         }
 
@@ -173,7 +170,7 @@ class DataFetcherRequest {
 
                 if (this.onprogress !== null)
                     this.onprogress();
-            } catch(e) {
+            } catch (e) {
                 break;
             }
         }

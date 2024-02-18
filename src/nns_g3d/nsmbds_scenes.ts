@@ -160,15 +160,15 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const basePath = `nsmbds`;
+        const pathBase = `NewSuperMarioBros`;
 
         return Promise.all([
-            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}`, dataFetcher),
-            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}_tree`, dataFetcher),
-            this.fetchObjectData(`${basePath}/map/w1_castle`, dataFetcher),
-            this.fetchObjectData(`${basePath}/map/w8_koppaC`, dataFetcher),
-            this.fetchObjectData(`${basePath}/map/w1_tower`, dataFetcher),
-            this.fetchObjectData(`${basePath}/map/map_point`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/w${this.worldNumber}`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/w${this.worldNumber}_tree`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/w1_castle`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/w8_koppaC`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/w1_tower`, dataFetcher),
+            this.fetchObjectData(`${pathBase}/map/map_point`, dataFetcher),
         ]).then(([mainObjData, treeObjData, castleObjData, bigCastleObjData, towerObjData, mapPointObjData]) => {
             // Adjust the nodes/bones to emulate the flag animations.
             mat4.fromTranslation(castleObjData!.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);

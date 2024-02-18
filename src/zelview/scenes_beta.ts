@@ -2,7 +2,7 @@
 import { SceneGroup } from '../viewer.js';
 import { ZelviewSceneDesc } from './scenes.js';
 
-const pathBase = `zelview_beta`;
+const pathBase = `ZeldaOcarinaOfTimeBeta`;
 
 const id = 'zelview_beta';
 const name = 'The Legend of Zelda: Ocarina of Time (F-Zero Overdump)';

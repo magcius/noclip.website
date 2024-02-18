@@ -44,6 +44,7 @@ function getEntriesWithField<T extends string | number>(bcsv: BCSV.Bcsv, name: s
     return { fields, records };
 }
 
+const pathBase = `LuigisMansion3D`;
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -53,8 +54,8 @@ class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
-        const path_gar = `lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
-        const models_path = `lm3d/mapmdl/map${this.mapNumber}`;
+        const path_gar = `${pathBase}/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
+        const models_path = `${pathBase}/mapmdl/map${this.mapNumber}`;
 
         const textureHolder = new GrezzoTextureHolder();
         const dataFetcher = context.dataFetcher;

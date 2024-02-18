@@ -19,6 +19,8 @@ class DKCRSceneRenderer extends RetroSceneRenderer {
     }
 }
 
+const pathBase = `DonkeyKongCountryReturns`;
+
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -28,7 +30,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(`${pathBase}/${this.filename}`).then((buffer: ArrayBufferSlice) => {
             const levelPak = PAK.parse(buffer, PAK.CompressionMethod.CMPD_ZLIB);
             const resourceSystem = new ResourceSystem(ResourceGame.DKCR, [levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {

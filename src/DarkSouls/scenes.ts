@@ -88,7 +88,7 @@ export class ResourceSystem {
     }
 }
 
-const pathBase = `dks`;
+const pathBase = `DarkSouls`;
 
 async function fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string) {
     const buffer = await resourceSystem.dataFetcher.fetchData(`${pathBase}/${archiveName}`);

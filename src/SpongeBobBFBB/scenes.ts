@@ -14,7 +14,7 @@ import { DataStream, parseRWChunks, createRWStreamFromChunk, DataCacheIDName } f
 import { assert } from '../util.js';
 import { AssetType } from './enums.js';
 
-const dataPath = 'bfbb/xbox';
+const dataPath = 'SpongeBobBattleForBikiniBottom/xbox';
 
 class AssetCache extends DataCacheIDName<Asset> {
     public addAsset(asset: Asset, lock: boolean = false) {

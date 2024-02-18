@@ -110,11 +110,12 @@ class BrawlRenderer extends BasicGXRendererHelper {
     }
 }
 
+const pathBase = `SuperSmashBrosBrawl`;
 class BrawlSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        return context.dataFetcher.fetchData(`ssbb/stage/${this.id}`).then((buffer: ArrayBufferSlice) => {
+        return context.dataFetcher.fetchData(`${pathBase}/stage/${this.id}`).then((buffer: ArrayBufferSlice) => {
             const textureHolder = new RRESTextureHolder();
 
             const arc = parseARC(buffer);

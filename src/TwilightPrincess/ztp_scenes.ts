@@ -713,7 +713,7 @@ export class ModelCache {
     }
 }
 
-const pathBase = `j3d/ztp`;
+const pathBase = `ZeldaTwilightPrincess`;
 
 class d_s_play extends fopScn {
     public bgS = new dBgS();

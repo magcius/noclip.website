@@ -811,7 +811,7 @@ function isAdultDungeon(scene: Scene) {
     }
 }
 
-const pathBase = `oot3d`;
+const pathBase = `ZeldaOcarinaOfTime3D`;
 
 class DataHolder {
     constructor(public modelCache: ModelCache, public textureHolder: CtrTextureHolder) {

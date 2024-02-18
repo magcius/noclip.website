@@ -932,7 +932,7 @@ export class ModelCache {
     }
 }
 
-export const pathBase = `j3d/ww`;
+export const pathBase = `ZeldaWindWaker`;
 
 class d_s_play extends fopScn {
     public bgS = new dBgS();

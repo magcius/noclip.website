@@ -249,7 +249,7 @@ export class NfsRenderer implements SceneGfx {
         const d = template.mapUniformBufferF32(NfsParticleProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
-        activeEmitters.forEach(e => e.prepareToRender(renderInstManager, viewerInput));
+        activeEmitters.forEach(e => e.prepareToRender(renderInstManager, this.renderInstListMain, viewerInput));
 
         renderInstManager.popTemplateRenderInst();
     }

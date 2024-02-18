@@ -22,7 +22,7 @@ import * as U8 from './u8.js';
 const id = 'klonoa';
 const name = "Klonoa";
 
-const pathBase = `klonoa`;
+const pathBase = `Klonoa`;
 
 const enum KlonoaPass {
     SKYBOX = 0x01,

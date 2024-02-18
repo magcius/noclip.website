@@ -6,14 +6,16 @@ import { FakeTextureHolder } from '../TextureHolder.js';
 import { KingdomHeartsRenderer, textureToCanvas } from './render.js';
 import { SceneContext } from '../SceneBase.js';
 
+const pathBase = `KingdomHearts`;
+
 export class KingdomHeartsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const pathBin = `kh/${this.id}.bin`;
-        const pathImg = `kh/${this.id}.img`;
+        const pathBin = `${pathBase}/${this.id}.bin`;
+        const pathImg = `${pathBase}/${this.id}.img`;
         return Promise.all([dataFetcher.fetchData(pathBin), dataFetcher.fetchData(pathImg)]).then(([binBuffer, imgBuffer]) => {
             const bin = BIN.parse(binBuffer, imgBuffer);
 

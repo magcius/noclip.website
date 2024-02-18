@@ -7,7 +7,7 @@ import { readString, flatten } from "./util.js";
 import * as Yaz0 from './Common/Compression/Yaz0.js';
 import * as CX from './Common/Compression/CX.js';
 
-import * as Grezzo3DS from './oot3d/scenes.js';
+import * as Grezzo3DS from './OcarinaOfTime3D/scenes.js';
 import * as NNS_G3D from './nns_g3d/scenes.js';
 import * as J3D from './j3d/scenes.js';
 import * as CTR_H3D from './Common/CTR_H3D/H3D.js';

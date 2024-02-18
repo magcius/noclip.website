@@ -286,6 +286,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 }
 
+const pathBase = `MetroidPrime`;
+
 class RetroSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -296,13 +298,13 @@ class RetroSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const levelPak = PAK.parse(await dataFetcher.fetchData(`metroid_prime/${this.filename}`), this.gameCompressionMethod);
+        const levelPak = PAK.parse(await dataFetcher.fetchData(`${pathBase}/${this.filename}`), this.gameCompressionMethod);
         const paks = [levelPak];
         if (this.game === ResourceGame.MP1) {
-            paks.push(PAK.parse(await dataFetcher.fetchData(`metroid_prime/mp1/Tweaks.pak`), this.gameCompressionMethod));
-            paks.push(PAK.parse(await dataFetcher.fetchData(`metroid_prime/mp1/TestAnim.pak`), this.gameCompressionMethod));
+            paks.push(PAK.parse(await dataFetcher.fetchData(`${pathBase}/mp1/Tweaks.pak`), this.gameCompressionMethod));
+            paks.push(PAK.parse(await dataFetcher.fetchData(`${pathBase}/mp1/TestAnim.pak`), this.gameCompressionMethod));
         } else if (this.game === ResourceGame.MP2) {
-            paks.push(PAK.parse(await dataFetcher.fetchData(`metroid_prime/mp2/TestAnim.pak`), this.gameCompressionMethod));
+            paks.push(PAK.parse(await dataFetcher.fetchData(`${pathBase}/mp2/TestAnim.pak`), this.gameCompressionMethod));
         }
         const resourceSystem = new ResourceSystem(this.game, paks);
 

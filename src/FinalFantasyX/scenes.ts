@@ -16,7 +16,7 @@ import { activateEffect, EventScript, LevelObjectHolder } from "./script.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 
-const pathBase = `ffx`;
+const pathBase = `FinalFantasyX`;
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 

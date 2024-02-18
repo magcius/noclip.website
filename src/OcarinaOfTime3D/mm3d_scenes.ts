@@ -19,7 +19,7 @@ import { SceneContext } from '../SceneBase.js';
 import { MathConstants } from "../MathHelpers.js";
 import { maybeDecompress } from './LzS.js';
 
-const pathBase = `mm3d`;
+const pathBase = `ZeldaMajorasMask3D`;
 
 enum ActorId {
     Player              = 0x0000,

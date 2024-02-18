@@ -385,7 +385,7 @@ const enum DoorType {
 
 const GLOBAL_SCALE = 1500;
 
-const pathBase = `sm64ds`;
+const pathBase = `SuperMario64DS`;
 class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();

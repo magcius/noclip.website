@@ -23,7 +23,7 @@ import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './r
 import { parseAnimationList, ObjectAnimationList } from './animation.js';
 import { GfxrAttachmentSlot, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph.js';
 
-const pathBase = `katamari_damacy`;
+const pathBase = `KatamariDamacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
 mat4.rotateX(katamariWorldSpaceToNoclipSpace, katamariWorldSpaceToNoclipSpace, Math.PI);
 

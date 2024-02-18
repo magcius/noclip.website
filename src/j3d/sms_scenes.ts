@@ -680,7 +680,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const pathBase = `j3d/sms`;
+        const pathBase = `SuperMarioSunshine`;
         const path = `${pathBase}/${this.id}.szs`;
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(path).then((result: ArrayBufferSlice) => {

@@ -11,7 +11,6 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { SceneContext } from '../SceneBase.js';
 import { assertExists } from '../util.js';
 import { CameraController } from '../Camera.js';
-import { computeModelMatrixS } from '../MathHelpers.js';
 import * as AnimGroup from './AnimGroup.js';
 
 class SuperPaperMarioRenderer extends WorldRenderer {
@@ -20,13 +19,14 @@ class SuperPaperMarioRenderer extends WorldRenderer {
     }
 }
 
+const pathBase = `SuperPaperMario`;
 class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const buffer = await dataFetcher.fetchData(`spm/${this.id}.bin`);
+        const buffer = await dataFetcher.fetchData(`${pathBase}/${this.id}.bin`);
         const decompressed = CX.decompress(buffer);
         const arc = U8.parse(decompressed);
         const dFile = assertExists(arc.findFileData(`./dvd/map/*/map.dat`));

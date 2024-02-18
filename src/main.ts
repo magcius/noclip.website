@@ -14,9 +14,9 @@ import * as Scenes_SuperMarioGalaxy2 from './SuperMarioGalaxy/Scenes_SuperMarioG
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes.js';
 import * as Scenes_Zelda_OcarinaOfTime from './zelview/scenes.js';
 import * as Scenes_Zelda_OcarinaOfTime_Beta from './zelview/scenes_beta.js';
-import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes.js';
-import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes.js';
-import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes.js';
+import * as Scenes_Zelda_OcarinaOfTime3D from './OcarinaOfTime3D/oot3d_scenes.js';
+import * as Scenes_Zelda_MajorasMask3D from './OcarinaOfTime3D/mm3d_scenes.js';
+import * as Scenes_LuigisMansion3D from './OcarinaOfTime3D/lm3d_scenes.js';
 import * as Scenes_DarkSoulsCollision from './DarkSoulsCollisionData/scenes.js';
 import * as Scenes_MetroidPrime from './metroid_prime/scenes.js';
 import * as Scenes_DonkeyKong64 from './DonkeyKong64/scenes.js';

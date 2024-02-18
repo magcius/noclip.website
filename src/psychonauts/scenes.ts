@@ -7,12 +7,13 @@ import { PsychonautsRenderer, SceneRenderer } from './render.js';
 import { SceneContext } from '../SceneBase.js';
 import { assertExists } from '../util.js';
 
+const pathBase = `Psychonauts`;
 class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     private fetchPPF(id: string, dataFetcher: DataFetcher, hasScene: boolean): Promise<PPF.PPAK> {
-        return dataFetcher.fetchData(`psychonauts/${id}.ppf`).then((buffer) => {
+        return dataFetcher.fetchData(`${pathBase}/${id}.ppf`).then((buffer) => {
             const ppf = PPF.parse(buffer, hasScene);
             return ppf;
         })

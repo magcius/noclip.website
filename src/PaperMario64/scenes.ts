@@ -18,7 +18,7 @@ import { mat4 } from 'gl-matrix';
 import { MathConstants, scaleMatrix } from '../MathHelpers.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
-const pathBase = `pm64`;
+const pathBase = `PaperMario64`;
 
 class PaperMario64Renderer implements Viewer.SceneGfx {
     private attachmentClearDescriptor: GfxrAttachmentClearDescriptor;

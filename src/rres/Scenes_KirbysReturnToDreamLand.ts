@@ -17,13 +17,14 @@ class RTDLRenderer extends BasicRRESRenderer {
     }
 }
 
+const pathBase = `KirbysReturnToDreamLand`;
 class RTDLSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
-        return dataFetcher.fetchData(`rtdl/${this.id}.brres`).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(`${pathBase}/${this.id}.brres`).then((buffer: ArrayBufferSlice) => {
             return CX.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
             const courseRRES = BRRES.parse(buffer);

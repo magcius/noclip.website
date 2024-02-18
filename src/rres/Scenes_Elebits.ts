@@ -18,7 +18,7 @@ import { CameraController } from '../Camera.js';
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);
-    return `elb/${stg}_${z}_disp01.brres`;
+    return `Elebits/${stg}_${z}_disp01.brres`;
 }
 
 const materialHacks: GXMaterialHacks = {

@@ -33,7 +33,7 @@ function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     out[10] = camera.worldMatrix[10];
 }
 
-const pathBase = `okami`;
+const pathBase = `Okami`;
 
 interface FileEntry {
     filename: string;

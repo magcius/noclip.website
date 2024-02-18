@@ -13,7 +13,7 @@ import * as UI from '../ui.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
-const pathBase = `zelview`;
+const pathBase = `ZeldaOcarinaOfTime`;
 
 class ZelviewRenderer implements Viewer.SceneGfx {
     private clearAttachmentDescriptor: GfxrAttachmentClearDescriptor;

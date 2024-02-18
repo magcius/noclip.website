@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { readString, hexzero, leftPad } from "../../util.js";
+import { readString, assertExists } from "../../util.js";
 import { assert } from "console";
 
 // Ported from "unpack.py" by Murugo.
@@ -81,25 +81,7 @@ function parseName(view: DataView, offs: number, size: number): string {
     return S;
 }
 
-function dumpObjectNames(elf: ArrayBufferSlice): void {
-    const view = elf.createDataView();
-
-    const nametableOffs = 0xE06B8;
-    const objectDescTableOffs = 0xCDF70;
-
-    let nameIdx = nametableOffs, objectDescIdx = objectDescTableOffs;
-    for (let i = 0; i < 1718; i++) {
-        const internalNamePtr = view.getUint32(objectDescIdx + 0x00, true);
-        const internalName = readString(elf, internalNamePtr - 0xFF000);
-
-        const objectName = parseName(view, nameIdx, 0x50);
-        console.log(`${leftPad('' + i, 4)}\t${hexzero(i, 4)}\t${internalName}\t${objectName}`);
-        nameIdx += 0x50;
-        objectDescIdx += 0x24;
-    }
-}
-
-function extractGalleryIndex(pathOutBase: string, elf: ArrayBufferSlice): void {
+function extractGalleryIndex(elf: ArrayBufferSlice): void {
     const view = elf.createDataView();
 
     const nametableOffs = 0xE06B8;
@@ -234,14 +216,14 @@ function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBuffer
     }
 }
 
-const pathBaseIn  = `../../../data/katamari_damacy_raw`;
-const pathBaseOut = `../../../data/katamari_damacy`;
+const pathBaseIn  = `../../../data/KatamariDamacy_raw`;
+const pathBaseOut = `../../../data/KatamariDamacy`;
 
 function main() {
     const isoFilename = `${pathBaseIn}/KatamariDamacy.iso`;
 
-    const elf = iso9660GetDataFilename(isoFilename, `SLUS_210.08;1`);
-    extractGalleryIndex(pathBaseOut, elf);
+    const elf = assertExists(iso9660GetDataFilename(isoFilename, `SLUS_210.08;1`));
+    extractGalleryIndex(elf);
     // dumpObjectNames(elf);
 
     extractFileTable(pathBaseOut, isoFilename, elf, 0x17C340, 0x4);
