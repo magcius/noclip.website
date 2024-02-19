@@ -1,7 +1,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { HIBase, HIBaseFlags } from "./HIBase.js";
 import { HIScene } from "./HIScene.js";
-import { HIModelInstance } from "./HIModel.js";
+import { HIModelAssetInfo, HIModelInstance } from "./HIModel.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HILightKit } from "./HILightKit.js";
 import { RpClump } from "./rw/rpworld.js";
@@ -66,6 +66,16 @@ export abstract class HIEnt extends HIBase {
         this.baseFlags |= HIBaseFlags.IsEntity;
     }
 
+    public parseModelInfo(assetID: number, scene: HIScene) {
+        if (scene.models.has(assetID)) {
+            this.loadModel(scene.models.get(assetID)!, scene);
+        } else if (scene.modelInfos.has(assetID)) {
+            this.model = this.recurseModelInfo(scene.modelInfos.get(assetID)!, scene);
+        } else {
+            console.warn(`Model info ID not found: 0x${assetID}`);
+        }
+    }
+
     public loadModel(clump: RpClump, scene: HIScene) {
         this.model = new HIModelInstance(clump.atomics[0], scene);
         for (let i = 1; i < clump.atomics.length; i++) {
@@ -73,11 +83,45 @@ export abstract class HIEnt extends HIBase {
         }
     }
 
-    public parseModelInfo(assetID: number, scene: HIScene) {
-        const clump = scene.models.get(assetID);
-        if (clump) {
-            this.loadModel(clump, scene);
+    private recurseModelInfo(info: HIModelAssetInfo, scene: HIScene): HIModelInstance | null {
+        const tempInst: HIModelInstance[] = [];
+
+        for (let i = 0; i < info.modelInst.length; i++) {
+            const inst = info.modelInst[i];
+            if (scene.models.has(inst.modelID)) {
+                const clump = scene.models.get(inst.modelID)!;
+                if (i === 0) {
+                    const minst = new HIModelInstance(clump.atomics[0], scene);
+                    tempInst.push(minst);
+                    for (let j = 1; j < clump.atomics.length; j++) {
+                        minst.attach(new HIModelInstance(clump.atomics[j], scene));
+                    }
+                } else {
+                    const minst = new HIModelInstance(clump.atomics[0], scene, inst.flags, inst.bone);
+                    tempInst.push(minst);
+                    tempInst[inst.parent]!.attach(minst);
+                    for (let j = 1; j < clump.atomics.length; j++) {
+                        minst.attach(new HIModelInstance(clump.atomics[j], scene));
+                    }
+                }
+            } else if (scene.modelInfos.has(inst.modelID)) {
+                const info = scene.modelInfos.get(inst.modelID)!;
+                const minst = this.recurseModelInfo(info, scene);
+                if (!minst) return null;
+
+                tempInst.push(minst);
+                if (i !== 0) {
+                    minst.flags |= inst.flags;
+                    minst.boneIndex = inst.bone;
+                    tempInst[inst.parent].attach(minst);
+                }
+            } else {
+                console.warn(`Model ID not found: 0x${inst.modelID}`);
+                return null;
+            }
         }
+
+        return tempInst[0];
     }
 
     public isVisible() {
@@ -108,6 +152,26 @@ export abstract class HIEnt extends HIBase {
             
             mat4.copy(this.model.mat, mat);
         }
+    }
+
+    public beginUpdate(scene: HIScene, dt: number) {
+        if (this.model) {
+            this.model.update(dt);
+        }
+    }
+
+    public endUpdate(scene: HIScene, dt: number) {
+        if (this.model) {
+            this.model.eval();
+        }
+    }
+
+    public update(scene: HIScene, dt: number) {
+        this.beginUpdate(scene, dt);
+
+        // update physics, motion, etc.
+
+        this.endUpdate(scene, dt);
     }
 
     public render(scene: HIScene, rw: RwEngine) {

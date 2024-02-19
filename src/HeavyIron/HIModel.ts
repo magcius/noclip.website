@@ -51,16 +51,62 @@ export class HIPipeInfoTable {
     }
 }
 
+export interface HIModelAssetInst {
+    modelID: number;
+    flags: number;
+    parent: number;
+    bone: number;
+    mat: mat4;
+}
+
+export class HIModelAssetInfo {
+    public magic: number;
+    public animTableID: number;
+    public combatID: number;
+    public brainID: number;
+    public modelInst: HIModelAssetInst[] = [];
+
+    constructor(stream: RwStream) {
+        this.magic = stream.readUint32();
+        const numModelInst = stream.readUint32();
+        this.animTableID = stream.readUint32();
+        this.combatID = stream.readUint32();
+        this.brainID = stream.readUint32();
+
+        for (let i = 0; i < numModelInst; i++) {
+            const modelID = stream.readUint32();
+            const flags = stream.readUint16();
+            const parent = stream.readUint8();
+            const bone = stream.readUint8();
+            const mat = mat4.fromValues(
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 1
+            );
+            this.modelInst.push({ modelID, flags, parent, bone, mat });
+        }
+    }
+}
+
+export const enum HIModelFlags {
+    Visible = 0x1
+}
+
 export class HIModelInstance {
     public next: HIModelInstance | null = null;
     public parent: HIModelInstance | null = null;
+    public flags: number;
+    public boneIndex: number;
     public mat: mat4 = mat4.create();
     public bucket: HIModelBucket;
     public bucketNext: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
     public pipeFlags = 0;
     
-    constructor(public data: RpAtomic, scene: HIScene) {
+    constructor(public data: RpAtomic, scene: HIScene, flags?: number, boneIndex?: number) {
+        this.flags = (flags || 0) | HIModelFlags.Visible;
+        this.boneIndex = boneIndex || 0;
         this.bucket = scene.modelBucketManager.getBucket(data)!;
         this.pipeFlags = this.bucket.pipeFlags;
     }
@@ -73,6 +119,23 @@ export class HIModelInstance {
         curr.next = inst;
 
         inst.parent = this;
+    }
+
+    public update(dt: number) {
+    }
+
+    public eval() {
+        let modelInst: HIModelInstance | null = this;
+        while (modelInst) {
+            modelInst.evalSingle();
+            modelInst = modelInst.next;
+        }
+    }
+
+    public evalSingle() {
+        if (this.parent) {
+            mat4.copy(this.mat, this.parent.mat);
+        }
     }
 
     public render(scene: HIScene, rw: RwEngine) {
@@ -88,6 +151,8 @@ export class HIModelInstance {
     }
 
     public renderSingle(rw: RwEngine) {
+        if (!(this.flags & HIModelFlags.Visible)) return;
+
         const oldflag = this.data.geometry.flags;
 
         if (this.lightKit && (this.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_KITPRELIGHT) {

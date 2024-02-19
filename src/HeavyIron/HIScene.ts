@@ -12,7 +12,7 @@ import { HIEntSimpleObj } from "./HIEntSimpleObj.js";
 import { HIEnt } from "./HIEnt.js";
 import { HILightKit, HILightKitManager } from "./HILightKit.js";
 import { HIEnv } from "./HIEnv.js";
-import { HIPipeInfoTable } from "./HIModel.js";
+import { HIModelAssetInfo, HIPipeInfoTable } from "./HIModel.js";
 import { HIModelBucketManager } from "./HIModelBucket.js";
 import { HIPAsset, HIPFile } from "./HIP.js";
 import { HIPlatform } from "./HIPlatform.js";
@@ -26,6 +26,7 @@ import { RpClump } from "./rw/rpworld.js";
 import { RwEngine, RwTexture, RwStream, RwPluginID, RwTexDictionary } from "./rw/rwcore.js";
 import { HIEntButton } from "./HIEntButton.js";
 import { HIEntDestructObj } from "./HIEntDestructObj.js";
+import { HINPCCommon } from "./HINPCCommon.js";
 
 export const enum HIAssetType {
     ALST = 0x414C5354,
@@ -131,6 +132,7 @@ export class HIScene implements SceneGfx {
     public hips: HIPFile[] = [];
     public textures = new Map<number, RwTexture>();
     public models = new Map<number, RpClump>();
+    public modelInfos = new Map<number, HIModelAssetInfo>();
     public env: HIEnv;
     public camera: HICamera;
     public renderStateManager = new HIRenderStateManager();
@@ -273,8 +275,14 @@ export class HIScene implements SceneGfx {
                     case HIAssetType.JSP:
                         jsp.load(asset.data, this.rw);
                         break;
+                    case HIAssetType.MINF:
+                        this.modelInfos.set(asset.id, new HIModelAssetInfo(new RwStream(asset.data)));
+                        break;
                     case HIAssetType.MODL:
                         this.loadModel(asset);
+                        break;
+                    case HIAssetType.VIL:
+                        this.addEnt(new HINPCCommon(new RwStream(asset.data)));
                         break;
                     case HIAssetType.PIPT:
                         pipeTables.push(new HIPipeInfoTable(new RwStream(asset.data)));
@@ -347,9 +355,9 @@ export class HIScene implements SceneGfx {
                         const subObjBits = pipe.subObjectBits & remainSubObjBits;
                         if (subObjBits) {
                             let currSubObjBits = subObjBits;
-                            for (const data of model.atomics) {
+                            for (let i = model.atomics.length-1; i >= 0; i--) {
                                 if (currSubObjBits & 0x1) {
-                                    this.modelBucketManager.insertBucket(data, pipe.pipeFlags);
+                                    this.modelBucketManager.insertBucket(model.atomics[i], pipe.pipeFlags);
                                 }
                                 currSubObjBits >>>= 1;
                             }
@@ -365,9 +373,9 @@ export class HIScene implements SceneGfx {
                 }
             }
             if (remainSubObjBits) {
-                for (const data of model.atomics) {
+                for (let i = model.atomics.length-1; i >= 0; i--) {
                     if (remainSubObjBits & 0x1) {
-                        this.modelBucketManager.insertBucket(data, 0);
+                        this.modelBucketManager.insertBucket(model.atomics[i], 0);
                     }
                     remainSubObjBits >>>= 1;
                 }
@@ -409,6 +417,9 @@ export class HIScene implements SceneGfx {
     }
 
     private update(viewerInput: ViewerRenderInput) {
+        for (const ent of this.entList) {
+            ent.update(this, viewerInput.deltaTime);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
