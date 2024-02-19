@@ -25,6 +25,7 @@ import { HIDebug } from "./HIDebug.js";
 import { RpClump } from "./rw/rpworld.js";
 import { RwEngine, RwTexture, RwStream, RwPluginID, RwTexDictionary } from "./rw/rwcore.js";
 import { HIEntButton } from "./HIEntButton.js";
+import { HIEntDestructObj } from "./HIEntDestructObj.js";
 
 export const enum HIAssetType {
     ALST = 0x414C5354,
@@ -258,6 +259,9 @@ export class HIScene implements SceneGfx {
                         break;
                     case HIAssetType.DPAT:
                         this.addBase(new HIDispatcher(new RwStream(asset.data)));
+                        break;
+                    case HIAssetType.DSTR:
+                        this.addEnt(new HIEntDestructObj(new RwStream(asset.data)));
                         break;
                     case HIAssetType.ENV:
                         this.env = new HIEnv(new RwStream(asset.data), jsp);
