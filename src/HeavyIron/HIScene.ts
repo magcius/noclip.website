@@ -135,7 +135,7 @@ export class HIRenderHacks {
     public player = true;
     public showAllEntities = false;
     public showAllJSPNodes = false;
-    public frustumCulling = true;
+    public frustumCulling = false;
 }
 
 export class HIScene implements SceneGfx {
