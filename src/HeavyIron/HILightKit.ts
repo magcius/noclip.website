@@ -2,6 +2,7 @@ import { mat4 } from "gl-matrix";
 import { RpLight, RpLightType, RpWorld } from "./rw/rpworld.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
+import { HIScene } from "./HIScene.js";
 
 export const enum HILightKitLightType {
     Ambient = 1,
@@ -79,6 +80,7 @@ export class HILightKit {
 
 export class HILightKitManager {
     public lastLightKit: HILightKit | null = null;
+    public disableHack = false;
 
     public enable(lkit: HILightKit | null, world: RpWorld) {
         if (lkit === this.lastLightKit) {
@@ -91,11 +93,13 @@ export class HILightKitManager {
             }
         }
 
-        this.lastLightKit = lkit;
+        if (!this.disableHack) {
+            this.lastLightKit = lkit;
 
-        if (lkit) {
-            for (const light of lkit.lightList) {
-                world.addLight(light);
+            if (lkit) {
+                for (const light of lkit.lightList) {
+                    world.addLight(light);
+                }
             }
         }
     }

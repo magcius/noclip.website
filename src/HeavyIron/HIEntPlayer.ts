@@ -1,7 +1,7 @@
 import { HIEnt } from "./HIEnt.js";
 import { HIModelInstance } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
-import { RwStream } from "./rw/rwcore.js";
+import { RwEngine, RwStream } from "./rw/rwcore.js";
 
 const enum SB_model_index {
     body = 4,
@@ -52,5 +52,11 @@ export class HIEntPlayer extends HIEnt {
         this.sb_models[SB_model_index.body].show();
         this.sb_models[SB_model_index.arm_l].show();
         this.sb_models[SB_model_index.arm_r].show();
+    }
+    
+    public override render(scene: HIScene, rw: RwEngine): void {
+        if (!scene.renderHacks.player) return;
+
+        super.render(scene, rw);
     }
 }

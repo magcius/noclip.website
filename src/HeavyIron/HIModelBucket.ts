@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { HIModelFlags, HIModelInstance, HIPipeFlags, modelCull } from "./HIModel.js";
+import { HIModelFlags, HIModelInstance, HIPipeFlags } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwCullMode, RwEngine } from "./rw/rwcore.js";
 import { RpAtomic } from "./rw/rpworld.js";
@@ -60,7 +60,7 @@ export class HIModelBucketManager {
 
     public add(minst: HIModelInstance, scene: HIScene, rw: RwEngine) {
         if (!(minst.flags & HIModelFlags.Visible)) return;
-        if (modelCull(minst.data, minst.mat, rw)) return;
+        if (scene.camera.cullModel(minst.data, minst.mat, rw)) return;
 
         if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_PRELIGHTONLY) {
             minst.lightKit = scene.lightKitManager.lastLightKit;

@@ -1,5 +1,6 @@
 import { HIBaseFlags } from "./HIBase.js";
 import { HIEnt } from "./HIEnt.js";
+import { HIScene } from "./HIScene.js";
 import { RwEngine } from "./rw/rwcore.js";
 
 interface SkyDomeInfo {
@@ -10,6 +11,7 @@ interface SkyDomeInfo {
 
 export class HISkyDomeManager {
     private skyList: SkyDomeInfo[] = [];
+    public disableHack = false;
 
     public addEntity(ent: HIEnt, sortorder: number, lockY: boolean) {
         if (this.skyList.find(v => v.ent === ent)) return;
@@ -22,6 +24,8 @@ export class HISkyDomeManager {
     }
 
     public render(rw: RwEngine) {
+        if (this.disableHack) return;
+
         for (const sky of this.skyList) {
             if (!sky.ent.model) continue;
             if (!sky.ent.isVisible()) continue;

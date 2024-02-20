@@ -48,10 +48,10 @@ export class HIEnv extends HIBase {
         this.readLinks(stream);
     }
 
-    public render(rw: RwEngine) {
+    public render(scene: HIScene, rw: RwEngine) {
         rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
         rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
         
-        this.jsp.render(rw);
+        this.jsp.render(scene.camera, rw);
     }
 }

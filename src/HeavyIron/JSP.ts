@@ -1,6 +1,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert } from "../util.js";
-import { modelCull } from "./HIModel.js";
+import { HICamera } from "./HICamera.js";
 import { RpAtomic, RpAtomicFlag, RpClump } from "./rw/rpworld.js";
 import { RwChunkHeader, RwCullMode, RwEngine, RwPluginID, RwStream } from "./rw/rwcore.js";
 
@@ -17,11 +17,12 @@ interface JSPNode {
 
 export class JSP {
     public nodeList: JSPNode[] = [];
+    public showAllNodesHack = false;
 
-    public render(rw: RwEngine) {
+    public render(camera: HICamera, rw: RwEngine) {
         for (const node of this.nodeList) {
-            if ((node.atomic.flags & RpAtomicFlag.RENDER) &&
-                !modelCull(node.atomic, node.atomic.frame.matrix, rw)) {
+            if ((this.showAllNodesHack || (node.atomic.flags & RpAtomicFlag.RENDER)) &&
+                !camera.cullModel(node.atomic, node.atomic.frame.matrix, rw)) {
                 rw.renderState.cullMode = (node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK;
                 rw.renderState.zWriteEnable = (node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0;
                 node.atomic.render(rw);

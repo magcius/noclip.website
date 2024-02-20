@@ -1,6 +1,6 @@
 import { mat4 } from "gl-matrix";
 import { HIEnt } from "./HIEnt.js";
-import { HIModelInstance, modelCull } from "./HIModel.js";
+import { HIModelInstance } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 
@@ -91,7 +91,7 @@ export class HIEntPickupManager {
         for (const pkup of this.pickups) {
             if (!pkup.isVisible()) continue;
             if (!pkup.model) continue;
-            if (modelCull(pkup.model.data, pkup.model.mat, rw)) continue;
+            if (scene.camera.cullModel(pkup.model.data, pkup.model.mat, rw)) continue;
 
             const dst = pkup.model.mat;
             mat4.set(dst,

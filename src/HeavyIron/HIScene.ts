@@ -1,3 +1,4 @@
+import * as UI from "../ui.js";
 import { CameraController } from "../Camera.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { SceneContext } from "../SceneBase.js";
@@ -127,6 +128,16 @@ export const enum HIAssetType {
     ZLIN = 0x5A4C494E,
 }
 
+export class HIRenderHacks {
+    public lighting = true;
+    public fog = true;
+    public skydome = true;
+    public player = true;
+    public showAllEntities = false;
+    public showAllJSPNodes = false;
+    public frustumCulling = true;
+}
+
 export class HIScene implements SceneGfx {
     private rw: RwEngine;
 
@@ -146,6 +157,7 @@ export class HIScene implements SceneGfx {
     public pickupManager = new HIEntPickupManager();
     public baseList: HIBase[] = [];
     public entList: HIEnt[] = [];
+    public renderHacks = new HIRenderHacks();
 
     constructor(device: GfxDevice, context: SceneContext) {
         this.rw = new RwEngine(device, context);
@@ -457,15 +469,21 @@ export class HIScene implements SceneGfx {
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         this.update(viewerInput);
 
+        this.camera.disableFogHack = !this.renderHacks.fog;
+        this.camera.disableFrustumCullHack = !this.renderHacks.frustumCulling;
+        this.env.jsp.showAllNodesHack = this.renderHacks.showAllJSPNodes;
+        this.lightKitManager.disableHack = !this.renderHacks.lighting;
+        this.skydomeManager.disableHack = !this.renderHacks.skydome;
+
         this.camera.begin(this.rw);
 
         this.lightKitManager.enable(null, this.rw.world);
-
+        
         this.renderStateManager.set(HIRenderState.SkyBack, this.camera, this.rw);
         this.skydomeManager.render(this.rw);
-
+        
         this.renderStateManager.set(HIRenderState.Environment, this.camera, this.rw);
-        this.env.render(this.rw);
+        this.env.render(this, this.rw);
         
         this.renderStateManager.set(HIRenderState.OpaqueModels, this.camera, this.rw);
         this.modelBucketManager.begin();
@@ -483,5 +501,42 @@ export class HIScene implements SceneGfx {
         this.camera.end(this.rw);
         
         this.rw.render();
+    }
+
+    public createPanels(): UI.Panel[] {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const lightingCheckbox = new UI.Checkbox('Lighting', this.renderHacks.lighting);
+        lightingCheckbox.onchanged = () => { this.renderHacks.lighting = lightingCheckbox.checked; };
+        panel.contents.appendChild(lightingCheckbox.elem);
+
+        const fogCheckbox = new UI.Checkbox('Fog', this.renderHacks.fog);
+        fogCheckbox.onchanged = () => { this.renderHacks.fog = fogCheckbox.checked; }
+        panel.contents.appendChild(fogCheckbox.elem);
+
+        const skydomeCheckbox = new UI.Checkbox('Skydome', this.renderHacks.skydome);
+        skydomeCheckbox.onchanged = () => { this.renderHacks.skydome = skydomeCheckbox.checked; };
+        panel.contents.appendChild(skydomeCheckbox.elem);
+
+        const playerCheckbox = new UI.Checkbox('Player', this.renderHacks.player);
+        playerCheckbox.onchanged = () => { this.renderHacks.player = playerCheckbox.checked; };
+        panel.contents.appendChild(playerCheckbox.elem);
+
+        const showAllEntitiesCheckbox = new UI.Checkbox('Show All Entities', this.renderHacks.showAllEntities);
+        showAllEntitiesCheckbox.onchanged = () => { this.renderHacks.showAllEntities = showAllEntitiesCheckbox.checked; };
+        panel.contents.appendChild(showAllEntitiesCheckbox.elem);
+
+        const showAllJSPNodesCheckbox = new UI.Checkbox('Show All JSP Nodes', this.renderHacks.showAllJSPNodes);
+        showAllJSPNodesCheckbox.onchanged = () => { this.renderHacks.showAllJSPNodes = showAllJSPNodesCheckbox.checked; };
+        panel.contents.appendChild(showAllJSPNodesCheckbox.elem);
+
+        const frustumCullingCheckbox = new UI.Checkbox('Frustum Culling', this.renderHacks.frustumCulling);
+        frustumCullingCheckbox.onchanged = () => { this.renderHacks.frustumCulling = frustumCullingCheckbox.checked; };
+        panel.contents.appendChild(frustumCullingCheckbox.elem);
+
+        panel.setVisible(true);
+        return [panel];
     }
 }

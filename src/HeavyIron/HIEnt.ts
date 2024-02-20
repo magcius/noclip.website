@@ -174,7 +174,7 @@ export abstract class HIEnt extends HIBase {
     }
 
     public render(scene: HIScene, rw: RwEngine) {
-        if (!this.isVisible()) return;
+        if (!this.isVisible() && !scene.renderHacks.showAllEntities) return;
         if (!this.model) return;
 
         this.model.render(scene, rw);
