@@ -1,6 +1,8 @@
+import { colorFromRGBA } from "../Color.js";
 import { HIEnt } from "./HIEnt.js";
+import { HIModelInstance, HIPipeFlags } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
-import { RwStream } from "./rw/rwcore.js";
+import { RwBlendFunction, RwStream } from "./rw/rwcore.js";
 
 export class HIEntNPCAsset {
     public npcFlags: number;
@@ -31,5 +33,78 @@ export class HINPCCommon extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+
+        const models: HIModelInstance[] = [];
+        for (let model = this.model; model; model = model.next) {
+            models.push(model);
+        }
+
+        // Temporary hacks to make the NPCs look good
+        switch (this.entAsset.modelInfoID) {
+        case 0x9BAAE4D2: // ham_bind.MINF
+            models[1].hide();
+            models[2].hide();
+            break;
+        case 0x0A518D42: // robot_tar_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            break;
+        case 0x252F35F0: // g_love_bind.MINF
+            models[1].hide();
+            models[2].hide();
+            break;
+        case 0x0615D145: // robot_chunk_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            break;
+        case 0x38E7D5C4: // robot_4a_monsoon_bind.MINF
+            models[1].hide();
+            models[2].hide();
+            break;
+        case 0x582111BD: // robot_sleepy-time_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            models[4].hide();
+            break;
+        case 0xF7771D9E: // robot_arf_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            break;
+        case 0x2554CA0D: // tubelet_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            models[4].hide();
+            break;
+        case 0xFD7A8D39: // tubelet_slave_bind.MINF
+            models[2].hide();
+            models[3].hide();
+            models[4].hide();
+            break;
+        case 0xBD640B63: // robot_9a_bind.MINF
+            models[1].data.geometry.materials[0].color.a = 100/255;
+            models[1].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
+            models[1].pipeFlags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            models[1].pipeFlags |= HIPipeFlags.CULL_FRONTONLY;
+            models[2].hide();
+            models[3].hide();
+            break;
+        case 0xBC21F435: // dutchman_notsubboss_bind.MINF
+            models[0].pipeFlags &= ~(HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK);
+            models[0].pipeFlags |= (RwBlendFunction.ONE << HIPipeFlags.SRCBLEND_SHIFT);
+            models[0].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            colorFromRGBA(models[0].data.geometry.materials[0].color, 0.5, 0.5, 0.5, 0.5);
+            break;
+        case 0xD9BA02B0: // dutchman_bind.MINF
+            models[0].pipeFlags &= ~(HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK);
+            models[0].pipeFlags |= (RwBlendFunction.ONE << HIPipeFlags.SRCBLEND_SHIFT);
+            models[0].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            colorFromRGBA(models[0].data.geometry.materials[0].color, 0.5, 0.5, 0.5, 0.5);
+            models[1].hide();
+            break;
+        case 0xD9F1A3AA: // boss_sb_body_bind.MINF
+            models[3].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
+            models[3].pipeFlags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
+            break;
+        }
     }
 }
