@@ -29,7 +29,7 @@ class AtomicProgram extends DeviceProgram {
     public static ub_MeshParams = 1;
 
     public static readonly ub_AtomicParams_SIZE = 16*3 + 4*2*MAX_DIRECTIONAL_LIGHTS + 4*2;
-    public static readonly ub_MeshParams_SIZE = 4*2;
+    public static readonly ub_MeshParams_SIZE = 4*3;
 
     public override both = `
 precision mediump float;
@@ -47,18 +47,21 @@ layout(std140) uniform ub_AtomicParams {
     Mat4x4 u_ModelMatrix;
     DirectionalLight u_DirectionalLights[MAX_DIRECTIONAL_LIGHTS];
     vec4 u_FogColor;
-    vec4 u_Misc;
+    vec4 u_AtomicMisc;
 };
+
+#define u_NearPlane (u_AtomicMisc.x)
+#define u_FarPlane (u_AtomicMisc.y)
+#define u_FogPlane (u_AtomicMisc.z)
+#define u_AlphaRef (u_AtomicMisc.w)
 
 layout(std140) uniform ub_MeshParams {
     vec4 u_MaterialColor;
     vec4 u_AmbientColor;
+    vec4 u_MeshMisc;
 };
 
-#define u_NearPlane (u_Misc.x)
-#define u_FarPlane (u_Misc.y)
-#define u_FogPlane (u_Misc.z)
-#define u_AlphaRef (u_Misc.w)
+#define u_TexEnable (u_MeshMisc.x)
 
 uniform sampler2D u_Texture;
 
@@ -107,10 +110,10 @@ ${GfxShaderLibrary.saturate}
 void main() {
     vec4 t_Color = v_Color;
 
-#ifdef USE_TEXTURE
     // Texture
-    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
-#endif
+    if (u_TexEnable != 0.0) {
+        t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    }
 
     // Alpha Test
     if (!(t_Color.a > u_AlphaRef)) discard;
@@ -211,9 +214,6 @@ class InstanceData {
             const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
             const indexCount = indexData.length;
             const material = geom.materials[mesh.matIndex];
-
-            program.setDefineBool('USE_TEXTURE', material.texture !== undefined);
-
             const gfxProgram = rw.renderHelper.renderCache.createProgram(program);
 
             this.meshes.push({ indexBuffer, indexBufferDescriptor, indexCount, gfxProgram, material });
@@ -301,11 +301,16 @@ class InstanceData {
             }
             offs += fillColor(mapped, offs, ambientColor);
 
+            if (mesh.material.texture) {
+                offs += fillVec4(mapped, offs, 1.0);
+                mesh.material.texture.raster.bind(renderInst);
+            } else {
+                offs += fillVec4(mapped, offs, 0.0);
+            }
+
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, mesh.indexBufferDescriptor);
             renderInst.setDrawCount(mesh.indexCount);
             renderInst.setGfxProgram(mesh.gfxProgram);
-
-            mesh.material.texture?.raster.bind(renderInst);
 
             rw.renderInstList.submitRenderInst(renderInst);
         }
