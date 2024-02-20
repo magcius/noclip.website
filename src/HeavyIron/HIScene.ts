@@ -28,6 +28,7 @@ import { HIEntButton } from "./HIEntButton.js";
 import { HIEntDestructObj } from "./HIEntDestructObj.js";
 import { HINPCCommon } from "./HINPCCommon.js";
 import { HIEntPlayer } from "./HIEntPlayer.js";
+import { HIAssetPickupTable, HIEntPickup, HIEntPickupManager } from "./HIEntPickup.js";
 
 export const enum HIAssetType {
     ALST = 0x414C5354,
@@ -137,10 +138,12 @@ export class HIScene implements SceneGfx {
     public env: HIEnv;
     public camera: HICamera;
     public player: HIEntPlayer;
+    public pickupTable: HIAssetPickupTable;
     public renderStateManager = new HIRenderStateManager();
     public lightKitManager = new HILightKitManager();
     public modelBucketManager = new HIModelBucketManager();
     public skydomeManager = new HISkyDomeManager();
+    public pickupManager = new HIEntPickupManager();
     public baseList: HIBase[] = [];
     public entList: HIEnt[] = [];
 
@@ -283,14 +286,21 @@ export class HIScene implements SceneGfx {
                     case HIAssetType.MODL:
                         this.loadModel(asset);
                         break;
-                    case HIAssetType.PLYR:
-                        this.player = new HIEntPlayer(new RwStream(asset.data));
-                        break;
-                    case HIAssetType.VIL:
-                        this.addEnt(new HINPCCommon(new RwStream(asset.data)));
+                    case HIAssetType.PICK:
+                        this.pickupTable = new HIAssetPickupTable(new RwStream(asset.data));
                         break;
                     case HIAssetType.PIPT:
                         pipeTables.push(new HIPipeInfoTable(new RwStream(asset.data)));
+                        break;
+                    case HIAssetType.PKUP:
+                    {
+                        const pkup = new HIEntPickup(new RwStream(asset.data));
+                        this.pickupManager.add(pkup);
+                        this.addEnt(pkup);
+                        break;
+                    }
+                    case HIAssetType.PLYR:
+                        this.player = new HIEntPlayer(new RwStream(asset.data));
                         break;
                     case HIAssetType.PLAT:
                         this.addEnt(new HIPlatform(new RwStream(asset.data)));
@@ -300,6 +310,9 @@ export class HIScene implements SceneGfx {
                         break;
                     case HIAssetType.SIMP:
                         this.addEnt(new HIEntSimpleObj(new RwStream(asset.data)));
+                        break;
+                    case HIAssetType.VIL:
+                        this.addEnt(new HINPCCommon(new RwStream(asset.data)));
                         break;
                     }
                 }
@@ -432,8 +445,12 @@ export class HIScene implements SceneGfx {
     }
 
     private update(viewerInput: ViewerRenderInput) {
+        const dt = viewerInput.deltaTime / 1000;
+
+        this.pickupManager.update(this, dt);
+
         for (const ent of this.entList) {
-            ent.update(this, viewerInput.deltaTime);
+            ent.update(this, dt);
         }
     }
 
@@ -456,6 +473,8 @@ export class HIScene implements SceneGfx {
             this.lightKitManager.enable(ent.lightKit, this.rw.world);
             ent.render(this, this.rw);
         }
+
+        this.pickupManager.render(this, this.rw);
         this.modelBucketManager.renderOpaque(this, this.rw);
 
         this.renderStateManager.set(HIRenderState.AlphaModels, this.camera, this.rw);
