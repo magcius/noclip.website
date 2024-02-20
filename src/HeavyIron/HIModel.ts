@@ -121,6 +121,14 @@ export class HIModelInstance {
         inst.parent = this;
     }
 
+    public show() {
+        this.flags |= HIModelFlags.Visible;
+    }
+
+    public hide() {
+        this.flags &= ~HIModelFlags.Visible;
+    }
+
     public update(dt: number) {
     }
 

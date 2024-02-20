@@ -27,6 +27,7 @@ import { RwEngine, RwTexture, RwStream, RwPluginID, RwTexDictionary } from "./rw
 import { HIEntButton } from "./HIEntButton.js";
 import { HIEntDestructObj } from "./HIEntDestructObj.js";
 import { HINPCCommon } from "./HINPCCommon.js";
+import { HIEntPlayer } from "./HIEntPlayer.js";
 
 export const enum HIAssetType {
     ALST = 0x414C5354,
@@ -135,6 +136,7 @@ export class HIScene implements SceneGfx {
     public modelInfos = new Map<number, HIModelAssetInfo>();
     public env: HIEnv;
     public camera: HICamera;
+    public player: HIEntPlayer;
     public renderStateManager = new HIRenderStateManager();
     public lightKitManager = new HILightKitManager();
     public modelBucketManager = new HIModelBucketManager();
@@ -281,6 +283,9 @@ export class HIScene implements SceneGfx {
                     case HIAssetType.MODL:
                         this.loadModel(asset);
                         break;
+                    case HIAssetType.PLYR:
+                        this.player = new HIEntPlayer(new RwStream(asset.data));
+                        break;
                     case HIAssetType.VIL:
                         this.addEnt(new HINPCCommon(new RwStream(asset.data)));
                         break;
@@ -300,6 +305,9 @@ export class HIScene implements SceneGfx {
                 }
             }
         }
+
+        // There's a BOOT.HIP player and a level.HIP player, we only want the level.HIP player
+        this.addEnt(this.player);
 
         this.loadPipeTables(pipeTables);
 
@@ -397,6 +405,13 @@ export class HIScene implements SceneGfx {
                         ent.lightKit = lkit;
                     }
                 }
+            }
+        }
+
+        if (this.player.playerAsset.lightKitID) {
+            const lkitAsset = this.findAsset(this.player.playerAsset.lightKitID);
+            if (lkitAsset) {
+                this.player.lightKit = new HILightKit(lkitAsset.data, this.rw);
             }
         }
     }

@@ -85,23 +85,22 @@ export abstract class HIEnt extends HIBase {
 
     private recurseModelInfo(info: HIModelAssetInfo, scene: HIScene): HIModelInstance | null {
         const tempInst: HIModelInstance[] = [];
+        tempInst.length = info.modelInst.length;
 
         for (let i = 0; i < info.modelInst.length; i++) {
             const inst = info.modelInst[i];
             if (scene.models.has(inst.modelID)) {
                 const clump = scene.models.get(inst.modelID)!;
                 if (i === 0) {
-                    const minst = new HIModelInstance(clump.atomics[0], scene);
-                    tempInst.push(minst);
+                    tempInst[i] = new HIModelInstance(clump.atomics[0], scene);
                     for (let j = 1; j < clump.atomics.length; j++) {
-                        minst.attach(new HIModelInstance(clump.atomics[j], scene));
+                        tempInst[i].attach(new HIModelInstance(clump.atomics[j], scene));
                     }
                 } else {
-                    const minst = new HIModelInstance(clump.atomics[0], scene, inst.flags, inst.bone);
-                    tempInst.push(minst);
-                    tempInst[inst.parent]!.attach(minst);
+                    tempInst[i] = new HIModelInstance(clump.atomics[0], scene, inst.flags, inst.bone);
+                    tempInst[inst.parent]!.attach(tempInst[i]);
                     for (let j = 1; j < clump.atomics.length; j++) {
-                        minst.attach(new HIModelInstance(clump.atomics[j], scene));
+                        tempInst[i].attach(new HIModelInstance(clump.atomics[j], scene));
                     }
                 }
             } else if (scene.modelInfos.has(inst.modelID)) {
@@ -109,11 +108,11 @@ export abstract class HIEnt extends HIBase {
                 const minst = this.recurseModelInfo(info, scene);
                 if (!minst) return null;
 
-                tempInst.push(minst);
+                tempInst[i] = minst;
                 if (i !== 0) {
-                    minst.flags |= inst.flags;
-                    minst.boneIndex = inst.bone;
-                    tempInst[inst.parent].attach(minst);
+                    tempInst[i].flags |= inst.flags;
+                    tempInst[i].boneIndex = inst.bone;
+                    tempInst[inst.parent].attach(tempInst[i]);
                 }
             } else {
                 console.warn(`Model ID not found: 0x${inst.modelID}`);
