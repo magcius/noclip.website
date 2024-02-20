@@ -1,19 +1,19 @@
+
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { divideByW } from "../Camera.js";
-import { Color, colorFromHSL, colorNewFromRGBA, OpaqueBlack, Red, White } from "../Color.js";
-import { drawViewportSpacePoint, drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { Color, White, colorFromHSL, colorNewFromRGBA } from "../Color.js";
+import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB } from "../Geometry.js";
+import { DeviceProgram } from "../Program.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import { DeviceProgram } from "../Program.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { Filesystem } from "./Filesystem.js";
 import { UVTT } from "./ParsedFiles/UVTT.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-
 
 // If the player resets when their progress is within this range, they will be reset as if their progress was at the end of the range
 class SpecialResetZone {
@@ -169,56 +169,9 @@ export function getTrackData(sceneIndex: number | null, filesystem: Filesystem):
     }
 }
 
-// PJ64 Script used to zones
-/*
-var ppFileTable = 0x8002D9B4;
-var pFileTable = mem.u32[ppFileTable]; console.log("pFileTable: " + pFileTable.hex());
-var pUVMOList = mem.u32[pFileTable + 8]; console.log("pUVMOList: " + pUVMOList.hex());
-var pTdata = mem.u32[pUVMOList + (60 * 16) + 4]; console.log("pTdata: " + pTdata.hex());
-console.log();
-
-{
-    var pAddSpecialResetZoneFn = mem.u32[pTdata + (25 * 4)]; console.log("pAddSpecialResetZoneFn: " + pAddSpecialResetZoneFn.hex());
-    var pRelevantInstructions = pAddSpecialResetZoneFn + (7 * 4); console.log("pRelevantInstructions: " + pRelevantInstructions.hex());
-    var ppLinkedList = mem.u16[pRelevantInstructions + 2] << 16;
-    ppLinkedList += mem.s16[pRelevantInstructions + 6]; console.log("ppLinkedList: " + ppLinkedList.hex());
-    var pLinkedList = mem.u32[ppLinkedList]; console.log("pLinkedList: " + pLinkedList.hex());
-    console.log();
-    
-    console.log("Special reset zones [if player resets between lo and hi progress, reset to hi]:");
-    var pCurElem = pLinkedList;
-    while(pCurElem !== 0) {
-        var lo = mem.float[pCurElem];
-        var hi = mem.float[pCurElem + 4];
-        var loHex = mem.u32[pCurElem];
-        var hiHex = mem.u32[pCurElem + 4];
-        pCurElem = mem.u32[pCurElem + 8];
-        console.log("new SpecialResetZone(" + lo + ", " + hi + "),");
-    }
-}
-console.log();
-{
-    var pAddProgressFixZone = mem.u32[pTdata + (24 * 4)]; console.log("pAddProgressFixZone: " + pAddProgressFixZone.hex());
-    var pRelevantInstructions = pAddProgressFixZone + (0 * 4); console.log("pRelevantInstructions: " + pRelevantInstructions.hex());
-    var ppLinkedList = mem.u16[pRelevantInstructions + 2] << 16;
-    ppLinkedList += mem.s16[pRelevantInstructions + 6]; console.log("ppLinkedList: " + ppLinkedList.hex());
-    var pLinkedList = mem.u32[ppLinkedList]; console.log("pLinkedList: " + pLinkedList.hex());
-    console.log();
-    
-    console.log("Progress fix zones [if player pos in zone and progress is in range, set progress to val]:");
-    var pCurElem = pLinkedList;
-    while(pCurElem !== 0) {
-        var x = mem.float[pCurElem];
-        var y = mem.float[pCurElem + 4];
-        var squareHalfSize = mem.float[pCurElem + 8];
-        var lo = mem.float[pCurElem + 12];
-        var hi = mem.float[pCurElem + 16];
-        var newProg = mem.float[pCurElem + 20];
-        pCurElem = mem.u32[pCurElem + 24];
-        console.log("new ProgressFixZone(" + x + ", " + y + ", " + squareHalfSize + ", " + lo + ", " + hi + ", " + newProg + "),");
-    }
-}
-*/
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 1, numSamplers: 0 },
+];
 
 class TranslucentPlaneProgram extends DeviceProgram {
     public override both = `
@@ -279,6 +232,7 @@ export class TranslucentPlaneRenderer {
         planePos: vec3, planeUp: vec3, planeRight: vec3, planeWidth: number, planeHeight: number, planeColor: Color) {
 
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.setBindingLayouts(bindingLayouts);
 
         renderInst.setMegaStateFlags(setAttachmentStateSimple({
             cullMode: GfxCullMode.None,
