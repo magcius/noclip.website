@@ -89,4 +89,10 @@ export class HashMap<K, V> {
             for (let j = bucket.values.length - 1; j >= 0; j--)
                 yield bucket.values[j];
     }
+
+    public* items(): IterableIterator<[K, V]> {
+        for (const bucket of this.buckets.values())
+            for (let j = bucket.keys.length - 1; j >= 0; j--)
+                yield [bucket.keys[j], bucket.values[j]];
+    }
 }

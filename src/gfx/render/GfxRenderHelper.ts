@@ -36,6 +36,7 @@ class GfxRenderHelperBase {
     }
 
     public prepareToRender(): void {
+        this.renderCache.prepareToRender();
         this.uniformBuffer.prepareToRender();
     }
 
