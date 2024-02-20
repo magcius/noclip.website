@@ -78,18 +78,22 @@ void main() {
     gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
 
     v_Position = a_Position;
-
     v_Color = a_Color * u_MaterialColor;
+
+    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
 
     // Ambient lighting
     v_Color.rgb *= u_AmbientColor.rgb * u_AmbientColor.a;
-
+    
     // Directional lighting
-    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
+    vec3 t_LightColor = vec3(0.0);
     for (int i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
         DirectionalLight light = u_DirectionalLights[i];
-        v_Color.rgb += max(dot(t_Normal, light.Direction.xyz), 0.0) * light.Color.rgb * light.Color.a;
+        t_LightColor += max(dot(t_Normal, light.Direction.xyz), 0.0) * light.Color.rgb * light.Color.a;
     }
+    t_LightColor = min(t_LightColor, vec3(1.0));
+
+    v_Color.rgb += t_LightColor;
 
     v_TexCoord = a_TexCoord;
     v_Depth = gl_Position.w;

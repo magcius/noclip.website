@@ -33,6 +33,16 @@ export class HILightKit {
             const angle = stream.readFloat();
             const platLightPtr = stream.readUint32();
 
+            if (color.r > 1.0 || color.g > 1.0 || color.b > 1.0) {
+                let s = Math.max(color.r, color.g, color.b);
+                s = Math.max(s, 0.00001);
+                s = 1.0 / s;
+
+                color.r *= s;
+                color.g *= s;
+                color.b *= s;
+            }
+
             let light: RpLight;
 
             switch (type) {
