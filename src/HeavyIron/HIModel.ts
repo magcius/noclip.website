@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { HIModelBucket } from "./HIModelBucket.js";
 import { HIScene } from "./HIScene.js";
 import { HILightKit } from "./HILightKit.js";
@@ -172,4 +172,20 @@ export class HIModelInstance {
 
         this.data.geometry.flags = oldflag;
     }
+}
+
+const scratchVec3 = vec3.create();
+
+export function modelCull(model: RpAtomic, mat: mat4, rw: RwEngine) {
+    const sph = model.geometry.morphTargets[0].boundingSphere;
+
+    const scale = scratchVec3;
+    mat4.getScaling(scale, mat);
+    const radius = sph[3] * Math.sqrt(Math.max(scale[0], scale[1], scale[2]));
+
+    const center = scratchVec3;
+    vec3.set(center, sph[0], sph[1], sph[2]);
+    vec3.transformMat4(center, center, mat);
+
+    return !rw.viewerInput.camera.frustum.containsSphere(center, radius);
 }

@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { HIModelInstance, HIPipeFlags } from "./HIModel.js";
+import { HIModelFlags, HIModelInstance, HIPipeFlags, modelCull } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwCullMode, RwEngine } from "./rw/rwcore.js";
 import { RpAtomic } from "./rw/rpworld.js";
@@ -17,6 +17,8 @@ interface HIModelAlphaBucket {
     layer: number;
 }
 
+const scratchVec3 = vec3.create();
+
 export class HIModelBucketManager {
     public enabled = false;
 
@@ -25,7 +27,8 @@ export class HIModelBucketManager {
     private alphaCurr = 0;
 
     constructor() {
-        for (let i = 0; i < 256; i++) {
+        // TODO: use 256 instead of 512 once we have distance culling
+        for (let i = 0; i < 512; i++) {
             this.alphaList.push({ sortValue: Infinity, layer: 0 });
         }
     }
@@ -56,13 +59,17 @@ export class HIModelBucketManager {
     }
 
     public add(minst: HIModelInstance, scene: HIScene, rw: RwEngine) {
+        if (!(minst.flags & HIModelFlags.Visible)) return;
+        if (modelCull(minst.data, minst.mat, rw)) return;
+
         if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_PRELIGHTONLY) {
             minst.lightKit = scene.lightKitManager.lastLightKit;
         }
 
         // TODO: Use RpAtomic.worldBoundingSphere instead
         const sph = minst.data.geometry.morphTargets[0].boundingSphere;
-        const pos = vec3.fromValues(sph[0], sph[1], sph[2]);
+        const pos = scratchVec3;
+        vec3.set(pos, sph[0], sph[1], sph[2]);
         vec3.transformMat4(pos, pos, minst.mat);
 
         const camdot = rw.camera.worldMatrix[8] * (pos[0] - rw.camera.worldMatrix[12]) +

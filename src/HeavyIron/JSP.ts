@@ -1,5 +1,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert } from "../util.js";
+import { modelCull } from "./HIModel.js";
 import { RpAtomic, RpAtomicFlag, RpClump } from "./rw/rpworld.js";
 import { RwChunkHeader, RwCullMode, RwEngine, RwPluginID, RwStream } from "./rw/rwcore.js";
 
@@ -19,7 +20,8 @@ export class JSP {
 
     public render(rw: RwEngine) {
         for (const node of this.nodeList) {
-            if (node.atomic.flags & RpAtomicFlag.RENDER) {
+            if ((node.atomic.flags & RpAtomicFlag.RENDER) &&
+                !modelCull(node.atomic, node.atomic.frame.matrix, rw)) {
                 rw.renderState.cullMode = (node.nodeFlags & JSPNodeFlags.DISABLECULL) ? RwCullMode.NONE : RwCullMode.BACK;
                 rw.renderState.zWriteEnable = (node.nodeFlags & JSPNodeFlags.DISABLEZWRITE) === 0;
                 node.atomic.render(rw);
