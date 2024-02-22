@@ -1,5 +1,5 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxDebugGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
@@ -463,7 +463,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // Pass Execution
     private _currentRenderPassDescriptor: GfxRenderPassDescriptor | null = null;
-    private _debugGroupStack: GfxDebugGroup[] = [];
+    private _statisticsGroupStack: GfxStatisticsGroup[] = [];
     private _resolveColorAttachmentsChanged: boolean = false;
     private _resolveColorReadFramebuffer: WebGLFramebuffer;
     private _resolveColorDrawFramebuffer: WebGLFramebuffer;
@@ -1521,10 +1521,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program.compileState === GfxProgramCompileStateP_GL.NeedsBind || program.compileState === GfxProgramCompileStateP_GL.ReadyToUse;
     }
 
-    public queryPlatformAvailable(): boolean {
-        return this.gl.isContextLost();
-    }
-
     public queryVendorInfo(): GfxVendorInfo {
         return this;
     }
@@ -1573,12 +1569,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.checkForLeaks();
     }
 
-    public pushDebugGroup(debugGroup: GfxDebugGroup): void {
-        this._debugGroupStack.push(debugGroup);
+    public pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void {
+        this._statisticsGroupStack.push(statisticsGroup);
     }
 
-    public popDebugGroup(): void {
-        this._debugGroupStack.pop();
+    public popStatisticsGroup(): void {
+        this._statisticsGroupStack.pop();
     }
 
     public programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void {
@@ -1603,23 +1599,23 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     //#region Pass execution
     private _debugGroupStatisticsDrawCall(count: number = 1): void {
-        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            this._debugGroupStack[i].drawCallCount += count;
+        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
+            this._statisticsGroupStack[i].drawCallCount += count;
     }
 
     private _debugGroupStatisticsBufferUpload(count: number = 1): void {
-        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            this._debugGroupStack[i].bufferUploadCount += count;
+        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
+            this._statisticsGroupStack[i].bufferUploadCount += count;
     }
 
     private _debugGroupStatisticsTextureBind(count: number = 1): void {
-        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            this._debugGroupStack[i].textureBindCount += count;
+        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
+            this._statisticsGroupStack[i].textureBindCount += count;
     }
 
     private _debugGroupStatisticsTriangles(count: number): void {
-        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            this._debugGroupStack[i].triangleCount += count;
+        for (let i = this._statisticsGroupStack.length - 1; i >= 0; i--)
+            this._statisticsGroupStack[i].triangleCount += count;
     }
 
     private _compileShader(contents: string, type: GLenum): WebGLShader {

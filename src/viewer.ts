@@ -4,7 +4,7 @@ import * as UI from './ui.js';
 import InputManager from './InputManager.js';
 import { SceneDesc, SceneGroup } from "./SceneBase.js";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera.js';
-import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxSwapChain, GfxStatisticsGroup, GfxTexture, makeTextureDescriptor2D, GfxFormat } from './gfx/platform/GfxPlatform.js';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2.js';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU.js';
 import { downloadFrontBufferToCanvas } from './Screenshot.js';
@@ -64,7 +64,7 @@ export interface SceneGfx {
 
 export type Listener = (viewer: Viewer) => void;
 
-function resetGfxDebugGroup(group: GfxDebugGroup): void {
+function resetGfxStatisticsGroup(group: GfxStatisticsGroup): void {
     group.bufferUploadCount = 0;
     group.drawCallCount = 0;
     group.textureBindCount = 0;
@@ -109,7 +109,7 @@ export class Viewer {
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
     private keyMoveSpeedListeners: Listener[] = [];
-    private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
+    private statisticsGroup: GfxStatisticsGroup = { drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -167,16 +167,16 @@ export class Viewer {
         this.gfxDevice.beginFrame();
         this.renderStatisticsTracker.beginFrame();
 
-        resetGfxDebugGroup(this.debugGroup);
-        this.gfxDevice.pushDebugGroup(this.debugGroup);
+        resetGfxStatisticsGroup(this.statisticsGroup);
+        this.gfxDevice.pushStatisticsGroup(this.statisticsGroup);
 
         this.renderViewport();
 
-        this.gfxDevice.popDebugGroup();
+        this.gfxDevice.popStatisticsGroup();
         this.gfxDevice.endFrame();
 
         const renderStatistics = this.renderStatisticsTracker.endFrame();
-        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.finishRenderStatistics(renderStatistics, this.statisticsGroup);
         this.onstatistics(renderStatistics);
     }
 
@@ -212,8 +212,8 @@ export class Viewer {
         this.gfxDevice.beginFrame();
         this.renderStatisticsTracker.beginFrame();
 
-        resetGfxDebugGroup(this.debugGroup);
-        this.gfxDevice.pushDebugGroup(this.debugGroup);
+        resetGfxStatisticsGroup(this.statisticsGroup);
+        this.gfxDevice.pushStatisticsGroup(this.statisticsGroup);
 
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
@@ -236,22 +236,22 @@ export class Viewer {
             this.viewerRenderInput.deltaTime = 0;
         }
 
-        this.gfxDevice.popDebugGroup();
+        this.gfxDevice.popStatisticsGroup();
         this.gfxDevice.endFrame();
         const renderStatistics = this.renderStatisticsTracker.endFrame();
-        this.finishRenderStatistics(renderStatistics, this.debugGroup);
+        this.finishRenderStatistics(renderStatistics, this.statisticsGroup);
         this.onstatistics(renderStatistics);
     }
 
-    private finishRenderStatistics(statistics: RenderStatistics, debugGroup: GfxDebugGroup): void {
-        if (debugGroup.drawCallCount)
-            statistics.lines.push(`Draw Calls: ${debugGroup.drawCallCount}`);
-        if (debugGroup.triangleCount)
-            statistics.lines.push(`Drawn Triangles: ${debugGroup.triangleCount}`);
-        if (debugGroup.textureBindCount)
-            statistics.lines.push(`Texture Binds: ${debugGroup.textureBindCount}`);
-        if (debugGroup.bufferUploadCount)
-            statistics.lines.push(`Buffer Uploads: ${debugGroup.bufferUploadCount}`);
+    private finishRenderStatistics(statistics: RenderStatistics, statisticsGroup: GfxStatisticsGroup): void {
+        if (statisticsGroup.drawCallCount)
+            statistics.lines.push(`Draw Calls: ${statisticsGroup.drawCallCount}`);
+        if (statisticsGroup.triangleCount)
+            statistics.lines.push(`Drawn Triangles: ${statisticsGroup.triangleCount}`);
+        if (statisticsGroup.textureBindCount)
+            statistics.lines.push(`Texture Binds: ${statisticsGroup.textureBindCount}`);
+        if (statisticsGroup.bufferUploadCount)
+            statistics.lines.push(`Buffer Uploads: ${statisticsGroup.bufferUploadCount}`);
 
         const worldMatrix = this.camera.worldMatrix;
         const camPositionX = worldMatrix[12].toFixed(2), camPositionY = worldMatrix[13].toFixed(2), camPositionZ = worldMatrix[14].toFixed(2);
