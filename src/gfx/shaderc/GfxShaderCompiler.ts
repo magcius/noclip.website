@@ -61,25 +61,24 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, implicitBinding = 0, location = 0;
 
-        rest = rest.replace(/^(layout\((.*)\))?\s*uniform(.+{)$/gm, (substr, cap, layout, rest) => {
-            const layout2 = layout ? `${layout}, ` : ``;
-            return `layout(${layout2}set = ${set}, binding = ${implicitBinding++}) uniform ${rest}`;
-        });
-
-        // XXX(jstpierre): WebGPU now binds UBOs and textures in different sets as a porting hack, hrm...
-        set++;
-        implicitBinding = 0;
-
+        let maxSamplerBinding = -1;
         assert(vendorInfo.separateSamplerTextures);
         rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, combinedSamplerType, samplerName) => {
             let binding = parseBinding(layout);
             if (binding === null)
                 binding = implicitBinding++;
+            maxSamplerBinding = Math.max(maxSamplerBinding, binding);
 
             const [textureType, samplerType] = getSeparateSamplerTypes(combinedSamplerType);
             return type === 'frag' ? `
 layout(set = ${set}, binding = ${(binding * 2) + 0}) uniform texture${textureType} T_${samplerName};
 layout(set = ${set}, binding = ${(binding * 2) + 1}) uniform sampler${samplerType} S_${samplerName};`.trim() : '';
+        });
+
+        let bufferBinding = maxSamplerBinding * 2 + 2;
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform(.+{)$/gm, (substr, cap, layout, rest) => {
+            const layout2 = layout ? `${layout}, ` : ``;
+            return `layout(${layout2}set = ${set}, binding = ${bufferBinding++}) uniform ${rest}`;
         });
 
         rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {

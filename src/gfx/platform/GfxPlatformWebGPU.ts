@@ -57,14 +57,10 @@ interface GfxComputeProgramP_WebGPU extends GfxProgram {
     computeStage: GPUProgrammableStage | null;
 }
 
-interface BindGroupLayout {
-    gpuBindGroupLayout: GPUBindGroupLayout[];
-}
-
 interface GfxBindingsP_WebGPU extends GfxBindings {
     bindingLayout: GfxBindingLayoutDescriptor;
-    bindGroupLayout: BindGroupLayout;
-    gpuBindGroup: GPUBindGroup[];
+    bindGroupLayout: GPUBindGroupLayout;
+    gpuBindGroup: GPUBindGroup;
 }
 
 interface GfxInputLayoutP_WebGPU extends GfxInputLayout {
@@ -689,8 +685,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
         const bindings = bindings_ as GfxBindingsP_WebGPU;
-        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex + 0, bindings.gpuBindGroup[0], dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
-        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex + 1, bindings.gpuBindGroup[1]);
+        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex, bindings.gpuBindGroup, dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
     }
 
     public setStencilRef(ref: number): void {
@@ -893,7 +888,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     private _computePassPool: GfxComputePassP_WebGPU[] = [];
     private _featureTextureCompressionBC: boolean = false;
 
-    private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, BindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
+    private _bindGroupLayoutCache = new HashMap<GfxBindingLayoutDescriptor, GPUBindGroupLayout>(gfxBindingLayoutDescriptorEqual, nullHashFunc);
 
     private _frameCommandEncoder: GPUCommandEncoder | null = null;
     private _readbacksSubmitted: GfxReadbackP_WebGPU[] = [];
@@ -1158,23 +1153,22 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return program;
     }
 
-    private _createBindGroupLayoutInternal(bindingLayout: GfxBindingLayoutDescriptor): BindGroupLayout {
-        const entries: GPUBindGroupLayoutEntry[][] = [[], []];
-
-        for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
-            entries[0].push({ binding: entries[0].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform', hasDynamicOffset: true } });
+    private _createBindGroupLayoutInternal(bindingLayout: GfxBindingLayoutDescriptor): GPUBindGroupLayout {
+        const entries: GPUBindGroupLayoutEntry[] = [];
 
         for (let i = 0; i < bindingLayout.numSamplers; i++) {
             const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
-            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: translateBindGroupTextureBinding(samplerEntry), });
-            entries[1].push({ binding: entries[1].length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: translateBindGroupSamplerBinding(samplerEntry), });
+            entries.push({ binding: entries.length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: translateBindGroupTextureBinding(samplerEntry), });
+            entries.push({ binding: entries.length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, sampler: translateBindGroupSamplerBinding(samplerEntry), });
         }
 
-        const gpuBindGroupLayout = entries.map((entries) => this.device.createBindGroupLayout({ entries }));
-        return { gpuBindGroupLayout };
+        for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
+            entries.push({ binding: entries.length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform', hasDynamicOffset: true } });
+
+        return this.device.createBindGroupLayout({ entries });
     }
 
-    private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): BindGroupLayout {
+    private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): GPUBindGroupLayout {
         let gpuBindGroupLayout = this._bindGroupLayoutCache.get(bindingLayout);
         if (gpuBindGroupLayout === null) {
             gpuBindGroupLayout = this._createBindGroupLayoutInternal(bindingLayout);
@@ -1209,20 +1203,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const bindingLayout = bindingsDescriptor.bindingLayout;
         const bindGroupLayout = this._createBindGroupLayout(bindingLayout);
 
-        const gpuBindGroupEntries: GPUBindGroupEntry[][] = [[], []];
+        const gpuBindGroupEntries: GPUBindGroupEntry[] = [];
         let numBindings = 0;
-        for (let i = 0; i < bindingLayout.numUniformBuffers; i++) {
-            const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
-            assert(gfxBinding.wordCount > 0);
-            const gpuBufferBinding: GPUBufferBinding = {
-                buffer: getPlatformBuffer(gfxBinding.buffer),
-                offset: 0,
-                size: gfxBinding.wordCount << 2,
-            };
-            gpuBindGroupEntries[0].push({ binding: numBindings++, resource: gpuBufferBinding });
-        }
 
-        numBindings = 0;
         for (let i = 0; i < bindingLayout.numSamplers; i++) {
             const samplerEntry = bindingLayout.samplerEntries !== undefined ? bindingLayout.samplerEntries[i] : defaultBindingLayoutSamplerDescriptor;
 
@@ -1231,14 +1214,26 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             assert(samplerEntry.dimension === gfxTexture.dimension);
             assert(samplerEntry.formatKind === getFormatSamplerKind(gfxTexture.pixelFormat));
             const gpuTextureView = (gfxTexture as GfxTextureP_WebGPU).gpuTextureView;
-            gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuTextureView });
+            gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuTextureView });
 
             const gfxSampler = gfxBinding.gfxSampler !== null ? gfxBinding.gfxSampler : this._getFallbackSampler(samplerEntry);
             const gpuSampler = getPlatformSampler(gfxSampler);
-            gpuBindGroupEntries[1].push({ binding: numBindings++, resource: gpuSampler });
+            gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuSampler });
         }
 
-        const gpuBindGroup = gpuBindGroupEntries.map((gpuBindGroupEntries, i) => this.device.createBindGroup({ layout: bindGroupLayout.gpuBindGroupLayout[i], entries: gpuBindGroupEntries }));
+        // numBindings = 0;
+        for (let i = 0; i < bindingLayout.numUniformBuffers; i++) {
+            const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
+            assert(gfxBinding.wordCount > 0);
+            const gpuBufferBinding: GPUBufferBinding = {
+                buffer: getPlatformBuffer(gfxBinding.buffer),
+                offset: 0,
+                size: gfxBinding.wordCount << 2,
+            };
+            gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuBufferBinding });
+        }
+
+        const gpuBindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries: gpuBindGroupEntries });
         const bindings: GfxBindingsP_WebGPU = { _T: _T.Bindings, ResourceUniqueId: this._resourceUniqueId, bindingLayout: bindingsDescriptor.bindingLayout, bindGroupLayout, gpuBindGroup };
         return bindings;
     }
@@ -1272,7 +1267,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private _createPipelineLayout(bindingLayouts: GfxBindingLayoutDescriptor[]): GPUPipelineLayout {
-        const bindGroupLayouts = bindingLayouts.flatMap((bindingLayout) => this._createBindGroupLayout(bindingLayout).gpuBindGroupLayout);
+        const bindGroupLayouts = bindingLayouts.map((bindingLayout) => this._createBindGroupLayout(bindingLayout));
         return this.device.createPipelineLayout({ bindGroupLayouts });
     }
 
