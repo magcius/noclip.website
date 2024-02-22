@@ -685,7 +685,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsets: number[]): void {
         const bindings = bindings_ as GfxBindingsP_WebGPU;
-        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex, bindings.gpuBindGroup, dynamicByteOffsets.slice(0, bindings.bindingLayout.numUniformBuffers));
+        this.gpuRenderPassEncoder!.setBindGroup(bindingLayoutIndex, bindings.gpuBindGroup, dynamicByteOffsets);
     }
 
     public setStencilRef(ref: number): void {

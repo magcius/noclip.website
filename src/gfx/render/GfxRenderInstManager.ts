@@ -1,5 +1,5 @@
 
-import { nArray, assert, assertExists, spliceBisectRight, setBitFlagEnabled } from "../../util.js";
+import { nArray, assert, assertExists, spliceBisectRight } from "../../util.js";
 import { clamp } from "../../MathHelpers.js";
 
 import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform.js";
@@ -220,15 +220,17 @@ export class GfxRenderInst {
         this._indexBuffer = o._indexBuffer;
         this._allowSkippingPipelineIfNotReady = o._allowSkippingPipelineIfNotReady;
         this.sortKey = o.sortKey;
-        const tbd = this._bindingDescriptors[0], obd = o._bindingDescriptors[0];
-        if (obd.bindingLayout !== null)
-            this._setBindingLayout(obd.bindingLayout);
-        for (let i = 0; i < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); i++)
-            tbd.uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
-        this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
+        for (let i = 0; i < o._bindingDescriptors.length; i++) {
+            const tbd = this._bindingDescriptors[i], obd = o._bindingDescriptors[i];
+            if (obd.bindingLayout !== null)
+                this._setBindingLayout(i, obd.bindingLayout);
+            for (let j = 0; j < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); j++)
+                tbd.uniformBufferBindings[j].wordCount = obd.uniformBufferBindings[j].wordCount;
+            this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
+        }
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
-            this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
-    }
+        this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
+}
 
     public validate(): void {
         // Validate uniform buffer bindings.
@@ -280,15 +282,16 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.inputLayout = inputLayout;
     }
 
-    private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
+    private _setBindingLayout(i: number, bindingLayout: GfxBindingLayoutDescriptor): void {
         assert(bindingLayout.numUniformBuffers <= this._dynamicUniformBufferByteOffsets.length);
-        this._renderPipelineDescriptor.bindingLayouts[0] = bindingLayout;
-        this._bindingDescriptors[0].bindingLayout = bindingLayout;
+        this._renderPipelineDescriptor.bindingLayouts[i] = bindingLayout;
+        const bindingDescriptor = this._bindingDescriptors[i];
+        bindingDescriptor.bindingLayout = bindingLayout;
 
-        for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
-            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0 });
-        for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
-            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
+        for (let j = bindingDescriptor.uniformBufferBindings.length; j < bindingLayout.numUniformBuffers; j++)
+            bindingDescriptor.uniformBufferBindings.push({ buffer: null!, wordCount: 0 });
+        for (let j = bindingDescriptor.samplerBindings.length; j < bindingLayout.numSamplers; j++)
+            bindingDescriptor.samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
 
     /**
@@ -296,8 +299,8 @@ export class GfxRenderInst {
      */
     public setBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): void {
         assert(bindingLayouts.length <= this._bindingDescriptors.length);
-        assert(bindingLayouts.length === 1);
-        this._setBindingLayout(bindingLayouts[0]);
+        for (let i = 0; i < this._bindingDescriptors.length; i++)
+            this._setBindingLayout(i, bindingLayouts[i]);
     }
 
     /**
@@ -377,17 +380,10 @@ export class GfxRenderInst {
         return this._uniformBuffer;
     }
 
-    /**
-     * Sets the {@param GfxSamplerBinding}s in use by this render instance.
-     *
-     * Note that {@see GfxRenderInst} has a method of doing late binding, intended to solve cases where live render
-     * targets are used, which can have difficult control flow consequences for users. Pass a string instead of a
-     * GfxSamplerBinding to record that it can be resolved later, and use {@see GfxRenderInst.resolveLateSamplerBinding}
-     * or equivalent to fill it in later.
-     */
-    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
-        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i];
+    public setSamplerBindings(bindingIndex: number, m: (GfxSamplerBinding | null)[]): void {
+        const bindingDescriptor = this._bindingDescriptors[bindingIndex];
+        for (let i = 0; i < bindingDescriptor.samplerBindings.length; i++) {
+            const dst = bindingDescriptor.samplerBindings[i];
             const binding = m[i];
 
             if (binding === undefined || binding === null) {
@@ -403,11 +399,27 @@ export class GfxRenderInst {
         }
     }
 
+    /**
+     * Sets the {@param GfxSamplerBinding}s in use by this render instance.
+     *
+     * Note that {@see GfxRenderInst} has a method of doing late binding, intended to solve cases where live render
+     * targets are used, which can have difficult control flow consequences for users. Pass a string instead of a
+     * GfxSamplerBinding to record that it can be resolved later, and use {@see GfxRenderInst.resolveLateSamplerBinding}
+     * or equivalent to fill it in later.
+     */
+    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
+        assert(this._bindingDescriptors.length === 1);
+        this.setSamplerBindings(0, m);
+    }
+
     public hasLateSamplerBinding(name: string): boolean {
-        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i];
-            if (dst.lateBinding === name)
-                return true;
+        for (let i = 0; i < this._bindingDescriptors.length; i++) {
+            const bindingDescriptor = this._bindingDescriptors[i];
+            for (let j = 0; j < bindingDescriptor.samplerBindings.length; j++) {
+                const dst = bindingDescriptor.samplerBindings[j];
+                if (dst.lateBinding === name)
+                    return true;
+            }
         }
 
         return false;
@@ -421,20 +433,23 @@ export class GfxRenderInst {
      * for framebuffer effects.
      */
     public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding | null): void {
-        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i];
-            if (dst.lateBinding === name) {
-                if (binding === null) {
-                    dst.gfxTexture = null;
-                    dst.gfxSampler = null;
-                } else {
-                    assert(binding.lateBinding === null);
-                    dst.gfxTexture = binding.gfxTexture;
-                    if (binding.gfxSampler !== null)
-                        dst.gfxSampler = binding.gfxSampler;
+        for (let i = 0; i < this._bindingDescriptors.length; i++) {
+            const bindingDescriptor = this._bindingDescriptors[i];
+            for (let j = 0; j < bindingDescriptor.samplerBindings.length; j++) {
+                const dst = bindingDescriptor.samplerBindings[j];
+                if (dst.lateBinding === name) {
+                    if (binding === null) {
+                        dst.gfxTexture = null;
+                        dst.gfxSampler = null;
+                    } else {
+                        assert(binding.lateBinding === null);
+                        dst.gfxTexture = binding.gfxTexture;
+                        if (binding.gfxSampler !== null)
+                            dst.gfxSampler = binding.gfxSampler;
+                    }
+    
+                    dst.lateBinding = null;
                 }
-
-                dst.lateBinding = null;
             }
         }
     }
@@ -496,12 +511,16 @@ export class GfxRenderInst {
         passRenderer.setPipeline(gfxPipeline);
         passRenderer.setVertexInput(this._renderPipelineDescriptor.inputLayout, this._vertexBuffers, this._indexBuffer);
 
-        for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
-            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = assertExists(this._uniformBuffer.gfxBuffer);
-
-        // TODO(jstpierre): Support multiple binding descriptors.
-        const gfxBindings = cache.createBindings(this._bindingDescriptors[0]);
-        passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
+        let uboIndex = 0;
+        for (let i = 0; i < this._bindingDescriptors.length; i++) {
+            const bindingDescriptor = this._bindingDescriptors[i];
+            for (let j = 0; j < bindingDescriptor.uniformBufferBindings.length; j++)
+                bindingDescriptor.uniformBufferBindings[j].buffer = assertExists(this._uniformBuffer.gfxBuffer);
+            const gfxBindings = cache.createBindings(bindingDescriptor);
+            const numBuffers = bindingDescriptor.bindingLayout.numUniformBuffers;
+            passRenderer.setBindings(i, gfxBindings, this._dynamicUniformBufferByteOffsets.slice(uboIndex, uboIndex + numBuffers));
+            uboIndex += numBuffers;
+        }
 
         const indexed = this._indexBuffer !== null;
         if (this._drawInstanceCount > 1) {
