@@ -174,8 +174,10 @@ export class GfxRenderCache {
 
     public prepareToRender(): void {
         for (const [key, value] of this.gfxBindingsCache.items()) {
-            if (--value.expireFrameNum <= 0)
+            if (--value.expireFrameNum <= 0) {
                 this.gfxBindingsCache.delete(key);
+                this.device.destroyBindings(value);
+            }
         }
     }
 
