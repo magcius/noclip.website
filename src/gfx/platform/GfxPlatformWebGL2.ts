@@ -1887,10 +1887,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
         // Ignore extra bindings.
         assert(uniformBufferBindings.length >= bindingLayoutTable.numUniformBuffers);
+        assert(dynamicByteOffsets.length >= bindingLayoutTable.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
-        assert(dynamicByteOffsets.length >= uniformBufferBindings.length);
 
-        for (let i = 0; i < uniformBufferBindings.length; i++) {
+        for (let i = 0; i < bindingLayoutTable.numUniformBuffers; i++) {
             const binding = uniformBufferBindings[i];
             if (binding.wordCount === 0)
                 continue;
