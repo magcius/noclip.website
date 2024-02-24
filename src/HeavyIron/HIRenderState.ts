@@ -43,7 +43,8 @@ export class HIRenderStateManager {
         camera.setFogRenderStates(rw);
         rw.renderState.vertexAlphaEnable = true;
         rw.renderState.cullMode = RwCullMode.NONE;
-        rw.renderState.textureAddress = RwTextureAddressMode.WRAP;
+        rw.renderState.textureAddressU = RwTextureAddressMode.WRAP;
+        rw.renderState.textureAddressV = RwTextureAddressMode.WRAP;
         rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
         rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
         rw.renderState.shadeMode = RwShadeMode.GOURAUD;

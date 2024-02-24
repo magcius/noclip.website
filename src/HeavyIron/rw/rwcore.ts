@@ -235,8 +235,9 @@ export const enum RwRasterFormat {
 export class RwRaster {
     private pixels: Uint8Array;
     
-    public gfxTexture?: GfxTexture;
-    public gfxSampler: GfxSampler;
+    public texture?: RwTexture;
+    
+    public gfxTexture: GfxTexture | null = null;
     public textureMapping = nArray(1, () => new TextureMapping());
 
     constructor(public width: number, public height: number, public depth: number, public format: RwRasterFormat) {
@@ -246,7 +247,7 @@ export class RwRaster {
     public lock(rw: RwEngine) {
         if (this.gfxTexture) {
             rw.renderHelper.device.destroyTexture(this.gfxTexture);
-            this.gfxTexture = undefined;
+            this.gfxTexture = null;
         }
 
         return this.pixels;
@@ -257,31 +258,25 @@ export class RwRaster {
         
         rw.renderHelper.device.uploadTextureData(this.gfxTexture, 0, [this.pixels]);
 
-        this.gfxSampler = rw.renderHelper.renderCache.createSampler({
-            magFilter: GfxTexFilterMode.Bilinear,
-            minFilter: GfxTexFilterMode.Bilinear,
-            mipFilter: GfxMipFilterMode.Linear,
-            wrapS: GfxWrapMode.Repeat,
-            wrapT: GfxWrapMode.Repeat,
-        });
-
         const mapping = this.textureMapping[0];
         mapping.width = this.width;
         mapping.height = this.height;
         mapping.flipY = false;
         mapping.gfxTexture = this.gfxTexture;
-        mapping.gfxSampler = this.gfxSampler;
     }
 
     public destroy(rw: RwEngine) {
         if (this.gfxTexture) {
             rw.renderHelper.device.destroyTexture(this.gfxTexture);
-            this.gfxTexture = undefined;
+            this.gfxTexture = null;
         }
     }
 
-    public bind(renderInst: GfxRenderInst) {
+    public bind(renderInst: GfxRenderInst, gfxSampler: GfxSampler) {
         if (this.gfxTexture) {
+            const mapping = this.textureMapping[0];
+            mapping.gfxSampler = gfxSampler;
+
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         }
     }
@@ -314,13 +309,96 @@ export const enum RwTextureStreamFlags {
     USERMIPMAPS = 0x01
 }
 
+// Not sure if these are right
+function convertRwTextureFilterMode(filter: RwTextureFilterMode): GfxTexFilterMode {
+    switch (filter) {
+    case RwTextureFilterMode.LINEAR:           return GfxTexFilterMode.Bilinear;
+    case RwTextureFilterMode.MIPNEAREST:       return GfxTexFilterMode.Point;
+    case RwTextureFilterMode.MIPLINEAR:        return GfxTexFilterMode.Point;
+    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxTexFilterMode.Bilinear;
+    case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxTexFilterMode.Bilinear;
+    default:                                   return GfxTexFilterMode.Point;
+    }
+}
+
+// Not sure if these are right
+function convertRwTextureFilterModeMip(filter: RwTextureFilterMode): GfxMipFilterMode {
+    switch (filter) {
+    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.Linear;
+    case RwTextureFilterMode.MIPNEAREST:       return GfxMipFilterMode.Nearest;
+    case RwTextureFilterMode.MIPLINEAR:        return GfxMipFilterMode.Linear;
+    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxMipFilterMode.Nearest;
+    case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxMipFilterMode.Linear;
+    default:                                   return GfxMipFilterMode.Nearest;
+    }
+}
+
+function convertRwTextureAddressMode(address: RwTextureAddressMode): GfxWrapMode {
+    switch (address) {
+    case RwTextureAddressMode.WRAP:             return GfxWrapMode.Repeat;
+    case RwTextureAddressMode.MIRROR:           return GfxWrapMode.Mirror;
+    case RwTextureAddressMode.CLAMP:            return GfxWrapMode.Clamp;
+    case RwTextureAddressMode.BORDER:           return GfxWrapMode.Clamp; // unsupported
+    default:                                    return GfxWrapMode.Repeat;
+    }
+}
+
 export class RwTexture {
     public name: string;
     public mask: string;
-    public filter: RwTextureFilterMode;
-    public addressingU: RwTextureAddressMode;
-    public addressingV: RwTextureAddressMode;
     public raster: RwRaster;
+
+    private _filter = RwTextureFilterMode.NEAREST;
+    private _addressingU = RwTextureAddressMode.WRAP;
+    private _addressingV = RwTextureAddressMode.WRAP;
+
+    private gfxSampler: GfxSampler | null = null;
+
+    public getGfxSampler(rw: RwEngine) {
+        if (!this.gfxSampler) {
+            const texFilter = convertRwTextureFilterMode(this._filter);
+            const mipFilter = convertRwTextureFilterModeMip(this._filter);
+            const wrapS = convertRwTextureAddressMode(this._addressingU);
+            const wrapT = convertRwTextureAddressMode(this._addressingV);
+            
+            this.gfxSampler = rw.renderHelper.renderCache.createSampler({
+                magFilter: texFilter,
+                minFilter: texFilter,
+                mipFilter: mipFilter,
+                wrapS: wrapS,
+                wrapT: wrapT,
+            });
+        }
+
+        return this.gfxSampler;
+    }
+
+    public get filter() {
+        return this._filter;
+    }
+
+    public set filter(f: RwTextureFilterMode) {
+        this._filter = f;
+        this.gfxSampler = null;
+    }
+    
+    public get addressingU() {
+        return this._addressingU;
+    }
+
+    public set addressingU(a: RwTextureAddressMode) {
+        this._addressingU = a;
+        this.gfxSampler = null;
+    }
+
+    public get addressingV() {
+        return this._addressingV;
+    }
+
+    public set addressingV(a: RwTextureAddressMode) {
+        this._addressingV = a;
+        this.gfxSampler = null;
+    }
 
     public destroy(rw: RwEngine) {
         this.raster.destroy(rw);
@@ -531,14 +609,64 @@ function convertGfxCullMode(cull: GfxCullMode): RwCullMode {
 export class RwRenderState {
     public megaStateFlags: Partial<GfxMegaStateDescriptor> = makeMegaState();
     
-    public textureAddress: RwTextureAddressMode;
     public shadeMode: RwShadeMode;
-    public textureFilter: RwTextureFilterMode;
     public vertexAlphaEnable: boolean; // currently unsupported
     public fogEnable: boolean;
     public fogColor: Color;
     public alphaTestFunction: RwAlphaTestFunction; // currently only GREATER is supported
     public alphaTestFunctionRef: number;
+
+    private _textureFilter: RwTextureFilterMode;
+    private _textureAddressU: RwTextureAddressMode;
+    private _textureAddressV: RwTextureAddressMode;
+
+    private gfxSampler: GfxSampler | null = null;
+
+    public getGfxSampler(rw: RwEngine) {
+        if (!this.gfxSampler) {
+            const texFilter = convertRwTextureFilterMode(this._textureFilter);
+            const mipFilter = convertRwTextureFilterModeMip(this._textureFilter);
+            const wrapS = convertRwTextureAddressMode(this._textureAddressU);
+            const wrapT = convertRwTextureAddressMode(this._textureAddressV);
+            
+            this.gfxSampler = rw.renderHelper.renderCache.createSampler({
+                magFilter: texFilter,
+                minFilter: texFilter,
+                mipFilter: mipFilter,
+                wrapS: wrapS,
+                wrapT: wrapT,
+            });
+        }
+
+        return this.gfxSampler;
+    }
+
+    public get textureFilter() {
+        return this._textureFilter;
+    }
+
+    public set textureFilter(filter: RwTextureFilterMode) {
+        this._textureFilter = filter;
+        this.gfxSampler = null;
+    }
+
+    public get textureAddressU() {
+        return this._textureAddressU;
+    }
+
+    public set textureAddressU(address: RwTextureAddressMode) {
+        this._textureAddressU = address;
+        this.gfxSampler = null;
+    }
+
+    public get textureAddressV() {
+        return this._textureAddressV;
+    }
+
+    public set textureAddressV(address: RwTextureAddressMode) {
+        this._textureAddressV = address;
+        this.gfxSampler = null;
+    }
 
     public get zTestEnable() {
         return this.megaStateFlags.depthCompare !== reverseDepthForCompareMode(GfxCompareMode.Always);
@@ -601,7 +729,8 @@ export class RwEngine {
         this.renderHelper = new GfxRenderHelper(device, context);
         this.viewerInput = context.viewerInput;
 
-        this.renderState.textureAddress = RwTextureAddressMode.WRAP;
+        this.renderState.textureAddressU = RwTextureAddressMode.WRAP;
+        this.renderState.textureAddressV = RwTextureAddressMode.WRAP;
         this.renderState.zTestEnable = true;
         this.renderState.shadeMode = RwShadeMode.GOURAUD;
         this.renderState.zWriteEnable = true;

@@ -314,7 +314,9 @@ class InstanceData {
 
             offs += fillVec4(mapped, offs, ambientMult, diffuseMult, enableTexture);
 
-            mesh.material.texture?.raster.bind(renderInst);
+            if (mesh.material.texture) {
+                mesh.material.texture.raster.bind(renderInst, mesh.material.texture.getGfxSampler(rw));
+            }
 
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, mesh.indexBufferDescriptor);
             renderInst.setDrawCount(mesh.indexCount);
