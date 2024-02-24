@@ -12,38 +12,28 @@ If you would like contribute, there is a Getting Started guide in the [Official 
 
 ## Controls
 
-- Global
-	- Z: Hide HUD
-	- T: Open games list
-	- G: Open save state menu
-	- Numpad 3: Export save states
-	- Numpad 7: Take screenshot
-	- Number key: Load save state
-	- Period: Freeze/unfreeze time
-- WASD mode
-	- B: Reset camera position
-	- WASD/Arrow Keys: Move camera
-	- IJKL/Drag Mouse: Pan/tilt camera
-	- Shift: Increase camera speed
-	- Backslash: Reduce camera speed
-	- Q/Page Down/Ctrl+Space: Move camera down
-	- E/Page Up/Space: Move camera up
-	- Scroll Wheel: Change camera speed
-- Orbit mode
-	- R: Toggle orbiting
-	- Numpad 5: Immediately stop orbiting
-	- B: Reset center
-	- WASD: Move center
-	- Shift+WASD/Mouse Drag: Orbit camera
-	- Scroll Wheel: Zoom
-- Ortho mode
-	- R: Start/stop orbiting
-	- B: Reset camera position
-	- Numpad 5: Stop orbiting
-	- Numpad 2/4/6/8: Front/Left/Right/Top view
-	- Q: Zoom out
-	- E: Zoom in
-	- WASD: Move camera
-	- Shift+WASD: Rotate camera
-	- Scroll Wheel: zoom
-
+Key | Description
+-|-
+`Z` | Show/hide all UI
+`T` | Open "Games" list
+`W`/`A`/`S`/`D` or Arrow Keys | Move camera
+Hold `Shift` | Make camera move faster
+Hold `\` | Make camera move slower
+`E` or `Page Up` or `Space` | Move camera up
+`Q` or `Page Down` or `Ctrl+Space` | Move camera down
+`Scroll Wheel` | Adjust camera movement speed (in WASD camera mode; instead changes the zoom level in Orbit or Ortho camera modes)
+`I`/`J`/`K`/`L` | Tilt camera
+`O` | Rotate camera clockwise
+`U` | Rotate camera counterclockwise
+`1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Load savestate
+`Shift`+`1`/`2`/`3`/`4`/`5`/`6`/`7`/`8`/`9` | Save savestate
+`Numpad 3` | Export save states
+`Numpad 7` or `[` | Take screenshot
+`.` | Freeze/unfreeze time
+`,` | Hold to slowly move through time
+`F9` | Reload current scene
+`B` | Reset camera position back to origin
+`R` | Start/stop automatic orbiting (requries Orbit or Ortho camera modes)
+`Numpad 5` | Immediately stop all orbiting (requries Orbit or Ortho camera modes)
+`Numpad 2`/`Numpad 4`/`Numpad 6`/`Numpad 8` | Snap view to front/left/right/top view (requires Orbit camera mode)
+`F` | Not sure what this key does, let me know if you figure it out
