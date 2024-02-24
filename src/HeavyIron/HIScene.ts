@@ -25,7 +25,7 @@ import { HIRenderState, HIRenderStateManager } from "./HIRenderState.js";
 import { HIDebug } from "./HIDebug.js";
 import { RpClump } from "./rw/rpworld.js";
 import { RwEngine, RwTexture, RwStream, RwPluginID, RwTexDictionary } from "./rw/rwcore.js";
-import { HIEntButton } from "./HIEntButton.js";
+import { HIEntButton, HIEntButtonManager } from "./HIEntButton.js";
 import { HIEntDestructObj } from "./HIEntDestructObj.js";
 import { HINPCCommon } from "./HINPCCommon.js";
 import { HIEntPlayer } from "./HIEntPlayer.js";
@@ -155,6 +155,7 @@ export class HIScene implements SceneGfx {
     public modelBucketManager = new HIModelBucketManager();
     public skydomeManager = new HISkyDomeManager();
     public pickupManager = new HIEntPickupManager();
+    public buttonManager = new HIEntButtonManager();
     public baseList: HIBase[] = [];
     public entList: HIEnt[] = [];
     public renderHacks = new HIRenderHacks();
@@ -460,6 +461,7 @@ export class HIScene implements SceneGfx {
         const dt = viewerInput.deltaTime / 1000;
 
         this.pickupManager.update(this, dt);
+        this.buttonManager.update(this, dt);
 
         for (const ent of this.entList) {
             ent.update(this, dt);

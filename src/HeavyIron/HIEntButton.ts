@@ -1,11 +1,16 @@
 import { HIEnt } from "./HIEnt.js";
 import { HIEntMotionAsset } from "./HIEntMotion.js";
 import { HIScene } from "./HIScene.js";
-import { RwStream } from "./rw/rwcore.js";
+import { RwEngine, RwStream } from "./rw/rwcore.js";
+
+export const enum HIEntButtonActMethod {
+    Button,
+    PressurePlate
+}
 
 export class HIEntButtonAsset {
     public modelPressedInfoID: number;
-    public actMethod: number;
+    public actMethod: HIEntButtonActMethod;
     public initButtonState: number;
     public isReset: number;
     public resetDelay: number;
@@ -35,5 +40,40 @@ export class HIEntButton extends HIEnt {
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
         super.setup(scene);
+    }
+    
+    public override render(scene: HIScene, rw: RwEngine): void {
+        if (this.model) {
+            if (this.buttonAsset.actMethod === HIEntButtonActMethod.Button) {
+                this.model.redMultiplier = scene.buttonManager.redMultiplier;
+                this.model.greenMultiplier = scene.buttonManager.greenMultiplier;
+                this.model.blueMultiplier = scene.buttonManager.blueMultiplier;
+            }
+        }
+
+        super.render(scene, rw);
+    }
+}
+
+export class HIEntButtonManager {
+    public redMultiplier = 1.0;
+    public greenMultiplier = 1.0;
+    public blueMultiplier = 1.0;
+    public colorMultiplier = 1.0;
+    public colorMultiplierSign = 1;
+
+    public update(scene: HIScene, dt: number) {
+        this.colorMultiplier += dt * this.colorMultiplierSign * 2.5;
+        if (this.colorMultiplier > 1.0) {
+            this.colorMultiplierSign *= -1;
+            this.colorMultiplier = 1.0;
+        }
+        if (this.colorMultiplier < 0.0) {
+            this.colorMultiplierSign *= -1;
+            this.colorMultiplier = 0.0;
+        }
+        this.redMultiplier = 0.6 + 0.4 * this.colorMultiplier;
+        this.greenMultiplier = 0.6 + 0.4 * this.colorMultiplier;
+        this.blueMultiplier = 0.6 + 0.4 * this.colorMultiplier;
     }
 }
