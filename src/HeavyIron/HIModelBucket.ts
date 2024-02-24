@@ -108,20 +108,44 @@ export class HIModelBucketManager {
     public renderOpaque(scene: HIScene, rw: RwEngine) {
         this.enabled = false;
 
+        const fog = scene.camera.fog;
+
         for (const bucket of this.bucketList) {
             let minst = bucket.list;
             while (minst) {
+                const oldData = minst.data;
+                minst.data = bucket.data;
+
                 scene.lightKitManager.enable(minst.lightKit, rw.world);
+
+                let cull = RwCullMode.NONE;
+                if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
+                    cull = RwCullMode.BACK;
+                }
+
+                rw.renderState.cullMode = cull;
+
+                scene.camera.fog = (minst.pipeFlags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
+                scene.camera.setFogRenderStates(rw);
+                
                 minst.renderSingle(scene, rw);
+
+                minst.data = oldData;
+
                 minst = minst.bucketNext;
             }
 
             // Reset for next frame
             bucket.list = null;
         }
+
+        scene.camera.fog = fog;
+        scene.camera.setFogRenderStates(rw);
     }
 
     public renderAlpha(scene: HIScene, rw: RwEngine) {
+        this.enabled = false;
+
         if (this.alphaCurr) {
             this.alphaList.sort((a, b) => {
                 if (a.layer > b.layer) return -1;
@@ -135,7 +159,11 @@ export class HIModelBucketManager {
         const fog = scene.camera.fog;
 
         for (let i = 0; i < this.alphaCurr; i++) {
-            const minst = this.alphaList[i].minst!;
+            const bucket = this.alphaList[i];
+            const minst = bucket.minst!;
+
+            const oldData = minst.data;
+            minst.data = bucket.data!;
 
             scene.lightKitManager.enable(minst.lightKit, rw.world);
 
@@ -149,7 +177,7 @@ export class HIModelBucketManager {
                 dstBlend = RwBlendFunction.INVSRCALPHA;
             }
 
-            const fade = this.alphaList[i].alphaFade;
+            const fade = bucket.alphaFade;
             const oldAlpha = minst.alpha;
 
             minst.alpha *= fade;
@@ -169,11 +197,7 @@ export class HIModelBucketManager {
             rw.renderState.zWriteEnable = zwrite;
             rw.renderState.cullMode = cull;
 
-            if (minst.pipeFlags & HIPipeFlags.FOG_DISABLE) {
-                scene.camera.fog = undefined;
-            } else {
-                scene.camera.fog = fog;
-            }
+            scene.camera.fog = (minst.pipeFlags & HIPipeFlags.FOG_DISABLE) ? undefined : fog;
             scene.camera.setFogRenderStates(rw);
 
             if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
@@ -192,9 +216,11 @@ export class HIModelBucketManager {
             }
 
             minst.alpha = oldAlpha;
+            minst.data = oldData;
         }
 
         scene.camera.fog = fog;
+        scene.camera.setFogRenderStates(rw);
         
         // Reset for next frame
         for (let i = 0; i < this.alphaCurr; i++) {
