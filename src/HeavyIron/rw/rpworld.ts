@@ -1,7 +1,6 @@
 import { mat4, vec4 } from "gl-matrix";
 import { Color, White } from "../../Color.js";
 import { RwTexture, RwStream, RwEngine, RwPluginID, RwFrame } from "./rwcore.js";
-import { AtomicAllInOnePipeline } from "./pipelines/AtomicAllInOne.js";
 
 export class RpMaterial {
     public color: Color;
@@ -112,11 +111,12 @@ export class RpGeometry {
     public flags: number = 0;
     public numVertices: number = 0;
     public mesh: RpMeshHeader;
-    public preLitLum: Float32Array;
-    public texCoords: Float32Array;
+    public preLitLum?: Float32Array;
+    public texCoords?: Float32Array;
     //public triangles: RwTriangle[] = [];
     public morphTargets: RpMorphTarget[] = [];
     public materials: RpMaterial[] = [];
+    public instanceData: any;
 
     public static streamRead(stream: RwStream, rw: RwEngine): RpGeometry | null {
         const geom = new RpGeometry();
@@ -268,16 +268,17 @@ export class RpAtomic {
 
     private _pipeline: RpAtomicPipeline;
 
-    constructor() {
-        this.pipeline = null;
+    constructor(rw: RwEngine) {
+        this._pipeline = rw.defaultAtomicPipeline;
     }
 
-    public get pipeline() {
+    public getPipeline() {
         return this._pipeline;
     }
 
-    public set pipeline(p: RpAtomicPipeline | null) {
-        this._pipeline = p || new AtomicAllInOnePipeline();
+    public setPipeline(p: RpAtomicPipeline | null, rw: RwEngine) {
+        this._pipeline.destroy(this, rw);
+        this._pipeline = p || rw.defaultAtomicPipeline;
     }
 
     public render(rw: RwEngine) {
@@ -454,7 +455,7 @@ export class RpClump {
         const frame = this.frames[frameIndex];
         const geometry = this.geometries[geomIndex];
 
-        const atomic = new RpAtomic();
+        const atomic = new RpAtomic(rw);
         atomic.flags = flags;
         atomic.frame = frame;
         atomic.geometry = geometry;

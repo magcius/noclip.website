@@ -1,15 +1,15 @@
 import { DeviceProgram } from "../../../Program.js";
 import { makeStaticDataBuffer } from "../../../gfx/helpers/BufferHelpers.js";
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from "../../../gfx/helpers/TopologyHelpers.js";
-import { fillColor, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from "../../../gfx/helpers/UniformBufferHelpers.js";
+import { fillColor, fillMatrix4x4, fillVec4, fillVec4v } from "../../../gfx/helpers/UniformBufferHelpers.js";
 import { GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../../../gfx/platform/GfxPlatformFormat.js";
 import { GfxBuffer, GfxProgram, GfxInputLayout } from "../../../gfx/platform/GfxPlatformImpl.js";
 import { GfxShaderLibrary } from "../../../gfx/helpers/GfxShaderLibrary.js";
-import { OpaqueBlack, White, colorCopy, colorNewCopy } from "../../../Color.js";
-import { vec3, vec4 } from "gl-matrix";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA, colorNewCopy } from "../../../Color.js";
+import { mat4, vec4 } from "gl-matrix";
 import { RwEngine } from "../rwcore.js";
-import { RpMaterial, RpAtomic, RpGeometryFlag, RpLightType, RpAtomicPipeline } from "../rpworld.js";
+import { RpMaterial, RpAtomic, RpGeometryFlag, RpLightType, RpAtomicPipeline, RpGeometry } from "../rpworld.js";
 
 const MAX_DIRECTIONAL_LIGHTS = 8;
 
@@ -28,8 +28,8 @@ class AtomicProgram extends DeviceProgram {
     public static ub_AtomicParams = 0;
     public static ub_MeshParams = 1;
 
-    public static readonly ub_AtomicParams_SIZE = 16*3 + 4*2*MAX_DIRECTIONAL_LIGHTS + 4*2;
-    public static readonly ub_MeshParams_SIZE = 4*3;
+    public static readonly ub_AtomicParams_SIZE = 16*2 + 4*MAX_DIRECTIONAL_LIGHTS*2 + 4*2 + 4;
+    public static readonly ub_MeshParams_SIZE = 4 + 4;
 
     public override both = `
 precision mediump float;
@@ -37,89 +37,92 @@ precision mediump float;
 #define MAX_DIRECTIONAL_LIGHTS ${MAX_DIRECTIONAL_LIGHTS}
 
 struct DirectionalLight {
-    vec4 Color;
-    vec4 Direction;
+    vec4 direction; // in eye space
+    vec4 color;
 };
 
 layout(std140) uniform ub_AtomicParams {
     Mat4x4 u_Projection;
-    Mat4x4 u_ViewMatrix;
-    Mat4x4 u_ModelMatrix;
+    Mat4x4 u_ModelView;
     DirectionalLight u_DirectionalLights[MAX_DIRECTIONAL_LIGHTS];
+    vec4 u_AmbientColor;
     vec4 u_FogColor;
-    vec4 u_AtomicMisc;
+    float u_FarPlane;
+    float u_FogPlane;
+    float u_AlphaRef;
+    float u_EnablePrelit;
 };
 
-#define u_NearPlane (u_AtomicMisc.x)
-#define u_FarPlane (u_AtomicMisc.y)
-#define u_FogPlane (u_AtomicMisc.z)
-#define u_AlphaRef (u_AtomicMisc.w)
+#define u_EnableLight (u_AmbientColor.a)
 
 layout(std140) uniform ub_MeshParams {
     vec4 u_MaterialColor;
-    vec4 u_AmbientColor;
-    vec4 u_MeshMisc;
+    float u_AmbientMult;
+    float u_DiffuseMult;
+    float u_EnableTexture;
+    float u_MeshUnused;
 };
-
-#define u_TexEnable (u_MeshMisc.x)
 
 uniform sampler2D u_Texture;
 
-varying vec3 v_Position;
 varying vec4 v_Color;
 varying vec2 v_TexCoord;
-varying float v_Depth;
+varying float v_FogAmount;
 `;
 
     public override vert = `
+${GfxShaderLibrary.invlerp}
+${GfxShaderLibrary.saturate}
+
 layout(location = ${AtomicProgram.a_Position}) in vec3 a_Position;
 layout(location = ${AtomicProgram.a_Normal}) in vec3 a_Normal;
 layout(location = ${AtomicProgram.a_Color}) in vec4 a_Color;
 layout(location = ${AtomicProgram.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
+    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position, 1.0)));
 
-    v_Position = a_Position;
-    v_Color = a_Color * u_MaterialColor;
+    // Normal (in eye space)
+    vec3 t_Normal = normalize(Mul(u_ModelView, vec4(a_Normal, 0.0)).xyz);
 
-    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
+    vec4 t_Color = u_EnablePrelit != 0.0 ? a_Color : (u_EnableLight != 0.0 ? vec4(0, 0, 0, 1) : vec4(1.0));
 
-    // Ambient lighting
-    v_Color.rgb *= u_AmbientColor.rgb * u_AmbientColor.a;
-    
-    // Directional lighting
-    vec3 t_LightColor = vec3(0.0);
-    for (int i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
-        DirectionalLight light = u_DirectionalLights[i];
-        t_LightColor += max(dot(t_Normal, light.Direction.xyz), 0.0) * light.Color.rgb * light.Color.a;
+    if (u_EnableLight != 0.0) {
+        // Ambient lighting
+        t_Color.rgb += u_AmbientColor.rgb * u_AmbientMult;
+
+        // Directional lighting
+        vec3 t_LightColor = vec3(0.0);
+        for (int i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+            DirectionalLight light = u_DirectionalLights[i];
+            t_LightColor += max(dot(t_Normal, light.direction.xyz), 0.0) * light.color.rgb;
+        }
+        t_LightColor = min(t_LightColor, vec3(1.0));
+        t_Color.rgb += t_LightColor * u_DiffuseMult;
     }
-    t_LightColor = min(t_LightColor, vec3(1.0));
 
-    v_Color.rgb += t_LightColor;
+    t_Color *= u_MaterialColor;
 
+    v_Color = t_Color;
     v_TexCoord = a_TexCoord;
-    v_Depth = gl_Position.w;
+
+    v_FogAmount = saturate(invlerp(u_FogPlane, u_FarPlane, gl_Position.w) * u_FogColor.a);
 }
 `;
 
     public override frag = `
-${GfxShaderLibrary.invlerp}
-${GfxShaderLibrary.saturate}
-
 void main() {
     vec4 t_Color = v_Color;
 
     // Texture
-    if (u_TexEnable != 0.0) {
+    if (u_EnableTexture != 0.0)
         t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    }
 
     // Alpha Test
     if (!(t_Color.a > u_AlphaRef)) discard;
 
     // Fog
-    t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, saturate(invlerp(u_FogPlane, u_FarPlane, v_Depth) * u_FogColor.a));
+    t_Color.rgb = mix(t_Color.rgb, u_FogColor.rgb, v_FogAmount);
 
     gl_FragColor = t_Color;
 }
@@ -130,22 +133,21 @@ interface MeshData {
     indexBuffer: GfxBuffer;
     indexBufferDescriptor: GfxIndexBufferDescriptor;
     indexCount: number;
-    gfxProgram: GfxProgram;
     material: RpMaterial;
 }
 
-const scratchVec3 = vec3.create();
 const scratchVec4 = vec4.create();
-const scratchColor = colorNewCopy(White);
+const scratchMat4 = mat4.create();
+const scratchColor = colorNewCopy(OpaqueBlack);
+const scratchColor2 = colorNewCopy(OpaqueBlack);
 
 class InstanceData {
     public vertexBuffer: GfxBuffer;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public inputLayout: GfxInputLayout;
     public meshes: MeshData[] = [];
-
-    constructor(atomic: RpAtomic, rw: RwEngine) {
-        const geom = atomic.geometry;
+    
+    constructor(geom: RpGeometry, public gfxProgram: GfxProgram, rw: RwEngine) {
         const mt = geom.morphTargets[0];
 
         const attrCount = 3 + 3 + 4 + 2; // Position + Normal + Color + TexCoord
@@ -156,16 +158,16 @@ class InstanceData {
             vertexData[offs++] = mt.verts![voff++];
             vertexData[offs++] = mt.verts![voff++];
             vertexData[offs++] = mt.verts![voff++];
-            if (geom.flags & RpGeometryFlag.NORMALS) {
-                vertexData[offs++] = mt.normals![noff++];
-                vertexData[offs++] = mt.normals![noff++];
-                vertexData[offs++] = mt.normals![noff++];
+            if (mt.normals) {
+                vertexData[offs++] = mt.normals[noff++];
+                vertexData[offs++] = mt.normals[noff++];
+                vertexData[offs++] = mt.normals[noff++];
             } else {
                 vertexData[offs++] = 0.0;
                 vertexData[offs++] = 0.0;
                 vertexData[offs++] = 0.0;
             }
-            if (geom.flags & RpGeometryFlag.PRELIT) {
+            if (geom.preLitLum) {
                 vertexData[offs++] = geom.preLitLum[coff++];
                 vertexData[offs++] = geom.preLitLum[coff++];
                 vertexData[offs++] = geom.preLitLum[coff++];
@@ -176,7 +178,7 @@ class InstanceData {
                 vertexData[offs++] = 1.0;
                 vertexData[offs++] = 1.0;
             }
-            if (geom.flags & RpGeometryFlag.TEXTURED) {
+            if (geom.texCoords) {
                 vertexData[offs++] = geom.texCoords[toff++];
                 vertexData[offs++] = geom.texCoords[toff++];
             } else {
@@ -206,17 +208,14 @@ class InstanceData {
 
         this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
 
-        const program = new AtomicProgram();
-
         for (const mesh of geom.mesh.meshes) {
             const indexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TriStrips, mesh.indices));
             const indexBuffer = makeStaticDataBuffer(rw.renderHelper.device, GfxBufferUsage.Index, indexData.buffer);
             const indexBufferDescriptor = { buffer: indexBuffer, byteOffset: 0 };
             const indexCount = indexData.length;
             const material = geom.materials[mesh.matIndex];
-            const gfxProgram = rw.renderHelper.renderCache.createProgram(program);
 
-            this.meshes.push({ indexBuffer, indexBufferDescriptor, indexCount, gfxProgram, material });
+            this.meshes.push({ indexBuffer, indexBufferDescriptor, indexCount, material });
         }
     }
 
@@ -228,6 +227,8 @@ class InstanceData {
     }
 
     public render(atomic: RpAtomic, rw: RwEngine) {
+        const geom = atomic.geometry;
+
         if (rw.camera.nearPlane !== rw.viewerInput.camera.near &&
             rw.camera.farPlane !== rw.viewerInput.camera.far) {
             rw.viewerInput.camera.setClipPlanes(rw.camera.nearPlane, rw.camera.farPlane);
@@ -239,54 +240,64 @@ class InstanceData {
 
         let offs = template.allocateUniformBuffer(AtomicProgram.ub_AtomicParams, AtomicProgram.ub_AtomicParams_SIZE);
         const mapped = template.mapUniformBufferF32(AtomicProgram.ub_AtomicParams);
-        offs += fillMatrix4x4(mapped, offs, rw.viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x4(mapped, offs, rw.camera.viewMatrix);
-        offs += fillMatrix4x4(mapped, offs, atomic.frame.matrix);
 
-        let ambientColor = scratchColor;
-        let directionalLightCount = 0;
-        if (rw.world.lights.size > 0 && (atomic.geometry.flags & RpGeometryFlag.LIGHT)) {
-            colorCopy(ambientColor, OpaqueBlack);
+        const projection = rw.viewerInput.camera.projectionMatrix;
+        offs += fillMatrix4x4(mapped, offs, projection);
+
+        const modelView = scratchMat4;
+        mat4.mul(modelView, rw.camera.viewMatrix, atomic.frame.matrix);
+        offs += fillMatrix4x4(mapped, offs, modelView);
+
+        const directionalColor = scratchColor;
+        const ambientColor = scratchColor2;
+
+        colorCopy(directionalColor, OpaqueBlack);
+        colorFromRGBA(ambientColor, 0, 0, 0, (geom.flags & RpGeometryFlag.LIGHT) ? 1.0 : 0.0);
+
+        let lightCount = 0;
+        if (atomic.geometry.flags & RpGeometryFlag.LIGHT) {
             for (const light of rw.world.lights) {
-                if (light.type === RpLightType.AMBIENT) {
+                if (light.type === RpLightType.DIRECTIONAL) {
+                    if (lightCount < MAX_DIRECTIONAL_LIGHTS) {
+                        const mat = scratchMat4;
+                        mat4.mul(mat, rw.camera.viewMatrix, light.frame.matrix);
+
+                        const dir = scratchVec4;
+                        vec4.set(dir, mat[8], mat[9], mat[10], 0);
+                        vec4.normalize(dir, dir);
+
+                        offs += fillVec4v(mapped, offs, dir);
+
+                        directionalColor.r = light.color.r * light.color.a;
+                        directionalColor.g = light.color.g * light.color.a;
+                        directionalColor.b = light.color.b * light.color.a;
+
+                        offs += fillColor(mapped, offs, directionalColor);
+
+                        lightCount++;
+                    }
+                } else if (light.type === RpLightType.AMBIENT) {
                     ambientColor.r += light.color.r * light.color.a;
                     ambientColor.g += light.color.g * light.color.a;
                     ambientColor.b += light.color.b * light.color.a;
-                } else if (light.type === RpLightType.DIRECTIONAL) {
-                    if (directionalLightCount < MAX_DIRECTIONAL_LIGHTS) {
-                        offs += fillColor(mapped, offs, light.color);
-
-                        const mat = light.frame.matrix;
-                        const dir = scratchVec3;
-                        vec3.set(dir, mat[8], mat[9], mat[10]);
-                        vec3.normalize(dir, dir);
-                        offs += fillVec3v(mapped, offs, dir);
-
-                        directionalLightCount++;
-                    }
                 }
             }
-        } else {
-            colorCopy(ambientColor, White);
         }
-
-        for (let i = directionalLightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+        for (let i = lightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
             offs += fillVec4(mapped, offs, 0);
             offs += fillVec4(mapped, offs, 0);
         }
 
-        if (rw.renderState.fogEnable) {
-            const color = rw.renderState.fogColor;
-            vec4.set(scratchVec4, color.r, color.g, color.b, color.a);
-            offs += fillVec4v(mapped, offs, scratchVec4);
-        } else {
-            offs += fillVec4(mapped, offs, 0);
-        }
+        offs += fillColor(mapped, offs, ambientColor);
 
-        offs += fillVec4(mapped, offs, rw.camera.nearPlane,
-                                       rw.camera.farPlane,
-                                       rw.camera.fogPlane,
-                                       rw.renderState.alphaTestFunctionRef);
+        const fogColor = rw.renderState.fogEnable ? rw.renderState.fogColor : TransparentBlack;
+        offs += fillColor(mapped, offs, fogColor);
+
+        const farPlane = rw.camera.farPlane;
+        const fogPlane = rw.camera.fogPlane;
+        const alphaRef = rw.renderState.alphaTestFunctionRef;
+        const enablePrelit = (atomic.geometry.flags & RpGeometryFlag.PRELIT) ? 1.0 : 0.0;
+        offs += fillVec4(mapped, offs, farPlane, fogPlane, alphaRef, enablePrelit);
 
         for (const mesh of this.meshes) {
             const renderInst = rw.renderHelper.renderInstManager.newRenderInst();
@@ -294,23 +305,20 @@ class InstanceData {
             let offs = renderInst.allocateUniformBuffer(AtomicProgram.ub_MeshParams, AtomicProgram.ub_MeshParams_SIZE);
             const mapped = renderInst.mapUniformBufferF32(AtomicProgram.ub_MeshParams);
 
-            offs += fillColor(mapped, offs, mesh.material.color);
+            const materialColor = (geom.flags & RpGeometryFlag.MODULATEMATERIALCOLOR) ? mesh.material.color : White;
+            offs += fillColor(mapped, offs, materialColor);
 
-            if (atomic.geometry.flags & RpGeometryFlag.LIGHT) {
-                ambientColor.a = mesh.material.ambient;
-            }
-            offs += fillColor(mapped, offs, ambientColor);
+            const ambientMult = mesh.material.ambient;
+            const diffuseMult = mesh.material.diffuse;
+            const enableTexture = mesh.material.texture ? 1.0 : 0.0;
 
-            if (mesh.material.texture) {
-                offs += fillVec4(mapped, offs, 1.0);
-                mesh.material.texture.raster.bind(renderInst);
-            } else {
-                offs += fillVec4(mapped, offs, 0.0);
-            }
+            offs += fillVec4(mapped, offs, ambientMult, diffuseMult, enableTexture);
+
+            mesh.material.texture?.raster.bind(renderInst);
 
             renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, mesh.indexBufferDescriptor);
             renderInst.setDrawCount(mesh.indexCount);
-            renderInst.setGfxProgram(mesh.gfxProgram);
+            renderInst.setGfxProgram(this.gfxProgram);
 
             rw.renderInstList.submitRenderInst(renderInst);
         }
@@ -320,16 +328,22 @@ class InstanceData {
 }
 
 export class AtomicAllInOnePipeline implements RpAtomicPipeline {
-    private instanceData?: InstanceData;
+    private gfxProgram?: GfxProgram;
 
     public instance(atomic: RpAtomic, rw: RwEngine) {
-        if (!this.instanceData) {
-            this.instanceData = new InstanceData(atomic, rw);
+        if (!this.gfxProgram) {
+            this.gfxProgram = rw.renderHelper.renderCache.createProgram(new AtomicProgram());
         }
-        this.instanceData.render(atomic, rw);
+        
+        if (!atomic.geometry.instanceData) {
+            atomic.geometry.instanceData = new InstanceData(atomic.geometry, this.gfxProgram, rw);
+        }
+
+        (atomic.geometry.instanceData as InstanceData).render(atomic, rw);
     }
 
     public destroy(atomic: RpAtomic, rw: RwEngine) {
-        this.instanceData?.destroy(atomic, rw);
+        (atomic.geometry.instanceData as InstanceData)?.destroy(atomic, rw);
+        atomic.geometry.instanceData = undefined;
     }
 }

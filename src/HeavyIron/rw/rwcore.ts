@@ -14,6 +14,7 @@ import { TextureMapping } from "../../TextureHolder.js";
 import { nArray } from "../../util.js";
 import { readXboxTexture } from "./xbox.js";
 import { RpWorld } from "./rpworld.js";
+import { AtomicAllInOnePipeline } from "./pipelines/AtomicAllInOne.js";
 
 export const enum RwPlatformID {
     NAPLATFORM = 0,
@@ -590,6 +591,7 @@ export class RwEngine {
     public world = new RpWorld();
     public camera = new RwCamera();
     public renderState = new RwRenderState();
+    public defaultAtomicPipeline = new AtomicAllInOnePipeline();
 
     public renderHelper: GfxRenderHelper;
     public viewerInput: ViewerRenderInput;
