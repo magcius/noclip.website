@@ -23,7 +23,7 @@ export class HISkyDomeManager {
         ent.baseFlags &= ~HIBaseFlags.ShadowRec;
     }
 
-    public render(rw: RwEngine) {
+    public render(scene: HIScene, rw: RwEngine) {
         if (this.disableHack) return;
 
         for (const sky of this.skyList) {
@@ -36,7 +36,7 @@ export class HISkyDomeManager {
                 sky.ent.model.mat[13] = rw.camera.worldMatrix[13];
             }
 
-            sky.ent.model.renderSingle(rw);
+            sky.ent.model.renderSingle(scene, rw);
         }
     }
 }

@@ -110,7 +110,6 @@ export class HIModelInstance {
     public greenMultiplier = 1.0;
     public blueMultiplier = 1.0;
     public alpha = 1.0;
-    public disableLightingHack = false;
     
     constructor(public data: RpAtomic, scene: HIScene, flags: number = 0, boneIndex: number = 0) {
         this.flags = flags | HIModelFlags.Visible;
@@ -161,13 +160,13 @@ export class HIModelInstance {
             if (scene.modelBucketManager.enabled) {
                 scene.modelBucketManager.add(modelInst, scene, rw);
             } else {
-                modelInst.renderSingle(rw);
+                modelInst.renderSingle(scene, rw);
             }
             modelInst = modelInst.next;
         }
     }
 
-    public renderSingle(rw: RwEngine) {
+    public renderSingle(scene: HIScene, rw: RwEngine) {
         if (!(this.flags & HIModelFlags.Visible)) return;
 
         for (let i = oldMaterialColors.length; i < this.data.geometry.materials.length; i++) {
@@ -188,7 +187,7 @@ export class HIModelInstance {
             material.color.a = this.alpha;
         }
 
-        if (this.disableLightingHack) {
+        if (!scene.renderHacks.lighting) {
             this.data.geometry.flags &= ~RpGeometryFlag.LIGHT;
         }
 

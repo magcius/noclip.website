@@ -102,7 +102,7 @@ export class HIEntPickupManager {
                      src[8], src[9], src[10], src[11],
                      dst[12], dst[13], dst[14], dst[15]);
 
-            pkup.model.renderSingle(rw);
+            pkup.model.renderSingle(scene, rw);
         }
     }
 }

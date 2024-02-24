@@ -479,7 +479,7 @@ export class HIScene implements SceneGfx {
         this.lightKitManager.enable(null, this.rw.world);
         
         this.renderStateManager.set(HIRenderState.SkyBack, this.camera, this.rw);
-        this.skydomeManager.render(this.rw);
+        this.skydomeManager.render(this, this.rw);
         
         this.renderStateManager.set(HIRenderState.Environment, this.camera, this.rw);
         this.env.render(this, this.rw);
@@ -488,9 +488,6 @@ export class HIScene implements SceneGfx {
         this.modelBucketManager.begin();
         for (const ent of this.entList) {
             this.lightKitManager.enable(ent.lightKit, this.rw.world);
-            for (let model = ent.model; model; model = model.next) {
-                model.disableLightingHack = !this.renderHacks.lighting;
-            }
             ent.render(this, this.rw);
         }
 

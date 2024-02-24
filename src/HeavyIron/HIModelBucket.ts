@@ -97,7 +97,7 @@ export class HIModelBucketManager {
             let minst = bucket.list;
             while (minst) {
                 scene.lightKitManager.enable(minst.lightKit, rw.world);
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
                 minst = minst.bucketNext;
             }
 
@@ -158,17 +158,17 @@ export class HIModelBucketManager {
 
             if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_BACKTHENFRONT) {
                 rw.renderState.cullMode = RwCullMode.FRONT;
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
                 rw.renderState.cullMode = RwCullMode.BACK;
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
             } else if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
                 // TODO not tested - the OG game does something different here
                 rw.renderState.zWriteEnable = true;
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
                 rw.renderState.zWriteEnable = false;
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
             } else {
-                minst.renderSingle(rw);
+                minst.renderSingle(scene, rw);
             }
         }
 
