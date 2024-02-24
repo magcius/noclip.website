@@ -390,19 +390,11 @@ export class RpClump {
         for (let i = 0; i < numFrames; i++) {
             const frame = new RwFrame();
 
-            frame.matrix = mat4.create();
-            frame.matrix[0] = stream.readFloat();
-            frame.matrix[1] = stream.readFloat();
-            frame.matrix[2] = stream.readFloat();
-            frame.matrix[4] = stream.readFloat();
-            frame.matrix[5] = stream.readFloat();
-            frame.matrix[6] = stream.readFloat();
-            frame.matrix[8] = stream.readFloat();
-            frame.matrix[9] = stream.readFloat();
-            frame.matrix[10] = stream.readFloat();
-            frame.matrix[12] = stream.readFloat();
-            frame.matrix[13] = stream.readFloat();
-            frame.matrix[14] = stream.readFloat();
+            frame.matrix = mat4.fromValues(
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 0,
+                stream.readFloat(), stream.readFloat(), stream.readFloat(), 1);
 
             const parentIndex = stream.readInt32();
             const data = stream.readUint32();
