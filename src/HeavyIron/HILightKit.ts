@@ -80,7 +80,6 @@ export class HILightKit {
 
 export class HILightKitManager {
     public lastLightKit: HILightKit | null = null;
-    public disableHack = false;
 
     public enable(lkit: HILightKit | null, world: RpWorld) {
         if (lkit === this.lastLightKit) {
@@ -93,13 +92,11 @@ export class HILightKitManager {
             }
         }
 
-        if (!this.disableHack) {
-            this.lastLightKit = lkit;
+        this.lastLightKit = lkit;
 
-            if (lkit) {
-                for (const light of lkit.lightList) {
-                    world.addLight(light);
-                }
+        if (lkit) {
+            for (const light of lkit.lightList) {
+                world.addLight(light);
             }
         }
     }

@@ -103,6 +103,7 @@ export class HIModelInstance {
     public bucketNext: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
     public pipeFlags = 0;
+    public disableLightingHack = false;
     
     constructor(public data: RpAtomic, scene: HIScene, flags?: number, boneIndex?: number) {
         this.flags = (flags || 0) | HIModelFlags.Visible;
@@ -162,6 +163,10 @@ export class HIModelInstance {
         if (!(this.flags & HIModelFlags.Visible)) return;
 
         const oldflag = this.data.geometry.flags;
+
+        if (this.disableLightingHack) {
+            this.data.geometry.flags &= ~RpGeometryFlag.LIGHT;
+        }
 
         if (this.lightKit && (this.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_KITPRELIGHT) {
             this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;

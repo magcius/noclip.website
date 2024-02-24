@@ -472,7 +472,6 @@ export class HIScene implements SceneGfx {
         this.camera.disableFogHack = !this.renderHacks.fog;
         this.camera.disableFrustumCullHack = !this.renderHacks.frustumCulling;
         this.env.jsp.showAllNodesHack = this.renderHacks.showAllJSPNodes;
-        this.lightKitManager.disableHack = !this.renderHacks.lighting;
         this.skydomeManager.disableHack = !this.renderHacks.skydome;
 
         this.camera.begin(this.rw);
@@ -489,6 +488,9 @@ export class HIScene implements SceneGfx {
         this.modelBucketManager.begin();
         for (const ent of this.entList) {
             this.lightKitManager.enable(ent.lightKit, this.rw.world);
+            for (let model = ent.model; model; model = model.next) {
+                model.disableLightingHack = !this.renderHacks.lighting;
+            }
             ent.render(this, this.rw);
         }
 
