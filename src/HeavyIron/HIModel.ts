@@ -91,7 +91,8 @@ export class HIModelAssetInfo {
 }
 
 export const enum HIModelFlags {
-    Visible = 0x1
+    Visible = 0x1,
+    LODNoRender = 0x400
 }
 
 const oldMaterialColors: Color[] = [];
@@ -110,6 +111,8 @@ export class HIModelInstance {
     public greenMultiplier = 1.0;
     public blueMultiplier = 1.0;
     public alpha = 1.0;
+    public fadeStart = 9e37;
+    public fadeEnd = 1e38;
     
     constructor(public data: RpAtomic, scene: HIScene, flags: number = 0, boneIndex: number = 0) {
         this.flags = flags | HIModelFlags.Visible;
@@ -135,6 +138,10 @@ export class HIModelInstance {
 
     public hide() {
         this.flags &= ~HIModelFlags.Visible;
+    }
+
+    public isVisible() {
+        return ((this.flags & (HIModelFlags.Visible | HIModelFlags.LODNoRender)) === HIModelFlags.Visible);
     }
 
     public update(dt: number) {
@@ -167,7 +174,7 @@ export class HIModelInstance {
     }
 
     public renderSingle(scene: HIScene, rw: RwEngine) {
-        if (!(this.flags & HIModelFlags.Visible)) return;
+        if (!this.isVisible()) return;
 
         for (let i = oldMaterialColors.length; i < this.data.geometry.materials.length; i++) {
             oldMaterialColors.push(colorNewCopy(OpaqueBlack));

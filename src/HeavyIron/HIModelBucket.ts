@@ -1,8 +1,9 @@
 import { vec3 } from "gl-matrix";
-import { HIModelFlags, HIModelInstance, HIPipeFlags } from "./HIModel.js";
+import { HIModelInstance, HIPipeFlags } from "./HIModel.js";
 import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwCullMode, RwEngine } from "./rw/rwcore.js";
 import { RpAtomic } from "./rw/rpworld.js";
+import { getMatrixTranslation } from "../MathHelpers.js";
 
 export interface HIModelBucket {
     data: RpAtomic;
@@ -13,11 +14,13 @@ export interface HIModelBucket {
 interface HIModelAlphaBucket {
     data?: RpAtomic;
     minst?: HIModelInstance;
+    alphaFade: number;
     sortValue: number;
     layer: number;
 }
 
 const scratchVec3 = vec3.create();
+const scratchVec3_2 = vec3.create();
 
 export class HIModelBucketManager {
     public enabled = false;
@@ -27,9 +30,8 @@ export class HIModelBucketManager {
     private alphaCurr = 0;
 
     constructor() {
-        // TODO: use 256 instead of 512 once we have distance culling
-        for (let i = 0; i < 512; i++) {
-            this.alphaList.push({ sortValue: Infinity, layer: 0 });
+        for (let i = 0; i < 256; i++) {
+            this.alphaList.push({ alphaFade: 1.0, sortValue: Infinity, layer: 0 });
         }
     }
 
@@ -59,27 +61,40 @@ export class HIModelBucketManager {
     }
 
     public add(minst: HIModelInstance, scene: HIScene, rw: RwEngine) {
-        if (!(minst.flags & HIModelFlags.Visible)) return;
+        if (!minst.isVisible()) return;
         if (scene.camera.cullModel(minst.data, minst.mat, rw)) return;
+
+        // TODO: Use RpAtomic.worldBoundingSphere instead
+        const sph = minst.data.geometry.morphTargets[0].boundingSphere;
+        vec3.set(scratchVec3, sph[0], sph[1], sph[2]);
+        vec3.transformMat4(scratchVec3, scratchVec3, minst.mat);
+
+        getMatrixTranslation(scratchVec3_2, rw.camera.worldMatrix);
+
+        const camdist2 = vec3.sqrDist(scratchVec3, scratchVec3_2);
+        if (camdist2 >= minst.fadeEnd * minst.fadeEnd) return;
 
         if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_PRELIGHTONLY) {
             minst.lightKit = scene.lightKitManager.lastLightKit;
         }
 
-        // TODO: Use RpAtomic.worldBoundingSphere instead
-        const sph = minst.data.geometry.morphTargets[0].boundingSphere;
-        const pos = scratchVec3;
-        vec3.set(pos, sph[0], sph[1], sph[2]);
-        vec3.transformMat4(pos, pos, minst.mat);
+        const camdot = rw.camera.worldMatrix[8] * (scratchVec3[0] - rw.camera.worldMatrix[12]) +
+                       rw.camera.worldMatrix[9] * (scratchVec3[1] - rw.camera.worldMatrix[13]) +
+                       rw.camera.worldMatrix[10] * (scratchVec3[2] - rw.camera.worldMatrix[14]);
+        
+        let alphaFade = 1.0;
+        if (camdist2 > minst.fadeStart * minst.fadeStart) {
+            alphaFade = (minst.fadeEnd - Math.sqrt(camdist2)) / (minst.fadeEnd - minst.fadeStart);
+            if (alphaFade <= 0.0) return;
+            alphaFade = Math.min(alphaFade, 1.0);
+        }
 
-        const camdot = rw.camera.worldMatrix[8] * (pos[0] - rw.camera.worldMatrix[12]) +
-                       rw.camera.worldMatrix[9] * (pos[1] - rw.camera.worldMatrix[13]) +
-                       rw.camera.worldMatrix[10] * (pos[2] - rw.camera.worldMatrix[14]);
-
-        if (minst.pipeFlags & (HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK)) {
+        if ((minst.pipeFlags & (HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK)) ||
+            alphaFade != 1.0 || minst.alpha != 1.0) {
             if (this.alphaCurr < this.alphaList.length) {
                 this.alphaList[this.alphaCurr].data = minst.bucket.data;
                 this.alphaList[this.alphaCurr].minst = minst;
+                this.alphaList[this.alphaCurr].alphaFade = alphaFade;
                 this.alphaList[this.alphaCurr].sortValue = camdot;
                 this.alphaList[this.alphaCurr].layer = (minst.pipeFlags & HIPipeFlags.LAYER_MASK) >>> HIPipeFlags.LAYER_SHIFT;
                 this.alphaCurr++;
@@ -134,6 +149,11 @@ export class HIModelBucketManager {
                 dstBlend = RwBlendFunction.INVSRCALPHA;
             }
 
+            const fade = this.alphaList[i].alphaFade;
+            const oldAlpha = minst.alpha;
+
+            minst.alpha *= fade;
+
             let zwrite = true;
             if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_DISABLE) {
                 zwrite = false;
@@ -170,6 +190,8 @@ export class HIModelBucketManager {
             } else {
                 minst.renderSingle(scene, rw);
             }
+
+            minst.alpha = oldAlpha;
         }
 
         scene.camera.fog = fog;

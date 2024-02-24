@@ -30,6 +30,7 @@ import { HIEntDestructObj } from "./HIEntDestructObj.js";
 import { HINPCCommon } from "./HINPCCommon.js";
 import { HIEntPlayer } from "./HIEntPlayer.js";
 import { HIAssetPickupTable, HIEntPickup, HIEntPickupManager } from "./HIEntPickup.js";
+import { HILOD } from "./HILOD.js";
 
 export const enum HIAssetType {
     ALST = 0x414C5354,
@@ -156,6 +157,7 @@ export class HIScene implements SceneGfx {
     public skydomeManager = new HISkyDomeManager();
     public pickupManager = new HIEntPickupManager();
     public buttonManager = new HIEntButtonManager();
+    public lod = new HILOD();
     public baseList: HIBase[] = [];
     public entList: HIEnt[] = [];
     public renderHacks = new HIRenderHacks();
@@ -421,6 +423,8 @@ export class HIScene implements SceneGfx {
         for (const base of this.baseList) {
             base.setup(this);
         }
+
+        this.lod.setup(this);
         
         if (this.env.envAsset.objectLightKit) {
             const lkitAsset = this.findAsset(this.env.envAsset.objectLightKit);
@@ -466,6 +470,8 @@ export class HIScene implements SceneGfx {
         for (const ent of this.entList) {
             ent.update(this, dt);
         }
+
+        this.lod.update(this.rw);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
