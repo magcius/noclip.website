@@ -34,5 +34,6 @@ export class HIEntButton extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+        super.setup(scene);
     }
 }

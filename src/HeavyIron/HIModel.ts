@@ -4,6 +4,7 @@ import { HIScene } from "./HIScene.js";
 import { HILightKit } from "./HILightKit.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { RpAtomic, RpGeometryFlag } from "./rw/rpworld.js";
+import { Color, OpaqueBlack, colorCopy, colorNewCopy } from "../Color.js";
 
 export const enum HIPipeFlags {
     ZBUFFER_SHIFT             = 2,
@@ -93,6 +94,8 @@ export const enum HIModelFlags {
     Visible = 0x1
 }
 
+const oldMaterialColors: Color[] = [];
+
 export class HIModelInstance {
     public next: HIModelInstance | null = null;
     public parent: HIModelInstance | null = null;
@@ -103,13 +106,18 @@ export class HIModelInstance {
     public bucketNext: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
     public pipeFlags = 0;
+    public redMultiplier = 1.0;
+    public greenMultiplier = 1.0;
+    public blueMultiplier = 1.0;
+    public alpha = 1.0;
     public disableLightingHack = false;
     
-    constructor(public data: RpAtomic, scene: HIScene, flags?: number, boneIndex?: number) {
-        this.flags = (flags || 0) | HIModelFlags.Visible;
-        this.boneIndex = boneIndex || 0;
+    constructor(public data: RpAtomic, scene: HIScene, flags: number = 0, boneIndex: number = 0) {
+        this.flags = flags | HIModelFlags.Visible;
+        this.boneIndex = boneIndex;
         this.bucket = scene.modelBucketManager.getBucket(data)!;
         this.pipeFlags = this.bucket.pipeFlags;
+        this.alpha = data.geometry.materials[0].color.a;
     }
 
     public attach(inst: HIModelInstance) {
@@ -162,7 +170,23 @@ export class HIModelInstance {
     public renderSingle(rw: RwEngine) {
         if (!(this.flags & HIModelFlags.Visible)) return;
 
+        for (let i = oldMaterialColors.length; i < this.data.geometry.materials.length; i++) {
+            oldMaterialColors.push(colorNewCopy(OpaqueBlack));
+        }
+        for (let i = 0; i < this.data.geometry.materials.length; i++) {
+            colorCopy(oldMaterialColors[i], this.data.geometry.materials[i].color);
+        }
+
         const oldflag = this.data.geometry.flags;
+
+        this.data.geometry.flags |= RpGeometryFlag.MODULATEMATERIALCOLOR;
+
+        for (const material of this.data.geometry.materials) {
+            material.color.r *= this.redMultiplier;
+            material.color.g *= this.greenMultiplier;
+            material.color.b *= this.blueMultiplier;
+            material.color.a = this.alpha;
+        }
 
         if (this.disableLightingHack) {
             this.data.geometry.flags &= ~RpGeometryFlag.LIGHT;
@@ -174,6 +198,10 @@ export class HIModelInstance {
 
         mat4.copy(this.data.frame.matrix, this.mat);
         this.data.render(rw);
+
+        for (let i = 0; i < this.data.geometry.materials.length; i++) {
+            colorCopy(this.data.geometry.materials[i].color, oldMaterialColors[i]);
+        }
 
         this.data.geometry.flags = oldflag;
     }

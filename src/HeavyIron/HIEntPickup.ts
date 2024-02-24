@@ -67,6 +67,8 @@ export class HIEntPickup extends HIEnt {
         if (clump) {
             this.model = new HIModelInstance(clump.atomics[0], scene);
         }
+
+        super.setup(scene);
     }
 
     public override render() {}

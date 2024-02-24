@@ -78,6 +78,7 @@ export class HIPlatform extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+        super.setup(scene);
     }
     
     public override handleEvent(event: HIEvent, params: number[], scene: HIScene): void {

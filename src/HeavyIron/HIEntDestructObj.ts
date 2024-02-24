@@ -50,5 +50,6 @@ export class HIEntDestructObj extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+        super.setup(scene);
     }
 }

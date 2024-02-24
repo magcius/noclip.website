@@ -66,6 +66,17 @@ export abstract class HIEnt extends HIBase {
         this.baseFlags |= HIBaseFlags.IsEntity;
     }
 
+    public override setup(scene: HIScene): void {
+        super.setup(scene);
+
+        if (this.model) {
+            this.model.redMultiplier = this.entAsset.redMult;
+            this.model.greenMultiplier = this.entAsset.greenMult;
+            this.model.blueMultiplier = this.entAsset.blueMult;
+            this.model.alpha = this.entAsset.seeThru;
+        }
+    }
+
     public parseModelInfo(assetID: number, scene: HIScene) {
         if (scene.models.has(assetID)) {
             this.loadModel(scene.models.get(assetID)!, scene);

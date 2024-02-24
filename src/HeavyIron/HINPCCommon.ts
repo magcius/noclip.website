@@ -33,6 +33,7 @@ export class HINPCCommon extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+        super.setup(scene);
 
         const models: HIModelInstance[] = [];
         for (let model = this.model; model; model = model.next) {

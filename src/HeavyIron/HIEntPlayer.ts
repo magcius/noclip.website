@@ -41,6 +41,7 @@ export class HIEntPlayer extends HIEnt {
 
     public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
+        super.setup(scene);
 
         let modelIndex = 0;
         for (let modelInst = this.model; modelInst !== null; modelInst = modelInst.next) {
