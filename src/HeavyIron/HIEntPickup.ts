@@ -87,7 +87,7 @@ export class HIEntPickupManager {
     }
     
     public render(scene: HIScene, rw: RwEngine) {
-        scene.lightKitManager.enable(null, rw.world);
+        scene.lightKitManager.enable(null, rw.world, scene);
 
         const src = this.pickupOrientation;
         for (const pkup of this.pickups) {

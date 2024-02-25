@@ -202,13 +202,30 @@ export class HIModelInstance {
             this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;
         }
 
-        mat4.copy(this.data.frame.matrix, this.mat);
-        this.data.render(rw);
+        scene.modelManager.render(this.data, this.mat, rw);
 
         for (let i = 0; i < this.data.geometry.materials.length; i++) {
             colorCopy(this.data.geometry.materials[i].color, oldMaterialColors[i]);
         }
 
         this.data.geometry.flags = oldflag;
+    }
+}
+
+export class HIModelManager {
+    public hackDisablePrelight = false;
+    
+    public render(model: RpAtomic, mat: mat4, rw: RwEngine) {
+        mat4.copy(model.frame.matrix, mat);
+
+        const oldflag = model.geometry.flags;
+
+        if (this.hackDisablePrelight) {
+            model.geometry.flags &= ~RpGeometryFlag.PRELIT;
+        }
+
+        model.render(rw);
+
+        model.geometry.flags = oldflag;
     }
 }

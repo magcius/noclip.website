@@ -13,7 +13,7 @@ import { HIEntSimpleObj } from "./HIEntSimpleObj.js";
 import { HIEnt } from "./HIEnt.js";
 import { HILightKit, HILightKitManager } from "./HILightKit.js";
 import { HIEnv } from "./HIEnv.js";
-import { HIModelAssetInfo, HIPipeInfoTable } from "./HIModel.js";
+import { HIModelAssetInfo, HIModelManager, HIPipeInfoTable } from "./HIModel.js";
 import { HIModelBucketManager } from "./HIModelBucket.js";
 import { HIPAsset, HIPFile } from "./HIP.js";
 import { HIPlatform } from "./HIPlatform.js";
@@ -153,6 +153,7 @@ export class HIScene implements SceneGfx {
     public pickupTable: HIAssetPickupTable;
     public renderStateManager = new HIRenderStateManager();
     public lightKitManager = new HILightKitManager();
+    public modelManager = new HIModelManager();
     public modelBucketManager = new HIModelBucketManager();
     public skydomeManager = new HISkyDomeManager();
     public pickupManager = new HIEntPickupManager();
@@ -484,7 +485,7 @@ export class HIScene implements SceneGfx {
 
         this.camera.begin(this.rw);
 
-        this.lightKitManager.enable(null, this.rw.world);
+        this.lightKitManager.enable(null, this.rw.world, this);
         
         this.renderStateManager.set(HIRenderState.SkyBack, this.camera, this.rw);
         this.skydomeManager.render(this, this.rw);
@@ -495,7 +496,7 @@ export class HIScene implements SceneGfx {
         this.renderStateManager.set(HIRenderState.OpaqueModels, this.camera, this.rw);
         this.modelBucketManager.begin();
         for (const ent of this.entList) {
-            this.lightKitManager.enable(ent.lightKit, this.rw.world);
+            this.lightKitManager.enable(ent.lightKit, this.rw.world, this);
             ent.render(this, this.rw);
         }
 
