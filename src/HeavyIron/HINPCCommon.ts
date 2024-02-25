@@ -82,24 +82,14 @@ export class HINPCCommon extends HIEnt {
             models[4].hide();
             break;
         case 0xBD640B63: // robot_9a_bind.MINF
-            models[1].data.geometry.materials[0].color.a = 100/255;
+            models[1].alpha = 100/255;
             models[1].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.SRCBLEND_SHIFT);
             models[1].pipeFlags |= (RwBlendFunction.INVSRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
             models[1].pipeFlags |= HIPipeFlags.CULL_FRONTONLY;
             models[2].hide();
             models[3].hide();
             break;
-        case 0xBC21F435: // dutchman_notsubboss_bind.MINF
-            models[0].pipeFlags &= ~(HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK);
-            models[0].pipeFlags |= (RwBlendFunction.ONE << HIPipeFlags.SRCBLEND_SHIFT);
-            models[0].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
-            colorFromRGBA(models[0].data.geometry.materials[0].color, 0.5, 0.5, 0.5, 0.5);
-            break;
         case 0xD9BA02B0: // dutchman_bind.MINF
-            models[0].pipeFlags &= ~(HIPipeFlags.SRCBLEND_MASK | HIPipeFlags.DESTBLEND_MASK);
-            models[0].pipeFlags |= (RwBlendFunction.ONE << HIPipeFlags.SRCBLEND_SHIFT);
-            models[0].pipeFlags |= (RwBlendFunction.SRCALPHA << HIPipeFlags.DESTBLEND_SHIFT);
-            colorFromRGBA(models[0].data.geometry.materials[0].color, 0.5, 0.5, 0.5, 0.5);
             models[1].hide();
             break;
         case 0xD9F1A3AA: // boss_sb_body_bind.MINF

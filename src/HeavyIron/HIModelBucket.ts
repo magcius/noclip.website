@@ -4,6 +4,7 @@ import { HIScene } from "./HIScene.js";
 import { RwBlendFunction, RwCullMode, RwEngine } from "./rw/rwcore.js";
 import { RpAtomic } from "./rw/rpworld.js";
 import { getMatrixTranslation } from "../MathHelpers.js";
+import { GfxChannelWriteMask } from "../gfx/platform/GfxPlatform.js";
 
 export interface HIModelBucket {
     data: RpAtomic;
@@ -206,10 +207,10 @@ export class HIModelBucketManager {
                 rw.renderState.cullMode = RwCullMode.BACK;
                 minst.renderSingle(scene, rw);
             } else if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
-                // TODO not tested - the OG game does something different here
-                rw.renderState.zWriteEnable = true;
+                // RenderWare has no API to set the color mask, so the game sets it using platform-specific code
+                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.None;
                 minst.renderSingle(scene, rw);
-                rw.renderState.zWriteEnable = false;
+                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
                 minst.renderSingle(scene, rw);
             } else {
                 minst.renderSingle(scene, rw);
