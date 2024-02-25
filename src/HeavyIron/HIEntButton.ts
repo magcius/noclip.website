@@ -30,16 +30,12 @@ export class HIEntButton extends HIEnt {
     public buttonAsset: HIEntButtonAsset;
     public motionAsset: HIEntMotionAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.buttonAsset = new HIEntButtonAsset(stream);
         this.motionAsset = new HIEntMotionAsset(stream);
         this.readLinks(stream);
-    }
-
-    public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
-        super.setup(scene);
     }
     
     public override render(scene: HIScene, rw: RwEngine): void {

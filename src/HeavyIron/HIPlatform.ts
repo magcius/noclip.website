@@ -69,15 +69,15 @@ export class HIPlatform extends HIEnt {
     public platformAsset: HIPlatformAsset;
     public motionAsset: HIEntMotionAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.platformAsset = new HIPlatformAsset(stream);
         this.motionAsset = new HIEntMotionAsset(stream);
         this.readLinks(stream);
+        this.parseModelInfo(this.entAsset.modelInfoID, scene);
     }
 
     public override setup(scene: HIScene): void {
-        this.parseModelInfo(this.entAsset.modelInfoID, scene);
         super.setup(scene);
     }
     

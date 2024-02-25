@@ -49,8 +49,8 @@ export class HIEntPickupAsset {
 export class HIEntPickup extends HIEnt {
     public pickupAsset: HIEntPickupAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.pickupAsset = new HIEntPickupAsset(stream);
         this.readLinks(stream);
     }

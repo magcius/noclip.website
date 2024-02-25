@@ -42,8 +42,8 @@ export class HIEnvAsset {
 export class HIEnv extends HIBase {
     public envAsset: HIEnvAsset;
     
-    constructor(stream: RwStream, public jsp: JSP) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene, public jsp: JSP) {
+        super(stream, scene);
         this.envAsset = new HIEnvAsset(stream);
         this.readLinks(stream);
     }

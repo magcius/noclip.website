@@ -42,14 +42,10 @@ export class HIEntDestructObjAsset {
 export class HIEntDestructObj extends HIEnt {
     public destructAsset: HIEntDestructObjAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.destructAsset = new HIEntDestructObjAsset(stream);
         this.readLinks(stream);
-    }
-
-    public override setup(scene: HIScene): void {
         this.parseModelInfo(this.entAsset.modelInfoID, scene);
-        super.setup(scene);
     }
 }

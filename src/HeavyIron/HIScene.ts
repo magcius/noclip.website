@@ -277,22 +277,6 @@ export class HIScene implements SceneGfx {
             for (const layer of hip.layers) {
                 for (const asset of layer.assets) {
                     switch (asset.type) {
-                    case HIAssetType.BUTN:
-                        this.addEnt(new HIEntButton(new RwStream(asset.data)));
-                        break;
-                    case HIAssetType.DPAT:
-                        this.addBase(new HIDispatcher(new RwStream(asset.data)));
-                        break;
-                    case HIAssetType.DSTR:
-                        this.addEnt(new HIEntDestructObj(new RwStream(asset.data)));
-                        break;
-                    case HIAssetType.ENV:
-                        this.env = new HIEnv(new RwStream(asset.data), jsp);
-                        this.addBase(this.env);
-                        break;
-                    case HIAssetType.FOG:
-                        this.addBase(new HIFog(new RwStream(asset.data)));
-                        break;
                     case HIAssetType.JSP:
                         jsp.load(asset.data, this.rw);
                         break;
@@ -308,27 +292,54 @@ export class HIScene implements SceneGfx {
                     case HIAssetType.PIPT:
                         pipeTables.push(new HIPipeInfoTable(new RwStream(asset.data)));
                         break;
+                    case HIAssetType.RWTX:
+                        this.loadTexture(asset);
+                        break;
+                    }
+                }
+            }
+        }
+
+        this.loadPipeTables(pipeTables);
+
+        for (const hip of this.hips) {
+            for (const layer of hip.layers) {
+                for (const asset of layer.assets) {
+                    switch (asset.type) {
+                    case HIAssetType.BUTN:
+                        this.addEnt(new HIEntButton(new RwStream(asset.data), this));
+                        break;
+                    case HIAssetType.DPAT:
+                        this.addBase(new HIDispatcher(new RwStream(asset.data), this));
+                        break;
+                    case HIAssetType.DSTR:
+                        this.addEnt(new HIEntDestructObj(new RwStream(asset.data), this));
+                        break;
+                    case HIAssetType.ENV:
+                        this.env = new HIEnv(new RwStream(asset.data), this, jsp);
+                        this.addBase(this.env);
+                        break;
+                    case HIAssetType.FOG:
+                        this.addBase(new HIFog(new RwStream(asset.data), this));
+                        break;
                     case HIAssetType.PKUP:
                     {
-                        const pkup = new HIEntPickup(new RwStream(asset.data));
+                        const pkup = new HIEntPickup(new RwStream(asset.data), this);
                         this.pickupManager.add(pkup);
                         this.addEnt(pkup);
                         break;
                     }
                     case HIAssetType.PLYR:
-                        this.player = new HIEntPlayer(new RwStream(asset.data));
+                        this.player = new HIEntPlayer(new RwStream(asset.data), this);
                         break;
                     case HIAssetType.PLAT:
-                        this.addEnt(new HIPlatform(new RwStream(asset.data)));
-                        break;
-                    case HIAssetType.RWTX:
-                        this.loadTexture(asset);
+                        this.addEnt(new HIPlatform(new RwStream(asset.data), this));
                         break;
                     case HIAssetType.SIMP:
-                        this.addEnt(new HIEntSimpleObj(new RwStream(asset.data)));
+                        this.addEnt(new HIEntSimpleObj(new RwStream(asset.data), this));
                         break;
                     case HIAssetType.VIL:
-                        this.addEnt(new HINPCCommon(new RwStream(asset.data)));
+                        this.addEnt(new HINPCCommon(new RwStream(asset.data), this));
                         break;
                     }
                 }
@@ -338,10 +349,8 @@ export class HIScene implements SceneGfx {
         // There's a BOOT.HIP player and a level.HIP player, we only want the level.HIP player
         this.addEnt(this.player);
 
-        this.loadPipeTables(pipeTables);
-
-        this.setup();
         this.reset();
+        this.setup();
 
         //console.log(this.baseList);
 
@@ -421,11 +430,11 @@ export class HIScene implements SceneGfx {
     }
 
     private setup() {
+        this.lod.setup(this);
+
         for (const base of this.baseList) {
             base.setup(this);
         }
-
-        this.lod.setup(this);
         
         if (this.env.envAsset.objectLightKit) {
             const lkitAsset = this.findAsset(this.env.envAsset.objectLightKit);

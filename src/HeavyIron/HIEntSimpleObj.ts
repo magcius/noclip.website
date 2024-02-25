@@ -21,14 +21,14 @@ export class HISimpleObjAsset {
 export class HIEntSimpleObj extends HIEnt {
     public simpAsset: HISimpleObjAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.simpAsset = new HISimpleObjAsset(stream);
         this.readLinks(stream);
+        this.parseModelInfo(this.entAsset.modelInfoID, scene);
     }
 
     public override setup(scene: HIScene): void {
-        this.parseModelInfo(this.entAsset.modelInfoID, scene);
         super.setup(scene);
     }
     

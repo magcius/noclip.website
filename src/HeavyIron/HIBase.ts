@@ -52,7 +52,7 @@ export class HIBase {
     /**
      * Load any needed assets from scene.assetManager here
      */
-    constructor(stream: RwStream) {
+    constructor(stream: RwStream, scene: HIScene) {
         this.baseAsset = new HIBaseAsset(stream);
         this.baseFlags = this.baseAsset.baseFlags;
     }
