@@ -53,9 +53,7 @@ export class HIEntPickup extends HIEnt {
         super(stream, scene);
         this.pickupAsset = new HIEntPickupAsset(stream);
         this.readLinks(stream);
-    }
 
-    public override setup(scene: HIScene): void {
         let pickupEntry = scene.pickupTable.entries[0];
         for (const pick of scene.pickupTable.entries) {
             if (this.pickupAsset.pickupHash === pick.pickupHash) {
@@ -67,8 +65,6 @@ export class HIEntPickup extends HIEnt {
         if (clump) {
             this.model = new HIModelInstance(clump.atomics[0], scene);
         }
-
-        super.setup(scene);
     }
 
     public override render() {}
