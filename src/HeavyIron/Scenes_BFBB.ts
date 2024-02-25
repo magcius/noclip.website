@@ -2,7 +2,7 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { HIScene } from "./HIScene.js";
 
-const dataPath = 'bfbb/xbox2'; // TEMP: remember to change back to bfbb/xbox
+const dataPath = 'SpongeBobBattleForBikiniBottom/v2';
 
 class BFBBSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string, public beta: boolean = false) {
