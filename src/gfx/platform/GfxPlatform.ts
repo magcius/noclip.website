@@ -326,8 +326,7 @@ export interface GfxDeviceLimits {
     wireframeSupported: boolean;
 }
 
-export interface GfxDebugGroup {
-    name: string;
+export interface GfxStatisticsGroup {
     drawCallCount: number;
     textureBindCount: number;
     bufferUploadCount: number;
@@ -490,7 +489,6 @@ export interface GfxDevice {
     // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat, width: number, height: number): boolean;
-    queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;
     queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor>;
@@ -500,8 +498,8 @@ export interface GfxDevice {
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
     programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void;
-    pushDebugGroup(debugGroup: GfxDebugGroup): void;
-    popDebugGroup(): void;
+    pushStatisticsGroup(statisticsGroup: GfxStatisticsGroup): void;
+    popStatisticsGroup(): void;
 }
 
 export type { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxRenderPipeline, GfxBindings };

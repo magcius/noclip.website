@@ -88,8 +88,14 @@ function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
     return hashCodeNumberFinish(hash);
 }
 
+interface Expiry {
+    expireFrameNum: number;
+}
+
+interface ExpiryBindings extends GfxBindings, Expiry {}
+
 export class GfxRenderCache {
-    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
+    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, ExpiryBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorSimpleEquals, nullHashFunc);
@@ -102,9 +108,10 @@ export class GfxRenderCache {
         let bindings = this.gfxBindingsCache.get(descriptor);
         if (bindings === null) {
             const descriptorCopy = gfxBindingsDescriptorCopy(descriptor);
-            bindings = this.device.createBindings(descriptorCopy);
+            bindings = this.device.createBindings(descriptorCopy) as ExpiryBindings;
             this.gfxBindingsCache.add(descriptorCopy, bindings);
         }
+        bindings.expireFrameNum = 4;
         return bindings;
     }
 
@@ -163,6 +170,15 @@ export class GfxRenderCache {
 
     public numBindings(): number {
         return this.gfxBindingsCache.size();
+    }
+
+    public prepareToRender(): void {
+        for (const [key, value] of this.gfxBindingsCache.items()) {
+            if (--value.expireFrameNum <= 0) {
+                this.gfxBindingsCache.delete(key);
+                this.device.destroyBindings(value);
+            }
+        }
     }
 
     public destroy(): void {

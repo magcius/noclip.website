@@ -3326,7 +3326,7 @@ export class JPABaseParticle {
 
             renderInst.setVertexInput(globalRes.inputLayout, globalRes.inputVertexQuad, globalRes.inputIndexQuad);
             if (shapeType === ShapeType.DirectionCross)
-                renderInst.setDrawCount(10);
+                renderInst.setDrawCount(12);
             else
                 renderInst.setDrawCount(6);
         } else if (shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross) {
