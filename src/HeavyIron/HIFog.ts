@@ -28,8 +28,8 @@ export class HIFogAsset {
 export class HIFog extends HIBase {
     public fogAsset: HIFogAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.fogAsset = new HIFogAsset(stream);
         this.readLinks(stream);
     }

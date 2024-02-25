@@ -4,8 +4,8 @@ import { HIScene } from "./HIScene.js";
 import { RwStream } from "./rw/rwcore.js";
 
 export class HIDispatcher extends HIBase {
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.readLinks(stream);
     }
 

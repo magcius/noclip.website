@@ -49,13 +49,11 @@ export class HIEntPickupAsset {
 export class HIEntPickup extends HIEnt {
     public pickupAsset: HIEntPickupAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.pickupAsset = new HIEntPickupAsset(stream);
         this.readLinks(stream);
-    }
 
-    public override setup(scene: HIScene): void {
         let pickupEntry = scene.pickupTable.entries[0];
         for (const pick of scene.pickupTable.entries) {
             if (this.pickupAsset.pickupHash === pick.pickupHash) {
@@ -67,8 +65,6 @@ export class HIEntPickup extends HIEnt {
         if (clump) {
             this.model = new HIModelInstance(clump.atomics[0], scene);
         }
-
-        super.setup(scene);
     }
 
     public override render() {}
@@ -87,7 +83,7 @@ export class HIEntPickupManager {
     }
     
     public render(scene: HIScene, rw: RwEngine) {
-        scene.lightKitManager.enable(null, rw.world);
+        scene.lightKitManager.enable(null, rw.world, scene);
 
         const src = this.pickupOrientation;
         for (const pkup of this.pickups) {

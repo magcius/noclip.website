@@ -114,10 +114,15 @@ export class HIModelBucketManager {
         for (const bucket of this.bucketList) {
             let minst = bucket.list;
             while (minst) {
+                scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+
+                const oldHack = scene.modelManager.hackDisablePrelight;
+                if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
+                    scene.modelManager.hackDisablePrelight = false;
+                }
+
                 const oldData = minst.data;
                 minst.data = bucket.data;
-
-                scene.lightKitManager.enable(minst.lightKit, rw.world);
 
                 let cull = RwCullMode.NONE;
                 if ((minst.pipeFlags & HIPipeFlags.CULL_MASK) === HIPipeFlags.CULL_FRONTONLY) {
@@ -131,6 +136,7 @@ export class HIModelBucketManager {
                 
                 minst.renderSingle(scene, rw);
 
+                scene.modelManager.hackDisablePrelight = oldHack;
                 minst.data = oldData;
 
                 minst = minst.bucketNext;
@@ -166,7 +172,12 @@ export class HIModelBucketManager {
             const oldData = minst.data;
             minst.data = bucket.data!;
 
-            scene.lightKitManager.enable(minst.lightKit, rw.world);
+            scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+
+            const oldHack = scene.modelManager.hackDisablePrelight;
+            if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
+                scene.modelManager.hackDisablePrelight = false;
+            }
 
             let srcBlend = ((minst.pipeFlags & HIPipeFlags.SRCBLEND_MASK) >>> HIPipeFlags.SRCBLEND_SHIFT);
             let dstBlend = ((minst.pipeFlags & HIPipeFlags.DESTBLEND_MASK) >>> HIPipeFlags.DESTBLEND_SHIFT);
@@ -217,6 +228,7 @@ export class HIModelBucketManager {
             }
 
             minst.alpha = oldAlpha;
+            scene.modelManager.hackDisablePrelight = oldHack;
             minst.data = oldData;
         }
 

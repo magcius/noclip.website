@@ -25,14 +25,14 @@ export class HIEntNPCAsset {
 export class HINPCCommon extends HIEnt {
     public npcAsset: HIEntNPCAsset;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.npcAsset = new HIEntNPCAsset(stream);
         this.readLinks(stream);
+        this.parseModelInfo(this.entAsset.modelInfoID, scene);
     }
 
     public override setup(scene: HIScene): void {
-        this.parseModelInfo(this.entAsset.modelInfoID, scene);
         super.setup(scene);
 
         const models: HIModelInstance[] = [];

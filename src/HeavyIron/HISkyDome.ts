@@ -36,7 +36,7 @@ export class HISkyDomeManager {
                 sky.ent.model.mat[13] = rw.camera.worldMatrix[13];
             }
 
-            sky.ent.model.renderSingle(scene, rw);
+            scene.modelManager.render(sky.ent.model.data, sky.ent.model.mat, rw);
         }
     }
 }

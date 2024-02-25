@@ -33,14 +33,14 @@ export class HIEntPlayer extends HIEnt {
     public playerAsset: HIEntPlayerAsset;
     public sb_models: HIModelInstance[] = [];
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.readLinks(stream);
         this.playerAsset = new HIEntPlayerAsset(stream);
+        this.parseModelInfo(this.entAsset.modelInfoID, scene);
     }
 
     public override setup(scene: HIScene): void {
-        this.parseModelInfo(this.entAsset.modelInfoID, scene);
         super.setup(scene);
 
         let modelIndex = 0;

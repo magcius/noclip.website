@@ -81,7 +81,7 @@ export class HILightKit {
 export class HILightKitManager {
     public lastLightKit: HILightKit | null = null;
 
-    public enable(lkit: HILightKit | null, world: RpWorld) {
+    public enable(lkit: HILightKit | null, world: RpWorld, scene: HIScene) {
         if (lkit === this.lastLightKit) {
             return;
         }
@@ -95,9 +95,13 @@ export class HILightKitManager {
         this.lastLightKit = lkit;
 
         if (lkit) {
+            scene.modelManager.hackDisablePrelight = true;
+
             for (const light of lkit.lightList) {
                 world.addLight(light);
             }
+        } else {
+            scene.modelManager.hackDisablePrelight = false;
         }
     }
 }

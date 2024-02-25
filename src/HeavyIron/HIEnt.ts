@@ -55,8 +55,8 @@ export abstract class HIEnt extends HIBase {
     public model: HIModelInstance | null = null;
     public lightKit: HILightKit | null = null;
 
-    constructor(stream: RwStream) {
-        super(stream);
+    constructor(stream: RwStream, scene: HIScene) {
+        super(stream, scene);
         this.entAsset = new HIEntAsset(stream);
 
         this.flags = this.entAsset.flags;
