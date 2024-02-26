@@ -146,10 +146,15 @@ interface MeshData {
     material: RpMaterial;
 }
 
+const scratchVec3 = vec3.create();
+const scratchColor1 = colorNewCopy(OpaqueBlack);
+const scratchColor2 = colorNewCopy(OpaqueBlack);
+
 class InstanceData {
     public vertexBuffer: GfxBuffer;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public inputLayout: GfxInputLayout;
+    public megaStateFlags: Partial<GfxMegaStateDescriptor> = makeMegaState();
     public meshes: MeshData[] = [];
     
     constructor(geom: RpGeometry, public gfxProgram: GfxProgram, rw: RwEngine) {
@@ -231,7 +236,7 @@ class InstanceData {
         rw.renderHelper.device.destroyBuffer(this.vertexBuffer);
     }
 
-    public render(atomic: RpAtomic, pipeline: AtomicAllInOnePipeline, rw: RwEngine) {
+    public render(atomic: RpAtomic, rw: RwEngine) {
         const geom = atomic.geometry;
 
         if (rw.camera.nearPlane !== rw.viewerInput.camera.near &&
@@ -239,9 +244,28 @@ class InstanceData {
             rw.viewerInput.camera.setClipPlanes(rw.camera.nearPlane, rw.camera.farPlane);
         }
 
+        // Convert the Rw render state to Gfx render state
+        // TODO: Since render state is stored per atomic now, maybe look into hashing the incoming Rw render state to avoid redoing these conversions if it doesn't change
+        this.megaStateFlags.depthCompare = reverseDepthForCompareMode(rw.renderState.zTestEnable ? GfxCompareMode.LessEqual : GfxCompareMode.Always);
+        this.megaStateFlags.depthWrite = rw.renderState.zWriteEnable;
+        this.megaStateFlags.cullMode = convertRwCullMode(rw.renderState.cullMode);
+        
+        const attachmentState = this.megaStateFlags.attachmentsState![0];
+
+        const srcBlend = convertRwBlendFunction(rw.renderState.srcBlend);
+        attachmentState.rgbBlendState.blendSrcFactor = srcBlend;
+        attachmentState.alphaBlendState.blendSrcFactor = srcBlend;
+
+        const dstBlend = convertRwBlendFunction(rw.renderState.destBlend);
+        attachmentState.rgbBlendState.blendDstFactor = dstBlend;
+        attachmentState.alphaBlendState.blendDstFactor = dstBlend;
+
+        attachmentState.channelWriteMask = rw.renderState.channelWriteMask;
+
+        // ub_AtomicParams
         const template = rw.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setMegaStateFlags(pipeline.megaStateFlags);
+        template.setMegaStateFlags(this.megaStateFlags);
 
         let offs = template.allocateUniformBuffer(AtomicProgram.ub_AtomicParams, AtomicProgram.ub_AtomicParams_SIZE);
         const mapped = template.mapUniformBufferF32(AtomicProgram.ub_AtomicParams);
@@ -251,11 +275,39 @@ class InstanceData {
         offs += fillMatrix4x4(mapped, offs, atomic.frame.matrix);
 
         if (geom.flags & RpGeometryFlag.LIGHT) {
-            for (let i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
-                offs += fillVec3v(mapped, offs, pipeline.directionalLightDirections[i]);
-                offs += fillColor(mapped, offs, pipeline.directionalLightColors[i]);
+            const ambientColor = scratchColor1;
+            colorCopy(ambientColor, OpaqueBlack);
+
+            let directionalLightCount = 0;
+            for (const light of rw.world.lights) {
+                if (light.flags & RpLightFlag.LIGHTATOMICS) {
+                    if (light.type === RpLightType.DIRECTIONAL) {
+                        if (directionalLightCount < MAX_DIRECTIONAL_LIGHTS) {
+                            const dir = scratchVec3;
+                            getMatrixAxisZ(dir, light.frame.matrix);
+                            vec3.normalize(dir, dir);
+                            offs += fillVec3v(mapped, offs, dir);
+        
+                            const color = scratchColor2;
+                            color.r = light.color.r * light.color.a;
+                            color.g = light.color.g * light.color.a;
+                            color.b = light.color.b * light.color.a;
+                            offs += fillColor(mapped, offs, color);
+        
+                            directionalLightCount++;
+                        }
+                    } else if (light.type === RpLightType.AMBIENT) {
+                        ambientColor.r += light.color.r * light.color.a;
+                        ambientColor.g += light.color.g * light.color.a;
+                        ambientColor.b += light.color.b * light.color.a;
+                    }
+                }
             }
-            offs += fillColor(mapped, offs, pipeline.ambientLightColor);
+            for (let i = directionalLightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+                offs += fillVec4(mapped, offs, 0);
+                offs += fillVec4(mapped, offs, 0);
+            }
+            offs += fillColor(mapped, offs, ambientColor);
         } else {
             for (let i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
                 offs += fillVec4(mapped, offs, 0);
@@ -277,6 +329,7 @@ class InstanceData {
 
         offs += fillVec4(mapped, offs, farPlane, fogPlane, alphaRef, atomicFlags);
 
+        // ub_MeshParams
         for (const mesh of this.meshes) {
             const renderInst = rw.renderHelper.renderInstManager.newRenderInst();
 
@@ -337,14 +390,6 @@ function convertRwCullMode(cull: RwCullMode): GfxCullMode {
 export class AtomicAllInOnePipeline implements RpAtomicPipeline {
     private gfxProgram?: GfxProgram;
 
-    public megaStateFlags: Partial<GfxMegaStateDescriptor> = makeMegaState();
-
-    public ambientLightColor = colorNewCopy(OpaqueBlack);
-    public directionalLightDirections = nArray(MAX_DIRECTIONAL_LIGHTS, () => vec3.create());
-    public directionalLightColors = nArray(MAX_DIRECTIONAL_LIGHTS, () => colorNewCopy(OpaqueBlack));
-
-    private enabledLights = new Set<RpLight>();
-
     public instance(atomic: RpAtomic, rw: RwEngine) {
         if (!this.gfxProgram) {
             this.gfxProgram = rw.renderHelper.renderCache.createProgram(new AtomicProgram());
@@ -353,88 +398,12 @@ export class AtomicAllInOnePipeline implements RpAtomicPipeline {
         if (!atomic.geometry.instanceData) {
             atomic.geometry.instanceData = new InstanceData(atomic.geometry, this.gfxProgram, rw);
         }
-
-        this.updateRenderState(rw);
-        this.updateLights(rw);
         
-        (atomic.geometry.instanceData as InstanceData).render(atomic, this, rw);
+        (atomic.geometry.instanceData as InstanceData).render(atomic, rw);
     }
 
     public destroy(atomic: RpAtomic, rw: RwEngine) {
         (atomic.geometry.instanceData as InstanceData)?.destroy(atomic, rw);
         atomic.geometry.instanceData = undefined;
-    }
-
-    private updateRenderState(rw: RwEngine) {
-        this.megaStateFlags.depthCompare = reverseDepthForCompareMode(rw.renderState.zTestEnable ? GfxCompareMode.LessEqual : GfxCompareMode.Always);
-        this.megaStateFlags.depthWrite = rw.renderState.zWriteEnable;
-        this.megaStateFlags.cullMode = convertRwCullMode(rw.renderState.cullMode);
-        
-        const attachmentState = this.megaStateFlags.attachmentsState![0];
-
-        const srcBlend = convertRwBlendFunction(rw.renderState.srcBlend);
-        attachmentState.rgbBlendState.blendSrcFactor = srcBlend;
-        attachmentState.alphaBlendState.blendSrcFactor = srcBlend;
-
-        const dstBlend = convertRwBlendFunction(rw.renderState.destBlend);
-        attachmentState.rgbBlendState.blendDstFactor = dstBlend;
-        attachmentState.alphaBlendState.blendDstFactor = dstBlend;
-
-        attachmentState.channelWriteMask = rw.renderState.channelWriteMask;
-    }
-
-    private updateLights(rw: RwEngine) {
-        // TODO: We should eventually check if any lights were modified (moved, changed color, etc.),
-        //       but that's not needed right now
-        let dirty = false;
-        for (const light of rw.world.lights) {
-            if (light.flags & RpLightFlag.LIGHTATOMICS) {
-                if (!this.enabledLights.has(light)) {
-                    dirty = true;
-                    this.enabledLights.add(light);
-                }
-            } else {
-                if (this.enabledLights.has(light)) {
-                    dirty = true;
-                    this.enabledLights.delete(light);
-                }
-            }
-        }
-        for (const light of this.enabledLights) {
-            if (!(light.flags & RpLightFlag.LIGHTATOMICS) || !rw.world.lights.has(light)) {
-                dirty = true;
-                this.enabledLights.delete(light);
-            }
-        }
-
-        if (dirty) {
-            colorCopy(this.ambientLightColor, OpaqueBlack);
-
-            let directionalLightCount = 0;
-            for (const light of this.enabledLights) {
-                if (light.type === RpLightType.DIRECTIONAL) {
-                    if (directionalLightCount < MAX_DIRECTIONAL_LIGHTS) {
-                        const dir = this.directionalLightDirections[directionalLightCount];
-                        getMatrixAxisZ(dir, light.frame.matrix);
-                        vec3.normalize(dir, dir);
-    
-                        const color = this.directionalLightColors[directionalLightCount];
-                        color.r = light.color.r * light.color.a;
-                        color.g = light.color.g * light.color.a;
-                        color.b = light.color.b * light.color.a;
-    
-                        directionalLightCount++;
-                    }
-                } else if (light.type === RpLightType.AMBIENT) {
-                    this.ambientLightColor.r += light.color.r * light.color.a;
-                    this.ambientLightColor.g += light.color.g * light.color.a;
-                    this.ambientLightColor.b += light.color.b * light.color.a;
-                }
-            }
-            for (let i = directionalLightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
-                vec3.set(this.directionalLightDirections[i], 0, 0, 0);
-                colorCopy(this.directionalLightColors[i], TransparentBlack);
-            }
-        }        
     }
 }
