@@ -305,9 +305,15 @@ export const enum RpLightType {
     //SPOTSOFT
 }
 
+export const enum RpLightFlag {
+    LIGHTATOMICS = 0x1,
+    LIGHTWORLD = 0x2,
+}
+
 export class RpLight {
     public frame = new RwFrame();
     public color = White;
+    public flags = RpLightFlag.LIGHTATOMICS | RpLightFlag.LIGHTWORLD;
 
     constructor(public type: RpLightType) {
         this.frame.matrix = mat4.create();

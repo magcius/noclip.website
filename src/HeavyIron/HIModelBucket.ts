@@ -219,9 +219,9 @@ export class HIModelBucketManager {
                 minst.renderSingle(scene, rw);
             } else if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
                 // RenderWare has no API to set the color mask, so the game sets it using platform-specific code
-                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.None;
+                rw.renderState.channelWriteMask = GfxChannelWriteMask.None;
                 minst.renderSingle(scene, rw);
-                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+                rw.renderState.channelWriteMask = GfxChannelWriteMask.AllChannels;
                 minst.renderSingle(scene, rw);
             } else {
                 minst.renderSingle(scene, rw);

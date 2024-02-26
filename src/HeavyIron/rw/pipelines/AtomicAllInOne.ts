@@ -1,15 +1,19 @@
 import { DeviceProgram } from "../../../Program.js";
 import { makeStaticDataBuffer } from "../../../gfx/helpers/BufferHelpers.js";
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from "../../../gfx/helpers/TopologyHelpers.js";
-import { fillColor, fillMatrix4x4, fillVec4, fillVec4v } from "../../../gfx/helpers/UniformBufferHelpers.js";
-import { GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode } from "../../../gfx/platform/GfxPlatform.js";
+import { fillColor, fillMatrix4x4, fillVec3v, fillVec4 } from "../../../gfx/helpers/UniformBufferHelpers.js";
+import { GfxIndexBufferDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendFactor, GfxCullMode } from "../../../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../../../gfx/platform/GfxPlatformFormat.js";
 import { GfxBuffer, GfxProgram, GfxInputLayout } from "../../../gfx/platform/GfxPlatformImpl.js";
 import { GfxShaderLibrary } from "../../../gfx/helpers/GfxShaderLibrary.js";
-import { OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA, colorNewCopy } from "../../../Color.js";
-import { mat4, vec4 } from "gl-matrix";
-import { RwEngine } from "../rwcore.js";
-import { RpMaterial, RpAtomic, RpGeometryFlag, RpLightType, RpAtomicPipeline, RpGeometry } from "../rpworld.js";
+import { OpaqueBlack, TransparentBlack, White, colorCopy, colorNewCopy } from "../../../Color.js";
+import { mat4, vec3 } from "gl-matrix";
+import { RwBlendFunction, RwCullMode, RwEngine } from "../rwcore.js";
+import { RpMaterial, RpAtomic, RpGeometryFlag, RpLightType, RpAtomicPipeline, RpGeometry, RpLight, RpLightFlag } from "../rpworld.js";
+import { nArray } from "../../../util.js";
+import { getMatrixAxisZ } from "../../../MathHelpers.js";
+import { makeMegaState } from "../../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { reverseDepthForCompareMode } from "../../../gfx/helpers/ReversedDepthHelpers.js";
 
 const MAX_DIRECTIONAL_LIGHTS = 8;
 
@@ -28,8 +32,8 @@ class AtomicProgram extends DeviceProgram {
     public static ub_AtomicParams = 0;
     public static ub_MeshParams = 1;
 
-    public static readonly ub_AtomicParams_SIZE = 16*2 + 4*MAX_DIRECTIONAL_LIGHTS*2 + 4*2 + 4;
-    public static readonly ub_MeshParams_SIZE = 4 + 4;
+    public static readonly ub_AtomicParams_SIZE = 16*3 + 4*MAX_DIRECTIONAL_LIGHTS*2 + 4*3;
+    public static readonly ub_MeshParams_SIZE = 4*2;
 
     public override both = `
 precision mediump float;
@@ -37,31 +41,38 @@ precision mediump float;
 #define MAX_DIRECTIONAL_LIGHTS ${MAX_DIRECTIONAL_LIGHTS}
 
 struct DirectionalLight {
-    vec4 direction; // in eye space
+    vec4 direction;
     vec4 color;
 };
 
 layout(std140) uniform ub_AtomicParams {
     Mat4x4 u_Projection;
-    Mat4x4 u_ModelView;
+    Mat4x4 u_ViewMatrix;
+    Mat4x4 u_ModelMatrix;
     DirectionalLight u_DirectionalLights[MAX_DIRECTIONAL_LIGHTS];
     vec4 u_AmbientColor;
     vec4 u_FogColor;
-    float u_FarPlane;
-    float u_FogPlane;
-    float u_AlphaRef;
-    float u_EnablePrelit;
+    vec4 u_AtomicMisc;
 };
 
-#define u_EnableLight (u_AmbientColor.a)
+#define u_FarPlane (u_AtomicMisc.x)
+#define u_FogPlane (u_AtomicMisc.y)
+#define u_AlphaRef (u_AtomicMisc.z)
+#define u_AtomicFlags (int(u_AtomicMisc.w))
+
+#define u_EnablePrelit ((u_AtomicFlags & 0x1) != 0)
+#define u_EnableLight ((u_AtomicFlags & 0x2) != 0)
 
 layout(std140) uniform ub_MeshParams {
     vec4 u_MaterialColor;
-    float u_AmbientMult;
-    float u_DiffuseMult;
-    float u_EnableTexture;
-    float u_MeshUnused;
+    vec4 u_MeshMisc;
 };
+
+#define u_AmbientMult (u_MeshMisc.x)
+#define u_DiffuseMult (u_MeshMisc.y)
+#define u_MeshFlags (int(u_MeshMisc.z))
+
+#define u_EnableTexture ((u_MeshFlags & 0x1) != 0)
 
 uniform sampler2D u_Texture;
 
@@ -80,14 +91,13 @@ layout(location = ${AtomicProgram.a_Color}) in vec4 a_Color;
 layout(location = ${AtomicProgram.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(u_ViewMatrix, Mul(u_ModelMatrix, vec4(a_Position, 1.0))));
 
-    // Normal (in eye space)
-    vec3 t_Normal = normalize(Mul(u_ModelView, vec4(a_Normal, 0.0)).xyz);
+    vec3 t_Normal = normalize(Mul(u_ModelMatrix, vec4(a_Normal, 0.0)).xyz);
 
-    vec4 t_Color = u_EnablePrelit != 0.0 ? a_Color : (u_EnableLight != 0.0 ? vec4(0, 0, 0, 1) : vec4(1.0));
+    vec4 t_Color = u_EnablePrelit ? a_Color : (u_EnableLight ? vec4(0, 0, 0, 1) : vec4(1.0));
 
-    if (u_EnableLight != 0.0) {
+    if (u_EnableLight) {
         // Ambient lighting
         t_Color.rgb += u_AmbientColor.rgb * u_AmbientMult;
 
@@ -115,7 +125,7 @@ void main() {
     vec4 t_Color = v_Color;
 
     // Texture
-    if (u_EnableTexture != 0.0)
+    if (u_EnableTexture)
         t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 
     // Alpha Test
@@ -135,11 +145,6 @@ interface MeshData {
     indexCount: number;
     material: RpMaterial;
 }
-
-const scratchVec4 = vec4.create();
-const scratchMat4 = mat4.create();
-const scratchColor = colorNewCopy(OpaqueBlack);
-const scratchColor2 = colorNewCopy(OpaqueBlack);
 
 class InstanceData {
     public vertexBuffer: GfxBuffer;
@@ -226,7 +231,7 @@ class InstanceData {
         rw.renderHelper.device.destroyBuffer(this.vertexBuffer);
     }
 
-    public render(atomic: RpAtomic, rw: RwEngine) {
+    public render(atomic: RpAtomic, pipeline: AtomicAllInOnePipeline, rw: RwEngine) {
         const geom = atomic.geometry;
 
         if (rw.camera.nearPlane !== rw.viewerInput.camera.near &&
@@ -236,59 +241,28 @@ class InstanceData {
 
         const template = rw.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setMegaStateFlags(rw.renderState.megaStateFlags);
+        template.setMegaStateFlags(pipeline.megaStateFlags);
 
         let offs = template.allocateUniformBuffer(AtomicProgram.ub_AtomicParams, AtomicProgram.ub_AtomicParams_SIZE);
         const mapped = template.mapUniformBufferF32(AtomicProgram.ub_AtomicParams);
 
-        const projection = rw.viewerInput.camera.projectionMatrix;
-        offs += fillMatrix4x4(mapped, offs, projection);
+        offs += fillMatrix4x4(mapped, offs, rw.viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(mapped, offs, rw.camera.viewMatrix);
+        offs += fillMatrix4x4(mapped, offs, atomic.frame.matrix);
 
-        const modelView = scratchMat4;
-        mat4.mul(modelView, rw.camera.viewMatrix, atomic.frame.matrix);
-        offs += fillMatrix4x4(mapped, offs, modelView);
-
-        const directionalColor = scratchColor;
-        const ambientColor = scratchColor2;
-
-        colorCopy(directionalColor, OpaqueBlack);
-        colorFromRGBA(ambientColor, 0, 0, 0, (geom.flags & RpGeometryFlag.LIGHT) ? 1.0 : 0.0);
-
-        let lightCount = 0;
-        if (atomic.geometry.flags & RpGeometryFlag.LIGHT) {
-            for (const light of rw.world.lights) {
-                if (light.type === RpLightType.DIRECTIONAL) {
-                    if (lightCount < MAX_DIRECTIONAL_LIGHTS) {
-                        const mat = scratchMat4;
-                        mat4.mul(mat, rw.camera.viewMatrix, light.frame.matrix);
-
-                        const dir = scratchVec4;
-                        vec4.set(dir, mat[8], mat[9], mat[10], 0);
-                        vec4.normalize(dir, dir);
-
-                        offs += fillVec4v(mapped, offs, dir);
-
-                        directionalColor.r = light.color.r * light.color.a;
-                        directionalColor.g = light.color.g * light.color.a;
-                        directionalColor.b = light.color.b * light.color.a;
-
-                        offs += fillColor(mapped, offs, directionalColor);
-
-                        lightCount++;
-                    }
-                } else if (light.type === RpLightType.AMBIENT) {
-                    ambientColor.r += light.color.r * light.color.a;
-                    ambientColor.g += light.color.g * light.color.a;
-                    ambientColor.b += light.color.b * light.color.a;
-                }
+        if (geom.flags & RpGeometryFlag.LIGHT) {
+            for (let i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+                offs += fillVec3v(mapped, offs, pipeline.directionalLightDirections[i]);
+                offs += fillColor(mapped, offs, pipeline.directionalLightColors[i]);
             }
-        }
-        for (let i = lightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+            offs += fillColor(mapped, offs, pipeline.ambientLightColor);
+        } else {
+            for (let i = 0; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+                offs += fillVec4(mapped, offs, 0);
+                offs += fillVec4(mapped, offs, 0);
+            }
             offs += fillVec4(mapped, offs, 0);
-            offs += fillVec4(mapped, offs, 0);
         }
-
-        offs += fillColor(mapped, offs, ambientColor);
 
         const fogColor = rw.renderState.fogEnable ? rw.renderState.fogColor : TransparentBlack;
         offs += fillColor(mapped, offs, fogColor);
@@ -296,8 +270,12 @@ class InstanceData {
         const farPlane = rw.camera.farPlane;
         const fogPlane = rw.camera.fogPlane;
         const alphaRef = rw.renderState.alphaTestFunctionRef;
-        const enablePrelit = (atomic.geometry.flags & RpGeometryFlag.PRELIT) ? 1.0 : 0.0;
-        offs += fillVec4(mapped, offs, farPlane, fogPlane, alphaRef, enablePrelit);
+        
+        let atomicFlags = 0;
+        if (atomic.geometry.flags & RpGeometryFlag.PRELIT) atomicFlags |= 0x1;
+        if (atomic.geometry.flags & RpGeometryFlag.LIGHT) atomicFlags |= 0x2;
+
+        offs += fillVec4(mapped, offs, farPlane, fogPlane, alphaRef, atomicFlags);
 
         for (const mesh of this.meshes) {
             const renderInst = rw.renderHelper.renderInstManager.newRenderInst();
@@ -310,9 +288,11 @@ class InstanceData {
 
             const ambientMult = mesh.material.ambient;
             const diffuseMult = mesh.material.diffuse;
-            const enableTexture = mesh.material.texture ? 1.0 : 0.0;
 
-            offs += fillVec4(mapped, offs, ambientMult, diffuseMult, enableTexture);
+            let meshFlags = 0;
+            if (mesh.material.texture) meshFlags |= 0x1;
+
+            offs += fillVec4(mapped, offs, ambientMult, diffuseMult, meshFlags);
 
             if (mesh.material.texture) {
                 mesh.material.texture.raster.bind(renderInst, mesh.material.texture.getGfxSampler(rw));
@@ -329,8 +309,41 @@ class InstanceData {
     }
 }
 
+function convertRwBlendFunction(blend: RwBlendFunction): GfxBlendFactor {
+    switch (blend) {
+    case RwBlendFunction.NABLEND:      return GfxBlendFactor.Zero;
+    case RwBlendFunction.ZERO:         return GfxBlendFactor.Zero;
+    case RwBlendFunction.ONE:          return GfxBlendFactor.One;
+    case RwBlendFunction.SRCCOLOR:     return GfxBlendFactor.Src;
+    case RwBlendFunction.INVSRCCOLOR:  return GfxBlendFactor.OneMinusSrc;
+    case RwBlendFunction.SRCALPHA:     return GfxBlendFactor.SrcAlpha;
+    case RwBlendFunction.INVSRCALPHA:  return GfxBlendFactor.OneMinusSrcAlpha;
+    case RwBlendFunction.DESTALPHA:    return GfxBlendFactor.DstAlpha;
+    case RwBlendFunction.INVDESTALPHA: return GfxBlendFactor.OneMinusDstAlpha;
+    case RwBlendFunction.DESTCOLOR:    return GfxBlendFactor.Dst;
+    case RwBlendFunction.INVDESTCOLOR: return GfxBlendFactor.OneMinusDst;
+    case RwBlendFunction.SRCALPHASAT:  return GfxBlendFactor.SrcAlpha; // unsupported
+    }
+}
+
+function convertRwCullMode(cull: RwCullMode): GfxCullMode {
+    switch (cull) {
+    case RwCullMode.NONE:  return GfxCullMode.None;
+    case RwCullMode.BACK:  return GfxCullMode.Back;
+    case RwCullMode.FRONT: return GfxCullMode.Front;
+    }
+}
+
 export class AtomicAllInOnePipeline implements RpAtomicPipeline {
     private gfxProgram?: GfxProgram;
+
+    public megaStateFlags: Partial<GfxMegaStateDescriptor> = makeMegaState();
+
+    public ambientLightColor = colorNewCopy(OpaqueBlack);
+    public directionalLightDirections = nArray(MAX_DIRECTIONAL_LIGHTS, () => vec3.create());
+    public directionalLightColors = nArray(MAX_DIRECTIONAL_LIGHTS, () => colorNewCopy(OpaqueBlack));
+
+    private enabledLights = new Set<RpLight>();
 
     public instance(atomic: RpAtomic, rw: RwEngine) {
         if (!this.gfxProgram) {
@@ -341,11 +354,87 @@ export class AtomicAllInOnePipeline implements RpAtomicPipeline {
             atomic.geometry.instanceData = new InstanceData(atomic.geometry, this.gfxProgram, rw);
         }
 
-        (atomic.geometry.instanceData as InstanceData).render(atomic, rw);
+        this.updateRenderState(rw);
+        this.updateLights(rw);
+        
+        (atomic.geometry.instanceData as InstanceData).render(atomic, this, rw);
     }
 
     public destroy(atomic: RpAtomic, rw: RwEngine) {
         (atomic.geometry.instanceData as InstanceData)?.destroy(atomic, rw);
         atomic.geometry.instanceData = undefined;
+    }
+
+    private updateRenderState(rw: RwEngine) {
+        this.megaStateFlags.depthCompare = reverseDepthForCompareMode(rw.renderState.zTestEnable ? GfxCompareMode.LessEqual : GfxCompareMode.Always);
+        this.megaStateFlags.depthWrite = rw.renderState.zWriteEnable;
+        this.megaStateFlags.cullMode = convertRwCullMode(rw.renderState.cullMode);
+        
+        const attachmentState = this.megaStateFlags.attachmentsState![0];
+
+        const srcBlend = convertRwBlendFunction(rw.renderState.srcBlend);
+        attachmentState.rgbBlendState.blendSrcFactor = srcBlend;
+        attachmentState.alphaBlendState.blendSrcFactor = srcBlend;
+
+        const dstBlend = convertRwBlendFunction(rw.renderState.destBlend);
+        attachmentState.rgbBlendState.blendDstFactor = dstBlend;
+        attachmentState.alphaBlendState.blendDstFactor = dstBlend;
+
+        attachmentState.channelWriteMask = rw.renderState.channelWriteMask;
+    }
+
+    private updateLights(rw: RwEngine) {
+        // TODO: We should eventually check if any lights were modified (moved, changed color, etc.),
+        //       but that's not needed right now
+        let dirty = false;
+        for (const light of rw.world.lights) {
+            if (light.flags & RpLightFlag.LIGHTATOMICS) {
+                if (!this.enabledLights.has(light)) {
+                    dirty = true;
+                    this.enabledLights.add(light);
+                }
+            } else {
+                if (this.enabledLights.has(light)) {
+                    dirty = true;
+                    this.enabledLights.delete(light);
+                }
+            }
+        }
+        for (const light of this.enabledLights) {
+            if (!(light.flags & RpLightFlag.LIGHTATOMICS) || !rw.world.lights.has(light)) {
+                dirty = true;
+                this.enabledLights.delete(light);
+            }
+        }
+
+        if (dirty) {
+            colorCopy(this.ambientLightColor, OpaqueBlack);
+
+            let directionalLightCount = 0;
+            for (const light of this.enabledLights) {
+                if (light.type === RpLightType.DIRECTIONAL) {
+                    if (directionalLightCount < MAX_DIRECTIONAL_LIGHTS) {
+                        const dir = this.directionalLightDirections[directionalLightCount];
+                        getMatrixAxisZ(dir, light.frame.matrix);
+                        vec3.normalize(dir, dir);
+    
+                        const color = this.directionalLightColors[directionalLightCount];
+                        color.r = light.color.r * light.color.a;
+                        color.g = light.color.g * light.color.a;
+                        color.b = light.color.b * light.color.a;
+    
+                        directionalLightCount++;
+                    }
+                } else if (light.type === RpLightType.AMBIENT) {
+                    this.ambientLightColor.r += light.color.r * light.color.a;
+                    this.ambientLightColor.g += light.color.g * light.color.a;
+                    this.ambientLightColor.b += light.color.b * light.color.a;
+                }
+            }
+            for (let i = directionalLightCount; i < MAX_DIRECTIONAL_LIGHTS; i++) {
+                vec3.set(this.directionalLightDirections[i], 0, 0, 0);
+                colorCopy(this.directionalLightColors[i], TransparentBlack);
+            }
+        }        
     }
 }
