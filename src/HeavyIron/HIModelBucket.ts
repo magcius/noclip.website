@@ -114,7 +114,7 @@ export class HIModelBucketManager {
         for (const bucket of this.bucketList) {
             let minst = bucket.list;
             while (minst) {
-                scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+                scene.lightKitManager.enable(minst.lightKit, scene);
 
                 const oldHack = scene.modelManager.hackDisablePrelight;
                 if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
@@ -172,7 +172,7 @@ export class HIModelBucketManager {
             const oldData = minst.data;
             minst.data = bucket.data!;
 
-            scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+            scene.lightKitManager.enable(minst.lightKit, scene);
 
             const oldHack = scene.modelManager.hackDisablePrelight;
             if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
@@ -219,9 +219,9 @@ export class HIModelBucketManager {
                 minst.renderSingle(scene, rw);
             } else if ((minst.pipeFlags & HIPipeFlags.ZBUFFER_MASK) === HIPipeFlags.ZBUFFER_ZFIRST) {
                 // RenderWare has no API to set the color mask, so the game sets it using platform-specific code
-                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.None;
+                rw.renderState.channelWriteMask = GfxChannelWriteMask.None;
                 minst.renderSingle(scene, rw);
-                rw.renderState.megaStateFlags.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+                rw.renderState.channelWriteMask = GfxChannelWriteMask.AllChannels;
                 minst.renderSingle(scene, rw);
             } else {
                 minst.renderSingle(scene, rw);

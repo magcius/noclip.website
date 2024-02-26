@@ -1,14 +1,12 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { Color, OpaqueBlack } from "../../Color.js";
 import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../../gfx/helpers/RenderGraphHelpers.js";
-import { GfxBlendFactor, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
+import { GfxChannelWriteMask, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInst, GfxRenderInstList } from "../../gfx/render/GfxRenderInstManager.js";
 import { SceneContext } from "../../SceneBase.js";
 import { ViewerRenderInput } from "../../viewer.js";
-import { makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { reverseDepthForCompareMode } from "../../gfx/helpers/ReversedDepthHelpers.js";
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { TextureMapping } from "../../TextureHolder.js";
 import { nArray } from "../../util.js";
@@ -309,27 +307,27 @@ export const enum RwTextureStreamFlags {
     USERMIPMAPS = 0x01
 }
 
-// Not sure if these are right
 function convertRwTextureFilterMode(filter: RwTextureFilterMode): GfxTexFilterMode {
     switch (filter) {
+    case RwTextureFilterMode.NEAREST:          return GfxTexFilterMode.Point;
     case RwTextureFilterMode.LINEAR:           return GfxTexFilterMode.Bilinear;
     case RwTextureFilterMode.MIPNEAREST:       return GfxTexFilterMode.Point;
-    case RwTextureFilterMode.MIPLINEAR:        return GfxTexFilterMode.Point;
-    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxTexFilterMode.Bilinear;
+    case RwTextureFilterMode.MIPLINEAR:        return GfxTexFilterMode.Bilinear;
+    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxTexFilterMode.Point;
     case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxTexFilterMode.Bilinear;
     default:                                   return GfxTexFilterMode.Point;
     }
 }
 
-// Not sure if these are right
 function convertRwTextureFilterModeMip(filter: RwTextureFilterMode): GfxMipFilterMode {
     switch (filter) {
-    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.Linear;
+    case RwTextureFilterMode.NEAREST:          return GfxMipFilterMode.NoMip;
+    case RwTextureFilterMode.LINEAR:           return GfxMipFilterMode.NoMip;
     case RwTextureFilterMode.MIPNEAREST:       return GfxMipFilterMode.Nearest;
-    case RwTextureFilterMode.MIPLINEAR:        return GfxMipFilterMode.Linear;
-    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxMipFilterMode.Nearest;
+    case RwTextureFilterMode.MIPLINEAR:        return GfxMipFilterMode.Nearest;
+    case RwTextureFilterMode.LINEARMIPNEAREST: return GfxMipFilterMode.Linear;
     case RwTextureFilterMode.LINEARMIPLINEAR:  return GfxMipFilterMode.Linear;
-    default:                                   return GfxMipFilterMode.Nearest;
+    default:                                   return GfxMipFilterMode.NoMip;
     }
 }
 
@@ -347,19 +345,18 @@ export class RwTexture {
     public name: string;
     public mask: string;
     public raster: RwRaster;
-
-    private _filter = RwTextureFilterMode.NEAREST;
-    private _addressingU = RwTextureAddressMode.WRAP;
-    private _addressingV = RwTextureAddressMode.WRAP;
+    public filter = RwTextureFilterMode.NEAREST;
+    public addressingU = RwTextureAddressMode.WRAP;
+    public addressingV = RwTextureAddressMode.WRAP;
 
     private gfxSampler: GfxSampler | null = null;
 
     public getGfxSampler(rw: RwEngine) {
         if (!this.gfxSampler) {
-            const texFilter = convertRwTextureFilterMode(this._filter);
-            const mipFilter = convertRwTextureFilterModeMip(this._filter);
-            const wrapS = convertRwTextureAddressMode(this._addressingU);
-            const wrapT = convertRwTextureAddressMode(this._addressingV);
+            const texFilter = convertRwTextureFilterMode(this.filter);
+            const mipFilter = convertRwTextureFilterModeMip(this.filter);
+            const wrapS = convertRwTextureAddressMode(this.addressingU);
+            const wrapT = convertRwTextureAddressMode(this.addressingV);
             
             this.gfxSampler = rw.renderHelper.renderCache.createSampler({
                 magFilter: texFilter,
@@ -371,33 +368,6 @@ export class RwTexture {
         }
 
         return this.gfxSampler;
-    }
-
-    public get filter() {
-        return this._filter;
-    }
-
-    public set filter(f: RwTextureFilterMode) {
-        this._filter = f;
-        this.gfxSampler = null;
-    }
-    
-    public get addressingU() {
-        return this._addressingU;
-    }
-
-    public set addressingU(a: RwTextureAddressMode) {
-        this._addressingU = a;
-        this.gfxSampler = null;
-    }
-
-    public get addressingV() {
-        return this._addressingV;
-    }
-
-    public set addressingV(a: RwTextureAddressMode) {
-        this._addressingV = a;
-        this.gfxSampler = null;
     }
 
     public destroy(rw: RwEngine) {
@@ -557,160 +527,25 @@ export const enum RwAlphaTestFunction {
     ALWAYS
 }
 
-function convertRwBlendFunction(blend: RwBlendFunction): GfxBlendFactor {
-    switch (blend) {
-    case RwBlendFunction.NABLEND:      return GfxBlendFactor.Zero;
-    case RwBlendFunction.ZERO:         return GfxBlendFactor.Zero;
-    case RwBlendFunction.ONE:          return GfxBlendFactor.One;
-    case RwBlendFunction.SRCCOLOR:     return GfxBlendFactor.Src;
-    case RwBlendFunction.INVSRCCOLOR:  return GfxBlendFactor.OneMinusSrc;
-    case RwBlendFunction.SRCALPHA:     return GfxBlendFactor.SrcAlpha;
-    case RwBlendFunction.INVSRCALPHA:  return GfxBlendFactor.OneMinusSrcAlpha;
-    case RwBlendFunction.DESTALPHA:    return GfxBlendFactor.DstAlpha;
-    case RwBlendFunction.INVDESTALPHA: return GfxBlendFactor.OneMinusDstAlpha;
-    case RwBlendFunction.DESTCOLOR:    return GfxBlendFactor.Dst;
-    case RwBlendFunction.INVDESTCOLOR: return GfxBlendFactor.OneMinusDst;
-    case RwBlendFunction.SRCALPHASAT:  return GfxBlendFactor.SrcAlpha; // unsupported
-    }
-}
-
-function convertGfxBlendFactor(factor: GfxBlendFactor): RwBlendFunction {
-    switch (factor) {
-    case GfxBlendFactor.Zero:             return RwBlendFunction.ZERO;
-    case GfxBlendFactor.One:              return RwBlendFunction.ONE;
-    case GfxBlendFactor.Src:              return RwBlendFunction.SRCCOLOR;
-    case GfxBlendFactor.OneMinusSrc:      return RwBlendFunction.INVSRCCOLOR;
-    case GfxBlendFactor.Dst:              return RwBlendFunction.DESTCOLOR;
-    case GfxBlendFactor.OneMinusDst:      return RwBlendFunction.INVDESTCOLOR;
-    case GfxBlendFactor.SrcAlpha:         return RwBlendFunction.SRCALPHA;
-    case GfxBlendFactor.OneMinusSrcAlpha: return RwBlendFunction.INVSRCALPHA;
-    case GfxBlendFactor.DstAlpha:         return RwBlendFunction.DESTALPHA;
-    case GfxBlendFactor.OneMinusDstAlpha: return RwBlendFunction.INVDESTALPHA;
-    }
-}
-
-function convertRwCullMode(cull: RwCullMode): GfxCullMode {
-    switch (cull) {
-    case RwCullMode.NONE:  return GfxCullMode.None;
-    case RwCullMode.BACK:  return GfxCullMode.Back;
-    case RwCullMode.FRONT: return GfxCullMode.Front;
-    }
-}
-
-function convertGfxCullMode(cull: GfxCullMode): RwCullMode {
-    switch (cull) {
-    case GfxCullMode.None:         return RwCullMode.NONE;
-    case GfxCullMode.Back:         return RwCullMode.BACK;
-    case GfxCullMode.Front:        return RwCullMode.FRONT;
-    case GfxCullMode.FrontAndBack: return RwCullMode.NONE; // unsupported
-    }
-}
-
 export class RwRenderState {
-    public megaStateFlags: Partial<GfxMegaStateDescriptor> = makeMegaState();
-    
-    public shadeMode: RwShadeMode;
-    public vertexAlphaEnable: boolean; // currently unsupported
-    public fogEnable: boolean;
-    public fogColor: Color;
-    public alphaTestFunction: RwAlphaTestFunction; // currently only GREATER is supported
-    public alphaTestFunctionRef: number;
+    public textureRaster: RwRaster | null = null;
+    public textureFilter = RwTextureFilterMode.LINEAR;
+    public textureAddressU = RwTextureAddressMode.WRAP;
+    public textureAddressV = RwTextureAddressMode.WRAP;
+    public zTestEnable = true;
+    public zWriteEnable = true;
+    public shadeMode = RwShadeMode.GOURAUD;
+    public srcBlend = RwBlendFunction.SRCALPHA;
+    public destBlend = RwBlendFunction.INVSRCALPHA;
+    public vertexAlphaEnable = false; // currently unsupported
+    public fogEnable = false;
+    public fogColor = OpaqueBlack;
+    public cullMode = RwCullMode.BACK;
+    public alphaTestFunction = RwAlphaTestFunction.GREATER; // currently only GREATER is supported
+    public alphaTestFunctionRef = 0;
 
-    private _textureFilter: RwTextureFilterMode;
-    private _textureAddressU: RwTextureAddressMode;
-    private _textureAddressV: RwTextureAddressMode;
-
-    private gfxSampler: GfxSampler | null = null;
-
-    public getGfxSampler(rw: RwEngine) {
-        if (!this.gfxSampler) {
-            const texFilter = convertRwTextureFilterMode(this._textureFilter);
-            const mipFilter = convertRwTextureFilterModeMip(this._textureFilter);
-            const wrapS = convertRwTextureAddressMode(this._textureAddressU);
-            const wrapT = convertRwTextureAddressMode(this._textureAddressV);
-            
-            this.gfxSampler = rw.renderHelper.renderCache.createSampler({
-                magFilter: texFilter,
-                minFilter: texFilter,
-                mipFilter: mipFilter,
-                wrapS: wrapS,
-                wrapT: wrapT,
-            });
-        }
-
-        return this.gfxSampler;
-    }
-
-    public get textureFilter() {
-        return this._textureFilter;
-    }
-
-    public set textureFilter(filter: RwTextureFilterMode) {
-        this._textureFilter = filter;
-        this.gfxSampler = null;
-    }
-
-    public get textureAddressU() {
-        return this._textureAddressU;
-    }
-
-    public set textureAddressU(address: RwTextureAddressMode) {
-        this._textureAddressU = address;
-        this.gfxSampler = null;
-    }
-
-    public get textureAddressV() {
-        return this._textureAddressV;
-    }
-
-    public set textureAddressV(address: RwTextureAddressMode) {
-        this._textureAddressV = address;
-        this.gfxSampler = null;
-    }
-
-    public get zTestEnable() {
-        return this.megaStateFlags.depthCompare !== reverseDepthForCompareMode(GfxCompareMode.Always);
-    }
-
-    public set zTestEnable(enable: boolean) {
-        this.megaStateFlags.depthCompare = reverseDepthForCompareMode(enable ? GfxCompareMode.LessEqual : GfxCompareMode.Always);
-    }
-
-    public get zWriteEnable() {
-        return this.megaStateFlags.depthWrite!;
-    }
-
-    public set zWriteEnable(enable: boolean) {
-        this.megaStateFlags.depthWrite = enable;
-    }
-
-    public get srcBlend() {
-        return convertGfxBlendFactor(this.megaStateFlags.attachmentsState![0].rgbBlendState.blendSrcFactor);
-    }
-
-    public set srcBlend(blend: RwBlendFunction) {
-        const b = convertRwBlendFunction(blend);
-        this.megaStateFlags.attachmentsState![0].rgbBlendState.blendSrcFactor = b;
-        this.megaStateFlags.attachmentsState![0].alphaBlendState.blendSrcFactor = b;
-    }
-
-    public get destBlend() {
-        return convertGfxBlendFactor(this.megaStateFlags.attachmentsState![0].rgbBlendState.blendDstFactor);
-    }
-
-    public set destBlend(blend: RwBlendFunction) {
-        const b = convertRwBlendFunction(blend);
-        this.megaStateFlags.attachmentsState![0].rgbBlendState.blendDstFactor = b;
-        this.megaStateFlags.attachmentsState![0].alphaBlendState.blendDstFactor = b;
-    }
-
-    public get cullMode() {
-        return convertGfxCullMode(this.megaStateFlags.cullMode!);
-    }
-
-    public set cullMode(mode: RwCullMode) {
-        this.megaStateFlags.cullMode = convertRwCullMode(mode);
-    }
+    // platform specific, just shoving this in here for now
+    public channelWriteMask = GfxChannelWriteMask.AllChannels;
 }
 
 export class RwEngine {
@@ -728,21 +563,6 @@ export class RwEngine {
     constructor(device: GfxDevice, context: SceneContext) {
         this.renderHelper = new GfxRenderHelper(device, context);
         this.viewerInput = context.viewerInput;
-
-        this.renderState.textureAddressU = RwTextureAddressMode.WRAP;
-        this.renderState.textureAddressV = RwTextureAddressMode.WRAP;
-        this.renderState.zTestEnable = true;
-        this.renderState.shadeMode = RwShadeMode.GOURAUD;
-        this.renderState.zWriteEnable = true;
-        this.renderState.textureFilter = RwTextureFilterMode.LINEAR;
-        this.renderState.srcBlend = RwBlendFunction.SRCALPHA;
-        this.renderState.destBlend = RwBlendFunction.DESTALPHA;
-        this.renderState.vertexAlphaEnable = false;
-        this.renderState.fogEnable = false;
-        this.renderState.fogColor = OpaqueBlack;
-        this.renderState.cullMode = RwCullMode.BACK;
-        this.renderState.alphaTestFunction = RwAlphaTestFunction.GREATER;
-        this.renderState.alphaTestFunctionRef = 0;
     }
 
     public destroy() {
