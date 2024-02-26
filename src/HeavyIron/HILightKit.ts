@@ -1,5 +1,5 @@
 import { mat4 } from "gl-matrix";
-import { RpLight, RpLightType, RpWorld } from "./rw/rpworld.js";
+import { RpLight, RpLightFlag, RpLightType } from "./rw/rpworld.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { RwEngine, RwStream } from "./rw/rwcore.js";
 import { HIScene } from "./HIScene.js";
@@ -66,8 +66,11 @@ export class HILightKit {
 
             light.color = color;
             light.frame.matrix = matrix;
+            light.flags &= ~RpLightFlag.LIGHTATOMICS; // disabled at first
 
             this.lightList.push(light);
+
+            rw.world.addLight(light);
         }
     }
 
@@ -81,14 +84,15 @@ export class HILightKit {
 export class HILightKitManager {
     public lastLightKit: HILightKit | null = null;
 
-    public enable(lkit: HILightKit | null, world: RpWorld, scene: HIScene) {
+    public enable(lkit: HILightKit | null, scene: HIScene) {
         if (lkit === this.lastLightKit) {
             return;
         }
 
         if (this.lastLightKit) {
             for (const light of this.lastLightKit.lightList) {
-                world.removeLight(light);
+                // OG game removes the light from the world here, but we can just unset the LIGHTATOMICS flag
+                light.flags &= ~RpLightFlag.LIGHTATOMICS;
             }
         }
 
@@ -98,7 +102,8 @@ export class HILightKitManager {
             scene.modelManager.hackDisablePrelight = true;
 
             for (const light of lkit.lightList) {
-                world.addLight(light);
+                // OG game adds the light to the world here, but we can just set the LIGHTATOMICS flag
+                light.flags |= RpLightFlag.LIGHTATOMICS;
             }
         } else {
             scene.modelManager.hackDisablePrelight = false;

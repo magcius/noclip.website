@@ -114,7 +114,7 @@ export class HIModelBucketManager {
         for (const bucket of this.bucketList) {
             let minst = bucket.list;
             while (minst) {
-                scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+                scene.lightKitManager.enable(minst.lightKit, scene);
 
                 const oldHack = scene.modelManager.hackDisablePrelight;
                 if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {
@@ -172,7 +172,7 @@ export class HIModelBucketManager {
             const oldData = minst.data;
             minst.data = bucket.data!;
 
-            scene.lightKitManager.enable(minst.lightKit, rw.world, scene);
+            scene.lightKitManager.enable(minst.lightKit, scene);
 
             const oldHack = scene.modelManager.hackDisablePrelight;
             if ((minst.pipeFlags & HIPipeFlags.LIGHTING_MASK) === HIPipeFlags.LIGHTING_KITPRELIGHT) {

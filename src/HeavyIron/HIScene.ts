@@ -494,7 +494,7 @@ export class HIScene implements SceneGfx {
 
         this.camera.begin(this.rw);
 
-        this.lightKitManager.enable(null, this.rw.world, this);
+        this.lightKitManager.enable(null, this);
         
         this.renderStateManager.set(HIRenderState.SkyBack, this.camera, this.rw);
         this.skydomeManager.render(this, this.rw);
@@ -505,7 +505,7 @@ export class HIScene implements SceneGfx {
         this.renderStateManager.set(HIRenderState.OpaqueModels, this.camera, this.rw);
         this.modelBucketManager.begin();
         for (const ent of this.entList) {
-            this.lightKitManager.enable(ent.lightKit, this.rw.world, this);
+            this.lightKitManager.enable(ent.lightKit, this);
             ent.render(this, this.rw);
         }
 
