@@ -417,21 +417,16 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        this.preparePass(device, this.renderInstListSky, ZSSPass.SKYBOX, viewerInput);
-        this.preparePass(device, this.renderInstListMain, ZSSPass.MAIN, viewerInput);
-        this.preparePass(device, this.renderInstListInd, ZSSPass.INDIRECT, viewerInput);
-
         // if (this.eggLightManager !== null)
         //     for (let i = 0; i < this.modelInstances.length; i++)
         //         this.modelInstances[i].bindLightSetting(this.eggLightManager.lightSetting);
-
-        fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++){
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        }
         this.modelBinds.forEach( value => {
             value.model.modelMatrix = value.modelToBindTo.getNodeToWorldMatrixRefernce(value.nodeName);
         });
+
+        this.preparePass(device, this.renderInstListSky, ZSSPass.SKYBOX, viewerInput);
+        this.preparePass(device, this.renderInstListMain, ZSSPass.MAIN, viewerInput);
+        this.preparePass(device, this.renderInstListInd, ZSSPass.INDIRECT, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -620,7 +615,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 return spawnModel(getOArcRRES(arc), model);
             }
         };
-
 
         // Start object by object
         // Wardrobes
