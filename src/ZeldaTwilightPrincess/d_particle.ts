@@ -13,7 +13,7 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { cLib_addCalc2, cM__Short2Rad } from "../WindWaker/SComponent.js";
+import { cLib_addCalc2, cM__Short2Rad } from "../ZeldaWindWaker/SComponent.js";
 import { dGlobals } from "./ztp_scenes.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";

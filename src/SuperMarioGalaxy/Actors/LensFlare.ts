@@ -11,7 +11,7 @@ import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../Li
 import { isFirstStep } from "../Spine.js";
 import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers.js";
 import { divideByW } from "../../Camera.js";
-import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ.js";
+import { PeekZManager, PeekZResult } from "../../ZeldaWindWaker/d_dlst_peekZ.js";
 import { GfxDevice, GfxCompareMode, GfxClipSpaceNearZ } from "../../gfx/platform/GfxPlatform.js";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers.js";
 import { GfxrGraphBuilder, GfxrRenderTargetID } from "../../gfx/render/GfxRenderGraph.js";

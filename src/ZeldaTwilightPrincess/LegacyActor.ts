@@ -21,8 +21,8 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { ColorKind } from '../gx/gx_render.js';
 import { colorNewFromRGBA8 } from '../Color.js';
-import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../WindWaker/m_do_mtx.js';
-import { cM__Short2Rad } from '../WindWaker/SComponent.js';
+import { calc_mtx, MtxTrans, mDoMtx_ZXYrotM, mDoMtx_YrotM } from '../ZeldaWindWaker/m_do_mtx.js';
+import { cM__Short2Rad } from '../ZeldaWindWaker/SComponent.js';
 
 const scratchVec3a = vec3.create();
 

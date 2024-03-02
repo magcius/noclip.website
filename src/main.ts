@@ -6,7 +6,7 @@ import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeC
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
 import * as Scenes_Zelda_TwilightPrincess from './TwilightPrincess/ztp_scenes.js';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes.js';
-import * as Scenes_Zelda_TheWindWaker from './WindWaker/zww_scenes.js';
+import * as Scenes_Zelda_TheWindWaker from './ZeldaWindWaker/zww_scenes.js';
 import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes.js';
 import * as Scenes_Pikmin2 from './j3d/pik2_scenes.js';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1.js';

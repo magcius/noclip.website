@@ -1,5 +1,5 @@
 
-import { PeekZManager } from "../WindWaker/d_dlst_peekZ.js";
+import { PeekZManager } from "../ZeldaWindWaker/d_dlst_peekZ.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstExecutionOrder, GfxRenderInstList, gfxRenderInstCompareNone, gfxRenderInstCompareSortKey } from "../gfx/render/GfxRenderInstManager.js";
 

@@ -28,7 +28,7 @@ import { dKyw__RegisterConstructors, mDoGph_bloom_c } from './d_kankyo_wether.js
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework.js';
 import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a.js';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor.js';
-import { dBgS } from '../WindWaker/d_bg.js';
+import { dBgS } from '../ZeldaWindWaker/d_bg.js';
 import { TransparentBlack } from '../Color.js';
 import { dPa_control_c } from './d_particle.js';
 import { dDlst_list_Set, dDlst_list_c } from './d_drawlist.js';

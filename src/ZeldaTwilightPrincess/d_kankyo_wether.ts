@@ -10,10 +10,10 @@ import { MathConstants, computeMatrixWithoutTranslation, invlerp, saturate } fro
 import { DeviceProgram } from "../Program.js";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { TextureMapping } from "../TextureHolder.js";
-import { cLib_addCalc, cM__Short2Rad, cM_rndF, cM_rndFX } from "../WindWaker/SComponent.js";
-import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ.js";
-import { mDoLib_project, mDoLib_projectFB } from "../WindWaker/m_do_ext.js";
-import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../WindWaker/m_do_mtx.js";
+import { cLib_addCalc, cM__Short2Rad, cM_rndF, cM_rndFX } from "../ZeldaWindWaker/SComponent.js";
+import { PeekZManager, PeekZResult } from "../ZeldaWindWaker/d_dlst_peekZ.js";
+import { mDoLib_project, mDoLib_projectFB } from "../ZeldaWindWaker/m_do_ext.js";
+import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers.js";
