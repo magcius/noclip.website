@@ -25,7 +25,7 @@ import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupStageTexture, mDoExt_setupShareTexture } from "./m_do_ext.js";
-import { dGlobals } from "./ztp_scenes.js";
+import { dGlobals } from "./Main.js";
 import { ItemNo } from "./d_item_data.js";
 
 const scratchMat4a = mat4.create();

@@ -31,7 +31,7 @@ import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo
 import { cPhs__Status, fGlobals, fopAcIt_JudgeByID, fopAcM_create, fopAcM_prm_class, fopAc_ac_c, fpcPf__Register, fpcSCtRq_Request, fpc__ProcessName, fpc_bs__Constructor } from "./framework.js";
 import { mDoExt_McaMorf, mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelEntryDL, mDoExt_modelUpdateDL, mDoLib_project } from "./m_do_ext.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XYZrotM, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM, mDoMtx_ZrotS, quatM } from "./m_do_mtx.js";
-import { dDlst_alphaModel__Type, dGlobals } from "./zww_scenes.js";
+import { dDlst_alphaModel__Type, dGlobals } from "./Main.js";
 
 // Framework'd actors
 

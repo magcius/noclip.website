@@ -8,7 +8,7 @@ import { nArray, assert, arrayRemove, assertExists, readString } from "../util.j
 import { J3DModelInstance, MaterialData, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { Camera } from "../Camera.js";
 import { ColorKind, MaterialParams } from "../gx/gx_render.js";
-import { dGlobals } from "./ztp_scenes.js";
+import { dGlobals } from "./Main.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { cLib_addCalc, cM_rndF } from "../ZeldaWindWaker/SComponent.js";

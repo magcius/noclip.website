@@ -4,7 +4,7 @@ import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformIn
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dGlobals, dDlst_list_Set } from "./zww_scenes.js";
+import { dGlobals, dDlst_list_Set } from "./Main.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { Camera, divideByW } from "../Camera.js";
 

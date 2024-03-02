@@ -4,7 +4,7 @@ import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, JointTransformIn
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { dGlobals } from "./ztp_scenes.js";
+import { dGlobals } from "./Main.js";
 import { mat4 } from "gl-matrix";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";

@@ -4,7 +4,7 @@ import { nArray } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { dGlobals } from './zww_scenes.js';
+import { dGlobals } from './Main.js';
 import { Endianness } from '../endian.js';
 
 import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';

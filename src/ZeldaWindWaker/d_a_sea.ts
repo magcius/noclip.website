@@ -3,7 +3,7 @@ import * as GX from '../gx/gx_enum.js';
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 import { nArray, assert } from "../util.js";
 import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { fopAc_ac_c, fpc__ProcessName, cPhs__Status } from "./framework.js";

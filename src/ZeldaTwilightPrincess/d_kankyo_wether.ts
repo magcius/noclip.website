@@ -33,7 +33,7 @@ import { ResType } from "./d_resorce.js";
 import { dStage_FileList_dt_c, dStage_stagInfo_GetArg0, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
-import { dGlobals } from "./ztp_scenes.js";
+import { dGlobals } from "./Main.js";
 
 export function dKyw_wether_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;

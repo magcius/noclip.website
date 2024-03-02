@@ -4,9 +4,9 @@
 import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer.js';
 
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes.js';
-import * as Scenes_Zelda_TwilightPrincess from './TwilightPrincess/ztp_scenes.js';
+import * as Scenes_ZeldaTwilightPrincess from './ZeldaTwilightPrincess/Main.js';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes.js';
-import * as Scenes_Zelda_TheWindWaker from './ZeldaWindWaker/zww_scenes.js';
+import * as Scenes_ZeldaWindWaker from './ZeldaWindWaker/Main.js';
 import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes.js';
 import * as Scenes_Pikmin2 from './j3d/pik2_scenes.js';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1.js';
@@ -43,7 +43,7 @@ import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl.j
 import * as Scenes_Test from './Scenes_Test.js';
 import * as Scenes_WiiSports from './WiiSports/Scenes_WiiSports.js';
 import * as Scenes_WiiSportsResort from './WiiSports/Scenes_WiiSportsResort.js';
-import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword.js';
+import * as Scenes_Zelda_SkywardSword from './ZeldaSkywardSword/Main.js';
 import * as Scenes_InteractiveExamples from './InteractiveExamples/Scenes.js';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes.js';
 import * as Scenes_Fez from './Fez/Scenes_Fez.js';
@@ -135,8 +135,8 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMonkeyBall.sceneGroup,
     Scenes_SuperMarioSunshine.sceneGroup,
-    Scenes_Zelda_TwilightPrincess.sceneGroup,
-    Scenes_Zelda_TheWindWaker.sceneGroup,
+    Scenes_ZeldaTwilightPrincess.sceneGroup,
+    Scenes_ZeldaWindWaker.sceneGroup,
     "Nintendo 3DS",
     Scenes_LuigisMansion3D.sceneGroup,
     Scenes_Zelda_MajorasMask3D.sceneGroup,

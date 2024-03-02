@@ -14,7 +14,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { cLib_addCalc2, cM__Short2Rad } from "../ZeldaWindWaker/SComponent.js";
-import { dGlobals } from "./ztp_scenes.js";
+import { dGlobals } from "./Main.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";

@@ -6,7 +6,7 @@ import { nArray, assert, readString } from "../util.js";
 import { dKy_tevstr_c } from "./d_kankyo.js";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework.js";
 
 export class dPath__Point {

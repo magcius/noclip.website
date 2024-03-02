@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer.js';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 
-import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes.js";
+import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./Main.js";
 import { mat4, vec3 } from "gl-matrix";
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';

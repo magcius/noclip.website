@@ -15,7 +15,7 @@ import { cLib_addCalc, cLib_addCalc2, cM_rndF } from "./SComponent.js";
 import { ThunderMode, ThunderState, dKankyo__CommonTextures, dKankyo__Windline, dKankyo_housi_Packet, dKankyo_moya_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKankyo_wave_Packet, dKy_wave_chan_init, dKyr__sun_arrival_check, dKyw_rain_set, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { dStage_stagInfo_GetSTType, stage_envr_info_class, stage_palet_info_class, stage_palet_info_class__DifAmb, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 
 export const enum LightType {
     Actor = 0,

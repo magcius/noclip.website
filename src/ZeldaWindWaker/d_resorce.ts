@@ -9,7 +9,7 @@ import { J3DModelData, J3DModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGra
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Destroyable } from "../SceneBase.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 import { cPhs__Status } from "./framework.js";
 import { cBgD_t } from "./d_bg.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";

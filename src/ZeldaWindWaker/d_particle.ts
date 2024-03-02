@@ -15,7 +15,7 @@ import { nArray } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { dKy_get_seacolor } from "./d_kankyo.js";
 import { cLib_addCalc2, cM__Short2Rad } from "./SComponent.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind } from "../gx/gx_render.js";
 import { gfxDeviceNeedsFlipY } from "../gfx/helpers/GfxDeviceHelpers.js";

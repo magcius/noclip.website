@@ -25,7 +25,7 @@ import { dStage_FileList_dt_c, dStage_stagInfo_GetSTType } from "./d_stage.js";
 import { cPhs__Status, fGlobals, fopKyM_Delete, fopKyM_create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
 import { mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoLib_project, mDoLib_projectFB } from "./m_do_ext.js";
 import { MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_ZrotM } from "./m_do_mtx.js";
-import { dGlobals } from "./zww_scenes.js";
+import { dGlobals } from "./Main.js";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;

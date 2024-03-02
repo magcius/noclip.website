@@ -1,5 +1,5 @@
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { dGlobals, SymbolMap } from './ztp_scenes.js';
+import { dGlobals, SymbolMap } from './Main.js';
 
 export class dItem_itemResource {
     public arcName: string;
