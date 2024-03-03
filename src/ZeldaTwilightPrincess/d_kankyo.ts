@@ -1,24 +1,24 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorCopy, colorNewFromRGBA, colorNewFromRGBA8 } from "../Color.js";
-import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock, lightSetSpot, lightSetDistAttn, lightSetWorldDirection } from "../gx/gx_material.js";
-import { ReadonlyVec3, mat4, vec3 } from "gl-matrix";
-import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, dStage_stagInfo_GetSTType } from "./d_stage.js";
-import { lerp, invlerp, clamp, MathConstants, Vec3UnitY, texEnvMtx, projectionMatrixForFrustum, Vec3Zero, computeUnitSphericalCoordinates, saturate } from "../MathHelpers.js";
-import { nArray, assert, arrayRemove, assertExists, readString } from "../util.js";
-import { J3DModelInstance, MaterialData, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
-import { Camera } from "../Camera.js";
-import { ColorKind, MaterialParams } from "../gx/gx_render.js";
-import { dGlobals } from "./Main.js";
+import { ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { dKyw_wether_init, dKyw_wether_init2, dKyw_wether_delete2, dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo_rain_Packet, dKankyo_housi_Packet, dKankyo_star_Packet, dKyw_wether_delete, dKyw_wind_set } from "./d_kankyo_wether.js";
+import { Camera } from "../Camera.js";
+import { Color, OpaqueBlack, TransparentBlack, White, colorCopy, colorFromRGBA, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
+import { J3DModelInstance, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { MathConstants, Vec3Zero, computeUnitSphericalCoordinates, invlerp, lerp, saturate } from "../MathHelpers.js";
 import { cLib_addCalc, cM_rndF } from "../ZeldaWindWaker/SComponent.js";
-import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework.js";
-import { ViewerRenderInput } from "../viewer.js";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import * as GX from "../gx/gx_enum.js";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm } from "./m_do_ext.js";
+import { FogBlock, Light, fogBlockSet, lightSetDistAttn, lightSetFromWorldLight, lightSetSpot } from "../gx/gx_material.js";
+import { ColorKind, MaterialParams } from "../gx/gx_render.js";
+import { arrayRemove, assert, assertExists, nArray, readString } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import { dGlobals } from "./Main.js";
+import { ThunderMode, ThunderState, dKankyo_housi_Packet, dKankyo_rain_Packet, dKankyo_star_Packet, dKankyo_sun_Packet, dKankyo_vrkumo_Packet, dKyw_rain_set, dKyw_wether_delete, dKyw_wether_delete2, dKyw_wether_draw, dKyw_wether_draw2, dKyw_wether_init, dKyw_wether_init2, dKyw_wether_move, dKyw_wether_move_draw, dKyw_wether_move_draw2, dKyw_wind_set } from "./d_kankyo_wether.js";
 import { ResType } from "./d_resorce.js";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader.js";
+import { dStage_stagInfo_GetSTType, stage_envr_info_class, stage_palet_info_class, stage_pselect_info_class, stage_vrbox_info_class } from "./d_stage.js";
+import { cPhs__Status, fGlobals, fopKyM_Create, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class } from "./framework.js";
+import { mDoExt_btkAnm, mDoExt_modelUpdateDL } from "./m_do_ext.js";
 
 export const enum LightType {
     UNK_0 = 0,

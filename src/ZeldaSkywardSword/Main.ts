@@ -12,7 +12,7 @@ import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { TransparentBlack, TransparentWhite, White, colorNewCopy, colorNewFromRGBA } from '../Color.js';
 import { EggDrawPathBloom } from '../MarioKartWii/PostEffect.js';
-import { SceneContext } from '../SceneBase.js';
+import { Destroyable, SceneContext } from '../SceneBase.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
@@ -173,13 +173,11 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
     private renderInstListInd = new GfxRenderInstList();
     private blackTexture: GfxTexture;
     private whiteTexture: GfxTexture;
-    private eggLightManager : EggLightManager;
-    private eggBloom : EggDrawPathBloom;
     public currentLayer : number = 0;
     public layerModels : MDL0ModelInstance[][] = [];
     public modelInstances: MDL0ModelInstance[] = [];
     public modelBinds: ModelToModelNodeBind_Info[] = [];
-    public otherTextureHolders : RRESTextureHolder[];
+    public otherTextureHolders: RRESTextureHolder[] = [];
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive, public layerArchives: (U8.U8Archive)[] = [], public layerNums: number[]) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -194,7 +192,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         const systemRRES = BRRES.parse(systemArchive.findFileData('g3d/model.brres')!);
         this.textureHolder.addRRESTextures(device, systemRRES);
-        
+
         // // Bringing over from mkWii
         // const blightData = systemArchive.findFileData(`./dat/default.blight`);
         // if (blightData !== null) {
@@ -215,15 +213,14 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
         this.blackTexture = makeSolidColorTexture2D(device, TransparentBlack);
         this.whiteTexture = makeSolidColorTexture2D(device, TransparentWhite);
-        const grey = makeSolidColorTexture2D(device, colorNewFromRGBA(0.5, 0.5, 0.5, 1));
         this.textureHolder.setTextureOverride('LmChaAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
         this.textureHolder.setTextureOverride('LmBGAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
         this.textureHolder.setTextureOverride('LmChaSkin', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
-        
+
         // Overriding the gradation textures. This causes some scenes to be overally bright
         this.textureHolder.setTextureOverride('F200_cmn_Gradation', { gfxTexture: this.whiteTexture, width: 1, height: 1, flipY: true });
         this.textureHolder.setTextureOverride('D200_cmn_Gradation', { gfxTexture: this.whiteTexture, width: 1, height: 1, flipY: true });
-        
+
         this.resourceSystem.getRRES(device, this.textureHolder, 'oarc/SkyCmn.arc');
 
         // Water animations appear in Common.arc.
@@ -397,6 +394,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy();
         this.modelCache.destroy(device);
         device.destroyTexture(this.blackTexture);
+        device.destroyTexture(this.whiteTexture);
+        for (let i = 0; i < this.otherTextureHolders.length; i++)
+            this.otherTextureHolders[i].destroy(device);
     }
 
     private preparePass(device: GfxDevice, list: GfxRenderInstList, passMask: number, viewerInput: Viewer.ViewerRenderInput): void {
@@ -518,7 +518,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
             const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
             const textureHolder = doesModelContainRepeatTexture(model) ? new ZSSTextureHolder() : this.textureHolder;
-            textureHolder.addRRESTextures(device,rres);
+            textureHolder.addRRESTextures(device, rres);
+            this.otherTextureHolders.push(textureHolder);
+            
             const modelRenderer = new MDL0ModelInstance(textureHolder, model, obj.name);
             modelRenderer.passMask = ZSSPass.MAIN;
             mat4.copy(modelRenderer.modelMatrix, modelMatrix);
@@ -602,9 +604,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         };
         const findPAT0 = (rres: BRRES.RRES, name: string) => {
             return assertExists(rres.pat0.find((pat0) => pat0.name === name));
-        };
-        const findVIS0 = (rres: BRRES.RRES, name: string) => {
-            return assertExists(rres.vis0.find((vis0) => vis0.name === name));
         };
 
         const stageRRES = this.stageRRES;

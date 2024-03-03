@@ -15,7 +15,6 @@ import { Endianness } from '../endian.js';
 import { AABB } from '../Geometry.js';
 import { TextureMapping } from '../TextureHolder.js';
 import AnimationController from '../AnimationController.js';
-import { GXTextureHolder } from '../gx/gx_render.js';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat.js';
 import { getPointHermite } from '../Spline.js';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color.js';
@@ -23,6 +22,7 @@ import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHe
 import BitMap from '../BitMap.js';
 import { autoOptimizeMaterial } from '../gx/gx_render.js';
 import { Camera } from '../Camera.js';
+import { MDL0ModelInstance } from './render.js';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -1770,18 +1770,6 @@ export interface PAT0 extends AnimationBase {
     texNames: string[];
 }
 
-function findAnimationData_PAT0(pat0: PAT0, materialName: string, texMapID: GX.TexMapID): PAT0_TexData | null {
-    const matData = pat0.matAnimations.find((m) => m.materialName === materialName);
-    if (matData === undefined)
-        return null;
-
-    const texData = matData.texAnimations[texMapID];
-    if (texData === undefined)
-        return null;
-
-    return texData;
-}
-
 function parsePAT0_MatData(buffer: ArrayBufferSlice): PAT0_MatData {
     const view = buffer.createDataView();
 
@@ -1909,29 +1897,25 @@ function findFrameData<T extends { frame: number }>(frames: T[], frame: number):
 }
 
 export class PAT0TexAnimator {
-    constructor(public animationController: AnimationController, public pat0: PAT0, public texData: PAT0_TexData) {
+    private textureMappings: TextureMapping[];
+    constructor(public animationController: AnimationController, public pat0: PAT0, public texData: PAT0_TexData, modelInstance: MDL0ModelInstance) {
+        // XXX(jstpierre): Not all of these textures are necessarily used by this specific material, maybe something to fix later...
+        this.textureMappings = nArray(this.pat0.texNames.length, () => new TextureMapping());
+        for (let i = 0; i < this.textureMappings.length; i++)
+            modelInstance.textureHolder!.fillTextureMapping(this.textureMappings[i], this.pat0.texNames[i]);
     }
 
-    public fillTextureMapping(textureMapping: TextureMapping, textureHolder: GXTextureHolder): void {
+    public fillTextureMapping(dst: TextureMapping): void {
         const texData = this.texData;
+        if (!texData.texIndexValid)
+            return;
 
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.pat0, frame);
 
         const texFrameData = findFrameData(texData.animationTrack, animFrame);
-
-        if (texData.texIndexValid) {
-            const texName = this.pat0.texNames[texFrameData.texIndex];
-            textureHolder.fillTextureMapping(textureMapping, texName);
-        }
+        dst.copy(this.textureMappings[texFrameData.texIndex]);
     }
-}
-
-export function bindPAT0Animator(animationController: AnimationController, pat0: PAT0, materialName: string, texMapID: GX.TexMapID): PAT0TexAnimator | null {
-    const texData: PAT0_TexData | null = findAnimationData_PAT0(pat0, materialName, texMapID);
-    if (texData === null)
-        return null;
-    return new PAT0TexAnimator(animationController, pat0, texData);
 }
 //#endregion
 //#region CLR0

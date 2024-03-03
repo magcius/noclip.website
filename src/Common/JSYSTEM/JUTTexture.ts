@@ -104,14 +104,13 @@ export class BTIData {
         this.viewerTexture = viewerTexture;
     }
 
-    public fillTextureMapping(m: TextureMapping): boolean {
+    public fillTextureMapping(m: TextureMapping): void {
         m.lateBinding = null;
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;
         m.lodBias = this.btiTexture.lodBias;
         m.width = this.btiTexture.width;
         m.height = this.btiTexture.height;
-        return true;
     }
 
     public destroy(device: GfxDevice): void {
