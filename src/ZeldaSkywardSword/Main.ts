@@ -670,11 +670,11 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 mat4.scale(rupeeModel.modelMatrix, rupeeModel.modelMatrix, [1.5, 1.5, 1.5]);
                 let rupeePat = findPAT0(getOArcRRES('PutRupee'), 'Rupee');
                 switch(itemId){
-                    case 2:  rupeeModel.bindPAT0(staticFrame(-1), rupeePat); break;
-                    case 3:  rupeeModel.bindPAT0(staticFrame( 0), rupeePat); break;
-                    case 4:  rupeeModel.bindPAT0(staticFrame( 1), rupeePat); break;
-                    case 32: rupeeModel.bindPAT0(staticFrame( 2), rupeePat); break;
-                    case 33: rupeeModel.bindPAT0(staticFrame( 3), rupeePat); break;
+                    case 2:  rupeeModel.bindPAT0(staticFrame(0), rupeePat); break;
+                    case 3:  rupeeModel.bindPAT0(staticFrame(1), rupeePat); break;
+                    case 4:  rupeeModel.bindPAT0(staticFrame(2), rupeePat); break;
+                    case 32: rupeeModel.bindPAT0(staticFrame(3), rupeePat); break;
+                    case 33: rupeeModel.bindPAT0(staticFrame(4), rupeePat); break;
                 }
             }
             // Small Key
@@ -927,7 +927,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         } else if (name === 'ESm'){
             const smRRES = getOArcRRES('Sm');
             const variant = params1 & 0xF;
-            const frame = [-1,2,1,-1,2,1,0][variant];
+            const frame = [0,3,2,0,3,2,1][variant];
             const chuModel = spawnModel(smRRES, 'sm');
             chuModel.bindPAT0(staticFrame(frame), findPAT0(smRRES, 'sm'));
             chuModel.bindCHR0(this.animationController, findCHR0(smRRES, 'awa'));
@@ -1178,7 +1178,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         // LumpPumpkin
         else if (name === 'PumpBar') {
             spawnModelFromNames('IslBar', 'IslBar');
-            spawnModelFromNames('IslBar', 'IslBar_L');
         }
         // THe ring on Fun Fun Island
         else if (name === 'RouletR') {
@@ -1917,17 +1916,17 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         }
         // Deku Baba
         else if (name === 'Ehb') {
-            const type = params1 & 0x7;
+            const type = (params1 >> 3) & 0x3;
             const rres = getOArcRRES('Degubaba');
             const m0 = spawnModel(rres, 'degubaba_leaf');
-            rotateModel(m0, [-Math.PI/2, 0, 0]);
-            m0.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
+            const newAnim = staticFrame([0, 0, 1, 1][type]);
             const m = spawnModel(rres, 'degubaba_head');
-            rotateModel(m, [-Math.PI/2, 0, 0]);
-            m.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
-            const newAnim = staticFrame([-1,1][type]);
             m0.bindPAT0(newAnim, findPAT0(rres, 'degubaba_leaf'));
             m.bindPAT0(newAnim, findPAT0(rres, 'degubaba_head'));
+            rotateModel(m0, [-Math.PI/2, 0, 0]);
+            m0.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
+            rotateModel(m, [-Math.PI/2, 0, 0]);
+            m.bindCHR0(this.animationController, findCHR0(rres, 'defaultpose'));
         }
         // The Wall of water to keep you in bounds in Flooded Faron
         // Water Shield
@@ -1957,7 +1956,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const leafrres = getOArcRRES('ForestManLeaf');
             const leaf = spawnModel(leafrres, 'ForestManLeaf');
             leaf.bindRRESAnimations(this.animationController, leafrres, 'ForestManLeaf_Close');
-            leaf.bindPAT0(staticFrame(-1), findPAT0(leafrres, 'ForestManLeaf'));
+            leaf.bindPAT0(staticFrame(0), findPAT0(leafrres, 'ForestManLeaf'));
             this.modelBinds.push({model: leaf, modelToBindTo: body, nodeName: "Tail"});
             const chr = findCHR0(rres, 'ForestMan_wait');
             body.bindCHR0(this.animationController, chr);
@@ -1981,7 +1980,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const leafrres = getOArcRRES('ForestManLeaf');
             const leaf = spawnModel(leafrres, 'ForestManLeaf');
             leaf.bindRRESAnimations(this.animationController, leafrres, 'ForestManLeaf_Close');
-            leaf.bindPAT0(staticFrame(-1), findPAT0(leafrres, 'ForestManLeaf'));
+            leaf.bindPAT0(staticFrame(0), findPAT0(leafrres, 'ForestManLeaf'));
             this.modelBinds.push({model: leaf, modelToBindTo: body, nodeName: "Tail"});
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
@@ -1997,7 +1996,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const leafrres = getOArcRRES('ForestManLeaf');
             const leaf = spawnModel(leafrres, 'ForestManLeaf');
             leaf.bindRRESAnimations(this.animationController, leafrres, 'ForestManLeaf_Close');
-            leaf.bindPAT0(staticFrame(-1), findPAT0(leafrres, 'ForestManLeaf'));
+            leaf.bindPAT0(staticFrame(0), findPAT0(leafrres, 'ForestManLeaf'));
             this.modelBinds.push({model: leaf, modelToBindTo: body, nodeName: "Tail"});
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
@@ -2012,7 +2011,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const leafrres = getOArcRRES('ForestManLeaf');
             const leaf = spawnModel(leafrres, 'ForestManLeaf');
             leaf.bindRRESAnimations(this.animationController, leafrres, 'ForestManLeaf_Close');
-            leaf.bindPAT0(staticFrame(-1), findPAT0(leafrres, 'ForestManLeaf'));
+            leaf.bindPAT0(staticFrame(0), findPAT0(leafrres, 'ForestManLeaf'));
             this.modelBinds.push({model: leaf, modelToBindTo: body, nodeName: "Tail"});
             body.bindCHR0(this.animationController, chr);
             this.modelBinds.push({model: eyes, modelToBindTo: body, nodeName: "Head"});
