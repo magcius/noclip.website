@@ -382,7 +382,7 @@ export class evtmgr {
         else if (expr < -20000000)
             evt.lw[expr - -30000000] = v;
         else
-            throw "whoops";
+            console.warn('evtset bad expr', expr);
     }
 
     private scanend(evt: evt_exec, opena: op[], close: op): void {
@@ -525,6 +525,9 @@ export class evtmgr {
 
     private op_goto(evt: evt_exec, needle: number): void {
         // Look for lbl
+
+        evt.pc = evt.entryAddress;
+        this.evtdecode(evt);
 
         while (true) {
             let found = false;
@@ -1223,6 +1226,18 @@ export class evt_handler_ttyd extends evt_handler {
             mgr.evt_set_arg(evt, 2, Math.sin(theta));
             mgr.evt_set_arg(evt, 3, Math.cos(theta));
             return evt_user_func_ret.advance;
+        } else if (sym.name === 'evt_sub_intpl_init') {
+            evt.lw[11] = mgr.evt_eval_arg(evt, 1);
+            evt.lw[12] = mgr.evt_eval_arg(evt, 2);
+            evt.lw[13] = mgr.evt_eval_arg(evt, 3);
+            evt.lw[14] = 0;
+            evt.lw[15] = mgr.evt_eval_arg(evt, 4);
+            return evt_user_func_ret.advance;
+        } else if (sym.name === 'evt_sub_intpl_get_value') {
+            evt.lw[0] = intplGetValue(evt.lw[12], evt.lw[13], evt.lw[11], evt.lw[14], evt.lw[15]);
+            evt.lw[1] = evt.lw[13] < evt.lw[14] ? 1 : 0;
+            evt.lw[13]++;
+            return evt_user_func_ret.advance;
         } else if (sym.name === 'evt_map_playanim') {
             const animName = mgr.evt_eval_string_arg(evt, 1);
             this.renderer.playAnimationName(animName);
@@ -1285,5 +1300,20 @@ export class evt_handler_ttyd extends evt_handler {
 
     public override get_user_func_sym(addr: number): evt_sym | null {
         return this.mapfile.getSymbol(addr);
+    }
+}
+
+function intplGetValue(a: number, b: number, mode: number, frm: number, numFrm: number): number {
+    // https://github.com/pmret/papermario/blob/e6da18503fbe55f4bb178ab3ec84e910c000728d/src/43F0.c#L731-L779
+    if (numFrm === 0)
+        return b;
+
+    switch (mode) {
+    case 0: return a + (b - a) * frm / numFrm;
+    case 1: return a + frm**2 * (b - a) / numFrm**2;
+    case 2: return a + frm**3 * (b - a) / numFrm**3;
+    case 3: return a + frm**4 * (b - a) / numFrm**4;
+    case 11: return a + (b - a) * (1.0 - Math.cos(Math.PI * frm) / numFrm) / 2.0;
+    default: throw "whoops";
     }
 }
