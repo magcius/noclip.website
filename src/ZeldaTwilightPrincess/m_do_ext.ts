@@ -155,7 +155,7 @@ export function mDoExt_modelEntryDL(globals: dGlobals, modelInstance: J3DModelIn
     const device = globals.modelCache.device;
 
     if (drawListSet === null)
-        drawListSet = globals.dlst.current;
+        drawListSet = globals.dlst.bg;
 
     modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 

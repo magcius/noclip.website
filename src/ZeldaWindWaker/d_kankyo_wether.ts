@@ -1206,7 +1206,7 @@ export class dKankyo_star_Packet {
         const ddraw = this.ddraw;
 
         if (this.renderInMain)
-            renderInstManager.setCurrentRenderInstList(globals.dlst.main[1]);
+            renderInstManager.setCurrentRenderInstList(globals.dlst.bg[1]);
         else
             renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
 

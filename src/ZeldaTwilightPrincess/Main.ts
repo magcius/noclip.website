@@ -480,7 +480,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
         renderInstManager.setCurrentRenderInstList(dlst.alphaModel);
-        renderInstManager.setCurrentRenderInstList(dlst.main[0]);
+        renderInstManager.setCurrentRenderInstList(dlst.bg[0]);
         {
             this.globals.particleCtrl.calc(viewerInput);
 
@@ -531,7 +531,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.executeListSet(passRenderer, dlst.main);
+                this.executeListSet(passRenderer, dlst.bg);
 
                 // Execute our alpha model stuff.
                 this.executeList(passRenderer, dlst.alphaModel);

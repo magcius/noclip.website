@@ -2,24 +2,24 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { OpaqueBlack, TransparentBlack, White, colorCopy, colorNewCopy, colorNewFromRGBA8 } from "../Color.js";
-import { J3DModelData, J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
+import { J3DModelData, J3DModelInstance, MaterialInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase.js";
 import { LoopMode, TRK1, TTK1 } from "../Common/JSYSTEM/J3D/J3DLoader.js";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA.js";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture.js";
-import { MathConstants, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
+import { MathConstants, Vec3UnitY, invlerp, saturate, scaleMatrix } from "../MathHelpers.js";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw.js";
 import { cLib_addCalc, cLib_addCalc2, cLib_addCalcAngleS2, cLib_addCalcAngleS_, cLib_chaseF, cLib_targetAngleX, cLib_targetAngleY, cM__Short2Rad, cM__Deg2Short, cM_atan2s } from "../ZeldaWindWaker/SComponent.js";
 import { dBgW } from "../ZeldaWindWaker/d_bg.js";
 import { MtxPosition, MtxTrans, calc_mtx, mDoMtx_XrotM, mDoMtx_YrotM, mDoMtx_YrotS, mDoMtx_ZXYrotM, mDoMtx_ZrotM } from "../ZeldaWindWaker/m_do_mtx.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
 import * as GX from '../gx/gx_enum.js';
 import { ColorKind, DrawParams, GXMaterialHelperGfx, MaterialParams } from "../gx/gx_render.js";
 import { assertExists, leftPad, nArray, readString } from "../util.js";
 import { ViewerRenderInput } from "../viewer.js";
-import { LIGHT_INFLUENCE, LightType, dKy_plight_set, dKy_GxFog_set, dKy_bg_MAxx_proc, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct } from "./d_kankyo.js";
+import { LIGHT_INFLUENCE, LightType, dKy_plight_set, dKy_GxFog_set, dKy_change_colpat, dKy_daynight_check, dKy_event_proc, dKy_plight_cut, dKy_plight_priority_set, dKy_setLight__OnModelInstance, dKy_tevstr_c, dKy_tevstr_init, dScnKy_env_light_c, dice_rain_minus, setLightTevColorType_MAJI, settingTevStruct, dKy_darkworld_check } from "./d_kankyo.js";
 import { dKyr_get_vectle_calc, dKyw_get_wind_pow, dKyw_get_wind_vec, dKyw_rain_set } from "./d_kankyo_wether.js";
 import { ResType, dComIfG_resLoad } from "./d_resorce.js";
 import { dPath, dPath_GetRoomPath, dPath__Point, dStage_Multi_c, dStage_stagInfo_GetArg0 } from "./d_stage.js";
@@ -27,6 +27,7 @@ import { cPhs__Status, fGlobals, fopAcM_create, fopAc_ac_c, fpcPf__Register, fpc
 import { mDoExt_bckAnm, mDoExt_brkAnm, mDoExt_btkAnm, mDoExt_modelUpdateDL, mDoExt_morf_c, mDoExt_setIndirectTex, mDoExt_setupStageTexture, mDoExt_setupShareTexture } from "./m_do_ext.js";
 import { dGlobals } from "./Main.js";
 import { ItemNo } from "./d_item_data.js";
+import { dDlst_list_Set } from "./d_drawlist.js";
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -78,6 +79,180 @@ class daBg_brkAnm_c {
     public play(deltaTimeFrames: number): void {
         this.anm.play(deltaTimeFrames);
     }
+}
+
+function dKy_murky_set(globals: dGlobals, materialInstance: MaterialInstance): void {
+    const c1 = colorNewCopy(globals.g_env_light.bgAmbCol[1]);
+    c1.a = globals.g_env_light.bgAmbCol[2].a;
+
+    const k3 = colorNewCopy(TransparentBlack);
+    k3.a = globals.g_env_light.bgAmbCol[1].a;
+
+    // other special handling, sunlenz, diababa
+
+    materialInstance.setColorOverride(ColorKind.C1, c1);
+    materialInstance.setColorOverride(ColorKind.K3, k3);
+}
+
+function projectionMatrixForLightPerspective(dst: mat4, fovY: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const cot = 1.0 / Math.tan(fovY * 0.5);
+
+    dst[0] = (cot / aspect) * scaleS;
+    dst[4] = 0.0;
+    dst[8] = -transS;
+    dst[12] = 0.0;
+
+    dst[1] = 0.0;
+    dst[5] = cot * scaleT;
+    dst[9] = -transT;
+    dst[13] = 0.0;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 1.0;
+}
+
+function dKy_bg_MAxx_proc(globals: dGlobals, modelInstance: J3DModelInstance): dDlst_list_Set | null {
+    const envLight = globals.g_env_light;
+    let list = globals.dlst.bg;
+
+    for (let i = 0; i < modelInstance.materialInstances.length; i++) {
+        const materialInstance = modelInstance.materialInstances[i];
+        const name = materialInstance.materialData.material.name;
+
+        if (name.charAt(3) === 'M' && name.charAt(4) === 'A') {
+            const sub = name.slice(3, 7);
+            if (sub === 'MA06')
+                dKy_murky_set(globals, materialInstance);
+
+            if (sub === 'MA03' || sub === 'MA09' || sub === 'MA17' || sub === 'MA19') {
+                if (sub === 'MA03' || sub === 'MA09') {
+                    // globals.dlst.dComIfGd_setListDarkBG();
+                } else if (sub === 'MA19') {
+                    list = globals.dlst.indirect;
+                } if (sub === 'MA09') {
+                    // patch fog block
+                    // materialInstance.materialData.material.gxMaterial.ropInfo.fogType
+                } else {
+                    // patch fog block
+                    // materialInstance.materialData.material.gxMaterial.ropInfo.fogType
+
+                    materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[2]);
+
+                    const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[1].a);
+                    materialInstance.setColorOverride(ColorKind.K3, k3);
+                }
+            }
+
+            if (sub === 'MA07') {
+                // const bright = envLight.thunderEff.field_0x08 * (100.0 / 255.0);
+                // const color = colorNewFromRGBA(bright, bright, bright);
+                // materialInstance.setColorOverride(ColorKind.C0, color);
+            }
+
+            if (sub === 'MA10' || sub === 'MA02') {
+                list = globals.dlst.indirect;
+                // set viewproj effect mtx based on whether this is MA10 or MA02
+                // TODO(jstpierre): This require some work in J3DGraphBase because ViewProj
+                // assumes that the effectMtx is predetermined for us...
+            }
+
+            if (sub === 'MA00' || sub === 'MA01' || sub === 'MA04' || sub === 'MA16') {
+                const color = colorNewCopy(TransparentBlack);
+                color.r = envLight.cloudShadowDensity;
+
+                if (sub === 'MA01') {
+                    if (envLight.cameraInWater) {
+                        color.a = 1.0;
+                        // patch alpha comp / zmode
+                    } else {
+                        // patch alpha comp / zmode
+                    }
+                }
+
+                materialInstance.setColorOverride(ColorKind.K1, color);
+            }
+
+            if (sub === 'MA11') {
+                if (dKy_darkworld_check(globals)) {
+                    // globals.dlst.dComIfGd_setListDarkBG();
+
+                    const c1 = colorNewCopy(TransparentBlack);
+                    c1.r = 170 / 255;
+                    c1.g = 160 / 255;
+                    c1.b = 255 / 255;
+                    c1.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                    const c2 = colorNewCopy(TransparentBlack);
+                    c2.r = 50 / 255;
+                    c2.g = 20 / 255;
+                    c2.b = 90 / 255;
+                    c2.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C2, c2);
+                } else {
+                    const c1 = colorNewCopy(TransparentBlack);
+                    c1.r = 120 / 255;
+                    c1.g = 90 / 255;
+                    c1.b = 180 / 255;
+                    c1.a = 255 / 255;
+
+                    if (globals.renderer.currentLayer == 1)
+                        c1.a = 0.0;
+
+                    materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                    const c2 = colorNewCopy(TransparentBlack);
+                    c2.r = 40 / 255;
+                    c2.g = 30 / 255;
+                    c2.b = 65 / 255;
+                    c2.a = 255 / 255;
+                    materialInstance.setColorOverride(ColorKind.C2, c2);
+
+                    // kytag08 effect mtx
+                }
+            } else if (sub === 'MA20') {
+                // patch fog block
+
+                const c1 = colorNewCopy(envLight.bgAmbCol[3], 1.0);
+                materialInstance.setColorOverride(ColorKind.C1, c1);
+
+                const texMtx = materialInstance.materialData.material.texMatrices[2];
+                if (texMtx !== null) {
+                    const target = vec3.clone(globals.playerPosition);
+                    target[1] = -14770;
+
+                    const eye = vec3.clone(globals.playerPosition);
+                    eye[1] = -14570;
+
+                    projectionMatrixForLightPerspective(texMtx.effectMatrix, 170.0 * MathConstants.DEG_TO_RAD, 1.0, 1.5, 1.5, 0.0, 0.0);
+                    const lookAt = mat4.create();
+                    mat4.lookAt(lookAt, eye, target, Vec3UnitY);
+                    mat4.mul(texMtx.effectMatrix, texMtx.effectMatrix, lookAt);
+                }
+            } else if (sub === 'MA13') {
+                materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[3]);
+            } else if (sub === 'MA14') {
+                materialInstance.setColorOverride(ColorKind.C1, envLight.fogCol);
+                const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[3].a);
+                materialInstance.setColorOverride(ColorKind.K3, k3);
+            } else if (sub === 'MA16') {
+                materialInstance.setColorOverride(ColorKind.C1, envLight.bgAmbCol[1]);
+                const k3 = colorNewCopy(TransparentBlack, envLight.bgAmbCol[3].a);
+                materialInstance.setColorOverride(ColorKind.K3, k3);
+            }
+        } else if (name.slice(3, 10) === 'Rainbow') {
+            // TODO: K3
+        }
+    }
+
+    return list;
 }
 
 class d_a_bg extends fopAc_ac_c {
@@ -178,8 +353,6 @@ class d_a_bg extends fopAc_ac_c {
 
         // force far plane to 100000.0 ?
 
-        globals.dlst.dComIfGd_setListBG();
-
         for (let i = 0; i < this.numBg; i++) {
             const modelInstance = this.bgModel[i];
 
@@ -198,7 +371,7 @@ class d_a_bg extends fopAc_ac_c {
             const bgTevStr = this.bgTevStr[i]!;
             settingTevStruct(globals, lightType[i], null, bgTevStr);
             setLightTevColorType_MAJI(globals, modelInstance, bgTevStr, viewerInput.camera);
-            dKy_bg_MAxx_proc(globals, modelInstance);
+            let list = dKy_bg_MAxx_proc(globals, modelInstance);
 
             for (let j = 0; j < modelInstance.materialInstances.length; j++) {
                 const materialInstance = modelInstance.materialInstances[j];
@@ -254,9 +427,7 @@ class d_a_bg extends fopAc_ac_c {
             }
 
             // this is actually mDoExt_modelEntryDL
-            mDoExt_modelUpdateDL(globals, modelInstance, renderInstManager, viewerInput);
-
-            globals.dlst.dComIfGd_setListBG();
+            mDoExt_modelUpdateDL(globals, modelInstance, renderInstManager, viewerInput, list);
         }
 
         const roomNo = this.parameters;
@@ -625,7 +796,7 @@ class d_a_obj_suisya extends fopAc_ac_c {
 
         settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 }
 
@@ -1070,7 +1241,7 @@ class d_a_obj_glowSphere extends fopAc_ac_c {
         const color_c = colorNewFromRGBA8(l_colorC);
         this.model.materialInstances[0].setColorOverride(ColorKind.C1, color_c);
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 }
 
@@ -1125,7 +1296,7 @@ class d_a_obj_iceblk extends fopAc_ac_c {
 
         settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 }
 
@@ -1595,7 +1766,7 @@ class d_a_obj_firepillar2 extends fopAc_ac_c {
             this.btk!.entry(this.model!);
             this.bck!.entry(this.model!);
 
-            mDoExt_modelUpdateDL(globals, this.model!, renderInstManager, viewerInput, globals.dlst.main);
+            mDoExt_modelUpdateDL(globals, this.model!, renderInstManager, viewerInput, globals.dlst.bg);
         }
     }
 
@@ -1687,7 +1858,7 @@ class d_a_obj_lv3water extends fopAc_ac_c {
         settingTevStruct(globals, LightType.UNK_16, this.pos, this.tevStr);
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
         this.btk.entry(this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
 
         if (this.modelIndirect !== null && this.modelIndirect !== undefined) {
             setLightTevColorType_MAJI(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
@@ -2272,7 +2443,7 @@ class daItemBase extends fopAc_ac_c {
             if (this.btk !== null)
                 this.btk.entry(this.model);
 
-            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
         }
     }
 
@@ -2590,7 +2761,7 @@ class d_a_obj_carry extends fopAc_ac_c {
     public override draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         settingTevStruct(globals, LightType.UNK_8, this.pos, this.tevStr);
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 
     public destroy(device: GfxDevice): void {
@@ -2767,7 +2938,7 @@ class d_a_obj_onsen extends fopAc_ac_c {
         setLightTevColorType_MAJI(globals, this.model, this.tevStr, viewerInput.camera);
         setLightTevColorType_MAJI(globals, this.modelIndirect, this.tevStr, viewerInput.camera);
         dKy_bg_MAxx_proc(globals, this.model);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
 
         this.btk.entry(this.modelIndirect);
         dKy_bg_MAxx_proc(globals, this.modelIndirect);
@@ -2984,7 +3155,7 @@ class d_a_obj_magLiftRot extends fopAc_ac_c {
         if (this.brk !== null)
             this.brk.entry(this.model);
 
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 
     public destroy(device: GfxDevice): void {
@@ -3065,7 +3236,7 @@ class d_a_e_hp extends fopAc_ac_c {
         //mDoExt_modelUpdateDL(globals, this.morf.model, renderInstManager, viewerInput, globals.dlst.main);
 
         setLightTevColorType_MAJI(globals, this.lanternModel, this.tevStr, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.lanternModel, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.lanternModel, renderInstManager, viewerInput, globals.dlst.bg);
 
         mat4.copy(calc_mtx, this.morf.model.shapeInstanceState.jointToWorldMatrixArray[13]);
         MtxPosition(this.unk_75c, vec3.set(scratchVec3a, 55, 0, 0));
@@ -3080,7 +3251,7 @@ class d_a_e_hp extends fopAc_ac_c {
         mDoMtx_XrotM(calc_mtx, cM_atan2s(-scratchVec3a[1], vec3.squaredLength(scratchVec3b)));
         mat4.copy(this.glowMorf.model.modelMatrix, calc_mtx);
 
-        mDoExt_modelUpdateDL(globals, this.glowMorf.model, renderInstManager, viewerInput, globals.dlst.main);
+        mDoExt_modelUpdateDL(globals, this.glowMorf.model, renderInstManager, viewerInput, globals.dlst.bg);
     }
 
     private ctrlJoint = (dst: mat4, modelData: J3DModelData, i: number) => {
