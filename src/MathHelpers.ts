@@ -298,32 +298,6 @@ export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): voi
     dst[14] = 0;
 }
 
-export function computeMatrixWithoutRotation(dst: mat4, m: ReadonlyMat4, v: vec3 = scratchVec3a): void {
-    const mx = Math.hypot(m[0], m[4], m[8]);
-    const my = Math.hypot(m[1], m[5], m[9]);
-    const mz = Math.hypot(m[2], m[6], m[10]);
-
-    dst[0] = mx;
-    dst[1] = 0.0;
-    dst[2] = 0.0;
-    dst[3] = 0.0;
-
-    dst[4] = 0.0;
-    dst[5] = my;
-    dst[6] = 0.0;
-    dst[7] = 0.0;
-
-    dst[8] = 0.0;
-    dst[9] = 0.0;
-    dst[10] = mz;
-    dst[11] = 0.0;
-
-    dst[12] = m[12];
-    dst[13] = m[13];
-    dst[14] = m[14];
-    dst[15] = 0.0;
-}
-
 export function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }

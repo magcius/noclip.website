@@ -4,7 +4,7 @@ import * as Viewer from '../viewer.js';
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render.js";
-import { mat4 } from "gl-matrix";
+import { ReadonlyMat4, mat4 } from "gl-matrix";
 
 import * as BRRES from './brres.js';
 import * as GX from '../gx/gx_enum.js';
@@ -12,7 +12,7 @@ import { assert, readString, hexzero, assertExists } from "../util.js";
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render.js";
 import AnimationController from "../AnimationController.js";
 import { GXMaterialHacks } from "../gx/gx_material.js";
-import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers.js";
+import { computeModelMatrixSRT } from "../MathHelpers.js";
 import { CameraController, Camera } from "../Camera.js";
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { SceneContext } from "../SceneBase.js";
@@ -31,6 +31,32 @@ function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     out[2] = camera.worldMatrix[2];
     out[6] = camera.worldMatrix[6];
     out[10] = camera.worldMatrix[10];
+}
+
+function computeMatrixWithoutRotation(dst: mat4, m: ReadonlyMat4): void {
+    const mx = Math.hypot(m[0], m[4], m[8]);
+    const my = Math.hypot(m[1], m[5], m[9]);
+    const mz = Math.hypot(m[2], m[6], m[10]);
+
+    dst[0] = mx;
+    dst[1] = 0.0;
+    dst[2] = 0.0;
+    dst[3] = 0.0;
+
+    dst[4] = 0.0;
+    dst[5] = my;
+    dst[6] = 0.0;
+    dst[7] = 0.0;
+
+    dst[8] = 0.0;
+    dst[9] = 0.0;
+    dst[10] = mz;
+    dst[11] = 0.0;
+
+    dst[12] = m[12];
+    dst[13] = m[13];
+    dst[14] = m[14];
+    dst[15] = 1.0;
 }
 
 const pathBase = `Okami`;
@@ -604,6 +630,7 @@ function shouldBillboard(objectTypeId: number, objectId: number): boolean {
 
 class ObjectInstance {
     private shouldBillboard: boolean;
+    private visible = true;
 
     constructor(private objectTypeId: number, private objectId: number, private modelMatrix: mat4, private modelInstance: MDL0ModelInstance) {
         this.shouldBillboard = shouldBillboard(this.objectTypeId, this.objectId);
@@ -615,6 +642,9 @@ class ObjectInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         if (this.shouldBillboard) {
             computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
