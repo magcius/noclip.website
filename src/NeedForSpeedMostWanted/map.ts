@@ -13,6 +13,7 @@ export class NfsMap {
     public modelCache: {[id: number]: NfsModel} = { };
     public textureCache: {[id: number]: NfsTexture} = { };
     public ingameStreamingMode: boolean = false;
+    public showAllRegions: boolean = false;
     private pathVertices: PathVertex[];
     private regionsToRender: Set<NfsRegion> = new Set<NfsRegion>();
     private regionOverridesIn: {[id: number]: RegionRenderOverride} = { };
@@ -155,15 +156,20 @@ export class NfsMap {
     }
 
     public getRegionsToRender(pos: vec2, activeRegion: NfsRegion): RegionConnections[] {
-        if(this.ingameStreamingMode)
+        if (this.showAllRegions) {
+            return Object.values(this.regions).map((region) => {
+                return { region, upperPartOnly: false };
+            });
+        } else if (this.ingameStreamingMode) {
             return activeRegion.connections!;
+        }
 
         this.regionsToRender.clear();
         activeRegion.connections!.forEach((r => this.regionsToRender.add(r.region)));
         for(const regionId in this.regions) {
             const r = this.regions[regionId];
-            if(r.regionType == RegionType.Regular && isCloseToRegion(r, pos, this.viewDistance))
-            this.regionsToRender.add(r);
+            if (r.regionType == RegionType.Regular && isCloseToRegion(r, pos, this.viewDistance))
+                this.regionsToRender.add(r);
         }
 
         const thisRegionOverride = this.regionOverridesIn[activeRegion.id];

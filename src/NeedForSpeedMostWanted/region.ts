@@ -35,7 +35,7 @@ export enum RegionType {
 export class NfsRegion {
     public id: number;
     public regionType: RegionType;
-    public rootBoundingVolumes: NfsBoundingVolume[];
+    public rootBoundingVolumes: NfsBoundingVolume[] = [];
     public emitterGroups: NfsParticleEmitterGroup[] = [];
     public dataSections: DataSection[] = [];
     public boundingBox?: AABB;
@@ -74,11 +74,15 @@ export class NfsRegion {
             case LoadStatus.ReadyToParse:
                 if(this.regionType == RegionType.Regular) {
                     const depNotLoaded = this.dependencies!.filter(d => d.loadStatus == LoadStatus.NotLoaded);
-                    if(depNotLoaded.length > 0) {
-                        depNotLoaded.forEach(d => {d.loadStatus = LoadStatus.Loading; d.load(map).then(() => d.loadStatus = LoadStatus.ReadyToParse);});
+                    if (depNotLoaded.length > 0) {
+                        depNotLoaded.forEach(d => {
+                            d.loadStatus = LoadStatus.Loading;
+                            d.load(map).then(() =>
+                                d.loadStatus = LoadStatus.ReadyToParse);
+                            });
                         return false;
                     }
-                    if(this.dependencies!.filter(d => d.loadStatus == LoadStatus.Loading).length > 0)
+                    if (this.dependencies!.filter(d => d.loadStatus == LoadStatus.Loading).length > 0)
                         return false;
                     const depsToParse = this.dependencies!.filter(d => d.loadStatus == LoadStatus.ReadyToParse);
                     depsToParse.forEach(d => d.parseTextures(device, renderHelper, map));
@@ -107,7 +111,7 @@ export class NfsRegion {
     }
 
     public isLoaded() {
-        return this.loadStatus == LoadStatus.Loaded;;
+        return this.loadStatus == LoadStatus.Loaded;
     }
 
     public async load(map: NfsMap) {

@@ -15,10 +15,7 @@
         "useUnknownInCatchVariables": true,
         "resolveJsonModule": true,
         "lib": [
-            "es2015",
-            "es2015.promise",
-            "es2016.array.include",
-            "es2017.sharedmemory",
+            "es2017",
             "es2019.array",
             "esnext.BigInt",
             "dom"
