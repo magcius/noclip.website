@@ -1896,7 +1896,7 @@ export class StudioPanel extends FloatingPanel {
         const icon = createDOMFromString(CLAPBOARD_ICON).querySelector('svg')!;
         icon.setAttribute('height','30');
         this.recordPlaybackBtn.appendChild(icon);
-        this.recordPlaybackBtn.onclick = () => this.recordVideo();
+        this.recordPlaybackBtn.onclick = () => this.record();
 
         this.timeLineContainerElement = this.contents.querySelector('#timelineContainer') as HTMLElement;
 
@@ -3983,7 +3983,7 @@ class VideoRecorder {
     }
 
     public static isSupported(): boolean {
-        if (typeof VideoEncoder === undefined)
+        if (typeof VideoEncoder === "undefined")
             return false;
 
         return true;
