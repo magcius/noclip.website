@@ -198,6 +198,10 @@ export class HIModelInstance {
             this.data.geometry.flags &= ~RpGeometryFlag.LIGHT;
         }
 
+        if (!scene.renderHacks.vertexColors) {
+            this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;
+        }
+
         if (this.lightKit && (this.pipeFlags & HIPipeFlags.LIGHTING_MASK) !== HIPipeFlags.LIGHTING_KITPRELIGHT) {
             this.data.geometry.flags &= ~RpGeometryFlag.PRELIT;
         }

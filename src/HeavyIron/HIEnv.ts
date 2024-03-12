@@ -52,6 +52,6 @@ export class HIEnv extends HIBase {
         rw.renderState.srcBlend = RwBlendFunction.SRCALPHA;
         rw.renderState.destBlend = RwBlendFunction.INVSRCALPHA;
         
-        this.jsp.render(scene.camera, rw);
+        this.jsp.render(scene, rw);
     }
 }
