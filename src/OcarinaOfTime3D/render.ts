@@ -168,7 +168,7 @@ uniform sampler2D u_Texture2;
             return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2)`;
         case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
             console.warn("Accessing procedural texture slot");
-            return `vec4(1.0)`;
+            return `vec4(0.0)`;
         }
     }
 
@@ -219,7 +219,7 @@ uniform sampler2D u_Texture2;
         case CMB.CombineResultOpDMP.MODULATE:    return `(t_CmbIn0 * t_CmbIn1)`;
         case CMB.CombineResultOpDMP.ADD:         return `(t_CmbIn0 + t_CmbIn1)`;
         case CMB.CombineResultOpDMP.ADD_SIGNED:  return `(t_CmbIn0 + t_CmbIn1 - 0.5)`;
-        case CMB.CombineResultOpDMP.INTERPOLATE: return `(mix(t_CmbIn0, t_CmbIn1, t_CmbIn2))`;
+        case CMB.CombineResultOpDMP.INTERPOLATE: return `(mix(t_CmbIn1, t_CmbIn0, t_CmbIn2))`;
         case CMB.CombineResultOpDMP.SUBTRACT:    return `(t_CmbIn0 - t_CmbIn1)`;
         case CMB.CombineResultOpDMP.DOT3_RGB:    return `vec4(vec3(4.0 * (dot(t_CmbIn0 - 0.5, t_CmbIn1 - 0.5))), 1.0)`;
         case CMB.CombineResultOpDMP.DOT3_RGBA:   return `vec4(4.0 * (dot(t_CmbIn0 - 0.5, t_CmbIn1 - 0.5))))`;
@@ -254,7 +254,7 @@ uniform sampler2D u_Texture2;
     t_CmbIn1 = vec4(${this.generateTexCombinerOp(c.source1RGB, c.op1RGB)}.rgb, ${this.generateTexCombinerOp(c.source1Alpha, c.op1Alpha)}.a);
     t_CmbIn2 = vec4(${this.generateTexCombinerOp(c.source2RGB, c.op2RGB)}.rgb, ${this.generateTexCombinerOp(c.source2Alpha, c.op2Alpha)}.a);
     t_CmbOut = vec4(${this.generateTexCombinerScale(c.combineRGB, c.scaleRGB)}.rgb, ${this.generateTexCombinerScale(c.combineAlpha, c.scaleAlpha)}.a);
-    t_CmbOutBuffer = vec4(${this.generateTexCombinerBuffer(c.bufferInputRGB)}.rgb, ${this.generateTexCombinerBuffer(c.bufferInputRGB)}.a);
+    t_CmbOutBuffer = vec4(${this.generateTexCombinerBuffer(c.bufferInputRGB)}.rgb, ${this.generateTexCombinerBuffer(c.bufferInputAlpha)}.a);
 `;
     }
 

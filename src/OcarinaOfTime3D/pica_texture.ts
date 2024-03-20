@@ -67,14 +67,14 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
 
     // Table 3.17.2 -- Intensity tables for each codeword.
     const intensityTableMap = [
-        [   -8,  -2,  2,   8 ],
-        [  -17,  -5,  5,  17 ],
-        [  -29,  -9,  9,  29 ],
-        [  -42, -13, 13,  42 ],
-        [  -60, -18, 18,  60 ],
-        [  -80, -24, 24,  80 ],
-        [ -106, -33, 33, 106 ],
-        [ -183, -47, 48, 183 ],
+        [    2,   8,    -2,   -8 ],
+        [    5,   17,   -5,  -17 ],
+        [    9,   29,   -9,  -29 ],
+        [   13,   42,  -13,  -42 ],
+        [   18,   60,  -18,  -60 ],
+        [   24,   80,  -24,  -80 ],
+        [   33,  106,  -33, -106 ],
+        [   47,  183,  -47, -183 ]
     ];
 
     const diff = (w1 & 0x02) !== 0;
@@ -92,11 +92,11 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
     }
 
     // Get the color table for a given block.
-    function getColors(colors: Uint8Array, r: number, g: number, b: number, intensityMap: number[]): void {
+    function getColors(colors: Uint8Array, r: number, g: number, b: number): void {
         for (let i = 0; i < 4; i++) {
-            colors[(i * 3) + 0] = clamp(r + intensityMap[i], 0, 255);
-            colors[(i * 3) + 1] = clamp(g + intensityMap[i], 0, 255);
-            colors[(i * 3) + 2] = clamp(b + intensityMap[i], 0, 255);
+            colors[(i * 3) + 0] = r;
+            colors[(i * 3) + 1] = g;
+            colors[(i * 3) + 2] = b;
         }
     }
 
@@ -118,8 +118,8 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         const baseB1 = expand5to8(baseB1a);
         const baseB2 = expand5to8(baseB1a + baseB2d);
 
-        getColors(colors1, baseR1, baseG1, baseB1, intensityTable1);
-        getColors(colors2, baseR2, baseG2, baseB2, intensityTable2);
+        getColors(colors1, baseR1, baseG1, baseB1);
+        getColors(colors2, baseR2, baseG2, baseB2);
     } else {
         const baseR1 = expand4to8((w1 >>> 28) & 0x0F);
         const baseR2 = expand4to8((w1 >>> 24) & 0x0F);
@@ -128,8 +128,8 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         const baseB1 = expand4to8((w1 >>> 12) & 0x0F);
         const baseB2 = expand4to8((w1 >>>  8) & 0x0F);
 
-        getColors(colors1, baseR1, baseG1, baseB1, intensityTable1);
-        getColors(colors2, baseR2, baseG2, baseB2, intensityTable2);
+        getColors(colors1, baseR1, baseG1, baseB1);
+        getColors(colors2, baseR2, baseG2, baseB2);
     }
 
     // Go through each pixel and copy the color into the right spot...
@@ -165,11 +165,12 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
             whichBlock = x & 2;
         else
             whichBlock = y & 2;
-
+        
         const colors = whichBlock ? colors2 : colors1;
-        dst[dstIndex + 0] = colors[(colorsIndex * 3) + 0];
-        dst[dstIndex + 1] = colors[(colorsIndex * 3) + 1];
-        dst[dstIndex + 2] = colors[(colorsIndex * 3) + 2];
+        const table = whichBlock ? intensityTable2 : intensityTable1;
+        dst[dstIndex + 0] = clamp(colors[(colorsIndex * 3) + 0] + table[lookup], 0, 255);
+        dst[dstIndex + 1] = clamp(colors[(colorsIndex * 3) + 1] + table[lookup], 0, 255);
+        dst[dstIndex + 2] = clamp(colors[(colorsIndex * 3) + 2] + table[lookup], 0, 255);
     }
 }
 
