@@ -66,15 +66,26 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
     // w2 = Lower 32-bit word, "pixel" data
 
     // Table 3.17.2 -- Intensity tables for each codeword.
+    //
+    // pre-swizzled to take the Table 3.17.3 -- MSB/LSB colors to modifiers into account.
+    //
+    // Table 3.17.3 -- MSB/LSB colors to modifiers.
+    //
+    //  msb lsb
+    //  --- ---
+    //   0  0   small positive value (2nd intensity)
+    //   0  1   large positive value (3rd intensity)
+    //   1  0   small negative value (1st intensity)
+    //   1  1   large negative value (0th intensity)
     const intensityTableMap = [
-        [   -8,  -2,  2,   8 ],
-        [  -17,  -5,  5,  17 ],
-        [  -29,  -9,  9,  29 ],
-        [  -42, -13, 13,  42 ],
-        [  -60, -18, 18,  60 ],
-        [  -80, -24, 24,  80 ],
-        [ -106, -33, 33, 106 ],
-        [ -183, -47, 48, 183 ],
+        [    2,   8,    -2,   -8 ],
+        [    5,   17,   -5,  -17 ],
+        [    9,   29,   -9,  -29 ],
+        [   13,   42,  -13,  -42 ],
+        [   18,   60,  -18,  -60 ],
+        [   24,   80,  -24,  -80 ],
+        [   33,  106,  -33, -106 ],
+        [   47,  183,  -47, -183 ]
     ];
 
     const diff = (w1 & 0x02) !== 0;
@@ -138,19 +149,6 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         const msb = (w2 >>> (16 + i)) & 0x01;
         const lookup = (msb << 1) | lsb;
 
-        // Table 3.17.3 -- MSB/LSB colors to modifiers.
-        //
-        //  msb lsb
-        //  --- ---
-        //   0  0   small positive value (2nd intensity)
-        //   0  1   large positive value (3rd intensity)
-        //   1  0   small negative value (1st intensity)
-        //   1  1   large negative value (0th intensity)
-        //
-        // Why the spec doesn't lay out the intensity map in this order,
-        // I'll never know...
-        const colorsIndex = lookup ^ 0x02;
-
         // Indexes march down and to the right here.
         const y = i & 0x03;
         const x = i >>> 2;
@@ -167,9 +165,9 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
             whichBlock = y & 2;
 
         const colors = whichBlock ? colors2 : colors1;
-        dst[dstIndex + 0] = colors[(colorsIndex * 3) + 0];
-        dst[dstIndex + 1] = colors[(colorsIndex * 3) + 1];
-        dst[dstIndex + 2] = colors[(colorsIndex * 3) + 2];
+        dst[dstIndex + 0] = colors[(lookup * 3) + 0];
+        dst[dstIndex + 1] = colors[(lookup * 3) + 1];
+        dst[dstIndex + 2] = colors[(lookup * 3) + 2];
     }
 }
 
