@@ -131,6 +131,7 @@ export const enum HIAssetType {
 
 export class HIRenderHacks {
     public lighting = true;
+    public vertexColors = true;
     public fog = true;
     public skydome = true;
     public player = true;
@@ -528,6 +529,10 @@ export class HIScene implements SceneGfx {
         const lightingCheckbox = new UI.Checkbox('Lighting', this.renderHacks.lighting);
         lightingCheckbox.onchanged = () => { this.renderHacks.lighting = lightingCheckbox.checked; };
         panel.contents.appendChild(lightingCheckbox.elem);
+
+        const vertexColorsCheckbox = new UI.Checkbox('Vertex Colors', this.renderHacks.vertexColors);
+        vertexColorsCheckbox.onchanged = () => { this.renderHacks.vertexColors = vertexColorsCheckbox.checked; };
+        panel.contents.appendChild(vertexColorsCheckbox.elem);
 
         const fogCheckbox = new UI.Checkbox('Fog', this.renderHacks.fog);
         fogCheckbox.onchanged = () => { this.renderHacks.fog = fogCheckbox.checked; }
