@@ -35,6 +35,9 @@ class CDNHost {
 }
 
 class CDNCache {
+    public fetchMode: 'full-archives' | 'partial-files' = 'full-archives';
+    public directory = `/data`;
+
     constructor(public dataFetcher: DataFetcher, public cachePath: string) {}
 
     public async ensureData(host: CDNHost, directory: string, key: string): Promise<string> {
@@ -53,24 +56,39 @@ class CDNCache {
         return fetchData(filePath);
     }
 
-    public async fetchArchivePartial(host: CDNHost, archive: TASCArchiveIndex, file: TASCArchiveFileEntry) {
-        const directory = `/data`;
-
+    public async fetchArchive(host: CDNHost, archive: TASCArchiveIndex) {
         const archiveFilename = archive.key;
-        if (existsSync(archiveFilename))
-            return fetchDataFragment(archiveFilename, file.dataOffset, file.dataSize);
-
-        const archiveDirectory = `${archive.key}.cache`;
-        const filename = `${file.dataOffset}`;
-        const filePath = path.join(this.cachePath, directory, archiveDirectory, filename);
-        if (existsSync(filename))
-            return fs.readFile(filePath);
+        const archiveFilePath = path.join(this.cachePath, this.directory, archiveFilename);
+        if (existsSync(archiveFilePath))
+            return;
 
         const url = host.makeURL(archive.key, '/data');
-        const buffer = await this.dataFetcher.fetchURL(url, { rangeStart: file.dataOffset, rangeSize: file.dataSize });
-        await fs.mkdir(path.join(this.cachePath, directory, archiveDirectory), { recursive: true });
-        await fs.writeFile(filePath, buffer.createTypedArray(Uint8Array));
-        return buffer;
+        const buffer = await this.dataFetcher.fetchURL(url);
+        await fs.writeFile(archiveFilePath, buffer.createTypedArray(Uint8Array));
+    }
+
+    public async fetchArchivePartial(host: CDNHost, archive: TASCArchiveIndex, file: TASCArchiveFileEntry) {
+        const archiveFilename = archive.key;
+        const archiveFilePath = path.join(this.cachePath, this.directory, archiveFilename);
+        if (existsSync(archiveFilePath))
+            return fetchDataFragment(archiveFilePath, file.dataOffset, file.dataSize);
+
+        const archiveDirectory = `${archive.key}.cache`;
+        const partialFilename = `${file.dataOffset}`;
+        const partialFilePath = path.join(this.cachePath, this.directory, archiveDirectory, partialFilename);
+        if (existsSync(partialFilePath))
+            return fs.readFile(partialFilePath);
+
+        const url = host.makeURL(archive.key, '/data');
+        if (this.fetchMode === 'full-archives') {
+            await this.fetchArchive(host, archive);
+            return fetchDataFragment(archiveFilePath, file.dataOffset, file.dataSize);
+        } else if (this.fetchMode === 'partial-files') {
+            const buffer = await this.dataFetcher.fetchURL(url, { rangeStart: file.dataOffset, rangeSize: file.dataSize });
+            await fs.mkdir(path.join(this.cachePath, this.directory, archiveDirectory), { recursive: true });
+            await fs.writeFile(partialFilePath, buffer.createTypedArray(Uint8Array));
+            return buffer;
+        }
     }
 }
 
@@ -348,7 +366,7 @@ class CDNFetcher {
         this.cdnConfig = parseKeyValues(decodeString(await this.cache.fetchData(this.selectHost(), '/config', cdnConfigKey)));
         this.buildConfig = parseKeyValues(decodeString(await this.cache.fetchData(this.selectHost(), '/config', buildConfigKey)));
 
-        this.bootstrap();
+        await this.bootstrap();
     }
 
     public async fetchCKeyFromCDN(CKey: string) {
@@ -380,6 +398,10 @@ class CDNFetcher {
         this.root = WoWRootFile.parse(await this.fetchCKeyFromCDN(this.buildConfig['root'][0]));
     }
 
+    public fetchArchive(archive: TASCArchiveIndex) {
+        return this.cache.fetchArchive(this.selectHost(), archive);
+    }
+
     public fetchFileID(fileID: number) {
         const CKey = this.root.getCKeyForFileID(fileID);
         this.fetchCKeyFromArchive(CKey);
@@ -398,6 +420,22 @@ async function main_fetch(fileID: number) {
     await fetcher.fetchFileID(fileID);
 }
 
+async function main_fetch_archives() {
+    const dataFetcher = new DataFetcher();
+    const cache = new CDNCache(dataFetcher, cachePath);
+
+    const versions = TASCManifest.parse(decodeString(await dataFetcher.fetchURL(`${patchServer}/${product}/versions`)));
+    const cdns = TASCManifest.parse(decodeString(await dataFetcher.fetchURL(`${patchServer}/${product}/cdns`)));
+
+    const fetcher = new CDNFetcher(cache, versions, cdns, region);
+    await fetcher.init();
+
+    for (const archive of fetcher.archiveIndex) {
+        console.log(`Fetching ${archive.key}`);
+        fetcher.fetchArchive(archive);
+    }
+}
+
 async function main_decompress(inPath: string, outPath: string) {
     const src = await fetchData(inPath);
     const dst = decodeBLTE(src);
@@ -409,6 +447,8 @@ async function main() {
     const mode = process.argv[2];
     if (mode === 'fetch')
         return main_fetch(parseInt(process.argv[3]));
+    else if (mode === 'fetch_archives')
+        return main_fetch_archives();
     else if (mode === 'decompress')
         return main_decompress(process.argv[3], process.argv[4]);
 }
