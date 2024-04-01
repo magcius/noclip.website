@@ -145,22 +145,22 @@ function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
                 jointMatrix[5] = A;
                 jointMatrix[6] = B;
 
-                jointMatrix[9] = 0;
-                jointMatrix[10] = C;
-                jointMatrix[11] = D;
+                jointMatrix[8] = 0;
+                jointMatrix[9] = C;
+                jointMatrix[10] = D;
             } else if (pivotIdx === 2) {
                 // Top right
                 jointMatrix[0] = 0;
-                jointMatrix[1] = A;
-                jointMatrix[2] = B;
+                jointMatrix[1] = 0;
+                jointMatrix[2] = pivotValue;
 
-                jointMatrix[4] = 0;
-                jointMatrix[5] = C;
-                jointMatrix[6] = D;
+                jointMatrix[4] = A;
+                jointMatrix[5] = B;
+                jointMatrix[6] = 0;
 
-                jointMatrix[9] = pivotValue;
+                jointMatrix[8] = C;
+                jointMatrix[9] = D;
                 jointMatrix[10] = 0;
-                jointMatrix[11] = 0;
             } else if (pivotIdx === 4) {
                 // Center center
                 jointMatrix[0] = A;
