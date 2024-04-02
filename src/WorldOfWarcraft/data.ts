@@ -414,11 +414,14 @@ export class ModelData {
     for (let i = 0; i < this.numBones; i++) {
       const parentId = this.boneParents[i];
       assert(parentId < i, "bone parent > bone");
+
+      // TODO(jstpierre): Billboarding
       mat4.fromRotationTranslationScale(this.boneTransforms[i],
         this.boneRotations.slice(i * 4, (i + 1) * 4),
         this.boneTranslations.slice(i * 3, (i + 1) * 3),
         this.boneScalings.slice(i * 3, (i + 1) * 3),
       );
+
       mat4.mul(this.boneTransforms[i], this.bonePivots[i], this.boneTransforms[i]);
       mat4.mul(this.boneTransforms[i], this.boneTransforms[i], this.boneAntipivots[i]);
       if (parentId >= 0) {

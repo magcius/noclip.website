@@ -1,12 +1,12 @@
-import { mat4 } from "gl-matrix";
+import { ReadonlyMat4, mat4 } from "gl-matrix";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxTopology, convertToTriangleIndexBuffer, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
-import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxInputLayout, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
@@ -19,6 +19,42 @@ import { TextureCache } from "./tex.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
+class BoneTexture {
+  private texture: GfxTexture;
+  private textureMapping = new TextureMapping();
+
+  constructor(device: GfxDevice, private maxBones: number, private maxInstances: number) {
+    const width = maxBones * 3; // 4x3 matrix
+    const height = maxInstances;
+    this.texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_RGBA, width, height, 1));
+    this.textureMapping.gfxTexture = this.texture;
+  }
+
+  public uploadMatrices(device: GfxDevice, boneMatrices: ReadonlyMat4[][]) {
+    const width = this.maxBones * 3 * 4;
+    const numInstances = boneMatrices.length;
+    const textureData = new Float32Array(width * numInstances);
+    for (let i = 0; i < boneMatrices.length; i++) {
+      const bones = boneMatrices[i];
+      let dstOffs = i * width;
+      for (let j = 0; j < bones.length; j++) {
+        const boneMatrix = bones[j];
+        dstOffs += fillMatrix4x3(textureData, dstOffs, boneMatrix);
+      }
+    }
+
+    device.uploadTextureData(this.texture, 0, [textureData]);
+  }
+
+  public getTextureMapping(): TextureMapping {
+    return this.textureMapping;
+  }
+
+  public destroy(device: GfxDevice): void {
+    device.destroyTexture(this.texture);
+  }
+}
+
 export class ModelRenderer {
   private skinData: SkinData[] = [];
   private vertexBuffer: GfxVertexBufferDescriptor;
@@ -27,6 +63,7 @@ export class ModelRenderer {
   private inputLayout: GfxInputLayout;
   public visible = true;
   private scratchMat4 = mat4.create();
+  private boneTexture: BoneTexture;
 
   constructor(device: GfxDevice, public model: ModelData, renderHelper: GfxRenderHelper, private textureCache: TextureCache) {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -47,6 +84,8 @@ export class ModelRenderer {
       buffer: makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.model.vertexBuffer.buffer),
       byteOffset: 0,
     };
+
+    this.boneTexture = new BoneTexture(device, this.model.numBones, 1);
 
     for (let i in this.model.skins) {
       const skinData = this.model.skins[i];
@@ -103,9 +142,8 @@ export class ModelRenderer {
       const numMat4s = 2;
       const numVec4s = 3;
       const instanceParamsSize = (16 * numMat4s + 4 * numVec4s);
-      const boneParamsSize = (16 * 1 + 4 * 1);
       const baseOffs = template.allocateUniformBuffer(ModelProgram.ub_DoodadParams,
-        instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
+        instanceParamsSize * MAX_DOODAD_INSTANCES);
       let offs = baseOffs;
       const mapped = template.mapUniformBufferF32(ModelProgram.ub_DoodadParams);
       for (let doodad of doodadChunk) {
@@ -124,15 +162,9 @@ export class ModelRenderer {
       offs = baseOffs + instanceParamsSize * MAX_DOODAD_INSTANCES;
       assert(this.model.boneTransforms.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneTransforms.length})`);
       mat4.identity(this.scratchMat4);
-      for (let i=0; i<MAX_BONE_TRANSFORMS; i++) {
-        if (i < this.model.boneTransforms.length) {
-          offs += fillMatrix4x4(mapped, offs, this.model.boneTransforms[i]);
-          offs += fillVec4(mapped, offs, this.model.boneFlags[i].spherical_billboard ? 1 : 0);
-        } else {
-          offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
-          offs += fillVec4(mapped, offs, 0);
-        }
-      }
+
+      const device = renderInstManager.gfxRenderCache.device;
+      this.boneTexture.uploadMatrices(device, [this.model.boneTransforms]);
 
       for (let i=0; i<this.skinData.length; i++) {
         const skinData = this.skinData[i];

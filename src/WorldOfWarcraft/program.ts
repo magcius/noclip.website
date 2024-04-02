@@ -780,7 +780,7 @@ export class ModelProgram extends BaseProgram {
   public static ub_MaterialParams = 2;
 
   public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
+      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 5 },
   ];
 
   private static buildVertexShaderBlock(colorType: string, uvs: string[]): string {
@@ -816,14 +816,8 @@ struct DoodadInstance {
     vec4 lightingParams; // [applyInteriorLighting, applyExteriorLighting, interiorExteriorBlend, isSkybox]
 };
 
-struct BoneParams {
-  Mat4x4 transform;
-  vec4 params; // isSphericalBillboard, _, _, _
-};
-
 layout(std140) uniform ub_DoodadParams {
     DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
-    BoneParams bones[${MAX_BONE_TRANSFORMS}];
 };
 
 layout(std140) uniform ub_MaterialParams {
@@ -837,8 +831,9 @@ layout(std140) uniform ub_MaterialParams {
 
 layout(binding = 0) uniform sampler2D u_Texture0;
 layout(binding = 1) uniform sampler2D u_Texture1;
-layout(binding = 1) uniform sampler2D u_Texture2;
-layout(binding = 1) uniform sampler2D u_Texture3;
+layout(binding = 2) uniform sampler2D u_Texture2;
+layout(binding = 3) uniform sampler2D u_Texture3;
+layout(binding = 4) uniform sampler2D u_TextureBoneMatrix;
 
 varying vec2 v_UV0;
 varying vec2 v_UV1;
@@ -869,45 +864,35 @@ void ScaledAddMat(out Mat4x4 self, float t, Mat4x4 other) {
     self.mw += t * other.mw;
 }
 
-Mat4x4 getCombinedBoneMat() {
+Mat4x4 DecodeBoneTransform(int instanceID, int boneID) {
+  Mat4x4 m;
+  m.mx = texelFetch(u_TextureBoneMatrix, ivec2(boneID * 3 + 0, instanceID), 0);
+  m.my = texelFetch(u_TextureBoneMatrix, ivec2(boneID * 3 + 1, instanceID), 0);
+  m.mz = texelFetch(u_TextureBoneMatrix, ivec2(boneID * 3 + 2, instanceID), 0);
+  m.mw = vec4(0.0, 0.0, 0.0, 1.0);
+  return m;
+}
+
+Mat4x4 getCombinedBoneMat(int instanceID) {
     Mat4x4 result;
     result.mx = vec4(0.0);
     result.my = vec4(0.0);
     result.mz = vec4(0.0);
     result.mw = vec4(0.0);
-    ScaledAddMat(result, a_BoneWeights.x, bones[int(a_BoneIndices.x)].transform);
-    ScaledAddMat(result, a_BoneWeights.y, bones[int(a_BoneIndices.y)].transform);
-    ScaledAddMat(result, a_BoneWeights.z, bones[int(a_BoneIndices.z)].transform);
-    ScaledAddMat(result, a_BoneWeights.w, bones[int(a_BoneIndices.w)].transform);
+    ScaledAddMat(result, a_BoneWeights.x, DecodeBoneTransform(instanceID, int(a_BoneIndices.x)));
+    ScaledAddMat(result, a_BoneWeights.y, DecodeBoneTransform(instanceID, int(a_BoneIndices.y)));
+    ScaledAddMat(result, a_BoneWeights.z, DecodeBoneTransform(instanceID, int(a_BoneIndices.z)));
+    ScaledAddMat(result, a_BoneWeights.w, DecodeBoneTransform(instanceID, int(a_BoneIndices.w)));
     return result;
-}
-
-mat4 convertMat4x4(Mat4x4 m) {
-  return transpose(mat4(m.mx, m.my, m.mz, m.mw));
-}
-
-void CalcBillboardMat(inout mat4 m) {
-  // extract scale from column vectors
-  mat4 colMat = transpose(m);
-  m[0] = vec4(0.0, 0.0, -length(colMat[2].xyz), 0.0);
-  m[1] = vec4(length(colMat[0].xyz), 0.0, 0.0, 0.0);
-  m[2] = vec4(0.0, length(colMat[1].xyz), 0.0, 0.0);
 }
 
 void mainVS() {
     DoodadInstance params = instances[gl_InstanceID];
     bool isSkybox = params.lightingParams.w > 0.0;
     float w = isSkybox ? 0.0 : 1.0;
-    Mat4x4 boneTransform = getCombinedBoneMat();
+    Mat4x4 boneTransform = getCombinedBoneMat(0);
     v_Position = Mul(params.transform, Mul(boneTransform, vec4(a_Position, w))).xyz;
-    bool isSphericalBone = bones[int(a_BoneIndices.x)].params.x > 0.0;
-    if (isSphericalBone) {
-      mat4 combinedModelMat = convertMat4x4(u_ModelView) * convertMat4x4(params.transform) * convertMat4x4(boneTransform);
-      CalcBillboardMat(combinedModelMat);
-      gl_Position = convertMat4x4(u_Projection) * combinedModelMat * vec4(a_Position, w);
-    } else {
-      gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(params.transform, Mul(boneTransform, vec4(a_Position, w)))));
-    }
+    gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(params.transform, Mul(boneTransform, vec4(a_Position, w)))));
 
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
     v_Normal = normalize(Mul(params.transform, Mul(boneTransform, vec4(a_Normal, 0.0))).xyz);
