@@ -1840,6 +1840,25 @@ export class DoodadData {
   }
 }
 
+async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike): Promise<AdtData> {
+  const [rootFile, obj0File, obj1File, texFile] = await Promise.all([
+    fetchDataByFileID(fileIDs.root_adt, cache.dataFetcher),
+    fetchDataByFileID(fileIDs.obj0_adt, cache.dataFetcher),
+    fileIDs.obj1_adt !== 0 ? fetchDataByFileID(fileIDs.obj1_adt, cache.dataFetcher) : Promise.resolve(null!),
+    fetchDataByFileID(fileIDs.tex0_adt, cache.dataFetcher),
+  ]);
+
+  const wowAdt = rust.WowAdt.new(rootFile);
+  wowAdt.append_obj_adt(obj0File);
+  if (obj1File !== null)
+    wowAdt.append_lod_obj_adt(obj1File);
+  wowAdt.append_tex_adt(texFile);
+
+  const adt = new AdtData(fileIDs.root_adt, wowAdt);
+  await adt.load(cache);
+  return adt;
+}
+
 export type AdtCoord = [number, number];
 
 export class LazyWorldData {
@@ -1859,14 +1878,18 @@ export class LazyWorldData {
     const wdt = await fetchFileByID(this.fileId, this.dataFetcher, rust.WowWdt.new);
     this.adtFileIds = wdt.get_all_map_data();
     const [centerX, centerY] = this.startAdtCoords;
+
+    const promises = [];
     for (let x = centerX - this.adtRadius; x <= centerX + this.adtRadius; x++) {
       for (let y = centerY - this.adtRadius; y <= centerY + this.adtRadius; y++) {
-        const maybeAdt = await this.ensureAdtLoaded(x, y);
-        if (maybeAdt) {
-          this.adts.push(maybeAdt);
-        }
+        promises.push(this.ensureAdtLoaded(x, y).then((adt) => {
+          if (adt !== undefined)
+            this.adts.push(adt);
+        }));
       }
     }
+    await Promise.all(promises);
+
     this.hasBigAlpha = wdt.adt_has_big_alpha();
     this.hasHeightTexturing = wdt.adt_has_height_texturing();
     wdt.free();
@@ -1937,20 +1960,9 @@ export class LazyWorldData {
       return undefined;
     }
 
-    const wowAdt = rust.WowAdt.new(await fetchDataByFileID(fileIDs.root_adt, this.dataFetcher));
-    wowAdt.append_obj_adt(await fetchDataByFileID(fileIDs.obj0_adt, this.dataFetcher));
-    if (fileIDs.obj1_adt !== 0) {
-      wowAdt.append_lod_obj_adt(await fetchDataByFileID(fileIDs.obj1_adt, this.dataFetcher));
-    }
-    wowAdt.append_tex_adt(await fetchDataByFileID(fileIDs.tex0_adt, this.dataFetcher));
-
-    const adt = new AdtData(fileIDs.root_adt, wowAdt);
-    await adt.load(this.cache);
-
+    const adt = await loadAdt(this.cache, fileIDs);
     adt.hasBigAlpha = this.hasBigAlpha;
     adt.hasHeightTexturing = this.hasHeightTexturing;
-
-    this.loadedAdtCoords.push([x, y]);
     return adt;
   }
 
@@ -1996,19 +2008,10 @@ export class WorldData {
           // throw new Error(`null ADTs in a non-global-WMO WDT`);
           continue;
         }
-        const wowAdt = rust.WowAdt.new(await fetchDataByFileID(fileIDs.root_adt, dataFetcher));
-        wowAdt.append_obj_adt(await fetchDataByFileID(fileIDs.obj0_adt, dataFetcher));
-        if (fileIDs.obj1_adt !== 0) {
-          wowAdt.append_lod_obj_adt(await fetchDataByFileID(fileIDs.obj1_adt, dataFetcher));
-        }
-        wowAdt.append_tex_adt(await fetchDataByFileID(fileIDs.tex0_adt, dataFetcher));
 
-        const adt = new AdtData(fileIDs.root_adt, wowAdt);
-        await adt.load(cache);
-
+        const adt = await loadAdt(cache, fileIDs);
         adt.hasBigAlpha = hasBigAlpha;
         adt.hasHeightTexturing = hasHeightTexturing;
-
         this.adts.push(adt);
       }
     }
