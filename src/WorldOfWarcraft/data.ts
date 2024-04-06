@@ -290,8 +290,9 @@ export class ModelData {
   }
 
   private loadTextures(cache: WowCache, m2: WowM2): Promise<BlpData[]> {
-    const getTextureIds = this.getTextureIds(cache, m2);
-    return Promise.all(getTextureIds.map(async (fileID) => {
+    // XXX(jstpierre): Blackrock Depths seems to have invalid texture IDs on world/khazmodan/blackrock/passivedoodads/golemparts/cannongolemwaist.m2
+    const textureIds = this.getTextureIds(cache, m2).filter((fileID) => fileID !== 0);
+    return Promise.all(textureIds.map(async (fileID) => {
       return new BlpData(fileID, await cache.loadBlp(fileID));
     }));
   }
