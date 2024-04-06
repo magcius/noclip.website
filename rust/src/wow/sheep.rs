@@ -1,6 +1,11 @@
 use polymorph::sheepfile::{get_data_filename, reader::SheepfileReader, Entry};
 use wasm_bindgen::prelude::*;
 
+/**
+ * For more information about sheepfiles, check out `src/WorldOfWarcraft/util.ts`
+ * and https://github.com/wgreenberg/polymorph.
+ */
+
 #[wasm_bindgen(js_name = "WowSheepfileEntry", getter_with_clone)]
 pub struct WasmEntry {
     pub file_id: u32,

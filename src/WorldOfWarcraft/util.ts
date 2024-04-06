@@ -5,6 +5,23 @@ import { MapArray } from "./scenes.js";
 
 const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
 
+/**
+ * Sheepfiles are custom packages of native WoW files built by `polymorph`
+ * (https://github.com/wgreenberg/polymorph). They're basically just an
+ * archive of appended WoW binary files with an index that contains metadata
+ * about each file's fileId and name hash (https://wowdev.wiki/TACT#hashpath).
+ * Our archive was built from these build/cdn config files:
+ *   `wow_classic` - `ac0b091d8852985a2ce03e416fbf1cf1`/`172046dd2cee54d02df17e21b2a2f321` on 4/5/2024
+ *   `wow_classic_era` - `c3d0cb83d013aa4e62de4df87021d77a`/`cce2d13c2533262be62f016e8775841a` on 4/5/2024
+ * polymorph built the archive first from all files in `wow_classic`, then
+ * overlaid any files in `wow_classic_era`, preferring `wow_classic`'s in the
+ * case of duplicates. This gives us a kind of hybrid of the WOTLK Classic
+ * state of the game plus some unreleased goodies still present in
+ * Vanilla.
+ * 
+ * If at some point we want to ship the state of Eastern Kingdoms/Kalimdor
+ * pre-WOTLK, we could make a separate sheepfile just from `wow_classic_era`.
+ */
 class Sheepfile {
     private sheepfile: WowSheepfileManager;
 
@@ -84,8 +101,6 @@ export async function fetchFileByID<T>(fileId: number, dataFetcher: DataFetcher,
 }
 
 export async function fetchDataByFileID(fileId: number, dataFetcher: DataFetcher): Promise<Uint8Array> {
-  // WOTLK extraction is from build 3.4.3.52237
-  // Vanilla extraction is from build 1.5.1.53495
   const data = await _sheepfile?.loadFileId(dataFetcher, fileId);
   if (!data) {
     throw new Error(`no data for fileId ${fileId}`)
