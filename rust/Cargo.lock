@@ -468,6 +468,7 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 [[package]]
 name = "polymorph"
 version = "0.1.0"
+source = "git+https://github.com/wgreenberg/polymorph#3383dc714d3b5b074cf81be12fb30bfedc954369"
 dependencies = [
  "deku",
  "env_logger 0.11.3",
