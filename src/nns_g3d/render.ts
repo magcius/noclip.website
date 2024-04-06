@@ -48,7 +48,7 @@ class MaterialInstance {
     public visible = true;
 
     constructor(cache: GfxRenderCache, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
-        this.baseCtx = { color: White, alpha: this.material.alpha };
+        this.baseCtx = { color: colorNewCopy(White), alpha: this.material.alpha };
 
         const device = cache.device;
         const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
