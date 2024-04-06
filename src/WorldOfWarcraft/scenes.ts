@@ -362,9 +362,9 @@ export class WdtScene implements Viewer.SceneGfx {
         this.modelIdToDoodads.append(doodad.modelId, doodad);
       }
     }
-    if (adt.skyboxModelId !== undefined) {
-      if (!this.skyboxModelRenderers.has(adt.skyboxModelId)) {
-        const model = this.world.cache.models.get(adt.skyboxModelId)!;
+    if (adt.skyboxModelData !== null) {
+      if (!this.skyboxModelRenderers.has(adt.skyboxModelData.fileId)) {
+        const model = adt.skyboxModelData;
         this.skyboxModelRenderers.set(model.fileId, new ModelRenderer(
           this.device,
           model,
@@ -482,13 +482,13 @@ export class WdtScene implements Viewer.SceneGfx {
 
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
-          if (adt.skyboxModelId !== undefined) {
+          if (adt.skyboxModelData !== null) {
             let originalMinZ = adt.worldSpaceAABB.minZ;
             let originalMaxZ = adt.worldSpaceAABB.maxZ;
             adt.worldSpaceAABB.minZ = -Infinity;
             adt.worldSpaceAABB.maxZ = Infinity;
             if (adt.worldSpaceAABB.containsPoint(worldCamera)) {
-              this.activeSkyboxModelId = adt.skyboxModelId;
+              this.activeSkyboxModelId = adt.skyboxModelData.fileId;
             }
             adt.worldSpaceAABB.minZ = originalMinZ;
             adt.worldSpaceAABB.maxZ = originalMaxZ;

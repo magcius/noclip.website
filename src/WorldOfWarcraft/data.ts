@@ -1,5 +1,5 @@
 import { ReadonlyMat4, mat4, quat, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg";
 import { DataFetcher } from "../DataFetcher.js";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
@@ -47,69 +47,69 @@ export class Database {
   }
 }
 
-abstract class Loadable {
-  public abstract load(dataFetcher: DataFetcher, cache: WowCache): Promise<void>
-}
+type LoadFunc<T> = (fileId: number) => Promise<T>;
 
 export class WowCache {
-  public models: Map<number, ModelData> = new Map();
-  public wmos: Map<number, WmoData> = new Map();
-  public wmoGroups: Map<number, WmoGroupData> = new Map();
-  public blps: Map<number, WowBlp> = new Map();
-  public liquidTypes: Map<number, LiquidType> = new Map();
+  private promiseCache = new Map<number, Promise<unknown>>();
+  private promiseCacheLiquidTypes = new Map<number, Promise<LiquidType>>(); // liquid types aren't fileIDs
 
   constructor(public dataFetcher: DataFetcher, public db: Database) {
   }
 
   public clear() {
-    this.models.clear();
-    this.wmos.clear();
-    this.wmoGroups.clear();
-    this.blps.clear();
+    this.promiseCache.clear();
+    this.promiseCacheLiquidTypes.clear();
   }
 
-  private async getOrLoad<T extends Loadable>(fileId: number, type: (new (fileId: number) => T), map: Map<number, T>): Promise<T> {
-    let value = map.get(fileId);
-    if (!value) {
-      value = new type(fileId);
-      await value.load(this.dataFetcher, this);
-      map.set(fileId, value);
+  private getOrLoad<T>(fileId: number, loadFunc: LoadFunc<T>, cache = this.promiseCache): Promise<T> {
+    let promise = cache.get(fileId) as Promise<T>;
+    if (promise === undefined) {
+      promise = loadFunc(fileId);
+      cache.set(fileId, promise);
     }
-    return value;
+    return promise;
   }
 
   public async loadModel(fileId: number): Promise<ModelData> {
-    return this.getOrLoad(fileId, ModelData, this.models);
+    return this.getOrLoad(fileId, async (fileId: number) => {
+      const d = new ModelData(fileId);
+      await d.load(this.dataFetcher, this);
+      return d;
+    });
   }
 
   public async loadWmo(fileId: number): Promise<WmoData> {
-    return this.getOrLoad(fileId, WmoData, this.wmos);
+    return this.getOrLoad(fileId, async (fileId: number) => {
+      const d = new WmoData(fileId);
+      await d.load(this.dataFetcher, this);
+      return d;
+    });
   }
 
   public async loadWmoGroup(fileId: number): Promise<WmoGroupData> {
-    return this.getOrLoad(fileId, WmoGroupData, this.wmoGroups);
-  }
-
-  public async loadLiquidType(type: number): Promise<LiquidType> {
-    let liquidType = this.liquidTypes.get(type);
-    if (!liquidType) {
-      const liquidTypeDb = this.db.getLiquidType(type);
-      if (!liquidTypeDb) {
-        throw new Error(`WowDatabase didn't have LiquidType ${liquidType}`);
-      }
-      liquidType = new LiquidType(type, liquidTypeDb);
-      await liquidType.load(this);
-    }
-    return liquidType;
+    return this.getOrLoad(fileId, async (fileId: number) => {
+      const d = new WmoGroupData(fileId);
+      await d.load(this.dataFetcher, this);
+      return d;
+    });
   }
 
   public async loadBlp(fileId: number): Promise<WowBlp> {
-    let blp = this.blps.get(fileId);
-    if (!blp) {
-      blp = await fetchFileByID(fileId, this.dataFetcher, rust.WowBlp.new);
-      this.blps.set(fileId, blp);
-    }
-    return blp;
+    return this.getOrLoad(fileId, async (fileId: number) => {
+      return await fetchFileByID(fileId, this.dataFetcher, rust.WowBlp.new);
+    });
+  }
+
+  public async loadLiquidType(type: number): Promise<LiquidType> {
+    return this.getOrLoad(type, async (type: number) => {
+      const liquidTypeDb = this.db.getLiquidType(type);
+      if (!liquidTypeDb) {
+        throw new Error(`WowDatabase didn't have LiquidType ${type}`);
+      }
+      const liquidType = new LiquidType(type, liquidTypeDb);
+      await liquidType.load(this);
+      return liquidType;
+    }, this.promiseCacheLiquidTypes);
   }
 }
 
@@ -273,31 +273,41 @@ export class ModelData {
     mat4.fromScaling(this.textureAntipivot, TEX_ANTIPIVOT);
   }
 
-  public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<undefined> {
-    const m2 = await fetchFileByID(this.fileId, dataFetcher, rust.WowM2.new);
-    for (let txid of m2.texture_ids) {
-      if (txid === 0) continue;
-      try {
-        this.blps.push(new BlpData(txid, await cache.loadBlp(txid)));
-      } catch (e) {
-        console.error(`failed to load BLP: ${e}`)
-      }
-    }
-    // check for legacy textures
-    if (this.blps.length === 0) {
+  private getTextureIds(cache: WowCache, m2: WowM2): number[] {
+    if (m2.texture_ids.length !== 0) {
+      return Array.from(m2.texture_ids);
+    } else {
       const legacyTextures = m2.take_legacy_textures();
+      const texture_ids: number[] = [];
       for (let tex of legacyTextures) {
-        const filename = tex.filename;
-        try {
-          const txid = getFileDataId(filename);
-          this.blps.push(new BlpData(txid, await cache.loadBlp(txid)));
-        } catch (e) {
-          console.error(`failed to load BLP: ${e}`)
-        }
+        const txid = getFileDataId(tex.filename);
+        texture_ids.push(txid);
         // FIXME should store flags somewhere
         tex.free();
       }
+      return texture_ids;
     }
+  }
+
+  private loadTextures(cache: WowCache, m2: WowM2): Promise<BlpData[]> {
+    const getTextureIds = this.getTextureIds(cache, m2);
+    return Promise.all(getTextureIds.map(async (fileID) => {
+      return new BlpData(fileID, await cache.loadBlp(fileID));
+    }));
+  }
+
+  private loadSkins(cache: WowCache, m2: WowM2): Promise<WowSkin[]> {
+    return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
+      return fetchFileByID(fileId, cache.dataFetcher, rust.WowSkin.new);
+    }));
+  }
+
+  public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<undefined> {
+    const m2 = await fetchFileByID(this.fileId, dataFetcher, rust.WowM2.new);
+
+    this.blps = await this.loadTextures(cache, m2);
+    this.skins = await this.loadSkins(cache, m2);
+
     this.vertexBuffer = m2.take_vertex_data();
     this.modelAABB = convertWowAABB(m2.get_bounding_box());
 
@@ -312,9 +322,6 @@ export class ModelData {
     });
     m2Materials.forEach(mat => mat.free());
 
-    for (let skid of m2.skin_ids) {
-      this.skins.push(await fetchFileByID(skid, dataFetcher, rust.WowSkin.new));
-    }
     this.animationManager = m2.take_animation_manager();
     this.textureWeights = new Float32Array(this.animationManager.get_num_texture_weights());
     this.numTextureTransformations = this.animationManager.get_num_transformations();
@@ -778,29 +785,69 @@ export class WmoData {
   constructor(public fileId: number) {
   }
 
+  private loadTextures(cache: WowCache): Promise<unknown> {
+    const textureSet = new Set<number>();
+    for (const material of this.materials) {
+      if (material.texture_1 !== 0)
+        textureSet.add(material.texture_1);
+      if (material.texture_2 !== 0)
+        textureSet.add(material.texture_2);
+      if (material.texture_3 !== 0)
+        textureSet.add(material.texture_3);
+    }
+
+    return Promise.all(Array.from(textureSet).map(async (fileId) => {
+      try {
+        this.blps.set(fileId, new BlpData(fileId, await cache.loadBlp(fileId)));
+      } catch (e) {
+        console.error(`failed to fetch BLP: ${e}`);
+      }
+    }));
+  }
+
+  private loadModels(cache: WowCache): Promise<unknown> {
+    return Promise.all(Array.from(this.modelIds).map(async (fileId) => {
+      if (fileId === 0)
+        return;
+      this.models.set(fileId, await cache.loadModel(fileId));
+    }));
+  }
+
+  private loadGroups(cache: WowCache): Promise<unknown> {
+    this.groupInfos = this.wmo.group_infos;
+    return Promise.all(Array.from(this.wmo.group_file_ids).map(async (fileId, i) => {
+      const group = await cache.loadWmoGroup(fileId);
+      group.portalRefs = this.portalRefs.slice(group.portalStart, group.portalStart + group.portalCount);
+
+      if (group.liquids) {
+        group.liquidIndex = this.liquids.length;
+        this.liquids.push(...group.liquids);
+        group.liquids = undefined;
+
+        for (let liquid of this.liquids) {
+          liquid.liquidType = calculateWmoLiquidType(this.flags, group, liquid.liquidType);
+          this.liquidTypes.set(liquid.liquidType, await cache.loadLiquidType(liquid.liquidType));
+        }
+      }
+
+      group.name = this.wmo.get_group_text(group.nameIndex);
+      group.description = this.wmo.get_group_text(group.descriptionIndex);
+      this.groupBsps.set(group.fileId, group.bsp);
+      this.groupIdToIndex.set(group.fileId, i);
+      this.groups[i] = group;
+
+      const groupInfo = this.groupInfos[i];
+      this.groupDefAABBs.set(group.fileId, convertWowAABB(groupInfo.bounding_box));
+    }));
+  }
+
   public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<void> {
     this.wmo = await fetchFileByID(this.fileId, dataFetcher, rust.WowWmo.new);
     this.flags = this.wmo.header.get_flags();
     assert(!this.flags.lod, "wmo with lod");
 
-    for (let material of this.wmo.textures) {
-      this.materials.push(material);
-      for (let texId of [material.texture_1, material.texture_2, material.texture_3]) {
-        if (texId !== 0 && !this.blps.has(texId)) {
-          try {
-            this.blps.set(texId, new BlpData(texId, await cache.loadBlp(texId)));
-          } catch (e) {
-            console.error(`failed to fetch BLP: ${e}`);
-          }
-        }
-      }
-    }
-
+    this.materials = this.wmo.textures;
     this.modelIds = this.wmo.doodad_file_ids;
-    for (let modelId of this.modelIds) {
-      if (modelId !== 0)
-        this.models.set(modelId, await cache.loadModel(modelId))
-    }
 
     this.portalVertices = this.wmo.take_portal_vertices();
     this.portalRefs = this.wmo.take_portal_refs();
@@ -809,30 +856,11 @@ export class WmoData {
       this.portals.push(PortalData.fromWowPortal(portal, this.portalVertices));
     }
 
-    this.groupInfos = this.wmo.group_infos;
-    for (let i=0; i<this.wmo.group_file_ids.length; i++) {
-      const gfid = this.wmo.group_file_ids[i];
-      const group = await cache.loadWmoGroup(gfid);
-      group.portalRefs = this.portalRefs.slice(group.portalStart, group.portalStart + group.portalCount);
-      if (group.liquids) {
-        group.liquidIndex = this.liquids.length;
-        for (let liquid of group.liquids) {
-          liquid.liquidType = calculateWmoLiquidType(this.flags, group, liquid.liquidType);
-          this.liquids.push(liquid);
-          if (!this.liquidTypes.has(liquid.liquidType)) {
-            this.liquidTypes.set(liquid.liquidType, await cache.loadLiquidType(liquid.liquidType));
-          }
-        }
-        group.liquids = undefined;
-      }
-      group.name = this.wmo.get_group_text(group.nameIndex);
-      group.description = this.wmo.get_group_text(group.descriptionIndex);
-      this.groupBsps.set(group.fileId, group.bsp);
-      this.groupIdToIndex.set(group.fileId, this.groups.length);
-      this.groups.push(group);
-      const groupInfo = this.groupInfos[i];
-      this.groupDefAABBs.set(group.fileId, convertWowAABB(groupInfo.bounding_box));
-    }
+    await Promise.all([
+      this.loadTextures(cache),
+      this.loadModels(cache),
+      this.loadGroups(cache),
+    ]);
   }
 
   public getGroup(groupId: number): WmoGroupData | undefined {
@@ -1450,8 +1478,43 @@ export class WmoDefinition {
 
 export class AdtLodData {
   public modelIds: number[] = [];
+  public models = new Map<number, ModelData>();
   public wmoDefs: WmoDefinition[] = [];
+  public wmos = new Map<number, WmoData>();
   public doodads: DoodadData[] = [];
+
+  private loadDoodads(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
+    return Promise.all(data.get_doodads(lodLevel).map(async (adtDoodad) => {
+      const doodad = DoodadData.fromAdtDoodad(adtDoodad);
+      const modelData = await cache.loadModel(doodad.modelId);
+      doodad.setBoundingBoxFromModel(modelData);
+      doodad.applyExteriorLighting = true;
+      this.doodads.push(doodad);
+    }));
+  }
+
+  private loadModels(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
+    return Promise.all(Array.from(data.get_model_file_ids(lodLevel)).map(async (modelId) => {
+      this.models.set(modelId, await cache.loadModel(modelId));
+      this.modelIds.push(modelId);
+    }));
+  }
+
+  private loadWMOs(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
+    return Promise.all(data.get_wmo_defs(lodLevel).map(async (wmoDef) => {
+      const wmo = await cache.loadWmo(wmoDef.name_id);
+      this.wmos.set(wmoDef.name_id, wmo);
+      this.wmoDefs.push(WmoDefinition.fromAdtDefinition(wmoDef, wmo));
+    }));
+  }
+
+  public async load(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
+    return Promise.all([
+      this.loadDoodads(cache, data, lodLevel),
+      this.loadModels(cache, data, lodLevel),
+      this.loadWMOs(cache, data, lodLevel),
+    ]);
+  }
 
   public setVisible(visible: boolean) {
     for (let doodad of this.doodads) {
@@ -1522,7 +1585,7 @@ export class AdtData {
   public liquidTypes: Map<number, LiquidType> = new Map();
   public insideWmoCandidates: WmoDefinition[] = [];
   public visibleWmoCandidates: WmoDefinition[] = [];
-  public skyboxModelId: number | undefined;
+  public skyboxModelData: ModelData | null = null;
   public skyboxFlags: number | undefined;
   private vertexBuffer: Float32Array;
   private indexBuffer: Uint16Array;
@@ -1554,43 +1617,39 @@ export class AdtData {
     }
   }
 
-  public async load(cache: WowCache) {
-    for (let blpId of this.inner!.get_texture_file_ids()) {
+  private async loadTextures(cache: WowCache): Promise<unknown> {
+    const textureIds = Array.from(this.inner!.get_texture_file_ids());
+    return Promise.all(textureIds.map(async (fileId) => {
       try {
-        this.blps.set(blpId, new BlpData(blpId, await cache.loadBlp(blpId)));
+        this.blps.set(fileId, new BlpData(fileId, await cache.loadBlp(fileId)));
       } catch (e) {
         console.error(`failed to load BLP ${e}`);
       }
-    }
+    }));
+  }
 
-    for (let lodLevel of [0, 1]) {
-      const lodData = new AdtLodData();
+  private async loadLODs(cache: WowCache): Promise<unknown> {
+    return Promise.all(this.lodData.map(async (lodData, i) => {
+      return lodData.load(cache, this.inner!, i);
+    }));
+  }
 
-      for (let adtDoodad of this.inner!.get_doodads(lodLevel)) {
-        const doodad = DoodadData.fromAdtDoodad(adtDoodad);
-        const modelData = await cache.loadModel(doodad.modelId);
-        doodad.setBoundingBoxFromModel(modelData);
-        doodad.applyExteriorLighting = true;
-        lodData.doodads.push(doodad);
-      }
+  public async load(cache: WowCache) {
+    this.lodData.push(new AdtLodData()); // LOD Level 0
+    this.lodData.push(new AdtLodData()); // LOD Level 1
 
-      for (let modelId of this.inner!.get_model_file_ids(lodLevel)) {
-        this.models.set(modelId, await cache.loadModel(modelId));
-        lodData.modelIds.push(modelId);
-      }
-
-      for (let wmoDef of this.inner!.get_wmo_defs(lodLevel)) {
-        const wmo = await cache.loadWmo(wmoDef.name_id);
-        this.wmos.set(wmoDef.name_id, wmo);
-        lodData.wmoDefs.push(WmoDefinition.fromAdtDefinition(wmoDef, wmo));
-      }
-      if (lodLevel > 0 && lodData.modelIds.length > 0) {
-        console.log(lodData);
-      }
-
-      this.lodData.push(lodData);
-    }
+    await Promise.all([
+      this.loadTextures(cache),
+      this.loadLODs(cache),
+    ]);
     this.setLodLevel(0);
+
+    for (const lodData of this.lodData) {
+      for (const [k, v] of lodData.wmos)
+        this.wmos.set(k, v);
+      for (const [k, v] of lodData.models)
+        this.models.set(k, v);
+    }
 
     const renderResult = this.inner!.get_render_result(this.hasBigAlpha, this.hasHeightTexturing);
     this.worldSpaceAABB.transform(convertWowAABB(renderResult.extents), noclipSpaceFromAdtSpace);
@@ -1641,8 +1700,7 @@ export class AdtData {
       if (modelFileId === undefined) {
         throw new Error(`couldn't find fileDataId for skybox "${lightingResult.skybox_filename}"`);
       }
-      await cache.loadModel(modelFileId);
-      this.skyboxModelId = modelFileId;
+      this.skyboxModelData = await cache.loadModel(modelFileId);
       this.skyboxFlags = lightingResult.skybox_flags;
     }
 
