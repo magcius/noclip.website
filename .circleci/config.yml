@@ -7,7 +7,7 @@ jobs:
         - master
 
     docker:
-      - image: cimg/rust:1.68-node
+      - image: cimg/rust:1.77.1-node
         auth:
           username: jasperrlz
           password: $DOCKERHUB_PASSWORD
