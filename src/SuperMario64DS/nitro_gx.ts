@@ -293,7 +293,7 @@ class ContextInternal {
     constructor(buffer: ArrayBufferSlice, baseCtx: Context, public posScale: number) {
         this.view = buffer.createDataView();
         this.alpha = baseCtx.alpha;
-        this.s_color = baseCtx.color;
+        this.s_color = colorNewCopy(baseCtx.color);
     }
 
     public readParam(): number {
