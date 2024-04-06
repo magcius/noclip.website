@@ -473,7 +473,7 @@ pub struct LightRecord {
 }
 
 enum DistanceResult {
-    Inner(f32),
+    Inner,
     Outer(f32),
     None,
 }
@@ -486,7 +486,7 @@ impl LightRecord {
             (self.coords.z - other.z).powi(2)
         ).sqrt();
         if distance < self.falloff_start {
-            DistanceResult::Inner(distance)
+            DistanceResult::Inner
         } else if distance < self.falloff_end {
             DistanceResult::Outer(distance)
         } else {
@@ -804,7 +804,7 @@ impl Database {
         for light in &self.lights.records {
             if light.map_id == map_id {
                 match light.distance(&coord) {
-                    DistanceResult::Inner(_) => return self.get_light_result(light, time).unwrap_or(default_light),
+                    DistanceResult::Inner => return self.get_light_result(light, time).unwrap_or(default_light),
                     DistanceResult::Outer(distance) => {
                         if let Some(outer_light) = self.get_light_result(light, time) {
                             let alpha = 1.0 - (distance - light.falloff_start) / (light.falloff_end - light.falloff_start);
