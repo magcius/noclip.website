@@ -1,23 +1,21 @@
-import { vec3, mat4, vec4, quat, ReadonlyMat4 } from "gl-matrix";
-import { WowM2, WowSkin, WowBlp, WowSkinSubmesh, WowModelBatch, WowAdt, WowAdtChunkDescriptor, WowDoodad, WowWdt, WowWmo, WowWmoGroup, WowWmoMaterialInfo, WowWmoMaterialBatch, WowQuat, WowVec3, WowDoodadDef, WowWmoMaterial, WowAdtWmoDefinition, WowGlobalWmoDefinition, WowM2Material, WowM2MaterialFlags, WowM2BlendingMode, WowVec4, WowMapFileDataIDs, WowDatabase, WowWmoMaterialVertexShader, WowWmoMaterialPixelShader, WowWmoMaterialFlags, WowWmoGroupFlags, WowLightResult, WowWmoGroupInfo, WowAdtRenderResult, WowM2AnimationManager, WowArgb, WowM2BoneFlags, WowAABBox, WowAdtLiquidLayer, WowLiquidResult, WowWmoLiquidResult, WowWmoHeaderFlags, WowWmoPortal, WowWmoPortalRef, WowWmoBspNode, WowWmoBspAxisType } from "../../rust/pkg";
+import { ReadonlyMat4, mat4, quat, vec3, vec4 } from "gl-matrix";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg";
 import { DataFetcher } from "../DataFetcher.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { GfxDevice, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferUsage, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxChannelWriteMask, GfxCompareMode, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { rust } from "../rustlib.js";
-import { fetchFileByID, fetchDataByFileID, getFileDataId } from "./util.js";
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, setMatrixTranslation } from "../MathHelpers.js";
-import { adtSpaceFromModelSpace, adtSpaceFromPlacementSpace, placementSpaceFromModelSpace, noclipSpaceFromPlacementSpace, noclipSpaceFromModelSpace, noclipSpaceFromAdtSpace, modelSpaceFromAdtSpace, MapArray, WdtScene, View, placementSpaceFromAdtSpace, MAP_SIZE, modelSpaceFromPlacementSpace } from "./scenes.js";
-import { AABB, Frustum, IntersectionState, Plane } from "../Geometry.js";
-import { GfxRenderInst, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import { BaseProgram, ModelProgram, WmoProgram } from "./program.js";
-import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { AttachmentStateSimple, copyAttachmentState, defaultMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
+import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { colorNewFromRGBA } from "../Color.js";
+import { ModelProgram, WmoProgram } from "./program.js";
+import { MapArray, View, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
+import { fetchDataByFileID, fetchFileByID, getFileDataId } from "./util.js";
 
 export class Database {
   private inner: WowDatabase;

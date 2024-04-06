@@ -1,26 +1,21 @@
-import { mat4, vec4 } from "gl-matrix";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
-import { AABB } from "../Geometry.js";
+import { mat4 } from "gl-matrix";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
+import { GfxTopology, convertToTriangleIndexBuffer, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxDevice, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxInputLayout, GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxInputLayout } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { SkinData, ModelData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, AdtData, DoodadData, ModelRenderPass, ChunkData, LiquidInstance as LiquidInstance, LiquidType } from "./data.js";
-import { DebugWmoPortalProgram, LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
-import { TextureCache } from "./tex.js";
-import { WowAdtChunkDescriptor } from "../../rust/pkg/index.js";
-import { MapArray, View, adtSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromModelSpace, MAP_SIZE } from "./scenes.js";
-import { convertToTriangleIndexBuffer, convertToTrianglesRange, GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
-import { skyboxVertices, skyboxIndices, loadingAdtVertices, loadingAdtIndices } from "./mesh.js";
 import { assert } from "../util.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { CullMode } from "../gx/gx_enum.js";
+import { AdtData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData } from "./data.js";
+import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
+import { DebugWmoPortalProgram, LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
+import { MAP_SIZE, MapArray, View } from "./scenes.js";
+import { TextureCache } from "./tex.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 

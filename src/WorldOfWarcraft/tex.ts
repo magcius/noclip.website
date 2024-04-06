@@ -1,13 +1,10 @@
-import { WowBlp, WowColorEncoding, WowPixelFormat } from "../../rust/pkg/index.js";
-import * as Viewer from '../viewer.js';
-import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { decompressBC, surfaceToCanvas } from "../Common/bc_texture.js";
+import { WowBlp } from "../../rust/pkg/index.js";
 import { SamplerSettings } from "../Halo1/tex.js";
-import { TextureMapping, TextureHolder, LoadedTexture } from "../TextureHolder.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
-import { GfxDevice, GfxTextureDimension, GfxTextureUsage, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, makeTextureDescriptor2D, GfxTextureDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
-import { GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatformImpl.js";
+import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { rust } from "../rustlib.js";
 

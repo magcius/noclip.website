@@ -1,7 +1,6 @@
+import { WowSheepfileEntry, WowSheepfileManager } from "../../rust/pkg";
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher.js";
 import { rust } from '../rustlib.js';
-import { WowSheepfileEntry, WowSheepfileManager } from "../../rust/pkg";
-import { MapArray } from "./scenes.js";
 
 const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
 
