@@ -21,7 +21,7 @@ const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
  * If at some point we want to ship the state of Eastern Kingdoms/Kalimdor
  * pre-WOTLK, we could make a separate sheepfile just from `wow_classic_era`.
  */
-class Sheepfile {
+export class Sheepfile {
     private sheepfile: WowSheepfileManager;
 
     public async load(dataFetcher: DataFetcher) {
@@ -36,7 +36,7 @@ class Sheepfile {
       });
     }
 
-    async loadEntry(dataFetcher: DataFetcher, entry: WowSheepfileEntry): Promise<Uint8Array> {
+    public async loadEntry(dataFetcher: DataFetcher, entry: WowSheepfileEntry): Promise<Uint8Array> {
       let data = await this.fetchDataRange(dataFetcher, entry.datafile_name, entry.start_bytes, entry.size_bytes);
       entry.free();
       return data.createTypedArray(Uint8Array);
@@ -69,40 +69,8 @@ class Sheepfile {
       }
       return entry.file_id;
     }
-}
 
-let _sheepfile: Sheepfile | undefined = undefined;
-export async function initSheepfile(dataFetcher: DataFetcher): Promise<undefined> {
-  if (!_sheepfile) {
-    _sheepfile = new Sheepfile();
-    await _sheepfile.load(dataFetcher);
-  }
-}
-
-export function getFileDataId(fileName: string): number {
-  if (fileName === '') {
-    throw new Error(`must provide valid filename`);
-  }
-  const result = _sheepfile!.getFileDataId(fileName);
-  if (result === undefined) {
-    throw new Error(`failed to find FileDataId for fileName ${fileName}`);
-  } else {
-    return result;
-  }
-}
-
-export type Constructor<T> = (data: Uint8Array) => T;
-
-export async function fetchFileByID<T>(fileId: number, dataFetcher: DataFetcher, constructor: Constructor<T>): Promise<T> {
-  const buf = await fetchDataByFileID(fileId, dataFetcher);
-  const result = constructor(buf);
-  return result;
-}
-
-export async function fetchDataByFileID(fileId: number, dataFetcher: DataFetcher): Promise<Uint8Array> {
-  const data = await _sheepfile?.loadFileId(dataFetcher, fileId);
-  if (!data) {
-    throw new Error(`no data for fileId ${fileId}`)
-  }
-  return data;
+    public destroy(): void {
+      this.sheepfile.free();
+    }
 }

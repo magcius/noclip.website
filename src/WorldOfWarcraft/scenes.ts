@@ -17,7 +17,6 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, Port
 import { BaseProgram, DebugWmoPortalProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
-import { initSheepfile } from "./util.js";
 
 export const MAP_SIZE = 17066;
 
@@ -35,26 +34,15 @@ export const noclipSpaceFromModelSpace = mat4.fromValues(
   0, 1, 0, 0,
   0, 0, 0, 1,
 );
-
-export const noclipSpaceFromPlacementSpace = mat4.fromValues(
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1,
-)
+export const placementSpaceFromModelSpace: mat4 = noclipSpaceFromModelSpace;
 
 export const adtSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
-mat4.mul(adtSpaceFromPlacementSpace, adtSpaceFromPlacementSpace, noclipSpaceFromPlacementSpace);
 
 export const adtSpaceFromModelSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromAdtSpace);
 mat4.mul(adtSpaceFromModelSpace, adtSpaceFromModelSpace, noclipSpaceFromModelSpace);
 
-export const placementSpaceFromModelSpace: mat4 = mat4.invert(mat4.create(), noclipSpaceFromPlacementSpace);
-mat4.mul(placementSpaceFromModelSpace, placementSpaceFromModelSpace, noclipSpaceFromModelSpace);
-
 export const modelSpaceFromAdtSpace: mat4 = mat4.invert(mat4.create(), adtSpaceFromModelSpace);
 export const modelSpaceFromPlacementSpace: mat4 = mat4.invert(mat4.create(), placementSpaceFromModelSpace);
-
 
 const scratchVec3 = vec3.create();
 export class View {
@@ -638,7 +626,7 @@ export class WdtScene implements Viewer.SceneGfx {
       template,
       viewerInput.camera.projectionMatrix,
       this.mainView,
-      this.db.getGlobalLightingData(this.mainView.cameraPos, this.mainView.time)
+      this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time)
     );
     this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
     this.skyboxRenderer.prepareToRenderSkybox(this.renderHelper.renderInstManager)
@@ -790,17 +778,19 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 
   public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
     const dataFetcher = context.dataFetcher;
-    await initSheepfile(dataFetcher);
-    const db = new Database(this.lightdbMapId);
-    await db.load(dataFetcher);
-    const cache = new WowCache(dataFetcher, db);
+    const cache = await context.dataShare.ensureObject(`${vanillaSceneGroup.id}/WowCache`, async () => {
+      const db = new Database();
+      const cache = new WowCache(dataFetcher, db);
+      await cache.load();
+      return cache;
+    });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new WorldData(this.fileId, cache);
+    const wdt = new WorldData(this.fileId, cache, this.lightdbMapId);
     console.time('loading wdt');
     await wdt.load(dataFetcher, cache);
     console.timeEnd('loading wdt');
-    return new WdtScene(device, wdt, renderHelper, db);
+    return new WdtScene(device, wdt, renderHelper, cache.db);
   }
 }
 
@@ -813,17 +803,19 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
 
   public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
     const dataFetcher = context.dataFetcher;
-    await initSheepfile(dataFetcher);
-    const db = new Database(this.lightdbMapId);
-    await db.load(dataFetcher);
-    const cache = new WowCache(dataFetcher, db);
+    const cache = await context.dataShare.ensureObject(`${vanillaSceneGroup.id}/WowCache`, async () => {
+      const db = new Database();
+      const cache = new WowCache(dataFetcher, db);
+      await cache.load();
+      return cache;
+    });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], 2, dataFetcher, cache);
+    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], 2, cache, this.lightdbMapId);
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
-    return new WdtScene(device, wdt, renderHelper, db);
+    return new WdtScene(device, wdt, renderHelper, cache.db);
   }
 }
 

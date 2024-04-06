@@ -1,4 +1,4 @@
-import { ReadonlyMat4, mat4, quat, vec3, vec4 } from "gl-matrix";
+import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg";
 import { DataFetcher } from "../DataFetcher.js";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk.js";
@@ -15,20 +15,26 @@ import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
 import { ModelProgram, WmoProgram } from "./program.js";
 import { MapArray, View, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
-import { fetchDataByFileID, fetchFileByID, getFileDataId } from "./util.js";
+import { Sheepfile } from "./util.js";
 
 export class Database {
   private inner: WowDatabase;
 
-  constructor(public mapId: number) {
-  }
+  public async load(cache: WowCache) {
+    const [
+      lightDbData,
+      lightDataDbData,
+      lightParamsDbData,
+      liquidTypes,
+      lightSkyboxData,
+    ] = await Promise.all([
+      cache.fetchDataByFileID(1375579), // lightDbData
+      cache.fetchDataByFileID(1375580), // lightDataDbData
+      cache.fetchDataByFileID(1334669), // lightParamsDbData
+      cache.fetchDataByFileID(1371380), // liquidTypes
+      cache.fetchDataByFileID(1308501), // lightSkyboxData
+    ]);
 
-  public async load(dataFetcher: DataFetcher) {
-    let lightDbData = await fetchDataByFileID(1375579, dataFetcher);
-    let lightDataDbData = await fetchDataByFileID(1375580, dataFetcher);
-    let lightParamsDbData = await fetchDataByFileID(1334669, dataFetcher);
-    let liquidTypes = await fetchDataByFileID(1371380, dataFetcher);
-    let lightSkyboxData = await fetchDataByFileID(1308501, dataFetcher);
     this.inner = rust.WowDatabase.new(
       lightDbData,
       lightDataDbData,
@@ -38,8 +44,8 @@ export class Database {
     );
   }
 
-  public getGlobalLightingData(coords: vec3, time: number): WowLightResult {
-    return this.inner.get_lighting_data(this.mapId, coords[0], coords[1], coords[2], time);
+  public getGlobalLightingData(lightdbMapId: number, coords: ReadonlyVec3, time: number): WowLightResult {
+    return this.inner.get_lighting_data(lightdbMapId, coords[0], coords[1], coords[2], time);
   }
 
   public getLiquidType(liquidType: number): WowLiquidResult | undefined {
@@ -50,10 +56,43 @@ export class Database {
 type LoadFunc<T> = (fileId: number) => Promise<T>;
 
 export class WowCache {
+  private sheepfile: Sheepfile;
   private promiseCache = new Map<number, Promise<unknown>>();
   private promiseCacheLiquidTypes = new Map<number, Promise<LiquidType>>(); // liquid types aren't fileIDs
 
   constructor(public dataFetcher: DataFetcher, public db: Database) {
+    this.sheepfile = new Sheepfile();
+  }
+
+  public async load() {
+    await this.sheepfile.load(this.dataFetcher);
+    await this.db.load(this);
+  }
+
+  public getFileDataId(fileName: string): number {
+    if (fileName === '') {
+      throw new Error(`must provide valid filename`);
+    }
+    const result = this.sheepfile.getFileDataId(fileName);
+    if (result === undefined) {
+      throw new Error(`failed to find FileDataId for fileName ${fileName}`);
+    } else {
+      return result;
+    }
+  }
+
+  public async fetchFileByID<T>(fileId: number, constructor: (data: Uint8Array) => T): Promise<T> {
+    const buf = await this.fetchDataByFileID(fileId);
+    const result = constructor(buf);
+    return result;
+  }
+  
+  public async fetchDataByFileID(fileId: number): Promise<Uint8Array> {
+    const data = await this.sheepfile.loadFileId(this.dataFetcher, fileId);
+    if (!data) {
+      throw new Error(`no data for fileId ${fileId}`);
+    }
+    return data;
   }
 
   public clear() {
@@ -73,7 +112,7 @@ export class WowCache {
   public async loadModel(fileId: number): Promise<ModelData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new ModelData(fileId);
-      await d.load(this.dataFetcher, this);
+      await d.load(this);
       return d;
     });
   }
@@ -81,7 +120,7 @@ export class WowCache {
   public async loadWmo(fileId: number): Promise<WmoData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new WmoData(fileId);
-      await d.load(this.dataFetcher, this);
+      await d.load(this);
       return d;
     });
   }
@@ -89,14 +128,14 @@ export class WowCache {
   public async loadWmoGroup(fileId: number): Promise<WmoGroupData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new WmoGroupData(fileId);
-      await d.load(this.dataFetcher, this);
+      await d.load(this);
       return d;
     });
   }
 
   public async loadBlp(fileId: number): Promise<WowBlp> {
     return this.getOrLoad(fileId, async (fileId: number) => {
-      return await fetchFileByID(fileId, this.dataFetcher, rust.WowBlp.new);
+      return await this.fetchFileByID(fileId, rust.WowBlp.new);
     });
   }
 
@@ -106,10 +145,15 @@ export class WowCache {
       if (!liquidTypeDb) {
         throw new Error(`WowDatabase didn't have LiquidType ${type}`);
       }
-      const liquidType = new LiquidType(type, liquidTypeDb);
+      const liquidType = new LiquidType(this, type, liquidTypeDb);
       await liquidType.load(this);
       return liquidType;
     }, this.promiseCacheLiquidTypes);
+  }
+
+  public destroy(): void {
+    this.sheepfile.destroy();
+    this.clear();
   }
 }
 
@@ -135,7 +179,7 @@ export class LiquidType {
   public proceduralTexture: ProceduralTexture | undefined;
   public textureIds: (number | undefined)[] = [];
 
-  constructor(public type: number, liquid: WowLiquidResult) {
+  constructor(cache: WowCache, public type: number, liquid: WowLiquidResult) {
     this.flags = liquid.flags;
     this.name = liquid.name;
     if (this.name.includes('Slime')) {
@@ -153,7 +197,7 @@ export class LiquidType {
       for (let i=1; i<31; i++) {
         const fileName = positionalTemplate.replace("%d", i.toString());
         try {
-          const fileDataId = getFileDataId(fileName);
+          const fileDataId = cache.getFileDataId(fileName);
           assert(fileDataId !== undefined, "couldn't find positional texture");
           positionals.push(fileDataId);
         } catch (e) {
@@ -176,12 +220,12 @@ export class LiquidType {
         this.proceduralTexture = ProceduralTexture.Wmo;
       }
     } else {
-      this.textureIds.push(this.pathToFileId(maybeProcedural));
+      this.textureIds.push(this.pathToFileId(cache, maybeProcedural));
     }
-    this.textureIds.push(this.pathToFileId(liquid.tex2));
-    this.textureIds.push(this.pathToFileId(liquid.tex3));
-    this.textureIds.push(this.pathToFileId(liquid.tex4));
-    this.textureIds.push(this.pathToFileId(liquid.tex5));
+    this.textureIds.push(this.pathToFileId(cache, liquid.tex2));
+    this.textureIds.push(this.pathToFileId(cache, liquid.tex3));
+    this.textureIds.push(this.pathToFileId(cache, liquid.tex4));
+    this.textureIds.push(this.pathToFileId(cache, liquid.tex5));
     liquid.free();
   }
 
@@ -197,11 +241,11 @@ export class LiquidType {
     }
   }
 
-  private pathToFileId(path: string): number | undefined {
+  private pathToFileId(cache: WowCache, path: string): number | undefined {
     if (path === '') {
       return undefined;
     }
-    return getFileDataId(this.fixPath(path));
+    return cache.getFileDataId(this.fixPath(path));
   }
 
   private fixPath(path: string): string {
@@ -280,7 +324,7 @@ export class ModelData {
       const legacyTextures = m2.take_legacy_textures();
       const texture_ids: number[] = [];
       for (let tex of legacyTextures) {
-        const txid = getFileDataId(tex.filename);
+        const txid = cache.getFileDataId(tex.filename);
         texture_ids.push(txid);
         // FIXME should store flags somewhere
         tex.free();
@@ -299,12 +343,12 @@ export class ModelData {
 
   private loadSkins(cache: WowCache, m2: WowM2): Promise<WowSkin[]> {
     return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
-      return fetchFileByID(fileId, cache.dataFetcher, rust.WowSkin.new);
+      return cache.fetchFileByID(fileId, rust.WowSkin.new);
     }));
   }
 
-  public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<undefined> {
-    const m2 = await fetchFileByID(this.fileId, dataFetcher, rust.WowM2.new);
+  public async load(cache: WowCache): Promise<undefined> {
+    const m2 = await cache.fetchFileByID(this.fileId, rust.WowM2.new);
 
     this.blps = await this.loadTextures(cache, m2);
     this.skins = await this.loadSkins(cache, m2);
@@ -652,8 +696,8 @@ export class WmoGroupData {
     return { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer) }
   }
 
-  public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<undefined> {
-    const group = await fetchFileByID(this.fileId, dataFetcher, rust.WowWmoGroup.new);
+  public async load(cache: WowCache): Promise<undefined> {
+    const group = await cache.fetchFileByID(this.fileId, rust.WowWmoGroup.new);
     this.groupLiquidType = group.header.group_liquid;
     this.replacementForHeaderColor = group.replacement_for_header_color;
     this.nameIndex = group.header.group_name;
@@ -842,8 +886,8 @@ export class WmoData {
     }));
   }
 
-  public async load(dataFetcher: DataFetcher, cache: WowCache): Promise<void> {
-    this.wmo = await fetchFileByID(this.fileId, dataFetcher, rust.WowWmo.new);
+  public async load(cache: WowCache): Promise<void> {
+    this.wmo = await cache.fetchFileByID(this.fileId, rust.WowWmo.new);
     this.flags = this.wmo.header.get_flags();
     assert(!this.flags.lod, "wmo with lod");
 
@@ -1592,7 +1636,7 @@ export class AdtData {
   private indexBuffer: Uint16Array;
   private inner: WowAdt | null = null;
 
-  constructor(public fileId: number, adt: WowAdt) {
+  constructor(public fileId: number, adt: WowAdt, public lightdbMapId: number) {
     this.inner = adt;
   }
 
@@ -1695,9 +1739,9 @@ export class AdtData {
 
     let adtCenter = vec3.create();
     this.worldSpaceAABB.centerPoint(adtCenter);
-    const lightingResult = cache.db.getGlobalLightingData(adtCenter, 0);
+    const lightingResult = cache.db.getGlobalLightingData(this.lightdbMapId, adtCenter, 0);
     if (lightingResult.skybox_filename !== undefined) {
-      const modelFileId = getFileDataId(lightingResult.skybox_filename);
+      const modelFileId = cache.getFileDataId(lightingResult.skybox_filename);
       if (modelFileId === undefined) {
         throw new Error(`couldn't find fileDataId for skybox "${lightingResult.skybox_filename}"`);
       }
@@ -1841,12 +1885,12 @@ export class DoodadData {
   }
 }
 
-async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike): Promise<AdtData> {
+async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike, lightdbMapId: number): Promise<AdtData> {
   const [rootFile, obj0File, obj1File, texFile] = await Promise.all([
-    fetchDataByFileID(fileIDs.root_adt, cache.dataFetcher),
-    fetchDataByFileID(fileIDs.obj0_adt, cache.dataFetcher),
-    fileIDs.obj1_adt !== 0 ? fetchDataByFileID(fileIDs.obj1_adt, cache.dataFetcher) : Promise.resolve(null!),
-    fetchDataByFileID(fileIDs.tex0_adt, cache.dataFetcher),
+    cache.fetchDataByFileID(fileIDs.root_adt),
+    cache.fetchDataByFileID(fileIDs.obj0_adt),
+    fileIDs.obj1_adt !== 0 ? cache.fetchDataByFileID(fileIDs.obj1_adt) : Promise.resolve(null!),
+    cache.fetchDataByFileID(fileIDs.tex0_adt),
   ]);
 
   const wowAdt = rust.WowAdt.new(rootFile);
@@ -1855,7 +1899,7 @@ async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike): Promise
     wowAdt.append_lod_obj_adt(obj1File);
   wowAdt.append_tex_adt(texFile);
 
-  const adt = new AdtData(fileIDs.root_adt, wowAdt);
+  const adt = new AdtData(fileIDs.root_adt, wowAdt, lightdbMapId);
   await adt.load(cache);
   return adt;
 }
@@ -1872,11 +1916,11 @@ export class LazyWorldData {
   public adtFileIds: WowMapFileDataIDs[] = [];
   public loading = false;
 
-  constructor(public fileId: number, public startAdtCoords: AdtCoord, public adtRadius = 2, private dataFetcher: DataFetcher, public cache: WowCache) {
+  constructor(public fileId: number, public startAdtCoords: AdtCoord, public adtRadius = 2, public cache: WowCache, public lightdbMapId: number) {
   }
 
   public async load() {
-    const wdt = await fetchFileByID(this.fileId, this.dataFetcher, rust.WowWdt.new);
+    const wdt = await this.cache.fetchFileByID(this.fileId, rust.WowWdt.new);
     this.adtFileIds = wdt.get_all_map_data();
     const [centerX, centerY] = this.startAdtCoords;
 
@@ -1961,7 +2005,7 @@ export class LazyWorldData {
       return undefined;
     }
 
-    const adt = await loadAdt(this.cache, fileIDs);
+    const adt = await loadAdt(this.cache, fileIDs, this.lightdbMapId);
     adt.hasBigAlpha = this.hasBigAlpha;
     adt.hasHeightTexturing = this.hasHeightTexturing;
     return adt;
@@ -1980,10 +2024,10 @@ export class LazyWorldData {
 }
 
 interface WowMapFileDataIDsLike {
-  root_adt: number,
-  obj0_adt: number,
-  obj1_adt: number,
-  tex0_adt: number,
+  root_adt: number;
+  obj0_adt: number;
+  obj1_adt: number;
+  tex0_adt: number;
 }
 
 export class WorldData {
@@ -1991,11 +2035,11 @@ export class WorldData {
   public globalWmo: WmoData | null = null;
   public globalWmoDef: WmoDefinition | null = null;
 
-  constructor(public fileId: number, public cache: WowCache) {
+  constructor(public fileId: number, public cache: WowCache, public lightdbMapId: number) {
   }
 
   public async load(dataFetcher: DataFetcher, cache: WowCache) {
-    const wdt = await fetchFileByID(this.fileId, dataFetcher, rust.WowWdt.new);
+    const wdt = await cache.fetchFileByID(this.fileId, rust.WowWdt.new);
     const hasBigAlpha = wdt.adt_has_big_alpha();
     const hasHeightTexturing = wdt.adt_has_height_texturing();
     if (wdt.wdt_uses_global_map_obj()) {
@@ -2010,7 +2054,7 @@ export class WorldData {
           continue;
         }
 
-        const adt = await loadAdt(cache, fileIDs);
+        const adt = await loadAdt(cache, fileIDs, this.lightdbMapId);
         adt.hasBigAlpha = hasBigAlpha;
         adt.hasHeightTexturing = hasHeightTexturing;
         this.adts.push(adt);

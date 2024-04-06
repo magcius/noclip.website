@@ -147,7 +147,6 @@ export class ModelRenderer {
   }
 
   public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager) {
-
   }
   
   public destroy(device: GfxDevice): void {

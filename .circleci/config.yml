@@ -21,7 +21,7 @@ jobs:
 
       - restore_cache:
           keys:
-            - v4-dependencies-{{ checksum "package.json" }}
+            - v4-dependencies-{{ checksum "package.json" }}-{{ checksum rust/Cargo.toml }}
 
       - run: sudo npm install -g pnpm
 
@@ -34,7 +34,7 @@ jobs:
             - node_modules
             - .cache
             - .cargo
-          key: v4-dependencies-{{ checksum "package.json" }}
+          key: v4-dependencies-{{ checksum "package.json" }}-{{ checksum rust/Cargo.toml }}
 
       - add_ssh_keys:
           fingerprints:
