@@ -557,6 +557,8 @@ impl LightResult {
         self.river_close_color += other.river_close_color * t;
         self.river_far_color += other.river_far_color * t;
         self.shadow_opacity += other.shadow_opacity * t;
+        self.fog_end += other.fog_end * t;
+        self.fog_scaler += other.fog_scaler * t;
     }
 }
 
