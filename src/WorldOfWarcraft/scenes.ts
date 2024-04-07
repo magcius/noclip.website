@@ -14,6 +14,7 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
 import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, PortalData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { MinimapDisplay } from './minimap.js';
 import { BaseProgram, DebugWmoPortalProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
@@ -285,6 +286,7 @@ export class WdtScene implements Viewer.SceneGfx {
   public frozenFrustum = new Frustum();
   private modelCamera = vec3.create();
   private modelFrustum = new Frustum();
+  public minimapDisplay: MinimapDisplay | null = null;
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
     console.time('WdtScene construction');
@@ -684,6 +686,9 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.prepareToRenderModel(this.renderHelper.renderInstManager, visibleDoodads);
     }
 
+    if (this.minimapDisplay !== null)
+      this.minimapDisplay.prepareToRender(this.renderHelper.renderInstManager, this.textureCache, this.mainView, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
     this.renderHelper.renderInstManager.popTemplateRenderInst();
     this.renderHelper.prepareToRender();
     this.updateCullingState();
@@ -771,8 +776,8 @@ export class WdtScene implements Viewer.SceneGfx {
 class WdtSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public lightdbMapId: number) {
-    this.id = `${name}-${fileId}`;
+  constructor(public name: string, public mapDbEntry: MapDbEntry) {
+    this.id = `${name}-${this.mapDbEntry.wdtFileDataId}`;
   }
 
   public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -785,7 +790,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new WorldData(this.fileId, cache, this.lightdbMapId);
+    const wdt = new WorldData(this.mapDbEntry.wdtFileDataId, cache, this.mapDbEntry.id);
     console.time('loading wdt');
     await wdt.load(dataFetcher, cache);
     console.timeEnd('loading wdt');
@@ -796,8 +801,8 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
-    this.id = `${name}-${fileId}`;
+  constructor(public name: string, public mapDbEntry: MapDbEntry, public startX: number, public startY: number) {
+    this.id = `${name}-${this.mapDbEntry.wdtFileDataId}`;
   }
 
   public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -810,198 +815,209 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], 2, cache, this.lightdbMapId);
+    const wdt = new LazyWorldData(this.mapDbEntry.wdtFileDataId, [this.startX, this.startY], 2, cache, this.mapDbEntry.id);
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
     const scene = new WdtScene(device, wdt, renderHelper, cache.db);
+    if (this.mapDbEntry.directory !== '')
+      scene.minimapDisplay = new MinimapDisplay(scene.renderHelper.renderCache, cache, this.mapDbEntry.directory);
     scene.enableProgressiveLoading = true;
     return scene;
   }
 }
 
+class MapDbEntry {
+    constructor(public id: number, public directory: string, public wdtFileDataId: number) {
+    }
+}
+
+// https://wago.tools/db2/Map
+const azeroth = new MapDbEntry(0, 'azeroth', 775971);
+const kalimdor = new MapDbEntry(1, 'kalimdor', 782779);
+
 const vanillaSceneDescs = [
     "Eastern Kingdoms",
-    new ContinentSceneDesc("Ironforge, Dun Morogh", 775971, 33, 40, 0),
-    new ContinentSceneDesc("Stormwind, Elwynn Forest", 775971, 31, 48, 0),
-    new ContinentSceneDesc("Undercity, Tirisfal Glades", 775971, 31, 28, 0),
-    new ContinentSceneDesc("Lakeshire, Redridge Mountains", 775971, 36, 49, 0),
-    new ContinentSceneDesc("Blackrock Mountain, Burning Steppes", 775971, 34, 45, 0),
-    new ContinentSceneDesc("Booty Bay, Stranglethorn Vale", 775971, 31, 58, 0),
-    new ContinentSceneDesc("Light's Hope Chapel, Eastern Plaguelands", 775971, 41, 27, 0),
-    new ContinentSceneDesc("Aerie Peak, Hinterlands", 775971, 35, 31, 0),
-    new ContinentSceneDesc("Tarren Mill, Hillsbrad Foothills", 775971, 33, 32, 0),
-    new ContinentSceneDesc("Stonewrought Dam, Loch Modan", 775971, 38, 40, 0),
-    new ContinentSceneDesc("Kargath, Badlands", 775971, 36, 44, 0),
-    new ContinentSceneDesc("Thorium Point, Searing Gorge", 775971, 34, 44, 0),
-    new ContinentSceneDesc("Stonard, Swamp of Sorrows", 775971, 38, 51, 0),
-    new ContinentSceneDesc("Nethergarde Keep, Blasted Lands", 775971, 38, 52, 0),
-    new ContinentSceneDesc("The Dark Portal, Blasted Lands", 775971, 38, 54, 0),
-    new ContinentSceneDesc("Darkshire, Duskwood", 775971, 34, 51, 0),
-    new ContinentSceneDesc("Grom'gol Base Camp, Stranglethorn Vale", 775971, 31, 55, 0),
-    new ContinentSceneDesc("Gurubashi Arena, Stranglethorn Vale", 775971, 31, 56, 0),
-    new ContinentSceneDesc("Sentinel Hill, Westfall", 775971, 30, 51, 0),
-    new ContinentSceneDesc("Kharazan, Deadwind Pass", 775971, 35, 52, 0),
-    new ContinentSceneDesc("Southshore, Hillsbrad Foothills", 775971, 33, 33, 0),
+    new ContinentSceneDesc("Ironforge, Dun Morogh", azeroth, 33, 40),
+    new ContinentSceneDesc("Stormwind, Elwynn Forest", azeroth, 31, 48),
+    new ContinentSceneDesc("Undercity, Tirisfal Glades", azeroth, 31, 28),
+    new ContinentSceneDesc("Lakeshire, Redridge Mountains", azeroth, 36, 49),
+    new ContinentSceneDesc("Blackrock Mountain, Burning Steppes", azeroth, 34, 45),
+    new ContinentSceneDesc("Booty Bay, Stranglethorn Vale", azeroth, 31, 58),
+    new ContinentSceneDesc("Light's Hope Chapel, Eastern Plaguelands", azeroth, 41, 27),
+    new ContinentSceneDesc("Aerie Peak, Hinterlands", azeroth, 35, 31),
+    new ContinentSceneDesc("Tarren Mill, Hillsbrad Foothills", azeroth, 33, 32),
+    new ContinentSceneDesc("Stonewrought Dam, Loch Modan", azeroth, 38, 40),
+    new ContinentSceneDesc("Kargath, Badlands", azeroth, 36, 44),
+    new ContinentSceneDesc("Thorium Point, Searing Gorge", azeroth, 34, 44),
+    new ContinentSceneDesc("Stonard, Swamp of Sorrows", azeroth, 38, 51),
+    new ContinentSceneDesc("Nethergarde Keep, Blasted Lands", azeroth, 38, 52),
+    new ContinentSceneDesc("The Dark Portal, Blasted Lands", azeroth, 38, 54),
+    new ContinentSceneDesc("Darkshire, Duskwood", azeroth, 34, 51),
+    new ContinentSceneDesc("Grom'gol Base Camp, Stranglethorn Vale", azeroth, 31, 55),
+    new ContinentSceneDesc("Gurubashi Arena, Stranglethorn Vale", azeroth, 31, 56),
+    new ContinentSceneDesc("Sentinel Hill, Westfall", azeroth, 30, 51),
+    new ContinentSceneDesc("Kharazan, Deadwind Pass", azeroth, 35, 52),
+    new ContinentSceneDesc("Southshore, Hillsbrad Foothills", azeroth, 33, 33),
 
     "Kalimdor",
-    new ContinentSceneDesc("Thunder Bluff, Mulgore", 782779, 31, 34, 1),
-    new ContinentSceneDesc("Darnassus, Teldrassil", 782779, 27, 13, 1),
-    new ContinentSceneDesc("GM Island", 782779, 1, 1, 1),
-    new ContinentSceneDesc("Archimonde's Bones, Hyjal", 782779, 38, 22, 1),
-    new ContinentSceneDesc("Everlook, Winterspring", 782779, 40, 19, 1),
-    new ContinentSceneDesc("Auberdine, Darkshore", 782779, 31, 19, 1),
-    new ContinentSceneDesc("Astranaar, Ashenvale", 782779, 32, 26, 1),
-    new ContinentSceneDesc("Mor'shan Rampart, Barrens", 782779, 36, 29, 1),
-    new ContinentSceneDesc("Splintertree Post, Ashenvale", 782779, 36, 27, 1),
-    new ContinentSceneDesc("Bloodvenom Post, Felwood", 782779, 32, 22, 1),
-    new ContinentSceneDesc("Talonbranch Glade, Felwood", 782779, 34, 24, 1),
-    new ContinentSceneDesc("The Crossroads, Barrens", 782779, 36, 32, 1),
-    new ContinentSceneDesc("Orgrimmar, Durotar", 782779, 40, 29, 1),
-    new ContinentSceneDesc("Ratchet, Barrens", 782779, 39, 33, 1),
-    new ContinentSceneDesc("Sun Rock Retreat, Stonetalon Mountains", 782779, 30, 30, 1),
-    new ContinentSceneDesc("Nijel's Point, Desolace", 782779, 29, 31, 1),
-    new ContinentSceneDesc("Shadowprey Village, Desolace", 782779, 25, 35, 1),
-    new ContinentSceneDesc("Dire Maul Arena, Feralas", 782779, 29, 38, 1),
-    new ContinentSceneDesc("Thalanaar, Feralas", 782779, 33, 40, 1),
-    new ContinentSceneDesc("Camp Mojache, Feralas", 782779, 31, 40, 1),
-    new ContinentSceneDesc("Feathermoon Stronghold, Feralas", 782779, 25, 40, 1),
-    new ContinentSceneDesc("Cenarion Hold, Silithus", 782779, 30, 44, 1),
-    new ContinentSceneDesc("Marshal's Refuge, Un'Goro Crater", 782779, 34, 43, 1),
-    new ContinentSceneDesc("Gadgetzan, Tanaris", 782779, 39, 45, 1),
-    new ContinentSceneDesc("Mirage Raceway, Thousand Needles", 782779, 39, 43, 1),
-    new ContinentSceneDesc("Freewind Post, Thousand Needles", 782779, 35, 41, 1),
-    new ContinentSceneDesc("Theramore Isle, Dustwallow Marsh", 782779, 40, 39, 1),
-    new ContinentSceneDesc("Alcaz Island, Dustwallow Marsh", 782779, 41, 37, 1),
+    new ContinentSceneDesc("Thunder Bluff, Mulgore", kalimdor, 31, 34),
+    new ContinentSceneDesc("Darnassus, Teldrassil", kalimdor, 27, 13),
+    new ContinentSceneDesc("GM Island", kalimdor, 1, 1),
+    new ContinentSceneDesc("Archimonde's Bones, Hyjal", kalimdor, 38, 22),
+    new ContinentSceneDesc("Everlook, Winterspring", kalimdor, 40, 19),
+    new ContinentSceneDesc("Auberdine, Darkshore", kalimdor, 31, 19),
+    new ContinentSceneDesc("Astranaar, Ashenvale", kalimdor, 32, 26),
+    new ContinentSceneDesc("Mor'shan Rampart, Barrens", kalimdor, 36, 29),
+    new ContinentSceneDesc("Splintertree Post, Ashenvale", kalimdor, 36, 27),
+    new ContinentSceneDesc("Bloodvenom Post, Felwood", kalimdor, 32, 22),
+    new ContinentSceneDesc("Talonbranch Glade, Felwood", kalimdor, 34, 24),
+    new ContinentSceneDesc("The Crossroads, Barrens", kalimdor, 36, 32),
+    new ContinentSceneDesc("Orgrimmar, Durotar", kalimdor, 40, 29),
+    new ContinentSceneDesc("Ratchet, Barrens", kalimdor, 39, 33),
+    new ContinentSceneDesc("Sun Rock Retreat, Stonetalon Mountains", kalimdor, 30, 30),
+    new ContinentSceneDesc("Nijel's Point, Desolace", kalimdor, 29, 31),
+    new ContinentSceneDesc("Shadowprey Village, Desolace", kalimdor, 25, 35),
+    new ContinentSceneDesc("Dire Maul Arena, Feralas", kalimdor, 29, 38),
+    new ContinentSceneDesc("Thalanaar, Feralas", kalimdor, 33, 40),
+    new ContinentSceneDesc("Camp Mojache, Feralas", kalimdor, 31, 40),
+    new ContinentSceneDesc("Feathermoon Stronghold, Feralas", kalimdor, 25, 40),
+    new ContinentSceneDesc("Cenarion Hold, Silithus", kalimdor, 30, 44),
+    new ContinentSceneDesc("Marshal's Refuge, Un'Goro Crater", kalimdor, 34, 43),
+    new ContinentSceneDesc("Gadgetzan, Tanaris", kalimdor, 39, 45),
+    new ContinentSceneDesc("Mirage Raceway, Thousand Needles", kalimdor, 39, 43),
+    new ContinentSceneDesc("Freewind Post, Thousand Needles", kalimdor, 35, 41),
+    new ContinentSceneDesc("Theramore Isle, Dustwallow Marsh", kalimdor, 40, 39),
+    new ContinentSceneDesc("Alcaz Island, Dustwallow Marsh", kalimdor, 41, 37),
 
     "Instances",
-    new WdtSceneDesc('Zul-Farak', 791169, 209),
-    new WdtSceneDesc('Blackrock Depths', 780172, 230),
-    new WdtSceneDesc('Scholomance', 790713, 289),
-    new WdtSceneDesc("Deeprun Tram", 780788, 369),
-    new WdtSceneDesc("Deadmines", 780605, 36),
-    new WdtSceneDesc("Shadowfang Keep", 790796, 33),
-    new WdtSceneDesc("Blackrock Spire", 780175, 229),
-    new WdtSceneDesc("Stratholme", 791063, 329),
-    new WdtSceneDesc('Mauradon', 788656, 349),
-    new WdtSceneDesc('Wailing Caverns', 791429, 43),
-    new WdtSceneDesc('Razorfen Kraul', 790640, 47),
-    new WdtSceneDesc('Razorfen Downs', 790517, 129),
-    new WdtSceneDesc('Blackfathom Deeps', 780169, 48),
-    new WdtSceneDesc('Uldaman', 791372, 70),
-    new WdtSceneDesc('Gnomeregon', 782773, 90),
-    new WdtSceneDesc('Sunken Temple', 791166, 109),
-    new WdtSceneDesc('Scarlet Monastery - Graveyard', 788662, 189),
-    new WdtSceneDesc('Scarlet Monastery - Cathedral', 788662, 189),
-    new WdtSceneDesc('Scarlet Monastery - Library', 788662, 189),
-    new WdtSceneDesc('Scarlet Monastery - Armory', 788662, 189),
-    new WdtSceneDesc("Ragefire Chasm", 789981, 389),
-    new WdtSceneDesc("Dire Maul", 780814, 429),
+    new WdtSceneDesc('Zul-Farak', new MapDbEntry(209, 'tanarisinstance', 791169)),
+    new WdtSceneDesc('Blackrock Depths', new MapDbEntry(780172, '', 230)),
+    new WdtSceneDesc('Scholomance', new MapDbEntry(790713, '', 289)),
+    new WdtSceneDesc("Deeprun Tram", new MapDbEntry(780788, '', 369)),
+    new WdtSceneDesc("Deadmines", new MapDbEntry(780605, '', 36)),
+    new WdtSceneDesc("Shadowfang Keep", new MapDbEntry(790796, '', 33)),
+    new WdtSceneDesc("Blackrock Spire", new MapDbEntry(780175, '', 229)),
+    new WdtSceneDesc("Stratholme", new MapDbEntry(791063, '', 329)),
+    new WdtSceneDesc('Mauradon', new MapDbEntry(788656, '', 349)),
+    new WdtSceneDesc('Wailing Caverns', new MapDbEntry(791429, '', 43)),
+    new WdtSceneDesc('Razorfen Kraul', new MapDbEntry(790640, '', 47)),
+    new WdtSceneDesc('Razorfen Downs', new MapDbEntry(790517, '', 129)),
+    new WdtSceneDesc('Blackfathom Deeps', new MapDbEntry(780169, '', 48)),
+    new WdtSceneDesc('Uldaman', new MapDbEntry(791372, '', 70)),
+    new WdtSceneDesc('Gnomeregon', new MapDbEntry(782773, '', 90)),
+    new WdtSceneDesc('Sunken Temple', new MapDbEntry(791166, '', 109)),
+    new WdtSceneDesc('Scarlet Monastery - Graveyard', new MapDbEntry(788662, '', 189)),
+    new WdtSceneDesc('Scarlet Monastery - Cathedral', new MapDbEntry(788662, '', 189)),
+    new WdtSceneDesc('Scarlet Monastery - Library', new MapDbEntry(788662, '', 189)),
+    new WdtSceneDesc('Scarlet Monastery - Armory', new MapDbEntry(788662, '', 189)),
+    new WdtSceneDesc("Ragefire Chasm", new MapDbEntry(789981, '', 389)),
+    new WdtSceneDesc("Dire Maul", new MapDbEntry(780814, '', 429)),
 
     "Raids",
-    new WdtSceneDesc("Onyxia's Lair", 789922, 249),
-    new WdtSceneDesc("Molten Core", 788659, 409),
-    new WdtSceneDesc("Blackwing Lair", 780178, 469),
-    new WdtSceneDesc("Zul'gurub", 791432, 309),
-    new WdtSceneDesc("Naxxramas", 827115, 533),
-    new WdtSceneDesc("Ahn'Qiraj Temple", 775840, 531),
-    new WdtSceneDesc("Ruins of Ahn'qiraj", 775637, 509),
+    new WdtSceneDesc("Onyxia's Lair", new MapDbEntry(789922, '', 249)),
+    new WdtSceneDesc("Molten Core", new MapDbEntry(788659, '', 409)),
+    new WdtSceneDesc("Blackwing Lair", new MapDbEntry(780178, '', 469)),
+    new WdtSceneDesc("Zul'gurub", new MapDbEntry(791432, '', 309)),
+    new WdtSceneDesc("Naxxramas", new MapDbEntry(827115, '', 533)),
+    new WdtSceneDesc("Ahn'Qiraj Temple", new MapDbEntry(775840, '', 531)),
+    new WdtSceneDesc("Ruins of Ahn'qiraj", new MapDbEntry(775637, '', 509)),
 
     "PvP",
-    new WdtSceneDesc('Alterac Valley', 790112, 30), // AKA pvpzone01
-    new WdtSceneDesc('Warsong Gulch', 790291, 489), // AKA pvpzone03
-    new WdtSceneDesc('Arathi Basin', 790377, 529), // AKA pvpzone04
+    new WdtSceneDesc('Alterac Valley', new MapDbEntry(790112, 'pvpzone01', 30)),
+    new WdtSceneDesc('Warsong Gulch', new MapDbEntry(790291, 'pvpzone03', 489)),
+    new WdtSceneDesc('Arathi Basin', new MapDbEntry(790377, 'pvpzone04', 529)),
 
     "Unreleased",
-    new WdtSceneDesc('PvP Zone 02 ("Azshara Crater")', 861092, 0),
-    new WdtSceneDesc('Dragon Isles, Developer Island', 857684, 0),
-    new WdtSceneDesc('Swamp of Sorrows Prototype, Developer Island', 857684, 0),
-    new WdtSceneDesc('Water test, Developer Island', 857684, 0),
-    new WdtSceneDesc('Verdant Fields, Emerald Dream', 780817, 0),
-    new WdtSceneDesc('Emerald Forest, Emerald Dream', 780817, 0),
-    new WdtSceneDesc('Untextured canyon, Emerald Dream', 780817, 0),
-    new WdtSceneDesc('Test 01', 2323096, 0),
-    new WdtSceneDesc('Scott Test', 863335, 0),
-    new WdtSceneDesc('Collin Test', 863984, 0),
-    new WdtSceneDesc('Scarlet Monastery Prototype', 865519, 189),
+    new WdtSceneDesc('PvP Zone 02 ("Azshara Crater")', new MapDbEntry(861092, '', 0)),
+    new WdtSceneDesc('Dragon Isles, Developer Island', new MapDbEntry(857684, '', 0)),
+    new WdtSceneDesc('Swamp of Sorrows Prototype, Developer Island', new MapDbEntry(857684, '', 0)),
+    new WdtSceneDesc('Water test, Developer Island', new MapDbEntry(857684, '', 0)),
+    new WdtSceneDesc('Verdant Fields, Emerald Dream', new MapDbEntry(780817, '', 0)),
+    new WdtSceneDesc('Emerald Forest, Emerald Dream', new MapDbEntry(780817, '', 0)),
+    new WdtSceneDesc('Untextured canyon, Emerald Dream', new MapDbEntry(780817, '', 0)),
+    new WdtSceneDesc('Test 01', new MapDbEntry(2323096, '', 0)),
+    new WdtSceneDesc('Scott Test', new MapDbEntry(863335, '', 0)),
+    new WdtSceneDesc('Collin Test', new MapDbEntry(863984, '', 0)),
+    new WdtSceneDesc('Scarlet Monastery Prototype', new MapDbEntry(865519, '', 189)),
 ];
 
 const bcSceneDescs = [
     "Instances",
-    new WdtSceneDesc("Hellfire Citadel: The Shattered Halls", 831277, 540),
-    new WdtSceneDesc("Hellfire Citadel: The Blood Furnace", 830642, 542),
-    new WdtSceneDesc("Hellfire Citadel: Ramparts", 832154, 543),
-    new WdtSceneDesc("Coilfang: The Steamvault", 828422, 545),
-    new WdtSceneDesc("Coilfang: The Underbog", 831262, 546),
-    new WdtSceneDesc("Coilfang: The Slave Pens", 830731, 547),
-    new WdtSceneDesc("Caverns of Time: The Escape from Durnholde", 833998, 560),
-    new WdtSceneDesc("Tempest Keep: The Arcatraz", 832070, 552),
-    new WdtSceneDesc("Tempest Keep: The Botanica", 833950, 553),
-    new WdtSceneDesc("Tempest Keep: The Mechanar", 831974, 554),
-    new WdtSceneDesc("Auchindoun: Shadow Labyrinth", 828331, 555),
-    new WdtSceneDesc("Auchindoun: Sethekk Halls", 828811, 556),
-    new WdtSceneDesc("Auchindoun: Mana-Tombs", 830899, 557),
-    new WdtSceneDesc("Auchindoun: Auchenai Crypts", 830415, 558),
-    new WdtSceneDesc("The Sunwell: Magister's Terrace", 834223, 585),
+    new WdtSceneDesc("Hellfire Citadel: The Shattered Halls", new MapDbEntry(831277, '', 540)),
+    new WdtSceneDesc("Hellfire Citadel: The Blood Furnace", new MapDbEntry(830642, '', 542)),
+    new WdtSceneDesc("Hellfire Citadel: Ramparts", new MapDbEntry(832154, '', 543)),
+    new WdtSceneDesc("Coilfang: The Steamvault", new MapDbEntry(828422, '', 545)),
+    new WdtSceneDesc("Coilfang: The Underbog", new MapDbEntry(831262, '', 546)),
+    new WdtSceneDesc("Coilfang: The Slave Pens", new MapDbEntry(830731, '', 547)),
+    new WdtSceneDesc("Caverns of Time: The Escape from Durnholde", new MapDbEntry(833998, '', 560)),
+    new WdtSceneDesc("Tempest Keep: The Arcatraz", new MapDbEntry(832070, '', 552)),
+    new WdtSceneDesc("Tempest Keep: The Botanica", new MapDbEntry(833950, '', 553)),
+    new WdtSceneDesc("Tempest Keep: The Mechanar", new MapDbEntry(831974, '', 554)),
+    new WdtSceneDesc("Auchindoun: Shadow Labyrinth", new MapDbEntry(828331, '', 555)),
+    new WdtSceneDesc("Auchindoun: Sethekk Halls", new MapDbEntry(828811, '', 556)),
+    new WdtSceneDesc("Auchindoun: Mana-Tombs", new MapDbEntry(830899, '', 557)),
+    new WdtSceneDesc("Auchindoun: Auchenai Crypts", new MapDbEntry(830415, '', 558)),
+    new WdtSceneDesc("The Sunwell: Magister's Terrace", new MapDbEntry(834223, '', 585)),
 
     "Raids",
-    new WdtSceneDesc("Tempest Keep", 832484, 550),
-    new WdtSceneDesc("Karazahn", 834192, 532),
-    new WdtSceneDesc("Caverns of Time: Hyjal", 831824, 534),
-    new WdtSceneDesc("Black Temple", 829630, 565),
-    new WdtSceneDesc("Gruul's Lair", 833180, 565),
-    new WdtSceneDesc("Zul'Aman", 815727, 568),
-    new WdtSceneDesc("The Sunwell: Plateau", 832953, 580),
-    new WdtSceneDesc("Magtheridon's Lair", 833183, 544),
-    new WdtSceneDesc("Coilfang: Serpentshrine Cavern", 829900, 548),
+    new WdtSceneDesc("Tempest Keep", new MapDbEntry(832484, '', 550)),
+    new WdtSceneDesc("Karazahn", new MapDbEntry(834192, '', 532)),
+    new WdtSceneDesc("Caverns of Time: Hyjal", new MapDbEntry(831824, '', 534)),
+    new WdtSceneDesc("Black Temple", new MapDbEntry(829630, '', 565)),
+    new WdtSceneDesc("Gruul's Lair", new MapDbEntry(833180, '', 565)),
+    new WdtSceneDesc("Zul'Aman", new MapDbEntry(815727, '', 568)),
+    new WdtSceneDesc("The Sunwell: Plateau", new MapDbEntry(832953, '', 580)),
+    new WdtSceneDesc("Magtheridon's Lair", new MapDbEntry(833183, '', 544)),
+    new WdtSceneDesc("Coilfang: Serpentshrine Cavern", new MapDbEntry(829900, '', 548)),
 
     "PvP",
-    new WdtSceneDesc('Eye of the Storm', 788893, 566),
-    new WdtSceneDesc('Arena: Nagrand', 790469, 559),
-    new WdtSceneDesc("Arena: Blade's Edge", 780261, 562),
+    new WdtSceneDesc('Eye of the Storm', new MapDbEntry(788893, '', 566)),
+    new WdtSceneDesc('Arena: Nagrand', new MapDbEntry(790469, '', 559)),
+    new WdtSceneDesc("Arena: Blade's Edge", new MapDbEntry(780261, '', 562)),
 
     "Outland",
-    new ContinentSceneDesc("The Dark Portal", 828395, 29, 32, 530),
-    new ContinentSceneDesc("Shattrath", 828395, 22, 35, 530),
+    new ContinentSceneDesc("The Dark Portal", new MapDbEntry(828395, '', 530), 29, 32),
+    new ContinentSceneDesc("Shattrath", new MapDbEntry(828395, '', 530), 22, 35),
 ];
 
 const wotlkSceneDescs = [
     "Instances",
-    new WdtSceneDesc("Ebon Hold", 818210, 609),
-    new WdtSceneDesc("Utgarde Keep", 825743, 574),
-    new WdtSceneDesc("Utgarde Pinnacle", 827661, 575),
-    new WdtSceneDesc("Drak'Theron Keep", 820968, 600),
-    new WdtSceneDesc("Violet Hold", 818205, 608),
-    new WdtSceneDesc("Gundrak", 818626, 604),
-    new WdtSceneDesc("Ahn'kahet: The Old Kingdom", 818056, 619),
-    new WdtSceneDesc("Azjol'Nerub", 818693, 601),
-    new WdtSceneDesc("Halls of Stone", 824642, 599),
-    new WdtSceneDesc("Halls of Lightning", 824768, 602),
-    new WdtSceneDesc("The Oculus", 819814, 578),
-    new WdtSceneDesc("The Nexus", 821331, 576),
-    new WdtSceneDesc("The Culling of Stratholme", 826005, 0), // map is actually 595
-    new WdtSceneDesc("Trial of the Champion", 817987, 650),
-    new WdtSceneDesc("The Forge of Souls", 818965, 632),
-    new WdtSceneDesc("Pit of Saron", 827056, 0), // map id is actually 658
-    new WdtSceneDesc("Halls of Reflection", 818690, 668),
+    new WdtSceneDesc("Ebon Hold", new MapDbEntry(818210, '', 609)),
+    new WdtSceneDesc("Utgarde Keep", new MapDbEntry(825743, '', 574)),
+    new WdtSceneDesc("Utgarde Pinnacle", new MapDbEntry(827661, '', 575)),
+    new WdtSceneDesc("Drak'Theron Keep", new MapDbEntry(820968, '', 600)),
+    new WdtSceneDesc("Violet Hold", new MapDbEntry(818205, '', 608)),
+    new WdtSceneDesc("Gundrak", new MapDbEntry(818626, '', 604)),
+    new WdtSceneDesc("Ahn'kahet: The Old Kingdom", new MapDbEntry(818056, '', 619)),
+    new WdtSceneDesc("Azjol'Nerub", new MapDbEntry(818693, '', 601)),
+    new WdtSceneDesc("Halls of Stone", new MapDbEntry(824642, '', 599)),
+    new WdtSceneDesc("Halls of Lightning", new MapDbEntry(824768, '', 602)),
+    new WdtSceneDesc("The Oculus", new MapDbEntry(819814, '', 578)),
+    new WdtSceneDesc("The Nexus", new MapDbEntry(821331, '', 576)),
+    new WdtSceneDesc("The Culling of Stratholme", new MapDbEntry(826005, '', 0)), // map is actually 595
+    new WdtSceneDesc("Trial of the Champion", new MapDbEntry(817987, '', 650)),
+    new WdtSceneDesc("The Forge of Souls", new MapDbEntry(818965, '', 632)),
+    new WdtSceneDesc("Pit of Saron", new MapDbEntry(827056, '', 0)), // map id is actually 658
+    new WdtSceneDesc("Halls of Reflection", new MapDbEntry(818690, '', 668)),
 
     "Raids",
-    new WdtSceneDesc("Icecrown Citadel", 820428, 0), // map id is actually 631
-    new WdtSceneDesc("Ulduar", 825015, 603),
-    new WdtSceneDesc("The Obsidian Sanctum", 820448, 615),
-    new WdtSceneDesc("The Ruby Sanctum", 821024, 724),
-    new WdtSceneDesc("Vault of Archavon", 826589, 624),
-    new WdtSceneDesc("Trial of the Crusader", 818173, 649),
-    new WdtSceneDesc("The Eye of Eternity", 822560, 616),
+    new WdtSceneDesc("Icecrown Citadel", new MapDbEntry(820428, '', 0)), // map id is actually 631
+    new WdtSceneDesc("Ulduar", new MapDbEntry(825015, '', 603)),
+    new WdtSceneDesc("The Obsidian Sanctum", new MapDbEntry(820448, '', 615)),
+    new WdtSceneDesc("The Ruby Sanctum", new MapDbEntry(821024, '', 724)),
+    new WdtSceneDesc("Vault of Archavon", new MapDbEntry(826589, '', 624)),
+    new WdtSceneDesc("Trial of the Crusader", new MapDbEntry(818173, '', 649)),
+    new WdtSceneDesc("The Eye of Eternity", new MapDbEntry(822560, '', 616)),
 
     "PvP",
-    new WdtSceneDesc('Strand of the Ancients', 789579, 607),
-    new WdtSceneDesc('Isle of Conquest', 821811, 0), // map id is actually 628
-    new WdtSceneDesc("Arena: Dalaran Sewers", 780309, 617),
-    new WdtSceneDesc("Arena: The Ring of Valor", 789925, 618),
+    new WdtSceneDesc('Strand of the Ancients', new MapDbEntry(789579, '', 607)),
+    new WdtSceneDesc('Isle of Conquest', new MapDbEntry(821811, '', 0)), // map id is actually 628
+    new WdtSceneDesc("Arena: Dalaran Sewers", new MapDbEntry(780309, '', 617)),
+    new WdtSceneDesc("Arena: The Ring of Valor", new MapDbEntry(789925, '', 618)),
 
     "Northrend",
-    new ContinentSceneDesc("???", 822688, 31, 28, 571),
+    new ContinentSceneDesc("???", new MapDbEntry(822688, '', 571), 31, 28),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {
