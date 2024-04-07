@@ -862,7 +862,7 @@ float edgeScan(vec3 position, vec3 normal){
     return clamp(2.7* dotProductClamped * dotProductClamped - 0.4, 0.0, 1.0);
 }
 
-void ScaledAddMat(out Mat4x4 self, float t, Mat4x4 other) {
+void ScaledAddMat(inout Mat4x4 self, float t, Mat4x4 other) {
     self.mx += t * other.mx;
     self.my += t * other.my;
     self.mz += t * other.mz;
