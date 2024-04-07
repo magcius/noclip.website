@@ -1935,7 +1935,7 @@ export class LazyWorldData {
     wdt.free();
   }
 
-  public onEnterAdt([centerX, centerY]: AdtCoord, callback: (coord: AdtCoord, adt: AdtData) => void): AdtCoord[] {
+  public onEnterAdt([centerX, centerY]: AdtCoord, callback: (coord: AdtCoord, adt: AdtData | undefined) => void): AdtCoord[] {
     if (this.loading) {
       return [];
     }
@@ -1951,15 +1951,16 @@ export class LazyWorldData {
     setTimeout(async () => {
       this.loading = true;
       for (let [x, y] of adtCoords) {
+        let maybeAdt: AdtData | undefined;
         try {
-          const maybeAdt = await this.ensureAdtLoaded(x, y);
+          maybeAdt = await this.ensureAdtLoaded(x, y);
           if (maybeAdt) {
-            callback([x, y], maybeAdt);
             this.adts.push(maybeAdt);
           }
         } catch (e) {
           console.log('failed to load ADT: ', e);
         }
+        callback([x, y], maybeAdt);
       }
       this.loading = false;
     }, 0);

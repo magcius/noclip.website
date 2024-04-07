@@ -695,9 +695,11 @@ export class WdtScene implements Viewer.SceneGfx {
       if (this.currentAdtCoords[0] !== adtCoords[0] || this.currentAdtCoords[1] !== adtCoords[1]) {
         this.currentAdtCoords = adtCoords;
         if (this.enableProgressiveLoading && 'onEnterAdt' in this.world) {
-          const newCoords = this.world.onEnterAdt(this.currentAdtCoords, (coord: AdtCoord, adt: AdtData) => {
+          const newCoords = this.world.onEnterAdt(this.currentAdtCoords, (coord: AdtCoord, maybeAdt: AdtData | undefined) => {
             this.loadingAdts = this.loadingAdts.filter(([x, y]) => !(x === coord[0] && y === coord[1]));
-            this.setupAdt(adt);
+            if (maybeAdt) {
+              this.setupAdt(maybeAdt);
+            }
           });
           for (let coord of newCoords) {
             this.loadingAdts.push(coord);
