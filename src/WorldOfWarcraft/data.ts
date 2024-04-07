@@ -2003,6 +2003,7 @@ export class LazyWorldData {
     const adt = await loadAdt(this.cache, fileIDs, this.lightdbMapId);
     adt.hasBigAlpha = this.hasBigAlpha;
     adt.hasHeightTexturing = this.hasHeightTexturing;
+    this.loadedAdtCoords.push([x, y]);
     return adt;
   }
 
