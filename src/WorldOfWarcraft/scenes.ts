@@ -615,8 +615,6 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-    this.mainView.setupFromViewerInput(viewerInput);
-
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
     template.setGfxProgram(this.skyboxProgram);
@@ -726,6 +724,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
   render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
     viewerInput.camera.setClipPlanes(0.1);
+    this.mainView.setupFromViewerInput(viewerInput);
     this.updateCurrentAdt();
     const renderInstManager = this.renderHelper.renderInstManager;
 
