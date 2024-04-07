@@ -815,7 +815,9 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
-    return new WdtScene(device, wdt, renderHelper, cache.db);
+    const scene = new WdtScene(device, wdt, renderHelper, cache.db);
+    scene.enableProgressiveLoading = true;
+    return scene;
   }
 }
 
