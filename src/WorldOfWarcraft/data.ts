@@ -282,7 +282,7 @@ function convertWowAABB(aabb: WowAABBox): AABB {
 const TEX_PIVOT: vec3 = [0.5, 0.5, 0];
 const TEX_ANTIPIVOT: vec3 = [-0.5, -0.5, 0];
 export class ModelData {
-  public skins: WowSkin[] = [];
+  public skins: SkinData[] = [];
   public blps: BlpData[] = [];
   public vertexBuffer: Uint8Array;
   public vertexColors: Float32Array;
@@ -341,17 +341,16 @@ export class ModelData {
     }));
   }
 
-  private loadSkins(cache: WowCache, m2: WowM2): Promise<WowSkin[]> {
+  private loadSkins(cache: WowCache, m2: WowM2): Promise<SkinData[]> {
     return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
-      return cache.fetchFileByID(fileId, rust.WowSkin.new);
+      const skin = await cache.fetchFileByID(fileId, rust.WowSkin.new);
+      const skinData = new SkinData(skin, this);
+      return skinData;
     }));
   }
 
   public async load(cache: WowCache): Promise<undefined> {
     const m2 = await cache.fetchFileByID(this.fileId, rust.WowM2.new);
-
-    this.blps = await this.loadTextures(cache, m2);
-    this.skins = await this.loadSkins(cache, m2);
 
     this.vertexBuffer = m2.take_vertex_data();
     this.modelAABB = convertWowAABB(m2.get_bounding_box());
@@ -366,6 +365,9 @@ export class ModelData {
       return [mat.blending_mode, rust.WowM2MaterialFlags.new(mat.flags)];
     });
     m2Materials.forEach(mat => mat.free());
+
+    this.blps = await this.loadTextures(cache, m2);
+    this.skins = await this.loadSkins(cache, m2);
 
     this.animationManager = m2.take_animation_manager();
     this.textureWeights = new Float32Array(this.animationManager.get_num_texture_weights());

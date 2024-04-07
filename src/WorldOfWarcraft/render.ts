@@ -49,8 +49,7 @@ export class ModelRenderer {
     };
 
     for (let i in this.model.skins) {
-      const skin = this.model.skins[i];
-      const skinData = new SkinData(skin, this.model);
+      const skinData = this.model.skins[i];
       this.indexBuffers.push({
         buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, skinData.indexBuffer.buffer),
         byteOffset: 0,
