@@ -11,7 +11,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
-import { AdtData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData } from "./data.js";
+import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData } from "./data.js";
 import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
 import { DebugWmoPortalProgram, LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { MAP_SIZE, MapArray, View } from "./scenes.js";
@@ -74,9 +74,22 @@ export class ModelRenderer {
     return nBatches > 0 && this.visible;
   }
 
+  private getTextureMapping(blpData: BlpData | null): TextureMapping | null {
+    if (blpData === null)
+      return null;
+
+    const wrapS = !!(blpData.flags & 0x01);
+    const wrapT = !!(blpData.flags & 0x02);
+    return this.textureCache.getTextureMapping(blpData.fileId, blpData.inner, { wrapS, wrapT });
+  }
+
   private getRenderPassTextures(renderPass: ModelRenderPass): TextureMappingArray {
-    return [renderPass.tex0, renderPass.tex1, renderPass.tex2, renderPass.tex3]
-      .map(blp => blp === null ? null : this.textureCache.getTextureMapping(blp.fileId, blp.inner));
+    return [
+      this.getTextureMapping(renderPass.tex0),
+      this.getTextureMapping(renderPass.tex1),
+      this.getTextureMapping(renderPass.tex2),
+      this.getTextureMapping(renderPass.tex3),
+    ];
   }
 
   public prepareToRenderModel(renderInstManager: GfxRenderInstManager, doodads: DoodadData[]): void {
@@ -195,10 +208,9 @@ export class WmoRenderer {
       if (blp === null) {
         mappings.push(this.textureCache.getAllWhiteTextureMapping());
       } else {
-        const wrap = !(batch.materialFlags.clamp_s || batch.materialFlags.clamp_t);
-        mappings.push(this.textureCache.getTextureMapping(batch.material.texture_1, blp.inner, undefined, undefined, {
-          wrap: wrap,
-        }));
+        const wrapS = !batch.materialFlags.clamp_s;
+        const wrapT = !batch.materialFlags.clamp_t;
+        mappings.push(this.textureCache.getTextureMapping(batch.material.texture_1, blp.inner, { wrapS, wrapT }));
       }
     }
     return mappings;

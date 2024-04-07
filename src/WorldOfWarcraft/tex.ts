@@ -1,5 +1,4 @@
 import { WowBlp } from "../../rust/pkg/index.js";
-import { SamplerSettings } from "../Halo1/tex.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
 import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
@@ -71,6 +70,11 @@ function makeTexture(device: GfxDevice, blp: WowBlp, level = 0): GfxTexture {
   return texture;
 }
 
+interface SamplerSettings {
+  wrapS: boolean;
+  wrapT: boolean;
+}
+
 export class TextureCache {
     public textures: Map<number, GfxTexture>;
     public default2DTexture: GfxTexture;
@@ -102,14 +106,14 @@ export class TextureCache {
     public getDefaultAlphaTextureMapping(): TextureMapping {
       const mapping = new TextureMapping();
       mapping.gfxTexture = this.allZeroTexture;
-      mapping.gfxSampler = this.getSampler({ wrap: false });
+      mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
       return mapping;
     }
 
     public getAllWhiteTextureMapping(): TextureMapping {
       const mapping = new TextureMapping();
       mapping.gfxTexture = this.allWhiteTexture;
-      mapping.gfxSampler = this.getSampler({ wrap: false });
+      mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
       return mapping;
     }
 
@@ -134,12 +138,12 @@ export class TextureCache {
         mipFilter: GfxMipFilterMode.Linear,
         minLOD: 0,
         maxLOD: 100,
-        wrapS: samplerSettings.wrap ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
-        wrapT: samplerSettings.wrap ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+        wrapS: samplerSettings.wrapS ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
+        wrapT: samplerSettings.wrapT ? GfxWrapMode.Repeat : GfxWrapMode.Clamp,
       });
     }
 
-    public getTextureMapping(fileId: number, blp: WowBlp, debug = false, submap = 0, samplerSettings: SamplerSettings = { wrap: true }): TextureMapping {
+    public getTextureMapping(fileId: number, blp: WowBlp, samplerSettings: SamplerSettings = { wrapS: true, wrapT: true }, debug = false, submap = 0): TextureMapping {
       const mapping = new TextureMapping();
       mapping.gfxTexture = this.getTexture(fileId, blp, debug, submap);
       mapping.gfxSampler = this.getSampler(samplerSettings);
@@ -162,7 +166,7 @@ export class TextureCache {
       device.uploadTextureData(texture, 0, [texData]);
       const mapping = new TextureMapping();
       mapping.gfxTexture = texture;
-      mapping.gfxSampler = this.getSampler({ wrap: false });
+      mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
       return mapping;
     }
 

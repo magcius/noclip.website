@@ -317,27 +317,20 @@ export class ModelData {
     mat4.fromScaling(this.textureAntipivot, TEX_ANTIPIVOT);
   }
 
-  private getTextureIds(cache: WowCache, m2: WowM2): number[] {
-    if (m2.texture_ids.length !== 0) {
-      return Array.from(m2.texture_ids);
-    } else {
-      const legacyTextures = m2.take_legacy_textures();
-      const texture_ids: number[] = [];
-      for (let tex of legacyTextures) {
-        const txid = cache.getFileDataId(tex.filename);
-        texture_ids.push(txid);
-        // FIXME should store flags somewhere
-        tex.free();
-      }
-      return texture_ids;
-    }
-  }
-
   private loadTextures(cache: WowCache, m2: WowM2): Promise<BlpData[]> {
-    // XXX(jstpierre): Blackrock Depths seems to have invalid texture IDs on world/khazmodan/blackrock/passivedoodads/golemparts/cannongolemwaist.m2
-    const textureIds = this.getTextureIds(cache, m2).filter((fileID) => fileID !== 0);
-    return Promise.all(textureIds.map(async (fileID) => {
-      return new BlpData(fileID, await cache.loadBlp(fileID));
+    const textureEntries = m2.take_legacy_textures();
+    return Promise.all(textureEntries.map(async (entry, i) => {
+      const flags = entry.flags;
+      let fileID = m2.texture_ids[i];
+      if (fileID === undefined)
+        fileID = cache.getFileDataId(entry.filename);
+      entry.free();
+
+      if (fileID === 0)
+        return null!;
+
+      // XXX(jstpierre): Blackrock Depths seems to have invalid texture IDs on world/khazmodan/blackrock/passivedoodads/golemparts/cannongolemwaist.m2
+      return new BlpData(fileID, await cache.loadBlp(fileID), flags);
     }));
   }
 
@@ -448,7 +441,7 @@ export class ModelData {
 }
 
 export class BlpData {
-  constructor(public fileId: number, public inner: WowBlp) {
+  constructor(public fileId: number, public inner: WowBlp, public flags: number = 0) {
   }
 }
 
