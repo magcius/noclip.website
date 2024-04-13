@@ -522,6 +522,7 @@ export class dStage_roomDt_c extends dStage_dt {
 
 export class dStage_roomStatus_c extends dStage_roomDt_c {
     public tevStr = new dKy_tevstr_c();
+    public visible = true;
 }
 
 function dStage_filiInfoInit(globals: dGlobals, dt: dStage_roomDt_c, buffer: ArrayBufferSlice, count: number): void {

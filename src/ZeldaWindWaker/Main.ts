@@ -298,16 +298,16 @@ function objectLayerVisible(layerMask: number, layer: number): boolean {
         return !!(layerMask & (1 << layer));
 }
 
-export class WindWakerRoom {
+class WindWakerRoom {
     public name: string;
 
-    constructor(public roomNo: number, public visible: boolean) {
+    constructor(public roomNo: number, public roomStatus: dStage_roomStatus_c) {
         this.name = `Room ${roomNo}`;
     }
 
-    public setVisible(v: boolean): void {
-        this.visible = v;
-    }
+    public get visible() { return this.roomStatus.visible; }
+    public set visible(v: boolean) { this.roomStatus.visible = v; }
+    public setVisible(v: boolean) { this.visible = v; }
 }
 
 const enum EffectDrawGroup {
@@ -403,13 +403,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     // For people to play around with.
     public cameraFrozen = false;
 
-    private getRoomVisible(roomNo: number): boolean {
-        if (roomNo === -1)
-            return true;
-        for (let i = 0; i < this.rooms.length; i++)
-            if (this.rooms[i].roomNo === roomNo)
-                return this.rooms[i].visible;
-        throw "whoops";
+    private getRoomStatus(ac: fopAc_ac_c): dStage_roomStatus_c | null {
+        if (ac.roomNo === -1)
+            return null;
+
+        return this.globals.roomStatus[ac.roomNo];
     }
 
     private getSingleRoomVisible(): number {
@@ -447,7 +445,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
                 if (ac instanceof fopAc_ac_c) {
-                    ac.roomVisible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    const roomStatus = this.getRoomStatus(ac);
+                    const roomVisible = roomStatus !== null ? roomStatus.visible : true;
+
+                    ac.roomVisible = roomVisible && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+
                     if (ac.roomVisible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
                         ac.roomVisible = false;
                 }
@@ -787,12 +789,12 @@ class d_s_play extends fopScn {
 class SceneDesc {
     public id: string;
 
-    public constructor(public stageDir: string, public name: string, public rooms: number[] = [0]) {
+    public constructor(public stageDir: string, public name: string, public roomList: number[] = [0]) {
         this.id = stageDir;
 
         // Garbage hack.
-        if (this.stageDir === 'sea' && rooms.length === 1)
-            this.id = `Room${rooms[0]}.arc`;
+        if (this.stageDir === 'sea' && roomList.length === 1)
+            this.id = `Room${roomList[0]}.arc`;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -818,8 +820,8 @@ class SceneDesc {
             modelCache.fetchFileData(particleArchives[i]);
 
         // XXX(jstpierre): This is really terrible code.
-        for (let i = 0; i < this.rooms.length; i++) {
-            const roomIdx = Math.abs(this.rooms[i]);
+        for (let i = 0; i < this.roomList.length; i++) {
+            const roomIdx = Math.abs(this.roomList[i]);
             modelCache.fetchStageData(`Room${roomIdx}`);
         }
 
@@ -864,8 +866,8 @@ class SceneDesc {
         dStage_dt_c_stageLoader(globals, globals.dStage_dt, dzs);
 
         // If this is a single-room scene, then set mStayNo.
-        if (this.rooms.length === 1)
-            globals.mStayNo = Math.abs(this.rooms[0]);
+        if (this.roomList.length === 1)
+            globals.mStayNo = Math.abs(this.roomList[0]);
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
@@ -889,11 +891,13 @@ class SceneDesc {
             fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox2, null);
         }
 
-        for (let i = 0; i < this.rooms.length; i++) {
-            const roomNo = Math.abs(this.rooms[i]);
+        for (let i = 0; i < this.roomList.length; i++) {
+            const roomNo = Math.abs(this.roomList[i]);
 
-            const visible = this.rooms[i] >= 0;
-            renderer.rooms.push(new WindWakerRoom(roomNo, visible));
+            const visible = this.roomList[i] >= 0;
+            const roomStatus = globals.roomStatus[i];
+            roomStatus.visible = visible;
+            renderer.rooms.push(new WindWakerRoom(roomNo, roomStatus));
 
             // objectSetCheck
 

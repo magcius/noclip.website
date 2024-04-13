@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { nArray } from '../util.js';
-import { mat4, vec3 } from 'gl-matrix';
+import { nArray, setBitFlagEnabled } from '../util.js';
+import { ReadonlyVec3, mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { dGlobals } from './Main.js';
@@ -55,7 +55,6 @@ function parseGxVtxDescList(buffer: ArrayBufferSlice) {
     return vtxDesc;
 }
 
-// @TODO: This is generic to all GX material display lists
 function createTexture(r: DisplayListRegisters, data: ArrayBufferSlice, name: string): BTI_Texture {
     const minFilterTable = [
         GX.TexFilter.NEAR,
@@ -110,11 +109,8 @@ const scratchMat4a = mat4.create();
 const drawParams = new DrawParams();
 const materialParams = new MaterialParams();
 
-// @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
-
-const chk = new dBgS_GndChk();
 function checkGroundY(globals: dGlobals, roomIdx: number, pos: vec3) {
-    chk.Reset();
+    const chk = new dBgS_GndChk();
     vec3.copy(chk.pos, pos);
     chk.pos[1] += 50;
 
@@ -131,18 +127,17 @@ function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, r
     colorCopy(materialParams.u_Color[ColorKind.C1], globals.roomStatus[roomNo].tevStr.colorK0);
 }
 
-// ---------------------------------------------
-// Flower Packet
-// ---------------------------------------------
-enum FlowerType {
-    WHITE,
-    PINK,
-    BESSOU,
-};
+function distanceCull(camPos: ReadonlyVec3, objPos: ReadonlyVec3, maxDist = 20000) {
+    const distSq = vec3.squaredDistance(camPos, objPos);
+    return distSq >= maxDist**2;
+}
+
+//#region Flower
+enum FlowerType { White, Pink, Bessou }
 
 enum FlowerFlags {
-    isFrustumCulled = 1 << 0,
-    needsGroundCheck = 2 << 0,
+    IsFrustumCulled = 1 << 0,
+    NeedsGroundCheck = 2 << 0,
 }
 
 interface FlowerData {
@@ -283,13 +278,6 @@ class FlowerModel {
     }
 }
 
-function distanceCull(camPos: vec3, objPos: vec3) {
-    const distSq = vec3.squaredDistance(camPos, objPos);
-    const maxDist = 20000;
-    const maxDistSq = maxDist*maxDist;
-    return distSq >= maxDistSq;
-}
-
 export class FlowerPacket {
     private rooms: FlowerData[][] = nArray(64, () => []);
     private anims: FlowerAnim[] = new Array(8 + kDynamicAnimCount);
@@ -313,15 +301,15 @@ export class FlowerPacket {
 
     public newData(globals: dGlobals, pos: vec3, isPink: boolean, roomIdx: number, itemIdx: number): FlowerData {
         const animIdx = Math.floor(Math.random() * 8);
-        let type = isPink ? FlowerType.PINK : FlowerType.WHITE;
+        let type = isPink ? FlowerType.Pink : FlowerType.White;
 
-        // Island 0x21 uses the Bessou flower (the game does this check here as well)
-        if (globals.stageName === 'sea' && roomIdx === 0x21 && isPink) {
-            type = FlowerType.BESSOU;
+        // Cabana island (33) uses Bessou flowers
+        if (globals.stageName === 'sea' && roomIdx === 33 && isPink) {
+            type = FlowerType.Bessou;
         }
 
         const data: FlowerData = {
-            flags: FlowerFlags.needsGroundCheck,
+            flags: FlowerFlags.NeedsGroundCheck,
             type,
             animIdx,
             itemIdx,
@@ -361,15 +349,15 @@ export class FlowerPacket {
                 const data = room[i];
 
                 // Perform ground checks for some limited number of flowers
-                if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+                if ((data.flags & FlowerFlags.NeedsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
                     data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
-                    data.flags &= ~FlowerFlags.needsGroundCheck;
+                    data.flags &= ~FlowerFlags.NeedsGroundCheck;
                     ++groundChecksThisFrame;
                 }
 
                 // @TODO: Frustum culling
 
-                if (!(data.flags & FlowerFlags.isFrustumCulled)) {
+                if (!(data.flags & FlowerFlags.IsFrustumCulled)) {
                     // Update model matrix for all non-culled objects
                     mat4.mul(data.modelMatrix, mat4.fromTranslation(scratchMat4a, data.pos), this.anims[data.animIdx].matrix);
                 }
@@ -393,7 +381,7 @@ export class FlowerPacket {
         for (let i = 0; i < room.length; i++) {
             const data = room[i];
 
-            if (data.flags & FlowerFlags.isFrustumCulled || data.type !== type)
+            if (data.flags & FlowerFlags.IsFrustumCulled || data.type !== type)
                 continue;
             if (distanceCull(scratchVec3a, data.pos))
                 continue;
@@ -409,12 +397,15 @@ export class FlowerPacket {
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!globals.roomStatus[roomIdx].visible)
+            return;
+
         if (this.rooms[roomIdx].length === 0)
             return;
 
-        this.drawFlowers(globals, roomIdx, FlowerType.WHITE, this.flowerModel.white, renderInstManager, viewerInput);
-        this.drawFlowers(globals, roomIdx, FlowerType.PINK, this.flowerModel.pink, renderInstManager, viewerInput);
-        this.drawFlowers(globals, roomIdx, FlowerType.BESSOU, this.flowerModel.bessou, renderInstManager, viewerInput);
+        this.drawFlowers(globals, roomIdx, FlowerType.White, this.flowerModel.white, renderInstManager, viewerInput);
+        this.drawFlowers(globals, roomIdx, FlowerType.Pink, this.flowerModel.pink, renderInstManager, viewerInput);
+        this.drawFlowers(globals, roomIdx, FlowerType.Bessou, this.flowerModel.bessou, renderInstManager, viewerInput);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -426,14 +417,12 @@ export class FlowerPacket {
         this.flowerModel.destroy(device);
     }
 }
+//#endregion
 
-
-// ---------------------------------------------
-// Tree Packet
-// ---------------------------------------------
+//#region Tree
 const enum TreeFlags {
-    isFrustumCulled = 1 << 0,
-    needsGroundCheck = 1 << 1,
+    IsFrustumCulled = 1 << 0,
+    NeedsGroundCheck = 1 << 1,
     unk8 = 1 << 3,
 }
 
@@ -589,7 +578,7 @@ export class TreePacket {
     }
 
     private checkGroundY(globals: dGlobals, roomIdx: number, treeData: TreeData): number {
-        chk.Reset();
+        const chk = new dBgS_GndChk();
         vec3.copy(chk.pos, treeData.pos);
         chk.pos[1] += 50;
     
@@ -634,7 +623,7 @@ export class TreePacket {
         const status = initialStatus;
 
         const data: TreeData = {
-            flags: TreeFlags.needsGroundCheck,
+            flags: TreeFlags.NeedsGroundCheck,
             animIdx,
             status,
             trunkAlpha: 0xFF,
@@ -673,15 +662,15 @@ export class TreePacket {
                 break;
 
             // Perform ground checks for some limited number of data
-            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+            if (!!(data.flags & GrassFlags.NeedsGroundCheck)) {
                 data.pos[1] = this.checkGroundY(globals, roomIdx, data);
-                data.flags &= ~TreeFlags.needsGroundCheck;
+                data.flags &= ~TreeFlags.NeedsGroundCheck;
                 ++groundChecksThisFrame;
             }
 
             // @TODO: Frustum culling
 
-            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+            if (!(data.flags & TreeFlags.IsFrustumCulled)) {
                 // Update model matrix for all non-culled objects
                 const anim = this.anims[data.animIdx];
 
@@ -730,20 +719,20 @@ export class TreePacket {
     }
 
     private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
-        const room = this.rooms[roomIdx];
-
-        if (room.length === 0)
+        if (!globals.roomStatus[roomIdx].visible)
             return;
 
-        let template;
+        const room = this.rooms[roomIdx];
+        if (room.length === 0)
+            return;
 
         const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
 
         // Draw shadows
-        template = renderInstManager.pushTemplateRenderInst();
         {
             // Set transparent
+            const template = renderInstManager.pushTemplateRenderInst();
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
@@ -764,12 +753,12 @@ export class TreePacket {
                 this.treeModel.shadow.materialHelper.allocateDrawParamsDataOnInst(shadowRenderInst, drawParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
+            renderInstManager.popTemplateRenderInst();
         }
-        renderInstManager.popTemplateRenderInst();
 
         // Draw tree trunks
-        template = renderInstManager.pushTemplateRenderInst();
         {
+            const template = renderInstManager.pushTemplateRenderInst();
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
@@ -781,7 +770,7 @@ export class TreePacket {
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];
 
-                if (data.flags & TreeFlags.isFrustumCulled)
+                if (data.flags & TreeFlags.IsFrustumCulled)
                     continue;
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
@@ -798,8 +787,8 @@ export class TreePacket {
                 this.treeModel.main.materialHelper.allocateDrawParamsDataOnInst(topRenderInst, drawParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
+            renderInstManager.popTemplateRenderInst();
         }
-        renderInstManager.popTemplateRenderInst();
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -812,13 +801,12 @@ export class TreePacket {
         this.treeModel.destroy(device);
     }
 }
+//#endregion
 
-// ---------------------------------------------
-// Grass Packet
-// ---------------------------------------------
+//#region Grass
 const enum GrassFlags {
-    isFrustumCulled = 1 << 0,
-    needsGroundCheck = 1 << 1,
+    IsFrustumCulled = 1 << 0,
+    NeedsGroundCheck = 1 << 1,
 }
 
 interface GrassData {
@@ -942,7 +930,7 @@ export class GrassPacket {
         const animIdx = Math.floor(Math.random() * 8);
 
         const data: GrassData = {
-            flags: GrassFlags.needsGroundCheck,
+            flags: GrassFlags.NeedsGroundCheck,
             animIdx,
             itemIdx,
             pos: vec3.clone(pos),
@@ -979,15 +967,17 @@ export class GrassPacket {
                 break;
 
             // Perform ground checks for some limited number of data
-            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+            if (!!(data.flags & GrassFlags.NeedsGroundCheck)) {
                 data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
-                data.flags &= ~GrassFlags.needsGroundCheck;
+                data.flags &= ~GrassFlags.NeedsGroundCheck;
                 ++groundChecksThisFrame;
             }
 
-            // @TODO: Frustum culling
+            vec3.copy(scratchVec3a, data.pos);
+            scratchVec3a[1] += 260.0;
+            data.flags = setBitFlagEnabled(data.flags, GrassFlags.IsFrustumCulled, !globals.camera.frustum.containsSphere(scratchVec3a, 260.0));
 
-            if (!(data.flags & GrassFlags.isFrustumCulled)) {
+            if (!(data.flags & GrassFlags.IsFrustumCulled)) {
                 // Update model matrix for all non-culled objects
                 if (data.animIdx < 0) {
                     // @TODO: Draw cut grass
@@ -1025,50 +1015,50 @@ export class GrassPacket {
         }
     }
 
-    private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
+    private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!globals.roomStatus[roomIdx].visible)
+            return;
+
         const room = this.rooms[roomIdx];
 
         if (room.length === 0)
             return;
 
-        let template;
-
         const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
 
-        template = renderInstManager.pushTemplateRenderInst();
-        {
-            template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
-            setColorFromRoomNo(globals, materialParams, roomIdx);
-            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
-            this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-            this.grassModel.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
+        setColorFromRoomNo(globals, materialParams, roomIdx);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+        this.grassModel.materialHelper.setOnRenderInst(renderInstManager.gfxRenderCache, template);
 
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
-                if (data.flags & GrassFlags.isFrustumCulled)
-                    continue;
-                if (distanceCull(worldCamPos, data.pos))
-                    continue;
+            if (data.flags & GrassFlags.IsFrustumCulled)
+                continue;
+            if (distanceCull(worldCamPos, data.pos))
+                continue;
 
-                const renderInst = renderInstManager.newRenderInst();
-                this.grassModel.shapes[0].setOnRenderInst(renderInst);
-                mat4.mul(drawParams.u_PosMtx[0], worldToView, data.modelMtx);
-                this.grassModel.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
-                renderInstManager.submitRenderInst(renderInst);
-            }
+            const renderInst = renderInstManager.newRenderInst();
+            this.grassModel.shapes[0].setOnRenderInst(renderInst);
+            mat4.mul(drawParams.u_PosMtx[0], worldToView, data.modelMtx);
+            this.grassModel.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
+            renderInstManager.submitRenderInst(renderInst);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
         for (let i = 0; i < this.rooms.length; i++)
-            this.drawRoom(globals, i, renderInstManager, viewerInput, device);
+            this.drawRoom(globals, i, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
         this.model.destroy(device);
     }
 }
+//#endregion
