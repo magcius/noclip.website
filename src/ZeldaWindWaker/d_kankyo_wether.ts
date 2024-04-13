@@ -2365,16 +2365,12 @@ function wether_move_moya(globals: dGlobals, deltaTimeFrames: number): void {
     pkt.rot += -1.5 * deltaTimeFrames;
 }
 
-function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRadius: number, outerRadius: number): void {
-    if (dist < outerRadius) {
-        if (dist < innerRadius || innerRadius > outerRadius) {
-            wave.strengthEnv = 0.0;
-        } else {
-            const speedFade = (dist - innerRadius) / (outerRadius - innerRadius);
-            if (speedFade < wave.strengthEnv)
-                wave.strengthEnv = speedFade;
-        }
-    }
+function invlerpDistance(dist: number, innerRadius: number, outerRadius: number): number {
+    if (dist > outerRadius)
+        return 1.0;
+    if (dist < innerRadius || innerRadius > outerRadius)
+        return 0.0;
+    return invlerp(innerRadius, outerRadius, dist);
 }
 
 function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
@@ -2471,13 +2467,16 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
             wave.alpha = 0.0;
         }
 
+        vec3.add(scratchVec3d, wave.basePos, wave.pos);
         wave.strengthEnv = 1.0;
 
         // Wave influence fade.
         for (let i = 0; i < envLight.waveInfo.length; i++) {
             const infl = envLight.waveInfo[i];
             const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
-            wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
+            const fade = invlerpDistance(dist, infl.innerRadius, infl.outerRadius);
+            if (fade < wave.strengthEnv)
+                wave.strengthEnv = fade;
         }
 
         // Sea flat fade.
@@ -2485,14 +2484,18 @@ function wether_move_wave(globals: dGlobals, deltaTimeFrames: number): void {
             const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);
             const innerRadius = envLight.waveFlatInter * 1.5 * envLight.waveSpawnRadius;
             const outerRadius = innerRadius + 1000.0;
-            wether_move_wave__FadeStrengthEnv(wave, dist, innerRadius, outerRadius);
+            const fade = invlerpDistance(dist, innerRadius, outerRadius);
+            if (fade < wave.strengthEnv)
+                wave.strengthEnv = fade;
         }
 
         // Player location fade.
-        const playerDist = Math.hypot(globals.playerPosition[0] - scratchVec3d[0], globals.playerPosition[2] - scratchVec3d[2]);
-        wether_move_wave__FadeStrengthEnv(wave, playerDist, 200.0, 2000.0);
+        {
+            const playerDist = Math.hypot(globals.playerPosition[0] - scratchVec3d[0], globals.playerPosition[2] - scratchVec3d[2]);
+            const fade = invlerpDistance(playerDist, 200.0, 2000.0);
+            wave.strengthEnv *= fade;
+        }
 
-        vec3.add(scratchVec3d, wave.basePos, wave.pos);
         const windSpeed = Math.max(windPow, vec3.distance(scratchVec3d, globals.cameraPosition));
         const alphaTarget = saturate(1.03 * (1.0 - (windSpeed / (2.0 * envLight.waveSpawnDist))) * Math.sin(wave.animCounter));
         wave.alpha = cLib_addCalc(wave.alpha, alphaTarget, 0.5, 0.5, 0.001);
