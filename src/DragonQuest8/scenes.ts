@@ -97,7 +97,6 @@ export class DQ8Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     private createProgressPanel(sceneDesc: SceneDesc): UI.Panel {

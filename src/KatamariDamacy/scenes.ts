@@ -251,7 +251,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
             for (const [, v] of this.motionCache.entries()) {

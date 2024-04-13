@@ -422,7 +422,6 @@ export class GoldSrcRenderer implements SceneGfx {
         this.prepareToRender(renderInstManager, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

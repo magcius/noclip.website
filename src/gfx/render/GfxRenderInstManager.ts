@@ -178,32 +178,12 @@ export class GfxRenderInst {
             depthStencilAttachmentFormat: null,
             sampleCount: 1,
         };
-
-        this.reset();
-    }
-
-    /**
-     * Resets a render inst to be boring, so it can re-enter the pool.
-     * Normally, you should not need to call this.
-     *
-     * {@private}
-     */
-    public reset(): void {
-        this.sortKey = 0;
-        this.debug = null;
-        this._allowSkippingPipelineIfNotReady = true;
-        this._vertexBuffers = null;
-        this._indexBuffer = null;
-        this._renderPipelineDescriptor.inputLayout = null;
     }
 
     /**
      * Copies the fields from another render inst {@param o} to this render inst.
-     * Normally, you should not need to call this.
-     *
-     * {@private}
      */
-    public setFromTemplate(o: GfxRenderInst): void {
+    public copyFrom(o: GfxRenderInst): void {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, o._renderPipelineDescriptor.megaStateDescriptor);
         this._renderPipelineDescriptor.program = o._renderPipelineDescriptor.program;
         this._renderPipelineDescriptor.inputLayout = o._renderPipelineDescriptor.inputLayout;
@@ -230,8 +210,8 @@ export class GfxRenderInst {
             this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
         }
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
-        this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
-}
+            this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
+    }
 
     public validate(): void {
         // Validate uniform buffer bindings.
@@ -552,7 +532,6 @@ export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => n
 
 export class GfxRenderInstList {
     public renderInsts: GfxRenderInst[] = [];
-    private usePostSort: boolean = false;
 
     constructor(
         public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
@@ -560,23 +539,9 @@ export class GfxRenderInstList {
     ) {
     }
 
-    private checkUsePostSort(): boolean {
-        // Over a certain threshold, it's faster to push and then sort than insort directly...
-        return this.renderInsts.length >= 500;
-    }
-
-    /**
-     * Insert a render inst to the list. This directly inserts the render inst to
-     * the position specified by the compare function, so the render inst must be
-     * fully constructed at this point.
-     */
-    private insertSorted(renderInst: GfxRenderInst): void {
-        this.renderInsts.push(renderInst);
-    }
-
     public submitRenderInst(renderInst: GfxRenderInst): void {
         renderInst.validate();
-        this.insertSorted(renderInst);
+        this.renderInsts.push(renderInst);
     }
 
     public hasLateSamplerBinding(name: string): boolean {
@@ -644,7 +609,7 @@ export class GfxRenderInstManager {
     public newRenderInst(): GfxRenderInst {
         const renderInst = new GfxRenderInst();
         if (this.templateStack.length > 0)
-            renderInst.setFromTemplate(this.getTemplateRenderInst());
+            renderInst.copyFrom(this.getTemplateRenderInst());
         return renderInst;
     }
 
@@ -677,7 +642,7 @@ export class GfxRenderInstManager {
     public pushTemplateRenderInst(): GfxRenderInst {
         const newTemplate = new GfxRenderInst();
         if (this.templateStack.length > 0)
-            newTemplate.setFromTemplate(this.getTemplateRenderInst());
+            newTemplate.copyFrom(this.getTemplateRenderInst());
         this.templateStack.push(newTemplate);
         return newTemplate;
     }
@@ -691,14 +656,6 @@ export class GfxRenderInstManager {
      */
     public getTemplateRenderInst(): GfxRenderInst {
         return this.templateStack[this.templateStack.length - 1];
-    }
-
-    /**
-     * Reset all allocated render insts. This should be called at the end of the frame,
-     * once done with all of the allocated render insts and render inst lists.
-     */
-    public resetRenderInsts(): void {
-        assert(this.templateStack.length === 0);
     }
 }
 //#endregion

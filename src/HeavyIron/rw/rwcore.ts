@@ -593,6 +593,5 @@ export class RwEngine {
         this.renderHelper.renderGraph.execute(builder);
 
         this.renderInstList.reset();
-        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 }

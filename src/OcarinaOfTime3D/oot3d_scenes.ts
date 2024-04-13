@@ -103,7 +103,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

@@ -510,7 +510,6 @@ export class Explorer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {

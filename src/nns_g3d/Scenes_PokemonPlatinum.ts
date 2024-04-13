@@ -362,7 +362,6 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

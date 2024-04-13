@@ -789,7 +789,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.renderGraph.execute(builder);
         sceneObjHolder.sceneNameObjListExecutor.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {

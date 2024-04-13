@@ -700,7 +700,6 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput, renderInstManager);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {

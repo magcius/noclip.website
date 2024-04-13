@@ -681,7 +681,6 @@ export class WdtScene implements Viewer.SceneGfx {
     this.prepareToRender();
     this.renderHelper.renderGraph.execute(builder);
     this.renderInstListMain.reset();
-    renderInstManager.resetRenderInsts();
   }
 
   destroy(device: GfxDevice): void {

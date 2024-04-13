@@ -684,7 +684,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public createPanels(): UI.Panel[] {

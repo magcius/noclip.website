@@ -546,7 +546,6 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
         this.renderInstListSky.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     private setCurrentScenario(index: number): void {

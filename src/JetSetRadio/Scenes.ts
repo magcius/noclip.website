@@ -95,7 +95,6 @@ class JetSetRadioRenderer implements SceneGfx {
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {

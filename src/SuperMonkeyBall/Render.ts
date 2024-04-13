@@ -125,7 +125,6 @@ export class Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput, this.opaqueInstList, this.translucentInstList);
 
         this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

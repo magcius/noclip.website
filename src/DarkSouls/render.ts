@@ -1349,14 +1349,14 @@ class MaterialInstance_Water {
     public submitRenderInst(renderContext: RenderContext, renderInstManager: GfxRenderInstManager, template: GfxRenderInst): void {
         {
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.setFromTemplate(template);
+            renderInst.copyFrom(template);
             renderInst.setGfxProgram(this.gfxProgramWaterHeight);
             renderContext.waterHeightList.submitRenderInst(renderInst);
         }
 
         {
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.setFromTemplate(template);
+            renderInst.copyFrom(template);
             renderInst.setGfxProgram(this.gfxProgramWater);
             renderContext.waterList.submitRenderInst(renderInst);
         }
@@ -2934,7 +2934,6 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
 
         this.renderContext.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

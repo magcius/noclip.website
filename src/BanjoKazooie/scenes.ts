@@ -146,7 +146,6 @@ class BKRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderGraph.execute(builder);
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

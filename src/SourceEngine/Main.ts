@@ -2063,7 +2063,6 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
         this.resetViews();
-        renderInstManager.resetRenderInsts();
 
         this.renderContext.debugStatistics.addToConsole(viewerInput);
         const camPositionX = this.mainViewRenderer.mainView.cameraPos[0].toFixed(2), camPositionY = this.mainViewRenderer.mainView.cameraPos[1].toFixed(2), camPositionZ = this.mainViewRenderer.mainView.cameraPos[2].toFixed(2);

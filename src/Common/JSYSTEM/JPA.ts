@@ -2047,7 +2047,7 @@ export class JPABaseEmitter {
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
             const renderInst2 = renderInstManager.newRenderInst();
-            renderInst2.setFromTemplate(renderInst1);
+            renderInst2.copyFrom(renderInst1);
             renderInst2.setDrawCount(oneStripIndexCount, oneStripIndexCount + 6);
             renderInstManager.submitRenderInst(renderInst2);
         }

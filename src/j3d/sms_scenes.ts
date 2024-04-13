@@ -627,7 +627,6 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
         this.renderInstListInd.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {

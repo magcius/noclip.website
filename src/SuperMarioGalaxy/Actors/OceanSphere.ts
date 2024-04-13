@@ -509,7 +509,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         if (!this.isStartPosCamera && !this.isCameraInside) {
             const renderInstFrontFaces = renderInstManager.newRenderInst();
-            renderInstFrontFaces.setFromTemplate(renderInstXluBack);
+            renderInstFrontFaces.copyFrom(renderInstXluBack);
 
             colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Back);
 

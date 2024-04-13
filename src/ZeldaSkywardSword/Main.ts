@@ -477,7 +477,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.renderInstListSky.reset();
         this.renderInstListMain.reset();
         this.renderInstListInd.reset();
-        renderInstManager.resetRenderInsts();
     }
 
     private findNode(m: MDL0ModelInstance, name: string): BRRES.MDL0_NodeEntry | undefined {

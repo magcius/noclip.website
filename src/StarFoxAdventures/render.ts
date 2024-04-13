@@ -353,7 +353,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         this.renderHelper.prepareToRender();
         this.renderHelper.renderGraph.execute(builder);
-        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
