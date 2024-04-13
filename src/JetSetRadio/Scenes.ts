@@ -173,7 +173,7 @@ interface ObjectData {
 }
 
 interface SkyboxData {
-    Meshes : ModelData[];    
+    Meshes : ModelData[];
 }
 
 interface StageData {
@@ -327,13 +327,15 @@ class JetSetRadioSceneDesc implements SceneDesc {
             actionInstance.update(modelMatrix, 0);
             renderer.actions.push(actionInstance);
         }
-        
-        if (stageData.Skybox!==null) 
+
+        if (stageData.Skybox !== null) {
             for (const mesh of stageData.Skybox.Meshes) {
                 const modelDataOuter = modelCache.loadFromModelData(mesh);
                 const actionInstanceOuter = new NjsActionInstance(modelCache.cache, modelDataOuter, modelDataOuter.texlist, modelCache.textureHolder);
                 renderer.actions.push(actionInstanceOuter);
             }
+        }
+
         return renderer;
     }
 }

@@ -37,14 +37,14 @@
   "scripts": {
     "start": "webpack serve --config webpack.dev.cjs",
     "build": "webpack --config webpack.prod.cjs",
-    "build:zww": "cd src/ZeldaWindWaker/tools && ts-node-esm zww_extractor.ts",
-    "build:ztp": "cd src/ZeldaTwilightPrincess/tools && ts-node-esm ztp_extractor.ts",
-    "build:dk64": "cd src/DonkeyKong64/tools && ts-node-esm extractor.ts",
-    "build:KatamariDamacy": "cd src/KatamariDamacy/tools && ts-node-esm extractor.ts",
-    "build:ffx": "cd src/FinalFantasyX/tools && ts-node-esm extractor.ts",
-    "build:zelview": "cd src/zelview/tools && ts-node-esm extractor.ts",
-    "build:JetSetRadio": "cd src/JetSetRadio/tools && ts-node-esm extractor.ts",
-    "test:DeBlob2": "cd src/DeBlob2/tools && ts-node-esm systest.ts",
+    "build:zww": "cd src/ZeldaWindWaker/tools && tsx zww_extractor.ts",
+    "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",
+    "build:dk64": "cd src/DonkeyKong64/tools && tsx extractor.ts",
+    "build:KatamariDamacy": "cd src/KatamariDamacy/tools && tsx extractor.ts",
+    "build:ffx": "cd src/FinalFantasyX/tools && tsx extractor.ts",
+    "build:zelview": "cd src/zelview/tools && tsx extractor.ts",
+    "build:JetSetRadio": "cd src/JetSetRadio/tools && tsx extractor.ts",
+    "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "bin": {

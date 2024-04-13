@@ -1079,7 +1079,7 @@ function main() {
     extractStage5(`${pathBaseOut}/Stage5.crg1`, exec);
     extractStage6(`${pathBaseOut}/Stage6.crg1`, exec); 
     extractGarage(`${pathBaseOut}/Garage.crg1`, exec);  // xayrga: Renderer doesn't like the objects here. , disabled temporarily.
-	extractStageLast(`${pathBaseOut}/StageLast.crg1`, exec)
+	extractStageLast(`${pathBaseOut}/StageLast.crg1`, exec);
 }
 
 main();
