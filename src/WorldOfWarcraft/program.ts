@@ -76,9 +76,9 @@ vec3 calcLight(
 }
 
 vec3 calcFog(vec3 inColor, vec3 worldPosition) {
-  float dist = distance(u_CameraPos.xyz, worldPosition);
-  float t = saturate(invlerp(fogParams.x, fogParams.y, dist));
-  return mix(inColor, skyFogColor.rgb, t);
+    float dist = distance(u_CameraPos.xyz, worldPosition);
+    float t = saturate(invlerp(fogParams.x, fogParams.y, dist)) * skyFogColor.a;
+    return mix(inColor, skyFogColor.rgb, t);
 }
 
 vec2 posToTexCoord(const vec3 vertexPosInView, const vec3 normal){
@@ -131,14 +131,14 @@ ${GfxShaderLibrary.invlerp}
 ${BaseProgram.utils}
   `;
 
-  public static layoutUniformBufs(renderInst: GfxRenderInst, projectionMatrix: mat4, view: View, lightingData: WowLightResult) {
+  public static layoutUniformBufs(renderInst: GfxRenderInst, view: View, lightingData: WowLightResult) {
     const numMat4s = 2;
     const numVec4s = 24;
     const totalSize = numMat4s * 16 + numVec4s * 4;
     let offset = renderInst.allocateUniformBuffer(BaseProgram.ub_SceneParams, totalSize);
     const uniformBuf = renderInst.mapUniformBufferF32(BaseProgram.ub_SceneParams);
 
-    offset += fillMatrix4x4(uniformBuf, offset, projectionMatrix);
+    offset += fillMatrix4x4(uniformBuf, offset, view.clipFromViewMatrix);
     offset += fillMatrix4x4(uniformBuf, offset, view.viewFromWorldMatrix);
     offset += fillVec4(uniformBuf, offset, view.cameraPos[0], view.cameraPos[1], view.cameraPos[2], 0.0);
 
@@ -151,7 +151,7 @@ ${BaseProgram.utils}
     offset += fillColor(uniformBuf, offset, lightingData.sky_middle_color);
     offset += fillColor(uniformBuf, offset, lightingData.sky_band1_color);
     offset += fillColor(uniformBuf, offset, lightingData.sky_band2_color);
-    offset += fillColor(uniformBuf, offset, lightingData.sky_fog_color);
+    offset += fillColor(uniformBuf, offset, lightingData.sky_fog_color, view.fogEnabled ? 1.0 : 0.0);
     offset += fillColor(uniformBuf, offset, lightingData.sky_smog_color);
     offset += fillColor(uniformBuf, offset, lightingData.sun_color);
     offset += fillColor(uniformBuf, offset, lightingData.cloud_sun_color);
@@ -163,7 +163,7 @@ ${BaseProgram.utils}
     offset += fillColor(uniformBuf, offset, lightingData.river_close_color);
     offset += fillColor(uniformBuf, offset, lightingData.river_far_color);
     offset += fillColor(uniformBuf, offset, lightingData.shadow_opacity);
-    const fogEnd = view.farPlane;
+    const fogEnd = view.cullingFarPlane;
     const fogStart = Math.max(lightingData.fog_scaler * fogEnd, 0);
     offset += fillVec4(uniformBuf, offset,
       fogStart,
@@ -187,11 +187,11 @@ ${BaseProgram.utils}
   }
 }
 
-function fillColor(buf: Float32Array, offset: number, color: WowVec3): number {
+function fillColor(buf: Float32Array, offset: number, color: WowVec3, a: number = 1.0): number {
   buf[offset + 0] = color.x;
   buf[offset + 1] = color.y;
   buf[offset + 2] = color.z;
-  buf[offset + 3] = 1.0;
+  buf[offset + 3] = a;
   color.free();
   return 4;
 }

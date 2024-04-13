@@ -57,18 +57,19 @@ export class View {
     public exteriorDirectColorDirection: vec4 = [-0.30822, -0.30822, -0.89999998, 0];
     public clipSpaceNearZ: GfxClipSpaceNearZ;
     public cameraPos = vec3.create();
-    public frustum: Frustum = new Frustum();
     public time: number;
     public deltaTime: number;
-    public farPlane = 1000;
+    public cullingNearPlane = 0.1;
+    public cullingFarPlane = 1000;
+    public cullingFrustum: Frustum = new Frustum();
     public timeOffset = 1440;
     public secondsPerGameDay = 90;
+    public fogEnabled = true;
 
     public finishSetup(): void {
       mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
       mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
       getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
-      this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
     }
 
     private calculateSunDirection(): void {
@@ -95,16 +96,25 @@ export class View {
     }
 
     public setupFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
+      this.cullingNearPlane = viewerInput.camera.near;
       this.clipSpaceNearZ = viewerInput.camera.clipSpaceNearZ;
       mat4.mul(this.viewFromWorldMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromAdtSpace);
-      projectionMatrixForFrustum(this.clipFromViewMatrix,
+      mat4.copy(this.clipFromViewMatrix, viewerInput.camera.projectionMatrix);
+
+      // Culling uses different near/far planes
+      const clipFromViewMatrixCull = mat4.create();
+      projectionMatrixForFrustum(clipFromViewMatrixCull,
         viewerInput.camera.left,
         viewerInput.camera.right,
         viewerInput.camera.bottom,
         viewerInput.camera.top,
-        viewerInput.camera.near,
-        this.farPlane
+        this.cullingNearPlane,
+        this.cullingFarPlane,
       );
+      const clipFromWorldMatrixCull = mat4.create();
+      mat4.mul(clipFromWorldMatrixCull, clipFromViewMatrixCull, this.viewFromWorldMatrix);
+      this.cullingFrustum.updateClipFrustum(clipFromWorldMatrixCull, GfxClipSpaceNearZ.NegativeOne);
+
       this.time = (viewerInput.time / this.secondsPerGameDay + this.timeOffset) % 2880;
       this.deltaTime = viewerInput.deltaTime;
       this.calculateSunDirection();
@@ -166,80 +176,6 @@ export class MapArray<K, V> {
   }
 }
 
-let drawPortalScratchVec3a = vec3.create();
-let drawPortalScratchVec3b = vec3.create();
-function drawDebugPortal(portal: PortalData, view: View, name: string, level: number) {
-  const colors = [
-    colorNewFromRGBA(1, 0, 0),
-    colorNewFromRGBA(0, 1, 0),
-    colorNewFromRGBA(0, 0, 1),
-    colorNewFromRGBA(1, 1, 0),
-    colorNewFromRGBA(0, 1, 1),
-    colorNewFromRGBA(1, 1, 1),
-  ];
-  for (let i in portal.points) {
-    const p = portal.points[i];
-    drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, p, colors[level], 10);
-    drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, p, `${i}`);
-  }
-  // vec3.lerp(drawPortalScratchVec3a, portal.points[0], portal.points[1], 0.5);
-  // vec3.lerp(drawPortalScratchVec3b, portal.points[2], portal.points[3], 0.5);
-  // vec3.lerp(drawPortalScratchVec3a, drawPortalScratchVec3a, drawPortalScratchVec3b, 0.5);
-  // drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, drawPortalScratchVec3a, name);
-  // drawWorldSpaceAABB(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, portal.aabb);
-  // drawDebugPlane(portal.plane, view, colors[level]);
-}
-
-function drawDebugPlane(plane: Plane, view: View, color: Color | undefined = undefined) {
-  vec3.scale(drawPortalScratchVec3a, plane.n, plane.d);
-  drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, drawPortalScratchVec3a);
-  drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, drawPortalScratchVec3a, 'plane');
-  // drawWorldSpaceVector(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, drawFrustumScratchVec3a, plane.n, 10.0);
-}
-
-let drawFrustumScratchVec3a = vec3.create();
-let drawFrustumScratchVec3b = vec3.create();
-function drawDebugFrustum(f: Frustum, view: View, color: Color | undefined = undefined) {
-  const near = f.planes[4];
-  const far = f.planes[5];
-  let planePairs = [
-    [0, 2], // Left/Top
-    [1, 2], // Right/Top
-    [1, 3], // Right/Bottom
-    [0, 3], // Left/Bottom
-  ];
-  for (let [p1, p2] of planePairs) {
-    findIncidentPoint(drawFrustumScratchVec3a, f.planes[p1], f.planes[p2], near);
-    findIncidentPoint(drawFrustumScratchVec3b, f.planes[p1], f.planes[p2], far);
-    drawWorldSpaceLine(
-      getDebugOverlayCanvas2D(),
-      view.clipFromWorldMatrix,
-      drawFrustumScratchVec3a,
-      drawFrustumScratchVec3b,
-      color
-    );
-  }
-}
-
-let incidentScratchMat = mat3.create();
-let incidentScratchVec3 = vec3.create();
-function findIncidentPoint(dst: vec3, p1: Plane, p2: Plane, p3: Plane) {
-  incidentScratchMat[0] = p1.n[0];
-  incidentScratchMat[1] = p2.n[0];
-  incidentScratchMat[2] = p3.n[0];
-  incidentScratchMat[3] = p1.n[1];
-  incidentScratchMat[4] = p2.n[1];
-  incidentScratchMat[5] = p3.n[1];
-  incidentScratchMat[6] = p1.n[2];
-  incidentScratchMat[7] = p2.n[2];
-  incidentScratchMat[8] = p3.n[2];
-  mat3.invert(incidentScratchMat, incidentScratchMat);
-  incidentScratchVec3[0] = -p1.d;
-  incidentScratchVec3[1] = -p2.d;
-  incidentScratchVec3[2] = -p3.d;
-  vec3.transformMat3(dst, incidentScratchVec3, incidentScratchMat);
-}
-
 enum CullWmoResult {
   CameraInsideAndExteriorVisible,
   CameraInside,
@@ -266,7 +202,6 @@ export class WdtScene implements Viewer.SceneGfx {
   private wmoProgram: GfxProgram;
   private skyboxProgram: GfxProgram;
   private loadingAdtProgram: GfxProgram;
-  private debugWmoPortalProgram: GfxProgram;
 
   private modelIdToDoodads: MapArray<number, DoodadData> = new MapArray();
   private wmoIdToDefs: MapArray<number, WmoDefinition> = new MapArray();
@@ -295,7 +230,6 @@ export class WdtScene implements Viewer.SceneGfx {
     this.wmoProgram = this.renderHelper.renderCache.createProgram(new WmoProgram());
     this.skyboxProgram = this.renderHelper.renderCache.createProgram(new SkyboxProgram());
     this.loadingAdtProgram = this.renderHelper.renderCache.createProgram(new LoadingAdtProgram());
-    this.debugWmoPortalProgram = this.renderHelper.renderCache.createProgram(new DebugWmoPortalProgram());
 
     if (this.world.globalWmo) {
       this.setupWmoDef(this.world.globalWmoDef!);
@@ -407,7 +341,7 @@ export class WdtScene implements Viewer.SceneGfx {
     this.cameraState = CameraState.Frozen;
     vec3.copy(this.frozenCamera, this.mainView.cameraPos);
     for (let i in this.frozenFrustum.planes) {
-      this.frozenFrustum.planes[i].copy(this.mainView.frustum.planes[i]);
+      this.frozenFrustum.planes[i].copy(this.mainView.cullingFrustum.planes[i]);
     }
   }
 
@@ -415,7 +349,7 @@ export class WdtScene implements Viewer.SceneGfx {
     if (this.cameraState === CameraState.Frozen) {
       return [this.frozenCamera, this.frozenFrustum];
     } else {
-      return [this.mainView.cameraPos, this.mainView.frustum];
+      return [this.mainView.cameraPos, this.mainView.cullingFrustum];
     }
   }
 
@@ -614,18 +548,14 @@ export class WdtScene implements Viewer.SceneGfx {
     }
   }
 
-  private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+  private prepareToRender(): void {
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
     template.setGfxProgram(this.skyboxProgram);
     template.setBindingLayouts(SkyboxProgram.bindingLayouts);
 
-    BaseProgram.layoutUniformBufs(
-      template,
-      viewerInput.camera.projectionMatrix,
-      this.mainView,
-      this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time)
-    );
+    const lightingData = this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time);
+    BaseProgram.layoutUniformBufs(template, this.mainView, lightingData);
     this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
     this.skyboxRenderer.prepareToRenderSkybox(this.renderHelper.renderInstManager)
 
@@ -748,7 +678,7 @@ export class WdtScene implements Viewer.SceneGfx {
     pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
     builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-    this.prepareToRender(device, viewerInput);
+    this.prepareToRender();
     this.renderHelper.renderGraph.execute(builder);
     this.renderInstListMain.reset();
     renderInstManager.resetRenderInsts();
