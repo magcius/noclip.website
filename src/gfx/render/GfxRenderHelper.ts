@@ -44,7 +44,6 @@ class GfxRenderHelperBase {
         if (this.renderCacheOwn !== null)
             this.renderCacheOwn.destroy();
         this.uniformBuffer.destroy();
-        this.renderInstManager.destroy();
         this.renderGraph.destroy();
     }
 

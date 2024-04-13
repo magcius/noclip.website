@@ -1,5 +1,5 @@
 
-import { nArray, assert, assertExists, spliceBisectRight } from "../../util.js";
+import { nArray, assert, assertExists } from "../../util.js";
 import { clamp } from "../../MathHelpers.js";
 
 import { GfxMegaStateDescriptor, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../platform/GfxPlatform.js";
@@ -190,6 +190,7 @@ export class GfxRenderInst {
      */
     public reset(): void {
         this.sortKey = 0;
+        this.debug = null;
         this._allowSkippingPipelineIfNotReady = true;
         this._vertexBuffers = null;
         this._indexBuffer = null;
@@ -559,12 +560,9 @@ export class GfxRenderInstList {
     ) {
     }
 
-    /**
-     * Determine whether to use post-sorting, based on some heuristics.
-     */
-    public checkUsePostSort(): void {
+    private checkUsePostSort(): boolean {
         // Over a certain threshold, it's faster to push and then sort than insort directly...
-        this.usePostSort = this.compareFunction !== null && this.renderInsts.length >= 500;
+        return this.renderInsts.length >= 500;
     }
 
     /**
@@ -573,15 +571,7 @@ export class GfxRenderInstList {
      * fully constructed at this point.
      */
     private insertSorted(renderInst: GfxRenderInst): void {
-        if (this.compareFunction === null) {
-            this.renderInsts.push(renderInst);
-        } else if (this.usePostSort) {
-            this.renderInsts.push(renderInst);
-        } else {
-            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
-        }
-
-        this.checkUsePostSort();
+        this.renderInsts.push(renderInst);
     }
 
     public submitRenderInst(renderInst: GfxRenderInst): void {
@@ -606,11 +596,8 @@ export class GfxRenderInstList {
     }
 
     public ensureSorted(): void {
-        if (this.usePostSort) {
-            if (this.renderInsts.length !== 0)
-                this.renderInsts.sort(this.compareFunction!);
-            this.usePostSort = false;
-        }
+        if (this.compareFunction !== null && this.renderInsts.length !== 0)
+            this.renderInsts.sort(this.compareFunction);
     }
 
     private drawOnPassRendererNoReset(cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
@@ -642,41 +629,7 @@ export class GfxRenderInstList {
 //#endregion
 
 //#region GfxRenderInstManager
-
-// Basic linear pool allocator.
-class RenderInstPool {
-    // The pool contains all render insts that we've ever created.
-    public pool: GfxRenderInst[] = [];
-    // The number of render insts currently allocated out to the user.
-    public allocCount: number = 0;
-
-    public allocRenderInstIndex(): number {
-        this.allocCount++;
-
-        if (this.allocCount > this.pool.length)
-            this.pool.push(new GfxRenderInst());
-
-        return this.allocCount - 1;
-    }
-
-    public popRenderInst(): void {
-        this.allocCount--;
-    }
-
-    public reset(): void {
-        for (let i = 0; i < this.pool.length; i++)
-            this.pool[i].reset();
-        this.allocCount = 0;
-    }
-
-    public destroy(): void {
-        this.pool.length = 0;
-        this.allocCount = 0;
-    }
-}
-
 export class GfxRenderInstManager {
-    public instPool = new RenderInstPool();
     public templateStack: GfxRenderInst[] = [];
     public currentRenderInstList: GfxRenderInstList = null!;
 
@@ -689,9 +642,7 @@ export class GfxRenderInstManager {
      * render inst.
      */
     public newRenderInst(): GfxRenderInst {
-        const renderInstIndex = this.instPool.allocRenderInstIndex();
-        const renderInst = this.instPool.pool[renderInstIndex];
-        renderInst.debug = null;
+        const renderInst = new GfxRenderInst();
         if (this.templateStack.length > 0)
             renderInst.setFromTemplate(this.getTemplateRenderInst());
         return renderInst;
@@ -747,12 +698,7 @@ export class GfxRenderInstManager {
      * once done with all of the allocated render insts and render inst lists.
      */
     public resetRenderInsts(): void {
-        this.instPool.reset();
         assert(this.templateStack.length === 0);
-    }
-
-    public destroy(): void {
-        this.instPool.destroy();
     }
 }
 //#endregion

@@ -27,6 +27,7 @@ export class RenderStatisticsTracker {
     public endFrame(): RenderStatistics {
         this.frameCPUTime = window.performance.now() - this.frameStartCPUTime;
         this.fps = 1000 / this.frameCPUTime;
+        this.lines.push(`CPU Time: ${(this.frameCPUTime).toFixed(2)}ms`);
         this.lines.push(`FPS: ${this.fps | 0}`);
         return this;
     }
