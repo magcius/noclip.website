@@ -321,8 +321,6 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected override addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
-        renderInstManager.setCurrentRenderInstList(renderLists.world[0]);
-
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 

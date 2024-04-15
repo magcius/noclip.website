@@ -223,15 +223,11 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private blurFilter?: BlurFilter;
 
-    private blurTemporalTexture(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, resultTargetID: GfxrRenderTargetID, sceneCtx: SceneRenderContext): GfxrRenderTargetID {
+    private blurTemporalTexture(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager): GfxrRenderTargetID {
         if (this.blurFilter === undefined)
             this.blurFilter = new BlurFilter(this.renderHelper.renderCache);
 
-        return this.blurFilter.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height,
-            () => {
-                return this.temporalTexture.getTextureForSampling();
-            }
-        );
+        return this.blurFilter.render(builder, renderInstManager, this.mainColorDesc.width, this.mainColorDesc.height, this.temporalTexture.getTextureForSampling()!);
     }
 
     protected attachResolveTexturesForWorldOpaques(builder: GfxrGraphBuilder, pass: GfxrPass) {}
@@ -242,7 +238,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         let blurTargetID: GfxrRenderTargetID | undefined;
         if (renderLists.world[0].hasLateSamplerBinding('temporal-texture-downscale-8x'))
-            blurTargetID = this.blurTemporalTexture(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
+            blurTargetID = this.blurTemporalTexture(builder, renderInstManager);
 
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaques');
