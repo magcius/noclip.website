@@ -727,8 +727,8 @@ impl LiquidData {
                     vertices.push(x_pos);
                     vertices.push(y_pos);
                     vertices.push(z_pos);
-                    vertices.push(y as f32 / height as f32);
-                    vertices.push(x as f32 / width as f32);
+                    vertices.push(y as f32 / (height - 1) as f32);
+                    vertices.push(x as f32 / (width - 1) as f32);
                     extents.update(x_pos, y_pos, z_pos);
                 }
             }
