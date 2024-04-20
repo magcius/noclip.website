@@ -296,7 +296,7 @@ const sceneDescs = [
     new SPMSceneDesc('gn3_05', "Floro Caverns 7"),
     new SPMSceneDesc('gn3_07', "Floro Caverns 8"),
     new SPMSceneDesc('gn3_10', "Floro Caverns 9"),
-    new SPMSceneDesc('gn3_09', "Floro Caverns - Level End),
+    new SPMSceneDesc('gn3_09', "Floro Caverns - Level End"),
     new SPMSceneDesc('gn3_15', "SMB 2-1 Segment"),
     new SPMSceneDesc('gn3_16', "SMB 2-1 Segment - Secret Room"),
     new SPMSceneDesc('gn3_04', "SMB 2-1 Segment - Coin Room"),
@@ -463,7 +463,7 @@ const sceneDescs = [
     new SPMSceneDesc('dan_62', "Flopside Intermediate Floor 2"),
     new SPMSceneDesc('dan_63', "Flopside Intermediate Floor 3"),
     new SPMSceneDesc('dan_64', "Flopside Intermediate Floor 4"),
-    new SPMSceneDesc('dan_70', "Flopside Pit 100")
+    new SPMSceneDesc('dan_70', "Flopside Pit 100"),
     new SPMSceneDesc('dan_11'),
     new SPMSceneDesc('dan_12'),
     new SPMSceneDesc('dan_13'),
