@@ -232,7 +232,7 @@ export class SunshineWaterSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
     
-        const rarc = RARC.parse(await Yaz0.decompress(await dataFetcher.fetchData("j3d/sms/dolpic0.szs")));
+        const rarc = RARC.parse(await Yaz0.decompress(await dataFetcher.fetchData("SuperMarioSunshine/dolpic0.szs")));
 
         const renderer = new SeaRenderer(device, rarc);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
