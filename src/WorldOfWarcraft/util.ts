@@ -23,10 +23,15 @@ const SHEEP_PATH = `WorldOfWarcraft/sheep0`;
  */
 export class Sheepfile {
     private sheepfile: WowSheepfileManager;
+    private hardcodedFileIds: Map<string, number> = new Map();
 
     public async load(dataFetcher: DataFetcher) {
       const sheepfileData = await dataFetcher.fetchData(`${SHEEP_PATH}/index.shp`);
       this.sheepfile = rust.WowSheepfileManager.new(sheepfileData.createTypedArray(Uint8Array));
+
+      // not sure why these don't hash correctly, hardcode them for now
+      this.hardcodedFileIds.set('WORLD\\AZEROTH\\REDRIDGE\\PASSIVEDOODADS\\DOCKPIECES\\REDRIDGEDOCKPLANK02.BLP', 190086);
+      this.hardcodedFileIds.set("Environments\\Stars\\HellfireSkyBox.m2", 130525);
     }
 
     async fetchDataRange(dataFetcher: DataFetcher, datafileName: string, start: number, size: number): Promise<NamedArrayBufferSlice> {
@@ -59,9 +64,9 @@ export class Sheepfile {
     }
 
     public getFileDataId(fileName: string): number | undefined {
-      // FIXME: not sure why this doesn't hash correctly, hardcode it for now
-      if (fileName === 'WORLD\\AZEROTH\\REDRIDGE\\PASSIVEDOODADS\\DOCKPIECES\\REDRIDGEDOCKPLANK02.BLP') {
-        return 190086;
+      const hardcodedResult = this.hardcodedFileIds.get(fileName);
+      if (hardcodedResult !== undefined) {
+        return hardcodedResult;
       }
       const entry = this.sheepfile.get_file_name(fileName);
       if (entry === undefined) {
