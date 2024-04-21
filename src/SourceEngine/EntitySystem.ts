@@ -89,6 +89,8 @@ const enum SpawnState {
 function shouldHideEntityFallback(classname: string): boolean {
     if (classname === 'func_clip_vphysics')
         return true;
+    if (classname === 'func_smokevolume')
+        return true;
     if (classname.startsWith('func_nav_'))
         return true;
     return false;
