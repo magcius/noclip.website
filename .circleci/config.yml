@@ -25,9 +25,9 @@ jobs:
 
       - run: sudo npm install -g pnpm
 
-      - run: pnpm install --config.package-manager-strict=false
+      - run: pnpm --config.package-manager-strict=false install
 
-      - run: pnpm run build --config.package-manager-strict=false
+      - run: pnpm --config.package-manager-strict=false run build
 
       - save_cache:
           paths:
