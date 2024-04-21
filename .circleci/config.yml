@@ -27,7 +27,7 @@ jobs:
 
       - run: pnpm install --config.package-manager-strict=false
 
-      - run: pnpm run build
+      - run: pnpm run build --config.package-manager-strict=false
 
       - save_cache:
           paths:
