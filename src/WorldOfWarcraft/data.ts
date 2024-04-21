@@ -1884,7 +1884,7 @@ export class DoodadData {
   }
 }
 
-async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike, lightdbMapId: number): Promise<AdtData> {
+async function fetchAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike, lightdbMapId: number): Promise<AdtData> {
   const [rootFile, obj0File, obj1File, texFile] = await Promise.all([
     cache.fetchDataByFileID(fileIDs.root_adt),
     cache.fetchDataByFileID(fileIDs.obj0_adt),
@@ -1898,9 +1898,7 @@ async function loadAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike, lightdbM
     wowAdt.append_lod_obj_adt(obj1File);
   wowAdt.append_tex_adt(texFile);
 
-  const adt = new AdtData(fileIDs.root_adt, wowAdt, lightdbMapId);
-  await adt.load(cache);
-  return adt;
+  return new AdtData(fileIDs.root_adt, wowAdt, lightdbMapId);
 }
 
 export type AdtCoord = [number, number];
@@ -2005,9 +2003,10 @@ export class LazyWorldData {
       return undefined;
     }
 
-    const adt = await loadAdt(this.cache, fileIDs, this.lightdbMapId);
+    const adt = await fetchAdt(this.cache, fileIDs, this.lightdbMapId);
     adt.hasBigAlpha = this.hasBigAlpha;
     adt.hasHeightTexturing = this.hasHeightTexturing;
+    await adt.load(this.cache);
     this.loadedAdtCoords.push([x, y]);
     return adt;
   }
@@ -2055,9 +2054,10 @@ export class WorldData {
           continue;
         }
 
-        const adt = await loadAdt(cache, fileIDs, this.lightdbMapId);
+        const adt = await fetchAdt(cache, fileIDs, this.lightdbMapId);
         adt.hasBigAlpha = hasBigAlpha;
         adt.hasHeightTexturing = hasHeightTexturing;
+        await adt.load(cache);
         this.adts.push(adt);
       }
     }
