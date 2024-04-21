@@ -1736,7 +1736,11 @@ export class AdtData {
     this.worldSpaceAABB.centerPoint(adtCenter);
     const lightingResult = cache.db.getGlobalLightingData(this.lightdbMapId, adtCenter, 0);
     if (lightingResult.skybox_filename !== undefined) {
-      const modelFileId = cache.getFileDataId(lightingResult.skybox_filename);
+      let filename = lightingResult.skybox_filename;
+      if (filename.endsWith('.mdx')) {
+        filename = filename.replace('.mdx', '.m2');
+      }
+      const modelFileId = cache.getFileDataId(filename);
       if (modelFileId === undefined) {
         throw new Error(`couldn't find fileDataId for skybox "${lightingResult.skybox_filename}"`);
       }
