@@ -18,7 +18,7 @@ import { DataFetcher } from '../DataFetcher.js';
 import { MathConstants, scaleMatrix } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxSamplerFormatKind, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -27,7 +27,20 @@ import { assert, assertExists, hexzero } from '../util.js';
 import { SceneGroup } from '../viewer.js';
 import { CmbData, CmbInstance, CtrTextureHolder, RoomRenderer, fillSceneParamsDataOnTemplate } from './render.js';
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
+export const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 10, numUniformBuffers: 3, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture0
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture1
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture2
+
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Dist0Lut
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Dist1Lut
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // FresnelLut
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // ReflecRLut
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // ReflecGLut
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // ReflecBLut
+
+        { dimension: GfxTextureDimension.Cube,  formatKind: GfxSamplerFormatKind.Float, }, // Cubemap
+    ]}];
 
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
@@ -2485,7 +2498,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
         renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
-        renderer.environmentSettingsIndex = this.environmentSettingsIndex
+        renderer.environmentSettingsIndex = this.environmentSettingsIndex;
 
         return renderer;
     }

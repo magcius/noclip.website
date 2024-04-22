@@ -12,12 +12,13 @@ import { SceneGroup } from '../viewer.js';
 import { assert, assertExists, hexzero } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { OoT3DRenderer, ModelCache } from './oot3d_scenes.js';
-import { TransparentBlack } from '../Color.js';
+import { TransparentBlack, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import { SceneContext } from '../SceneBase.js';
 import { MathConstants } from "../MathHelpers.js";
 import { maybeDecompress } from './LzS.js';
+import { ZSIEnvironmentSettings } from './zsi.js';
 
 const pathBase = `ZeldaMajorasMask3D`;
 
@@ -754,7 +755,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
         else if (actor.actorId === ActorId.En_Kakasi) {
             const gar = await fetchArchive(`zelda_ka.gar.lzs`);
-            const b = buildModel(gar, `model/strawman.cmb`);
+            const b = buildModel(gar, `model/scarecrow.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/ka_newwait.csab`));
             b.setVertexColorScale(characterLightScale);
         }
@@ -809,7 +810,7 @@ class SceneDesc implements Viewer.SceneDesc {
             l.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
             l.setVertexColorScale(characterLightScale);
             const s = buildModel(gar, `model/poh_soul_modelT.cmb`);
-            s.bindCMAB(parseCMAB(gar, `anim/poh_soul_modelT.cmab`));
+            s.bindCMAB(parseCMAB(gar, `misc/poh_soul_modelT.cmab`));
             s.setVertexColorScale(characterLightScale);
         }
         else if (actor.actorId === ActorId.En_Rr) {
@@ -891,6 +892,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const zsi = ZSI.parseScene(maybeDecompress(zsiBuffer));
         assert(zsi.rooms !== null);
+        if(zsi.environmentSettings.length === 0)
+        {
+            zsi.environmentSettings.push(new ZSIEnvironmentSettings());
+        }
 
         const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
         const cache = renderer.getRenderCache();

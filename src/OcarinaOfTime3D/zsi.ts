@@ -1,7 +1,8 @@
 
 import * as CMB from './cmb.js';
 
-import { assert, readString } from '../util.js';
+import { colorCopy, colorFromRGBA, TransparentBlack, TransparentWhite, White, colorNewCopy, colorNewFromRGBA, colorEqual, OpaqueBlack } from '../Color.js';
+import { assert, nArray, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
 
@@ -22,27 +23,71 @@ export class ZSIRoomSetup {
     public mesh: Mesh;
 }
 
+export class Light {
+    public ambient = colorNewCopy(TransparentBlack);
+	public diffuse = colorNewCopy(White);
+	public specular0 = colorNewCopy(TransparentWhite);
+	public specular1 = colorNewCopy(TransparentBlack);
+	public direction = vec3.create();
+
+    public copy(o: Light): void {
+        colorCopy(this.ambient, o.ambient);
+        colorCopy(this.diffuse, o.diffuse);
+        colorCopy(this.specular0, o.specular0);
+        colorCopy(this.specular1, o.specular1);
+        vec3.copy(this.direction, o.direction);
+    }
+}
+
 export class ZSIEnvironmentSettings {
-    public ambientLightColor: vec3 = vec3.fromValues(0.5, 0.5, 0.5);
-    public primaryLightDir: vec3 = vec3.fromValues(-0.007874016, -0.047244094, 0.8976378);
-    public primaryLightColor: vec3 = vec3.fromValues(0.8, 0.8, 0.8);
-    public secondaryLightDir: vec3 = vec3.fromValues(-0.19685039, 0.79527557, -0.496063);
-    public secondaryLightColor: vec3 = vec3.create();
-    public fogColor: vec3 = vec3.fromValues(0.5, 0.5, 0.5);
+    
+    public lights: Light[] = nArray(7, () => new Light());
+    public globalAmbient = colorNewCopy(TransparentBlack);
+
+    public fogColor = colorNewFromRGBA(0.5, 0.5, 0.5);
     public fogStart: number = 996.0;
     public fogEnd: number = 12800.0;
+
     public drawDistance: number = 20000.0;
 
+    constructor() {
+        this.reset();
+    }
+
+    public reset(): void {
+        colorFromRGBA(this.globalAmbient, 0.5, 0.5, 0.5);
+        
+        vec3.set(this.lights[0].direction, -0.57715, -0.57715, -0.57715);
+        colorFromRGBA(this.lights[0].diffuse, 1.0, 1.0, 1.0);
+        colorFromRGBA(this.lights[0].ambient, 0.0, 0.0, 0.0);
+        colorFromRGBA(this.lights[0].specular0, 1.0, 1.0, 1.0);
+        colorFromRGBA(this.lights[0].specular1, 1.0, 1.0, 1.0);
+
+        vec3.set(this.lights[1].direction, 0.57715, 0.57715, 0.57715);
+        colorFromRGBA(this.lights[1].diffuse, 0.0, 0.2, 0.3);
+        colorFromRGBA(this.lights[1].ambient, 0.0, 0.0, 0.0);
+        colorFromRGBA(this.lights[1].specular0, 0.1, 0.1, 0.1);
+        colorFromRGBA(this.lights[1].specular1, 0.1, 0.1, 0.1);
+
+        for (let i = 2; i < this.lights.length; i++) {
+            vec3.set(this.lights[i].direction, 0, 1, 0);
+            colorFromRGBA(this.lights[i].diffuse,  0, 0, 0);
+            colorFromRGBA(this.lights[i].ambient,  0, 0, 0);
+            colorFromRGBA(this.lights[i].specular0, 0, 0, 0);
+            colorFromRGBA(this.lights[i].specular1, 0, 0, 0);
+        }
+    }
+
     public copy(o: ZSIEnvironmentSettings): void {
-        vec3.copy(this.ambientLightColor, o.ambientLightColor);
-        vec3.copy(this.primaryLightDir, o.primaryLightDir);
-        vec3.copy(this.primaryLightColor, o.primaryLightColor);
-        vec3.copy(this.secondaryLightDir, o.secondaryLightDir);
-        vec3.copy(this.secondaryLightColor, o.secondaryLightColor);
-        vec3.copy(this.fogColor, o.fogColor);
+        colorCopy(this.globalAmbient, o.globalAmbient);
+        colorCopy(this.fogColor, o.fogColor);
         this.fogStart = o.fogStart;
         this.fogEnd = o.fogEnd;
         this.drawDistance = o.drawDistance;
+        
+        for (let i = 0; i < o.lights.length; i++) {
+            this.lights[i].copy(o.lights[i]);
+        }
     }
 }
 
@@ -157,59 +202,116 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
 
     for (let i = 0; i < nEnvironmentSettings; i++) {
         let setting = new ZSIEnvironmentSettings;
-
-        const drawDistance =  version === Version.Majora ? view.getFloat32(offs + 0x1C, true) : view.getFloat32(offs + 0x00, true);
-        const fogEnd = version === Version.Majora ? view.getFloat32(offs + 0x18, true) : view.getFloat32(offs + 0x04, true);
-        const fogStart =  (version === Version.Majora ? view.getUint16(offs + 0x16, true) : view.getUint16(offs + 0x08, true)) & 0x03FF;
-
-        const ambientColR = view.getUint8(offs + 0x0A) / 0xFF;
-        const ambientColG = view.getUint8(offs + 0x0B) / 0xFF;
-        const ambientColB = view.getUint8(offs + 0x0C) / 0xFF;
-
-        const firstDiffuseLightDirX = view.getInt8(offs + 0x0D) / 0x7F;
-        const firstDiffuseLightDirY = view.getInt8(offs + 0x0E) / 0x7F;
-        const firstDiffuseLightDirZ = view.getInt8(offs + 0x0F) / 0x7F;
-
-        const firstDiffuseLightColR = view.getUint8(offs + 0x10) / 0xFF;
-        const firstDiffuseLightColG = view.getUint8(offs + 0x11) / 0xFF;
-        const firstDiffuseLightColB = view.getUint8(offs + 0x12) / 0xFF;
         
-        const secondDiffuseLightDirX = view.getInt8(offs + 0x13) / 0x7F;
-        const secondDiffuseLightDirY = view.getInt8(offs + 0x14) / 0x7F;
-        const secondDiffuseLightDirZ = view.getInt8(offs + 0x15) / 0x7F;
-        
-        const secondDiffuseLightColR = view.getUint8(offs + 0x16) / 0xFF;
-        const secondDiffuseLightColG = view.getUint8(offs + 0x17) / 0xFF;
-        const secondDiffuseLightColB = view.getUint8(offs + 0x18) / 0xFF;
+        if(version === Version.Majora){
+            const ambientColR = view.getUint8(offs + 0x00) / 0xFF;
+            const ambientColG = view.getUint8(offs + 0x01) / 0xFF;
+            const ambientColB = view.getUint8(offs + 0x02) / 0xFF;
+    
+            const unk03 = view.getUint8(offs + 0x03) / 0xFF;
+            const unk04 = view.getUint8(offs + 0x04) / 0xFF;
+            const unk05 = view.getUint8(offs + 0x05) / 0xFF;
 
-        const fogColorR = (version === Version.Majora ? view.getUint8(offs + 0x12) : view.getUint8(offs + 0x19)) / 0xFF;
-        const fogColorG = (version === Version.Majora ? view.getUint8(offs + 0x13) : view.getUint8(offs + 0x1A)) / 0xFF;
-        const fogColorB = (version === Version.Majora ? view.getUint8(offs + 0x14) : view.getUint8(offs + 0x1B)) / 0xFF;
+            const light0DirX = view.getInt8(offs + 0x06) / 0x7F;
+            const light0DirY = view.getInt8(offs + 0x07) / 0x7F;
+            const light0DirZ = view.getInt8(offs + 0x08) / 0x7F;
+    
+            const light0ColR = view.getUint8(offs + 0x09) / 0xFF;
+            const light0ColG = view.getUint8(offs + 0x0A) / 0xFF;
+            const light0ColB = view.getUint8(offs + 0x0B) / 0xFF;
+
+            const light1DirX = view.getInt8(offs + 0x0C) / 0x7F;
+            const light1DirY = view.getInt8(offs + 0x0D) / 0x7F;
+            const light1DirZ = view.getInt8(offs + 0x0E) / 0x7F;
+
+            const light1ColR = view.getUint8(offs + 0x0F) / 0xFF;
+            const light1ColG = view.getUint8(offs + 0x10) / 0xFF;
+            const light1ColB = view.getUint8(offs + 0x11) / 0xFF;
+
+            const fogColorR = view.getUint8(offs + 0x12) / 0xFF;
+            const fogColorG = view.getUint8(offs + 0x13) / 0xFF;
+            const fogColorB = view.getUint8(offs + 0x14) / 0xFF;
+
+            const fogStart = view.getUint16(offs + 0x16, true) & 0x03FF;
+            const fogEnd = view.getFloat32(offs + 0x18, true);
+            const drawDistance = view.getFloat32(offs + 0x1C, true);
+
+            setting.lights.forEach(o=> o.ambient = colorNewFromRGBA(0, 0, 0, 0));
+            setting.lights[0].direction = vec3.fromValues(light0DirX, light0DirY, light0DirZ);
+            setting.lights[0].diffuse   = colorNewFromRGBA(light0ColR, light0ColG, light0ColB);
+            setting.lights[0].specular0 = colorNewFromRGBA(light0ColR, light0ColG, light0ColB);
+            setting.lights[0].specular1 = colorNewFromRGBA(light0ColR, light0ColG, light0ColB);
+
+            setting.lights[1].direction = vec3.fromValues(light1DirX, light1DirY, light1DirZ);
+            setting.lights[1].diffuse   = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
+            setting.lights[1].specular0 = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
+            setting.lights[1].specular1 = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
+
+            setting.drawDistance = drawDistance;
+            setting.fogStart = fogStart;
+            setting.fogEnd = fogEnd;
+            setting.globalAmbient = colorNewFromRGBA(ambientColR, ambientColG, ambientColB);
+            setting.fogColor = colorNewFromRGBA(fogColorR, fogColorG, fogColorB);
+        }
+        else
+        {
+            const drawDistance = view.getFloat32(offs + 0x00, true);
+            const fogEnd = view.getFloat32(offs + 0x04, true);
+            const fogStart = view.getUint16(offs + 0x08, true) & 0x03FF;
+
+            const ambientColR = view.getUint8(offs + 0x0A) / 0xFF;
+            const ambientColG = view.getUint8(offs + 0x0B) / 0xFF;
+            const ambientColB = view.getUint8(offs + 0x0C) / 0xFF;
+    
+            const light0DirX = view.getInt8(offs + 0x0D) / 0x7F;
+            const light0DirY = view.getInt8(offs + 0x0E) / 0x7F;
+            const light0DirZ = view.getInt8(offs + 0x0F) / 0x7F;
+    
+            const light0ColR = view.getUint8(offs + 0x10) / 0xFF;
+            const light0ColG = view.getUint8(offs + 0x11) / 0xFF;
+            const light0ColB = view.getUint8(offs + 0x12) / 0xFF;
+            
+            const light1DirX = view.getInt8(offs + 0x13) / 0x7F;
+            const light1DirY = view.getInt8(offs + 0x14) / 0x7F;
+            const light1DirZ = view.getInt8(offs + 0x15) / 0x7F;
+    
+            const light1ColR = view.getUint8(offs + 0x16) / 0xFF;
+            const light1ColG = view.getUint8(offs + 0x17) / 0xFF;
+            const light1ColB = view.getUint8(offs + 0x18) / 0xFF;
+
+            const fogColorR = view.getUint8(offs + 0x19) / 0xFF;
+            const fogColorG = view.getUint8(offs + 0x1A) / 0xFF;
+            const fogColorB = view.getUint8(offs + 0x1B) / 0xFF;
+
+            //(M-1): Direction doesn't accurate...
+            setting.lights[0].direction = vec3.fromValues(light0DirX, light0DirY, light0DirZ);
+            setting.lights[0].diffuse = colorNewFromRGBA(light0ColR, light0ColG, light0ColB);
+            setting.lights[0].ambient = colorNewFromRGBA(ambientColR, ambientColG, ambientColB);
+
+            setting.lights[1].direction = vec3.fromValues(light1DirX, light1DirY, light1DirZ);
+            setting.lights[1].diffuse = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
+            setting.lights[1].ambient = colorNewFromRGBA(0, 0, 0);
+
+            setting.drawDistance = drawDistance;
+            setting.fogStart = (fogStart >= 996) ? 996: fogStart;
+            setting.fogEnd = fogEnd;
+            setting.fogColor = colorNewFromRGBA(fogColorR, fogColorG, fogColorB);
+        }
         
         offs += (version === Version.Majora) ? 0x20 : 0x1C;
 
-        setting.drawDistance = drawDistance;
-        setting.fogStart = (fogStart >= 996) ? 996: fogStart;
-        setting.fogEnd = (fogEnd >= 12800) ? version === Version.Majora ? 3000 : 5000 : fogEnd;
-        setting.ambientLightColor = vec3.fromValues(ambientColR, ambientColG, ambientColB);
-        setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
-        setting.primaryLightColor = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
-        setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
-        setting.secondaryLightColor = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
-        setting.fogColor = vec3.fromValues(fogColorR, fogColorG, fogColorB);
-
         //HACK(M-1) Until I figure how to handle "outdoor lighting"
-        if(vec3.equals(setting.primaryLightDir, [0, 0, 0]) && vec3.equals(setting.secondaryLightDir, [0, 0, 0])){
-            setting.primaryLightDir = vec3.fromValues(0.5, 0.5, 0.5);
-            setting.secondaryLightDir = vec3.fromValues(-0.5, -0.5, -0.5);
-            setting.primaryLightColor = vec3.fromValues(1, 1, 1);
-            setting.secondaryLightColor = vec3.fromValues(0, 0, 0);
+        if(vec3.equals(setting.lights[0].direction, [0, 0, 0]) && vec3.equals(setting.lights[1].direction, [0, 0, 0])){
+            setting.lights[0].direction = vec3.fromValues(0.5, 0.5, 0.5);
+            setting.lights[0].direction = vec3.fromValues(-0.5, -0.5, -0.5);
+
+            colorFromRGBA(setting.lights[0].ambient, 0.5, 0.5, 0.5, 1);
+            colorFromRGBA(setting.lights[0].diffuse, 1, 1, 1, 1);
+            colorFromRGBA(setting.lights[1].diffuse, 0, 0, 0, 1);
         }
-        if(vec3.equals(setting.fogColor, [0,0,0])){
-            setting.fogColor = vec3.fromValues(0.5, 0.5, 0.5)
-        }
-        if(vec3.equals(setting.ambientLightColor, [0,0,0])){
-            setting.ambientLightColor = vec3.fromValues(0.5, 0.5, 0.5)
+
+        if(colorEqual(setting.fogColor, OpaqueBlack)){
+            colorFromRGBA(setting.fogColor, 0.5, 0.5, 0.5);
         }
 
         environmentSettings.push(setting);

@@ -7,12 +7,15 @@ import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxC
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
+import { AnimationKeyframeHermite, sampleAnimationTrack,} from './csab.js';
+import { clamp } from '../MathHelpers.js';
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;
     positionByteOffset: number;
     colorByteOffset: number;
     normalByteOffset: number;
+    tangentByteOffset: number;
     texCoord0ByteOffset: number;
     texCoord1ByteOffset: number;
     texCoord2ByteOffset: number;
@@ -21,13 +24,14 @@ export interface VatrChunk {
 }
 
 export const enum Version {
-    Ocarina, Majora, LuigisMansion
+    Ocarina, Majora, LuigisMansion, EverOasis
 }
 
 export class CMB {
     public name: string;
     public version: Version;
     public textures: Texture[] = [];
+    public luts: Uint8Array[] = [];
     public vatrChunk: VatrChunk;
 
     public materials: Material[] = [];
@@ -78,7 +82,7 @@ function readSklChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         bones.push(bone);
 
         boneTableIdx += 0x28;
-        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+        if (cmb.version > Version.Ocarina)
             boneTableIdx += 0x04;
     }
     cmb.bones = bones;
@@ -159,6 +163,54 @@ export const enum CombineOpDMP {
     ONE_MINUS_SRC_B          = 0x8585,
 };
 
+export const enum LightingConfig {
+	Config0 = 0x62B0,
+	Config1 = 0x62B1,
+	Config2 = 0x62B2,
+	Config3 = 0x62B3,
+	Config4 = 0x62B4,
+	Config5 = 0x62B5,
+	Config6 = 0x62B6,
+	Config7 = 0x62B7,
+};
+
+export const enum FresnelSelector {
+	No     = 0x62C0,
+	Pri    = 0x62C1,
+	Sec    = 0x62C2,
+	PriSec = 0x62C3
+};
+
+export const enum BumpMode {
+    NotUsed   = 0x62C8,
+	AsBump    = 0x62C9,
+	AsTangent = 0x62CA// Doesn't exist in OoT3D?
+};
+
+export const enum LutInput {
+	CosNormalHalf  = 0x62A0,
+	CosViewHalf    = 0x62A1,
+	CosNormalView  = 0x62A2,
+	CosLightNormal = 0x62A3,
+	CosLightSpot   = 0x62A4,
+	CosPhi         = 0x62A5
+}
+
+export const enum TextureTransformType{
+    DccMaya,
+    DccSoftImage,
+    Dcc3dsMax
+}
+
+export const enum TexCoordConfig{
+    Config0120,
+    Config0110,
+    Config0111,
+    Config0112,
+    Config0121,
+    Config0122
+}
+
 export interface TextureCombiner {
     combineRGB: CombineResultOpDMP;
     combineAlpha: CombineResultOpDMP;
@@ -198,12 +250,21 @@ export interface TextureCoordinator {
     sourceCoordinate: number;
     mappingMethod: TextureCoordinatorMappingMethod;
     referenceCamera: number;
-    matrixMode: number;
+    matrixMode: TextureTransformType;
     textureMatrix: mat4;
+}
+
+export interface MaterialLutSampler {
+    isAbsolute: boolean;
+    index: number;
+    input: LutInput;
+    scale: number;
 }
 
 export interface Material {
     index: number;
+    renderLayer: number;
+    texCoordConfig: TexCoordConfig;
     textureBindings: TextureBinding[];
     textureCoordinators: TextureCoordinator[];
     constantColors: Color[];
@@ -214,9 +275,35 @@ export interface Material {
     isTransparent: boolean;
     polygonOffset: number;
     isVertexLightingEnabled: boolean;
+    isFragmentLightingEnabled: boolean;
     isFogEnabled: boolean;
+
+    lightingConfig: LightingConfig;
+    fresnelSelector: FresnelSelector;
+
+    bumpMode: BumpMode;
+    bumpTextureIndex: number;
+    isBumpRenormEnabled: boolean;
+    isClampHighlight: boolean;
+    isGeoFactorEnabled: boolean;
+    isGeo0Enabled: boolean;
+    isGeo1Enabled: boolean;
+    isDist0Enabled: boolean;
+    isDist1Enabled: boolean;
+    isReflectionEnabled: boolean;
+
+    emissionColor: Color;
     diffuseColor: Color;
     ambientColor: Color;
+    specular0Color: Color;
+    specular1Color: Color;
+
+    lutDist0:   MaterialLutSampler;
+    lutDist1:   MaterialLutSampler;
+    lutFesnel:  MaterialLutSampler;
+    lutReflecR: MaterialLutSampler;
+    lutReflecG: MaterialLutSampler;
+    lutReflecB: MaterialLutSampler;
 }
 
 export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -226,12 +313,23 @@ export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: 
 
     mat4.identity(dst);
 
-    dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
-    dst[4]  = scaleS *  sinR;
-    dst[5]  = scaleT *  cosR;
-    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[0] = scaleS *  cosR;
+    dst[1] = scaleT *  sinR;
+    dst[4] = scaleS *  -sinR;
+    dst[5] = scaleT *  cosR;
+    dst[12] = scaleS * ((0.5 *  sinR - 0.5 * cosR) + 0.5 - translationS);
+    dst[13] = scaleT * ((0.5 * -sinR - 0.5 * cosR) + 0.5 - translationT);
+}
+
+function translateBumpTexture(bumpTexture: number): GfxCullMode {
+    switch (bumpTexture) {
+    case 0x84C0: return 0;
+    case 0x84C1: return 1;
+    case 0x84C2: return 2;
+    case 0x84C3: return 3;
+    default:
+        throw "whoops";
+    }
 }
 
 function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
@@ -256,7 +354,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const materialCount = view.getUint32(0x08, true);
 
     let materialDataSize = 0x15C;
-    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+    if (cmb.version > Version.Ocarina)
         materialDataSize += 0x10;
 
     let offs = 0x0C;
@@ -268,7 +366,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const isVertexLightingEnabled = !!view.getUint8(offs + 0x01);
         //(M-1): Hack until fog is implemented for Luigi's Mansion
         const isFogEnabled = (cmb.version === Version.LuigisMansion) ? false : !!view.getUint8(offs + 0x02);
-        const isBlendEnabled = !!view.getUint8(offs + 0x03);
+        const renderLayer = view.getUint8(offs + 0x03);
 
         const cullModeFlags = view.getUint8(offs + 0x04);
         assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);
@@ -278,8 +376,22 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const polygonOffsetUnit = view.getInt8(offs + 0x07);
         const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0xFFFE : 0;
 
-        const textureBindingTableCount = view.getUint32(offs + 0x08);
-        const textureCoordinatorTableCount = view.getUint32(offs + 0x0C);
+        let textureBindingTableCount = 3;
+        let textureCoordinatorTableCount = 3;
+        let texCoordConfig: TexCoordConfig = TexCoordConfig.Config0120;
+
+        if(cmb.version > Version.Majora){
+            texCoordConfig = view.getUint32(offs + 0x08, true);
+            textureBindingTableCount = view.getUint16(offs + 0x0C, true);
+            textureCoordinatorTableCount = view.getUint16(offs + 0x0E, true);
+        }else{
+            textureBindingTableCount = view.getUint32(offs + 0x08, true);
+            textureCoordinatorTableCount = view.getUint32(offs + 0x0C, true);
+
+            if(textureBindingTableCount > textureCoordinatorTableCount){
+                texCoordConfig = TexCoordConfig.Config0110;
+            }
+        }
 
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
@@ -309,13 +421,15 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x00);
             const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
             const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
-            const matrixMode = view.getUint8(coordinatorsOffs + 0x03);
+            const matrixMode: TextureTransformType = view.getUint8(coordinatorsOffs + 0x03);
             const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
             const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
             const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
             const translationT = view.getFloat32(coordinatorsOffs + 0x10, true);
             const rotation = view.getFloat32(coordinatorsOffs + 0x14, true);
             const textureMatrix = mat4.create();
+
+            assert(matrixMode === TextureTransformType.DccMaya);
             calcTexMtx(textureMatrix, scaleS, scaleT, rotation, translationS, translationT);
             textureCoordinators.push({ sourceCoordinate, mappingMethod, referenceCamera, matrixMode, textureMatrix });
             coordinatorsOffs += 0x18;
@@ -324,8 +438,8 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const emissionColor = colorNewFromRGBA8(view.getUint32(offs + 0xA0, false));
         const ambientColor = colorNewFromRGBA8(view.getUint32(offs + 0xA4, false));
         const diffuseColor = colorNewFromRGBA8(view.getUint32(offs + 0xA8, false));
-        const specularColor0 = colorNewFromRGBA8(view.getUint32(offs + 0xAC, false));
-        const specularColor1 = colorNewFromRGBA8(view.getUint32(offs + 0xB0, false));
+        const specular0Color = colorNewFromRGBA8(view.getUint32(offs + 0xAC, false));
+        const specular1Color = colorNewFromRGBA8(view.getUint32(offs + 0xB0, false));
 
         const constantColors: Color[] = [];
         constantColors[0] = colorNewFromRGBA8(view.getUint32(offs + 0xB4, false));
@@ -340,49 +454,62 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const bufferColorB = view.getFloat32(offs + 0xD4, true);
         const bufferColorA = view.getFloat32(offs + 0xD8, true);
 
-        const bumpTextureIndex = view.getUint16(offs + 0xDC, true);
-        const bumpMode = view.getUint16(offs + 0xDE, true);
-        const isBumpRenormalize = !!view.getUint32(offs + 0xE0, true);
+        const bumpTextureIndex = translateBumpTexture(view.getUint16(offs + 0xDC, true));
+        const bumpMode: BumpMode = view.getUint16(offs + 0xDE, true);
+        const isBumpRenormEnabled = !!view.getUint32(offs + 0xE0, true);
 
-        const layerConfig = view.getUint32(offs + 0xE4, true);
-        const fresnelSelector = view.getUint16(offs + 0xE8, true);
+        const lightingConfig: LightingConfig = view.getUint32(offs + 0xE4, true);
+        const fresnelSelector: FresnelSelector = view.getUint16(offs + 0xE8, true);
         const isClampHighlight = !!view.getUint8(offs + 0xEA);
-        const isDistribution0Enabled = !!view.getUint8(offs + 0xEB);
-        const isDistribution1Enabled = !!view.getUint8(offs + 0xEC);
-        const isGeometricFactor0Enabled = !!view.getUint8(offs + 0xED);
-        const isGeometricFactor1Enabled = !!view.getUint8(offs + 0xEE);
+        const isDist0Enabled = !!view.getUint8(offs + 0xEB);
+        const isDist1Enabled = !!view.getUint8(offs + 0xEC);
+        const isGeo0Enabled = !!view.getUint8(offs + 0xED);
+        const isGeo1Enabled = !!view.getUint8(offs + 0xEE);
         const isReflectionEnabled = !!view.getUint8(offs + 0xEF);
+        const isGeoFactorEnabled = isGeo0Enabled || isGeo1Enabled;
 
         // Fragment lighting table.
-        const distibution0SamplerIsAbs = !!view.getUint8(offs + 0xF0);
-        const distibution0SamplerIndex = view.getInt8(offs + 0xF1);
-        const distibution0SamplerInput = view.getUint16(offs + 0xF2, true);
-        const distibution0SamplerScale = view.getUint32(offs + 0xF4, true);
+        const lutDist0 = {
+            isAbsolute: !!view.getUint8(offs + 0xF0),
+            index: view.getInt8(offs + 0xF1),
+            input: view.getUint16(offs + 0xF2, true),
+            scale: view.getFloat32(offs + 0xF4, true)
+        };
 
-        const distibution1SamplerIsAbs = !!view.getUint8(offs + 0xF8);
-        const distibution1SamplerIndex = view.getInt8(offs + 0xF9);
-        const distibution1SamplerInput = view.getUint16(offs + 0xFA, true);
-        const distibution1SamplerScale = view.getUint32(offs + 0xFC, true);
+        const lutDist1 = {
+            isAbsolute: !!view.getUint8(offs + 0xF8),
+            index: view.getInt8(offs + 0xF9),
+            input: view.getUint16(offs + 0xFA, true),
+            scale: view.getFloat32(offs + 0xFC, true)
+        };
 
-        const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0x100);
-        const reflectanceRSamplerIndex = view.getInt8(offs + 0x101);
-        const reflectanceRSamplerInput = view.getUint16(offs + 0x102, true);
-        const reflectanceRSamplerScale = view.getUint32(offs + 0x104, true);
+        const lutReflecR = {
+            isAbsolute: !!view.getUint8(offs + 0x100),
+            index: view.getInt8(offs + 0x101),
+            input: view.getUint16(offs + 0x102, true),
+            scale: view.getFloat32(offs + 0x104, true)
+        };
 
-        const reflectanceGSamplerIsAbs = !!view.getUint8(offs + 0x108);
-        const reflectanceGSamplerIndex = view.getInt8(offs + 0x109);
-        const reflectanceGSamplerInput = view.getUint16(offs + 0x10A, true);
-        const reflectanceGSamplerScale = view.getUint32(offs + 0x10C, true);
+        const lutReflecG = {
+            isAbsolute: !!view.getUint8(offs + 0x109),
+            index: view.getInt8(offs + 0x109),
+            input: view.getUint16(offs + 0x10A, true),
+            scale: view.getFloat32(offs + 0x10C, true)
+        };
 
-        const reflectanceBSamplerIsAbs = !!view.getUint8(offs + 0x110);
-        const reflectanceBSamplerIndex = view.getInt8(offs + 0x111);
-        const reflectanceBSamplerInput = view.getUint16(offs + 0x112, true);
-        const reflectanceBSamplerScale = view.getUint32(offs + 0x114, true);
+        const lutReflecB = {
+            isAbsolute: !!view.getUint8(offs + 0x110),
+            index: view.getInt8(offs + 0x111),
+            input: view.getUint16(offs + 0x112, true),
+            scale: view.getFloat32(offs + 0x114, true)
+        };
 
-        const fresnelSamplerIsAbs = !!view.getUint8(offs + 0x118);
-        const fresnelSamplerIndex = view.getInt8(offs + 0x110);
-        const fresnelSamplerInput = view.getUint16(offs + 0x11A, true);
-        const fresnelSamplerScale = view.getUint32(offs + 0x11C, true);
+        const lutFesnel = {
+            isAbsolute: !!view.getUint8(offs + 0x118),
+            index: view.getInt8(offs + 0x119),
+            input: view.getUint16(offs + 0x11A, true),
+            scale: view.getFloat32(offs + 0x11C, true)
+        };
 
         const textureCombinerTableCount = view.getUint32(offs + 0x120, true);
         const textureCombiners: TextureCombiner[] = [];
@@ -477,11 +604,17 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
-        cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset, isVertexLightingEnabled, isFogEnabled, ambientColor, diffuseColor });
+        cmb.materials.push({
+            index: i, renderLayer, texCoordConfig, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags,
+            isTransparent, polygonOffset, isVertexLightingEnabled, isFragmentLightingEnabled, isFogEnabled, lightingConfig, fresnelSelector,
+            bumpMode, bumpTextureIndex, isBumpRenormEnabled, isClampHighlight, isGeoFactorEnabled, isGeo0Enabled, isGeo1Enabled, isDist0Enabled, isDist1Enabled, isReflectionEnabled,
+            emissionColor, ambientColor, diffuseColor, specular0Color, specular1Color,
+            lutDist0, lutDist1, lutFesnel, lutReflecR, lutReflecG, lutReflecB,
+        });
 
         offs += 0x15C;
 
-        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion) {
+        if (cmb.version > Version.Ocarina) {
             // Stencil.
             offs += 0x10;
         }
@@ -496,6 +629,7 @@ export interface TextureLevel {
 }
 
 export interface Texture {
+    isCubemap: boolean;
     name: string;
     width: number;
     height: number;
@@ -509,18 +643,20 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
     assert(readString(buffer, 0x00, 0x04) === 'tex ');
     const count = view.getUint32(0x08, true);
     let offs = 0x0C;
+    let cubemapOffs = offs + (0x24 * count);
 
+    //TODO(M-1): Cubemap support
     const textures: Texture[] = [];
     for (let i = 0; i < count; i++) {
         const size = view.getUint32(offs + 0x00, true);
         const maxLevel = view.getUint16(offs + 0x04, true);
         const isETC1 = view.getUint8(offs + 0x06);
-        const isCubeMap = view.getUint8(offs + 0x07);
+        const isCubemap = !!view.getUint8(offs + 0x07);
         const width = view.getUint16(offs + 0x08, true);
         const height = view.getUint16(offs + 0x0A, true);
         const glFormat = view.getUint32(offs + 0x0C, true);
         let dataOffs = view.getUint32(offs + 0x10, true);
-        const dataEnd = dataOffs + size;
+        let dataEnd = dataOffs + size;
         const texName = readString(buffer, offs + 0x14, 0x10);
         // TODO(jstpierre): Maybe find another way to dedupe? Name seems inconsistent.
         const name = `${cmbName}/${i}/${texName}`;
@@ -531,17 +667,49 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
         const format = getTextureFormatFromGLFormat(glFormat);
 
         if (texData !== null) {
-            let mipWidth = width, mipHeight = height;
-            for (let i = 0; i < maxLevel; i++) {
-                const pixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(dataOffs, dataEnd));
-                levels.push({ name, width: mipWidth, height: mipHeight, pixels });
-                dataOffs += computeTextureByteSize(format, mipWidth, mipHeight);
-                mipWidth /= 2;
-                mipHeight /= 2;
+            if(isCubemap) {
+                let mipWidth = width, mipHeight = height;
+                //TODO(M-1): Support mipmaps properly and check image order
+                const depth = 1;
+                const startOffs: number[] = [];
+                const endOffs:   number[] = [];
+
+                for (let i = 0; i < 6; i++){
+                    startOffs.push(view.getUint32(cubemapOffs + dataOffs + (4 * i), true));
+                    endOffs.push(startOffs[i] + size);
+                }
+
+                for (let i = 0; i < 3; i++) {
+                    const pixels: Uint8Array = new Uint8Array((mipWidth * mipHeight * 4) * depth);
+                    const mipSize = computeTextureByteSize(format, mipWidth, mipHeight);
+                    let setOffs = 0;
+
+                    for (let j = 0; j < depth; j++) {
+                        const tempPixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(startOffs[j], endOffs[j]));
+                        pixels.set(tempPixels, setOffs);
+                        
+                        startOffs[j] += mipSize;
+                        setOffs += tempPixels.length;
+                    }
+
+                    levels.push({ name, width: mipWidth, height: mipHeight, pixels });
+                    mipWidth /= 2;
+                    mipHeight /= 2;
+                }
+            }
+            else {
+                let mipWidth = width, mipHeight = height;
+                for (let i = 0; i < maxLevel; i++) {
+                    const pixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(dataOffs, dataEnd));
+                    levels.push({ name, width: mipWidth, height: mipHeight, pixels });
+                    dataOffs += computeTextureByteSize(format, mipWidth, mipHeight);
+                    mipWidth /= 2;
+                    mipHeight /= 2;
+                }
             }
         }
 
-        textures.push({ name, format, width, height, levels });
+        textures.push({ isCubemap:false, name, format, width, height, levels });
     }
 
     return textures;
@@ -549,6 +717,63 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
 
 function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null): void {
     cmb.textures = parseTexChunk(buffer, texData, cmb.name);
+}
+
+function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): Uint8Array[] {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'luts');
+    const count = view.getUint32(0x08, true);
+
+    let offsTable = 0x10;
+
+    const lutTables: Uint8Array[] = [];
+    for (let i = 0; i < count; i++) {
+        const offs = view.getUint32(offsTable, true);
+
+        const timeStart = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x04, true) : view.getInt32(offs + 0x08, true);
+        let timeEnd = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x06, true) : view.getInt32(offs + 0x0C, true);
+        const numKeyframes = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x02, true) : view.getUint32(offs + 0x04, true);
+        let keyframeTableIdx: number = offs + 0x10;
+
+        const isAbs = timeStart >= 0;
+
+        if(isAbs)
+            timeEnd += 256;
+
+        const frames: AnimationKeyframeHermite[] = [];
+        for (let j = 0; j < numKeyframes; j++) {
+            let time = view.getInt32(keyframeTableIdx + 0x00, true);
+            const value = view.getFloat32(keyframeTableIdx + 0x04, true);
+            const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
+            const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
+
+            if(!isAbs)
+                time +=256;
+
+            keyframeTableIdx += 0x10;
+            frames.push({ time, value, tangentIn, tangentOut });
+        }
+
+        const data = new Uint8Array(512);
+        if(isAbs){
+            const clampValue = clamp(frames[0].value, 0, 1) * 255;
+            for (let i = 0; i < 256; i++) {
+                data[i + 256] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, i), 0, 1) * 255;
+                data[i] = clampValue;
+            }
+        }
+        else{
+            for (let i = 0; i < 512; i++) {
+                data[i] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, i), 0, 1) * 255;
+            }
+        }
+
+        offsTable += 4;
+        lutTables.push(data);
+    }
+
+    return lutTables;
 }
 
 function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
@@ -577,7 +802,7 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const normalByteOffset = readSlice(baseOffs);
 
     let tangentByteOffset = 0;
-    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+    if (cmb.version > Version.Ocarina)
         tangentByteOffset = readSlice(baseOffs);
 
     const colorByteOffset = readSlice(baseOffs);
@@ -592,6 +817,7 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         dataBuffer,
         positionByteOffset,
         normalByteOffset,
+        tangentByteOffset,
         colorByteOffset,
         texCoord0ByteOffset,
         texCoord1ByteOffset,
@@ -624,6 +850,8 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
             idx += 0x04;
         else if (cmb.version === Version.Majora)
             idx += 0x0C;
+        else if (cmb.version === Version.EverOasis)
+            idx += 0x10;
         else if (cmb.version === Version.LuigisMansion)
             idx += 0x58;
     }
@@ -651,7 +879,10 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
     assert(readString(buffer, 0x00, 0x04) === 'prm ');
 
     const prm = new Prm();
-    prm.indexType = view.getUint32(0x10, true);
+    prm.indexType = view.getInt16(0x10, true);
+    //(M-1): What could this be?
+    const unk00 = view.getInt8(0x12);
+    const unkFF = view.getInt8(0x13);
     prm.count = view.getUint16(0x14, true);
     // No idea why this is always specified in terms of shorts, even when the indexType is byte...
     prm.offset = view.getUint16(0x16, true) * 2;
@@ -728,7 +959,8 @@ export class Sepd {
     public boneWeights!: SepdVertexAttrib;
 
     public boneDimension: number;
-    public useVertexColors: boolean;
+    public hasVertexColors: boolean;
+    public hasTangents: boolean;
 }
 
 // "Separate Data Shape"
@@ -775,11 +1007,13 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     let bitIdx = cmb.version !== Version.Ocarina ? 3 : 2;
 
-    sepd.useVertexColors = ((flags >> bitIdx) & 1) !== 0;
+    sepd.hasVertexColors = ((flags >> bitIdx) & 1) !== 0;
+    sepd.hasTangents = cmb.version > Version.Ocarina ? ((flags >> 2) & 1) !== 0 : false;
+    
     sepd.position = readVertexAttrib();
     sepd.normal = readVertexAttrib();
 
-    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+    if (cmb.version > Version.Ocarina)
         sepd.tangent = readVertexAttrib();
 
     sepd.color = readVertexAttrib();
@@ -840,12 +1074,14 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     const size = view.getUint32(0x04, true);
     cmb.name = readString(buffer, 0x10, 0x10);
 
-    const numChunks = view.getUint32(0x08, true);
-    if (numChunks === 0x0F)
+    const version = view.getUint32(0x08, true);
+    if (version === 0x0F)
         cmb.version = Version.LuigisMansion;
-    else if (numChunks === 0x0A)
+    else if (version === 0x0C)
+        cmb.version = Version.EverOasis;
+    else if (version === 0x0A)
         cmb.version = Version.Majora
-    else if (numChunks === 0x06)
+    else if (version === 0x06)
         cmb.version = Version.Ocarina;
     else
         throw "whoops";
@@ -856,7 +1092,7 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     chunkIdx += 0x04;
     readSklChunk(cmb, buffer.slice(sklChunkOffs));
 
-    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
+    if (cmb.version > Version.Ocarina)
         chunkIdx += 0x04; // Qtrs
 
     const matsChunkOffs = view.getUint32(chunkIdx, true);
@@ -874,7 +1110,9 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     chunkIdx += 0x04;
     readSklmChunk(cmb, buffer.slice(sklmChunkOffs));
 
-    chunkIdx += 0x04; // Luts
+    const lutsChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
+    cmb.luts = readLutsChunk(cmb, buffer.slice(lutsChunkOffs));
 
     const vatrChunkOffs = view.getUint32(chunkIdx, true);
     chunkIdx += 0x04;

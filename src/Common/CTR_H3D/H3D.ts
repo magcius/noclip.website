@@ -106,6 +106,7 @@ export interface TextureLevel {
 }
 
 export interface Texture {
+    isCubemap: boolean,
     name: string;
     width: number;
     height: number;
@@ -281,7 +282,7 @@ export function parse(buffer: ArrayBufferSlice): BCH {
             mipHeight /= 2;
         }
 
-        textures.push({ name, width: width0, height: height0, format, levels });
+        textures.push({ isCubemap: false, name, width: width0, height: height0, format, levels });
     }
 
     return { textures };

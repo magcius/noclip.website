@@ -89,7 +89,7 @@ function parseLM3DS(buffer: ArrayBufferSlice): ZAR {
     const dataOffsStart = view.getUint32(0x14, true);
 
     const codename = readString(buffer, 0x18, 0x08, true);
-    assert(['SYSTEM'].includes(codename));
+    assert(['SYSTEM', 'agora'].includes(codename));
 
     const files: ZARFile[] = [];
 
