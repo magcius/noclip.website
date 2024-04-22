@@ -81,14 +81,11 @@ vec3 calcFog(vec3 inColor, vec3 worldPosition) {
     return mix(inColor, skyFogColor.rgb, t);
 }
 
-vec2 posToTexCoord(const vec3 vertexPosInView, const vec3 normal){
-    //Blizz seems to have vertex in view space as vector from "vertex to eye", while in this implementation, it's
-    //vector from "eye to vertex". So the minus here is not needed
-    vec3 viewVecNormalized = normalize(vertexPosInView.xyz);
-    vec3 reflection = reflect(viewVecNormalized, normalize(normal));
-    vec3 temp_657 = vec3(reflection.x, reflection.y, (reflection.z + 1.0));
-
-    return ((normalize(temp_657).xy * 0.5) + vec2(0.5));
+vec2 envmapTexCoord(const vec3 viewSpacePos, const vec3 viewSpaceNormal) {
+    vec3 refl = reflect(-normalize(viewSpacePos), normalize(viewSpaceNormal));
+    refl.z += 1.0;
+    refl = normalize(refl);
+    return refl.xy * 0.5 + vec2(0.5);
 }
   `;
 
@@ -304,6 +301,7 @@ void mainVS() {
     v_Normal = normalize(Mul(u_Transform, vec4(a_Normal, 0.0))).xyz;
 
     vec3 viewPosition = Mul(u_ModelView, vec4(v_Position, 1.0)).xyz;
+    vec3 viewNormal = Mul(u_ModelView, vec4(v_Normal, 0.0)).xyz;
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
     v_Color0 = a_Color0.bgra / 255.0;
     v_Color1 = a_Color1.rgba / 255.0;
@@ -319,11 +317,11 @@ void mainVS() {
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseT1Refl}) {
        v_UV0 = a_TexCoord0;
-       v_UV1 = reflect(normalize(viewPosition), v_Normal).xy;
+       v_UV1 = reflect(normalize(viewPosition), viewNormal).xy;
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseT1EnvT2}) {
        v_UV0 = a_TexCoord0;
-       v_UV1 = posToTexCoord(viewPosition, v_Normal);;
+       v_UV1 = envmapTexCoord(viewPosition, viewNormal);
        v_UV2 = a_TexCoord2;
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.SpecularT1}) {
        v_UV0 = a_TexCoord0;
@@ -336,7 +334,7 @@ void mainVS() {
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseCompRefl}) {
        v_UV0 = a_TexCoord0;
        v_UV1 = a_TexCoord1;
-       v_UV2 = reflect(normalize(viewPosition), v_Normal).xy;
+       v_UV2 = reflect(normalize(viewPosition), viewNormal).xy;
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseCompTerrain}) {
        v_UV0 = a_TexCoord0;
        v_UV1 = viewPosition.xy * -0.239999995;
@@ -920,7 +918,7 @@ void mainVS() {
 
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
     vec4 combinedColorHalved = combinedColor * 0.5;
-    vec2 envCoord = posToTexCoord(viewPosition, v_Normal);
+    vec2 envCoord = envmapTexCoord(viewPosition, v_Normal);
     float edgeScanVal = edgeScan(viewPosition, v_Normal);
     int vertexShader = int(shaderTypes.g);
 
