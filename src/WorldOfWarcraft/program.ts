@@ -303,7 +303,8 @@ void mainVS() {
     v_Position = Mul(u_Transform, vec4(a_Position, 1.0)).xyz;
     v_Normal = normalize(Mul(u_Transform, vec4(a_Normal, 0.0))).xyz;
 
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(v_Position, 1.0)));
+    vec3 viewPosition = Mul(u_ModelView, vec4(v_Position, 1.0)).xyz;
+    gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
     v_Color0 = a_Color0.bgra / 255.0;
     v_Color1 = a_Color1.rgba / 255.0;
 
@@ -318,11 +319,11 @@ void mainVS() {
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseT1Refl}) {
        v_UV0 = a_TexCoord0;
-       v_UV1 = reflect(normalize(gl_Position.xyz), v_Normal).xy;
+       v_UV1 = reflect(normalize(viewPosition), v_Normal).xy;
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseT1EnvT2}) {
-       v_UV0= a_TexCoord0;
-       v_UV1 = posToTexCoord(v_Position.xyz, v_Normal);;
+       v_UV0 = a_TexCoord0;
+       v_UV1 = posToTexCoord(viewPosition, v_Normal);;
        v_UV2 = a_TexCoord2;
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.SpecularT1}) {
        v_UV0 = a_TexCoord0;
@@ -335,14 +336,14 @@ void mainVS() {
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseCompRefl}) {
        v_UV0 = a_TexCoord0;
        v_UV1 = a_TexCoord1;
-       v_UV2 = reflect(normalize(gl_Position.xyz), v_Normal).xy;
+       v_UV2 = reflect(normalize(viewPosition), v_Normal).xy;
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseCompTerrain}) {
        v_UV0 = a_TexCoord0;
-       v_UV1 = v_Position.xy * -0.239999995;
+       v_UV1 = viewPosition.xy * -0.239999995;
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.DiffuseCompAlpha}) {
        v_UV0 = a_TexCoord0;
-       v_UV1 = v_Position.xy * -0.239999995;
+       v_UV1 = viewPosition.xy * -0.239999995;
        v_UV2 = a_TexCoord2; //not used
    } else if (vertexShader == ${rust.WowWmoMaterialVertexShader.Parallax}) {
        v_UV0 = a_TexCoord0;
@@ -431,7 +432,7 @@ void mainPS() {
         spec = calcSpec(tex.a);
         finalOpacity = tex.a;
     } else if (pixelShader == ${rust.WowWmoMaterialPixelShader.Metal}) {
-        matDiffuse = tex.rgb ;
+        matDiffuse = tex.rgb;
         spec = calcSpec(((tex * 4.0) * tex.a).x);
         finalOpacity = tex.a;
     } else if (pixelShader == ${rust.WowWmoMaterialPixelShader.Env}) {
@@ -899,22 +900,28 @@ void mainVS() {
     bool isSkybox = params.lightingParams.w > 0.0;
     float w = isSkybox ? 0.0 : 1.0;
     Mat4x4 boneTransform = getCombinedBoneMat();
+
     v_Position = Mul(params.transform, Mul(boneTransform, vec4(a_Position, w))).xyz;
+    v_Normal = normalize(Mul(params.transform, Mul(boneTransform, vec4(a_Normal, 0.0))).xyz);
+
+    vec3 viewPosition;
+
     bool isSphericalBone = bones[int(a_BoneIndices.x)].params.x > 0.0;
     if (isSphericalBone) {
       mat4 combinedModelMat = convertMat4x4(u_ModelView) * convertMat4x4(params.transform) * convertMat4x4(boneTransform);
       CalcBillboardMat(combinedModelMat);
-      gl_Position = convertMat4x4(u_Projection) * combinedModelMat * vec4(a_Position, w);
+      viewPosition = (combinedModelMat * vec4(a_Position, w)).xyz;
     } else {
-      gl_Position = Mul(u_Projection, Mul(u_ModelView, Mul(params.transform, Mul(boneTransform, vec4(a_Position, w)))));
+      viewPosition = Mul(u_ModelView, Mul(params.transform, Mul(boneTransform, vec4(a_Position, w)))).xyz;
     }
 
+    gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
     v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
-    v_Normal = normalize(Mul(params.transform, Mul(boneTransform, vec4(a_Normal, 0.0))).xyz);
+
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
     vec4 combinedColorHalved = combinedColor * 0.5;
-    vec2 envCoord = posToTexCoord(gl_Position.xyz, v_Normal);
-    float edgeScanVal = edgeScan(gl_Position.xyz, v_Normal);
+    vec2 envCoord = posToTexCoord(viewPosition, v_Normal);
+    float edgeScanVal = edgeScan(viewPosition, v_Normal);
     int vertexShader = int(shaderTypes.g);
 
     v_UV0 = a_TexCoord0;

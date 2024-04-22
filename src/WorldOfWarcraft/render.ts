@@ -210,7 +210,7 @@ export class WmoRenderer {
       } else {
         const wrapS = !batch.materialFlags.clamp_s;
         const wrapT = !batch.materialFlags.clamp_t;
-        mappings.push(this.textureCache.getTextureMapping(batch.material.texture_1, blp.inner, { wrapS, wrapT }));
+        mappings.push(this.textureCache.getTextureMapping(blp.fileId, blp.inner, { wrapS, wrapT }));
       }
     }
     return mappings;
