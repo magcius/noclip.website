@@ -604,6 +604,13 @@ class MaterialInstance {
         }
     }
 
+    private calcColor(dst: Color, fallback: Color, i: number): void {
+        if (this.colorAnimators[i])
+            this.colorAnimators[i].calcColor(dst, fallback);
+        else
+            colorCopy(dst, fallback);
+    }
+
     private packTexCoordParams(textureCoordinator: CMB.TextureCoordinator) {
         return (textureCoordinator.mappingMethod << 12) | (textureCoordinator.sourceCoordinate << 8);
     }
@@ -620,8 +627,8 @@ class MaterialInstance {
 
         const mapped = template.mapUniformBufferF32(DMPProgram.ub_MaterialParams);
 
-        offs += fillColor(mapped, offs, this.material.diffuseColor)
-        offs += fillColor(mapped, offs, this.material.ambientColor)
+        offs += fillColor(mapped, offs, this.material.diffuseColor);
+        offs += fillColor(mapped, offs, this.material.ambientColor);
         offs += fillVec4(mapped, offs, this.material.isVertexLightingEnabled ? 1:0, this.material.isFogEnabled? 1:0, this.renderFog ? 1:0);
 
         if (this.isActor) {
@@ -644,12 +651,7 @@ class MaterialInstance {
         offs += fillVec4(mapped, offs, this.environmentSettings.fogStart, this.environmentSettings.fogEnd);
 
         for (let i = 0; i < 6; i++) {
-            if (this.colorAnimators[i]) {
-                this.colorAnimators[i].calcColor(scratchColor);
-            } else {
-                colorCopy(scratchColor, this.constantColors[i]);
-            }
-
+            this.calcColor(scratchColor, this.constantColors[i], i);
             offs += fillColor(mapped, offs, scratchColor);
         }
 
@@ -687,11 +689,11 @@ class MaterialInstance {
             if (animEntry.materialIndex !== this.material.index)
                 continue;
 
-            if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
+            if (animEntry.animationType === CMAB.AnimationType.Translation || animEntry.animationType === CMAB.AnimationType.Rotation || animEntry.animationType === CMAB.AnimationType.Scale) {
                 this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureSRTAnimator(animationController, cmab, animEntry);
-            } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
+            } else if (animEntry.animationType === CMAB.AnimationType.ConstColor) {
                 this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
-            } else if (animEntry.animationType === CMAB.AnimationType.TEXTURE_PALETTE) {
+            } else if (animEntry.animationType === CMAB.AnimationType.TexturePalette) {
                 this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmab, animEntry);
             }
         }

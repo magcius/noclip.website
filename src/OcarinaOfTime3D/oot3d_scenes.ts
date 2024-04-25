@@ -2485,7 +2485,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
         renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
-        renderer.environmentSettingsIndex = this.environmentSettingsIndex
+        renderer.environmentSettingsIndex = this.environmentSettingsIndex;
 
         return renderer;
     }

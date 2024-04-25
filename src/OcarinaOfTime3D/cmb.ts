@@ -226,12 +226,12 @@ export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: 
 
     mat4.identity(dst);
 
-    dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
-    dst[4]  = scaleS *  sinR;
-    dst[5]  = scaleT *  cosR;
-    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[0] = scaleS *  cosR;
+    dst[1] = scaleT *  sinR;
+    dst[4] = scaleS *  -sinR;
+    dst[5] = scaleT *  cosR;
+    dst[12] = scaleS * ((0.5 *  sinR - 0.5 * cosR) + 0.5 - translationS);
+    dst[13] = scaleT * ((0.5 * -sinR - 0.5 * cosR) + 0.5 - translationT);
 }
 
 function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
@@ -268,7 +268,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const isVertexLightingEnabled = !!view.getUint8(offs + 0x01);
         //(M-1): Hack until fog is implemented for Luigi's Mansion
         const isFogEnabled = (cmb.version === Version.LuigisMansion) ? false : !!view.getUint8(offs + 0x02);
-        const isBlendEnabled = !!view.getUint8(offs + 0x03);
+        const renderLayer = view.getUint8(offs + 0x03);
 
         const cullModeFlags = view.getUint8(offs + 0x04);
         assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);

@@ -754,7 +754,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
         else if (actor.actorId === ActorId.En_Kakasi) {
             const gar = await fetchArchive(`zelda_ka.gar.lzs`);
-            const b = buildModel(gar, `model/strawman.cmb`);
+            const b = buildModel(gar, `model/scarecrow.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/ka_newwait.csab`));
             b.setVertexColorScale(characterLightScale);
         }
@@ -809,7 +809,7 @@ class SceneDesc implements Viewer.SceneDesc {
             l.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
             l.setVertexColorScale(characterLightScale);
             const s = buildModel(gar, `model/poh_soul_modelT.cmb`);
-            s.bindCMAB(parseCMAB(gar, `anim/poh_soul_modelT.cmab`));
+            s.bindCMAB(parseCMAB(gar, `misc/poh_soul_modelT.cmab`));
             s.setVertexColorScale(characterLightScale);
         }
         else if (actor.actorId === ActorId.En_Rr) {

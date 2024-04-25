@@ -15,9 +15,9 @@ import { lerp } from "../MathHelpers.js";
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
 
 const enum AnimationTrackType {
-    LINEAR = 0x01,
-    HERMITE = 0x02,
-    INTEGER = 0x03,
+    Linear = 0x01,
+    Hermite = 0x02,
+    Integer = 0x03,
 };
 
 interface AnimationKeyframeLinear {
@@ -33,17 +33,17 @@ interface AnimationKeyframeHermite {
 }
 
 interface AnimationTrackLinear {
-    type: AnimationTrackType.LINEAR;
+    type: AnimationTrackType.Linear;
     frames: AnimationKeyframeLinear[];
 }
 
 interface AnimationTrackHermite {
-    type: AnimationTrackType.HERMITE;
+    type: AnimationTrackType.Hermite;
     frames: AnimationKeyframeHermite[];
 }
 
 interface AnimationTrackInteger {
-    type: AnimationTrackType.INTEGER;
+    type: AnimationTrackType.Integer;
     frames: AnimationKeyframeLinear[];
 }
 
@@ -67,14 +67,15 @@ export interface CMAB extends AnimationBase {
 };
 
 export const enum AnimationType {
-    TRANSLATION = 0x01,
-    TEXTURE_PALETTE = 0x02,
-    COLOR = 0x04,
-    ROTATION = 0x05,
+    Translation = 0x01,
+    TexturePalette = 0x02,
+    ConstColor = 0x04,
+    Rotation = 0x05,
+    Scale = 0x06,
 }
 
 const enum LoopMode {
-    ONCE, REPEAT,
+    Once, Repeat,
 }
 
 function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack | null {
@@ -107,7 +108,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
     if (numKeyframes === 0)
         return null;
 
-    if (type === AnimationTrackType.LINEAR) {
+    if (type === AnimationTrackType.Linear) {
         const frames: AnimationKeyframeLinear[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
@@ -116,18 +117,18 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             frames.push({ time, value });
         }
         return { type, frames };
-    } else if (type === AnimationTrackType.HERMITE) {
+    } else if (type === AnimationTrackType.Hermite) {
         const frames: AnimationKeyframeHermite[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
             const value = view.getFloat32(keyframeTableIdx + 0x04, true);
-            const tangentIn = view.getUint32(keyframeTableIdx + 0x08, true);
-            const tangentOut = view.getUint32(keyframeTableIdx + 0x0C, true);
+            const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
+            const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
             keyframeTableIdx += 0x10;
             frames.push({ time, value, tangentIn, tangentOut });
         }
         return { type, frames };
-    } else if (type === AnimationTrackType.INTEGER) {
+    } else if (type === AnimationTrackType.Integer) {
         const frames: AnimationKeyframeLinear[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
@@ -196,7 +197,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
     let trackOffsTableIdx = 0x10;
     const tracks: AnimationTrack[] = [];
 
-    if (animationType === AnimationType.TRANSLATION) {
+    if (animationType === AnimationType.Translation) {
         for (let i = 0; i < 2; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -208,7 +209,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.TEXTURE_PALETTE) {
+    } else if (animationType === AnimationType.TexturePalette) {
         for (let i = 0; i < 1; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -220,7 +221,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.COLOR) {
+    } else if (animationType === AnimationType.ConstColor) {
         for (let i = 0; i < 4; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -232,7 +233,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.ROTATION) {
+    } else if (animationType === AnimationType.Rotation) {
         for (let i = 0; i < 1; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -280,12 +281,11 @@ export function parse(version: Version, buffer: ArrayBufferSlice, textureNamePre
 
     assert(view.getUint32(0x20, true) === 0xFFFFFFFF); // chunk type?
     const duration = view.getUint32(0x24, true);
+    const loopMode: LoopMode = view.getUint32(0x28, true);
     // TODO(jstpierre): This breaks in shrine. Loop mode, maybe?
     // assert(view.getUint32(0x28, true) === 0x01); // num chunks?
     assert(view.getUint32(0x2C, true) === 0x14); // chunk location?
     const txptChunkOffs = view.getUint32(0x30, true);
-
-    const loopMode = LoopMode.REPEAT;
 
     const madsChunkOffs = 0x34;
     assert(readString(buffer, madsChunkOffs + 0x00, 0x04, false) === 'mads');
@@ -377,11 +377,11 @@ function sampleAnimationTrackInteger(track: AnimationTrackInteger, frame: number
 }
 
 function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
-    if (track.type === AnimationTrackType.LINEAR)
+    if (track.type === AnimationTrackType.Linear)
         return sampleAnimationTrackLinear(track, frame);
-    else if (track.type === AnimationTrackType.HERMITE)
+    else if (track.type === AnimationTrackType.Hermite)
         return sampleAnimationTrackHermite(track, frame);
-    else if (track.type === AnimationTrackType.INTEGER)
+    else if (track.type === AnimationTrackType.Integer)
         return sampleAnimationTrackInteger(track, frame);
     else
         throw "whoops";
@@ -390,11 +390,11 @@ function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
 function getAnimFrame(anim: AnimationBase, frame: number): number {
     // Be careful of floating point precision.
     const lastFrame = anim.duration;
-    if (anim.loopMode === LoopMode.ONCE) {
+    if (anim.loopMode === LoopMode.Once) {
         if (frame > lastFrame)
             frame = lastFrame;
         return frame;
-    } else if (anim.loopMode === LoopMode.REPEAT) {
+    } else if (anim.loopMode === LoopMode.Repeat) {
         while (frame > lastFrame)
             frame -= lastFrame;
         return frame;
@@ -405,20 +405,24 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
 
 export class TextureSRTAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.TRANSLATION || animEntry.animationType === AnimationType.ROTATION);
+        assert(animEntry.animationType === AnimationType.Translation || animEntry.animationType === AnimationType.Rotation || animEntry.animationType === AnimationType.Scale);
     }
 
     public calcTexMtx(dst: mat4): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
         mat4.identity(dst);
 
-        if (this.animEntry.animationType === AnimationType.TRANSLATION) {
+        if (this.animEntry.animationType === AnimationType.Translation) {
             const tx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             const ty = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 0;
-            calcTexMtx(dst, 1, 1, 0, -tx, -ty);
-        } else if (this.animEntry.animationType === AnimationType.ROTATION) {
+            calcTexMtx(dst, 1, 1, 0, tx, ty);
+        } else if (this.animEntry.animationType === AnimationType.Rotation) {
             const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             calcTexMtx(dst, 1, 1, r, 0, 0);
+        } else if (this.animEntry.animationType === AnimationType.Scale) {
+            const sx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 1;
+            const sy = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
+            calcTexMtx(dst, sx, sy, 0, 0, 0);
         } else {
             throw "whoops";
         }
@@ -427,22 +431,22 @@ export class TextureSRTAnimator {
 
 export class ColorAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.COLOR);
+        assert(animEntry.animationType === AnimationType.ConstColor);
     }
 
-    public calcColor(dst: Color): void {
+    public calcColor(dst: Color, fallback: Color): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
-        const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 1;
-        const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
-        const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : 1;
-        const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : 1;
+        const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : fallback.r;
+        const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : fallback.g;
+        const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : fallback.b;
+        const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : fallback.a;
         colorFromRGBA(dst, r, g, b, a);
     }
 }
 
 export class TexturePaletteAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.TEXTURE_PALETTE);
+        assert(animEntry.animationType === AnimationType.TexturePalette);
     }
 
     public fillTextureMapping(textureHolder: CtrTextureHolder, textureMapping: TextureMapping): void {
