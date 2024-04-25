@@ -62,11 +62,11 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
                 const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
                 const rgbaPixels = rgbaTexture.pixels;
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-    
+
                 const canvas = document.createElement('canvas');
                 surfaceToCanvas(canvas, rgbaTexture);
                 canvases.push(canvas);
-            })
+            });
         }
 
         const extraInfo = new Map<string, string>();
@@ -491,7 +491,9 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         vec3 t_Sum = saturate(t_Sample.rgb + SampleMultiTextureA().rgb + SampleMultiTextureB().rgb - u_MultiTexReg[0].r) * u_MultiTexReg[0].g;
         t_Sample.rgb = mix(u_MultiTexReg[2].rgb, u_MultiTexReg[1].rgb, t_Sum);
     } else if (multi_tex_calc_type_color == 12) {
-        t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTextureA().rgb + SampleMultiTextureB().rgb);
+        t_Sample.rgb = saturate(t_Sample.rgb * SampleMultiTextureA().rgb + SampleMultiTextureB().rgb);
+    } else if (multi_tex_calc_type_color == 13) {
+        t_Sample.rgb = saturate(SampleMultiTextureA().rgb + SampleMultiTextureB().rgb - u_MultiTexReg[0].r) * u_MultiTexReg[0].g;
     } else if (multi_tex_calc_type_color == 14) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, t_Sample.rgb, t_Sample.a);
     } else if (multi_tex_calc_type_color == 17) {
@@ -500,9 +502,8 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         t_Sample.rgb = t_Sample.rgb * saturate(SampleMultiTextureA().rgb + u_MultiTexReg[0].rgb);
     } else if (multi_tex_calc_type_color == 21) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, (t_Sample.r + t_Sample.g + t_Sample.b) / 3.0);
-    } else if (multi_tex_calc_type_color == 30) {
-        // Not sure!
-        // t_Sample.rgb = SampleMultiTextureA().rgb;
+    } else if (multi_tex_calc_type_color == 24) {
+        t_Sample.rgb += mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, SampleMultiTextureA().r) * SampleMultiTextureA().r * u_MultiTexReg[0].a * u_MultiTexReg[1].a;
     } else {
         // Unknown multi texture calc type.
         bool is_development = ${IS_DEVELOPMENT};
@@ -1293,7 +1294,7 @@ export class FSHPMeshData {
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
-    
+
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
         this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
