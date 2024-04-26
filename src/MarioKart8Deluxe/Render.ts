@@ -475,8 +475,7 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
 
     int multi_tex_calc_type_color = ${this.shaderOptionInt('multi_tex_calc_type_color')};
     if (multi_tex_calc_type_color == 0) {
-        // Seems to be the same as multi_tex_calc_type_color = 7. Fine, because this is a sane default.
-        t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTextureA().rgb, SampleMultiTextureA().a);
+        // Nothing.
     } else if (multi_tex_calc_type_color == 1) {
         t_Sample.rgb *= SampleMultiTextureA().rgb;
     } else if (multi_tex_calc_type_color == 2) {
@@ -500,10 +499,18 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         t_Sample.rgb = mix(SampleMultiTextureA().rgb * u_MultiTexReg[0].rgb, t_Sample.rgb, u_MultiTexReg[0].a);
     } else if (multi_tex_calc_type_color == 19) {
         t_Sample.rgb = t_Sample.rgb * saturate(SampleMultiTextureA().rgb + u_MultiTexReg[0].rgb);
+    } else if (multi_tex_calc_type_color == 20) {
+        t_Sample.rgb = mix(u_MultiTexReg[0].rgb, t_Sample.rgb, v_VtxColor.rgb);
     } else if (multi_tex_calc_type_color == 21) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, (t_Sample.r + t_Sample.g + t_Sample.b) / 3.0);
+    } else if (multi_tex_calc_type_color == 22) {
+        t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTextureA().rgb * SampleMultiTextureB().rgb);
     } else if (multi_tex_calc_type_color == 24) {
         t_Sample.rgb += mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, SampleMultiTextureA().r) * SampleMultiTextureA().r * u_MultiTexReg[0].a * u_MultiTexReg[1].a;
+    } else if (multi_tex_calc_type_color == 25) {
+        t_Sample.rgb += mix(u_MultiTexReg[0].rgb + u_MultiTexReg[1].rgb,  u_MultiTexReg[2].rgb, SampleMultiTextureA().r) * SampleMultiTextureA().x * u_MultiTexReg[0].a * u_MultiTexReg[1].a;
+    } else if (multi_tex_calc_type_color == 30) {
+        t_Sample.rgb *= SampleMultiTextureA().rgb + SampleMultiTextureB().rgb;
     } else {
         // Unknown multi texture calc type.
         bool is_development = ${IS_DEVELOPMENT};
@@ -516,6 +523,8 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         // This space intentionally left blank.
     } else if (multi_tex_calc_type_alpha == 1) {
         t_Sample.a *= SampleMultiTextureA().a;
+    } else if (multi_tex_calc_type_alpha == 7) {
+        t_Sample.a = SampleMultiTextureA().r;
     } else if (multi_tex_calc_type_alpha == 8) {
         t_Sample.a = SampleMultiTextureB().r;
     } else {
@@ -523,6 +532,19 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
         bool is_development = ${IS_DEVELOPMENT};
         if (is_development)
             t_Sample.rgb = vec3(1.0, 1.0, 0.0);
+    }
+}
+
+void CalcGeoMulti(inout vec4 t_Sample) {
+    bool enable_geo_multi = ${this.shaderOptionBool('enable_geo_multi')};
+    if (!enable_geo_multi)
+        return;
+
+    int geo_multi_alpha_type = ${this.shaderOptionInt('geo_multi_alpha_type')};
+    if (geo_multi_alpha_type == 1) {
+        t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTextureA().rgb, SampleMultiTextureA().a);
+    } else if (geo_multi_alpha_type == 2) {
+        t_Sample.rgb = mix(SampleMultiTextureA().rgb, t_Sample.rgb, t_Sample.a);
     }
 }
 
@@ -621,9 +643,11 @@ void main() {
         vec4 t_AlbedoSample = texture(SAMPLER_2D(u_TextureAlbedo0), t_AlbedoTexCoord.xy);
         t_AlbedoTex.rgba = t_AlbedoSample.rgba;
         CalcMultiTexture(0, t_AlbedoSample);
+        CalcGeoMulti(t_AlbedoSample);
         t_Albedo.rgb *= t_AlbedoSample.rgb;
         t_Alpha *= t_AlbedoSample.a;
     }
+
     if (enable_vtx_color_diff) {
         t_Albedo.rgb *= v_VtxColor.rgb;
     }
