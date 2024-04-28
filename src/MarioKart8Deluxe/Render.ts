@@ -191,7 +191,7 @@ uniform sampler2D u_TextureBake1;     // _b1
 uniform sampler2D u_TextureMultiA;    // _a1
 uniform sampler2D u_TextureMultiB;    // _a2
 uniform sampler2D u_TextureIndirect;  // _a3
-uniform sampler2D u_TransmissionTex;  // _t0
+uniform sampler2D u_TextureTransmission;  // _t0
 
 `;
 
@@ -815,7 +815,7 @@ void main() {
         if (enable_opa_trans_tex)
         {
             vec2 t_TransTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_transmitt')});
-            t_Transmission *= texture(u_TransmissionTex, t_TransTexCoord).rgb;
+            t_Transmission *= texture(u_TextureTransmission, t_TransTexCoord).rgb;
         }
         if (enable_opa_trans_albedo)
             t_Transmission *= t_Albedo.rgb;
