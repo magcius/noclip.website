@@ -855,13 +855,11 @@ void main() {
 
         int decal_trail_type = int(${this.shaderOptionInt('decal_trail_type')});
 
-         if (decal_trail_type == 2) //Ice
-        {
+         if (decal_trail_type == 2)  {
             t_TrailValue = saturate(t_TrailValue * -2.0 + 1.9);
             t_PixelOut.rgb = mix( t_PixelOut.rgb, vec3(0.0), t_TrailValue);
         }
-        else if (decal_trail_type == 4) //snow
-        {
+        else if (decal_trail_type == 4) {
             t_TrailValue = ((t_TrailValue - 0.5) * (1.0 + t_BakeResult.Shadow)) * 4.0 + 1.0;
             t_PixelOut.rgb  *= clamp(t_TrailValue, 0.2, 1.8);
         }
@@ -1127,7 +1125,7 @@ class FMATInstance {
 
             // Unsupported texture type.
             if (shaderSamplerIndex < 0) {
-                continue;
+                assert(false);
             }
 
             assert(samplerIndex >= 0 && shaderSamplerIndex >= 0);
