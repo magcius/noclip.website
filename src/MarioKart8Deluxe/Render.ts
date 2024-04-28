@@ -703,11 +703,10 @@ void main() {
 
     vec3 t_NormalWorld = CalcNormalWorld();
     vec3 t_IncomingLightSpecular = vec3(0.0);
-    vec3 t_IncomingLightTransmission = vec3(0.0);
 
-    //Adjust normals if needed based on front facing usage
-    if (enable_opa_trans)
-        t_NormalWorld = gl_FrontFacing ? t_NormalWorld : -t_NormalWorld;
+    // Flip normals if we're backfacing (shouldn't happen except for transmission)
+    if (enable_opa_trans && !gl_FrontFacing)
+        t_NormalWorld = -t_NormalWorld;
 
     vec4 t_AlbedoTex = vec4(1.0);
     vec3 t_Albedo = u_AlbedoColor.rgb;
@@ -801,32 +800,28 @@ void main() {
         t_PixelOut.rgb += t_Albedo.rgb * t_IncomingLightDiffuse.rgb;
     }
 
-    if (enable_opa_trans)
-    {
+    vec3 t_AOColor = vec3(t_BakeResult.AO);
+    t_PixelOut.rgb *= t_AOColor;
+
+    if (enable_opa_trans) {
         bool enable_opa_trans_tex = ${this.shaderOptionBool('enable_opa_trans_tex')};
         bool enable_opa_trans_albedo = ${this.shaderOptionBool('enable_opa_trans_albedo')};
 
         vec3 t_Transmission = u_TransmissionColorAndIntensity.rgb * u_TransmissionColorAndIntensity.a;
-        if (enable_opa_trans_tex)
-        {
+        if (enable_opa_trans_tex) {
             vec2 t_TransTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_transmitt')});
             t_Transmission *= texture(u_TextureTransmission, t_TransTexCoord).rgb;
         }
+
         if (enable_opa_trans_albedo)
             t_Transmission *= t_Albedo.rgb;
 
-        LightResult t_LightResult; //light with negative normals
+        LightResult t_LightResult; // Backfacing light
         t_SurfaceLightParams.SurfaceNormal = -t_NormalWorld.xyz;
 
         CalcEnvLight(t_LightResult, t_SurfaceLightParams);
 
-        t_IncomingLightTransmission.rgb =  t_Transmission * t_LightResult.DiffuseColor;
-    }
-
-    vec3 t_AOColor = vec3(t_BakeResult.AO);
-    t_PixelOut.rgb *= t_AOColor;
-
-    if (enable_opa_trans){
+        vec3 t_IncomingLightTransmission =  t_Transmission * t_LightResult.DiffuseColor;
         t_PixelOut.rgb += t_IncomingLightTransmission.rgb;
     }
 
@@ -847,19 +842,17 @@ void main() {
         }
     }
     
-    if (enable_decal_ao)
-    {
+    if (enable_decal_ao) {
         // Fake it for now...
         vec4 t_StaticShadowSample = vec4(1.0);
         float t_TrailValue =  t_StaticShadowSample.w;
 
-        int decal_trail_type = int(${this.shaderOptionInt('decal_trail_type')});
+        int decal_trail_type = ${this.shaderOptionInt('decal_trail_type')};
 
-         if (decal_trail_type == 2)  {
+        if (decal_trail_type == 2)  {
             t_TrailValue = saturate(t_TrailValue * -2.0 + 1.9);
             t_PixelOut.rgb = mix( t_PixelOut.rgb, vec3(0.0), t_TrailValue);
-        }
-        else if (decal_trail_type == 4) {
+        } else if (decal_trail_type == 4) {
             t_TrailValue = ((t_TrailValue - 0.5) * (1.0 + t_BakeResult.Shadow)) * 4.0 + 1.0;
             t_PixelOut.rgb  *= clamp(t_TrailValue, 0.2, 1.8);
         }

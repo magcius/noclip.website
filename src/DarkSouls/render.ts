@@ -1918,7 +1918,7 @@ export class MSBRenderer {
     private parseSceneDrawConfig(part: Part): void {
         this.sceneDrawConfig.dofParams = this.drawParamBank.dofBank[part.dofID];
         this.sceneDrawConfig.toneCorrectParams = this.drawParamBank.toneCorrectBank[part.toneCorrectID];
-        this.sceneDrawConfig.toneMapParams = this.drawParamBank.toneMapBank[part.dofID];
+        this.sceneDrawConfig.toneMapParams = this.drawParamBank.toneMapBank[part.toneMapID];
     }
 
     private lodModels: string[] = [];
