@@ -691,11 +691,6 @@ void main() {
     bool enable_decal_ao = ${this.shaderOptionBool('enable_decal_ao')};
     bool enable_opa_trans = ${this.shaderOptionBool('enable_opa_trans')};
 
-    float t_FrontFace = 1.0;
-
-    if (enable_opa_trans)
-        t_FrontFace = gl_FrontFacing ? 1.0 : 0.0;
-
     vec4 t_PixelOut = vec4(0.0);
     float t_Alpha = 1.0;
 
@@ -712,7 +707,7 @@ void main() {
 
     //Adjust normals if needed based on front facing usage
     if (enable_opa_trans)
-        t_NormalWorld = (vec3(t_FrontFace) * t_NormalWorld) * vec3(2.0) - t_NormalWorld;
+        t_NormalWorld *= gl_FrontFacing ? t_NormalWorld : -t_NormalWorld;
 
     vec4 t_AlbedoTex = vec4(1.0);
     vec3 t_Albedo = u_AlbedoColor.rgb;
