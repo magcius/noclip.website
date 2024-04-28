@@ -120,7 +120,7 @@ function translateTexFilterMode(filterMode: FilterMode): GfxTexFilterMode {
 
 class TurboUBER extends DeviceProgram {
     public static a_Orders = [ '_p0', '_c0', '_u0', '_u1', '_u2', '_u3', '_n0', '_t0' ];
-    public static s_Orders = [ '_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3' ];
+    public static s_Orders = ['_a0', '_s0', '_n0', '_n1', '_e0', '_b0', '_b1', '_a1', '_a2', '_a3', '_t0' ];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -161,9 +161,12 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_EmissionColorAndNormalMapWeight;
     vec4 u_SpecularColorAndIntensity;
     vec4 u_BakeLightScaleAndRoughness;
+    vec4 u_TransmissionColorAndIntensity;
+
     vec4 u_MultiTexReg[3];
     vec4 u_Misc[1];
     EnvLightParam u_EnvLightParams[${TurboUBER.NumEnvLightParams}];
+
 };
 
 #define u_AlbedoColor (u_AlbedoColorAndTransparency.rgb)
@@ -188,6 +191,8 @@ uniform sampler2D u_TextureBake1;     // _b1
 uniform sampler2D u_TextureMultiA;    // _a1
 uniform sampler2D u_TextureMultiB;    // _a2
 uniform sampler2D u_TextureIndirect;  // _a3
+uniform sampler2D u_TransmissionTex;  // _t0
+
 `;
 
     public override both = TurboUBER.globalDefinitions;
@@ -683,6 +688,13 @@ void main() {
     bool enable_vtx_color_emission = ${this.shaderOptionBool('enable_vtx_color_emission')};
     bool enable_vtx_color_spec = ${this.shaderOptionBool('enable_vtx_color_spec')};
     bool enable_vtx_alpha_trans = ${this.shaderOptionBool('enable_vtx_alpha_trans')};
+    bool enable_decal_ao = ${this.shaderOptionBool('enable_decal_ao')};
+    bool enable_opa_trans = ${this.shaderOptionBool('enable_opa_trans')};
+
+    float t_FrontFace = 1.0;
+
+    if (enable_opa_trans)
+        t_FrontFace = gl_FrontFacing ? 1.0 : 0.0;
 
     vec4 t_PixelOut = vec4(0.0);
     float t_Alpha = 1.0;
@@ -696,6 +708,11 @@ void main() {
 
     vec3 t_NormalWorld = CalcNormalWorld();
     vec3 t_IncomingLightSpecular = vec3(0.0);
+    vec3 t_IncomingLightTransmission = vec3(0.0);
+
+    //Adjust normals if needed based on front facing usage
+    if (enable_opa_trans)
+        t_NormalWorld = (vec3(t_FrontFace) * t_NormalWorld) * vec3(2.0) - t_NormalWorld;
 
     vec4 t_AlbedoTex = vec4(1.0);
     vec3 t_Albedo = u_AlbedoColor.rgb;
@@ -789,8 +806,34 @@ void main() {
         t_PixelOut.rgb += t_Albedo.rgb * t_IncomingLightDiffuse.rgb;
     }
 
+    if (enable_opa_trans)
+    {
+        bool enable_opa_trans_tex = ${this.shaderOptionBool('enable_opa_trans_tex')};
+        bool enable_opa_trans_albedo = ${this.shaderOptionBool('enable_opa_trans_albedo')};
+
+        vec3 t_Transmission = u_TransmissionColorAndIntensity.rgb * u_TransmissionColorAndIntensity.a;
+        if (enable_opa_trans_tex)
+        {
+            vec2 t_TransTexCoord = SelectTexCoord(${this.shaderOptionInt('texcoord_select_transmitt')});
+            t_Transmission *= texture(u_TransmissionTex, t_TransTexCoord).rgb;
+        }
+        if (enable_opa_trans_albedo)
+            t_Transmission *= t_Albedo.rgb;
+
+        LightResult t_LightResult; //light with negative normals
+        t_SurfaceLightParams.SurfaceNormal = -t_NormalWorld.xyz;
+
+        CalcEnvLight(t_LightResult, t_SurfaceLightParams);
+
+        t_IncomingLightTransmission.rgb =  t_Transmission * t_LightResult.DiffuseColor;
+    }
+
     vec3 t_AOColor = vec3(t_BakeResult.AO);
     t_PixelOut.rgb *= t_AOColor;
+
+    if (enable_opa_trans){
+        t_PixelOut.rgb += t_IncomingLightTransmission.rgb;
+    }
 
     if (enable_emission) {
         t_PixelOut.rgb += t_Emission.rgb;
@@ -808,14 +851,25 @@ void main() {
             t_Alpha *= v_VtxColor.a;
         }
     }
-
-    // TODO(jstpierre): When exactly does this apply?
-    if (false) {
+    
+    if (enable_decal_ao)
+    {
         // Fake it for now...
         vec4 t_StaticShadowSample = vec4(1.0);
-        float t_FinalColorScale = ((t_StaticShadowSample.a - 0.5) * (1.0 + t_BakeResult.Shadow)) * 4.0 + 1.0;
-        t_FinalColorScale = clamp(t_FinalColorScale, 0.2, 1.8);
-        t_PixelOut.rgb *= t_FinalColorScale;
+        float t_TrailValue =  t_StaticShadowSample.w;
+
+        int decal_trail_type = int(${this.shaderOptionInt('decal_trail_type')});
+
+         if (decal_trail_type == 2) //Ice
+        {
+            t_TrailValue = saturate(t_TrailValue * -2.0 + 1.9);
+            t_PixelOut.rgb = mix( t_PixelOut.rgb, vec3(0.0), t_TrailValue);
+        }
+        else if (decal_trail_type == 4) //snow
+        {
+            t_TrailValue = ((t_TrailValue - 0.5) * (1.0 + t_BakeResult.Shadow)) * 4.0 + 1.0;
+            t_PixelOut.rgb  *= clamp(t_TrailValue, 0.2, 1.8);
+        }
     }
 
     t_PixelOut.a = t_Alpha;
@@ -1041,6 +1095,7 @@ class FMATInstance {
     private emissionColorAndNormalMapWeight = colorNewCopy(White);
     private specularColorAndIntensity = colorNewCopy(White);
     private bakeLightScaleAndRoughness = colorNewCopy(White);
+    private transmissionColorAndIntensity = colorNewCopy(White);
     private multiTexReg = nArray(3, () => vec4.create());
     private indirectMag = vec2.create();
     private emissionIntensity = 1.0;
@@ -1077,7 +1132,6 @@ class FMATInstance {
 
             // Unsupported texture type.
             if (shaderSamplerIndex < 0) {
-                assert(['_t0'].includes(shaderSamplerName));
                 continue;
             }
 
@@ -1173,11 +1227,14 @@ class FMATInstance {
         parseFMAT_ShaderParam_Color3(this.emissionColorAndNormalMapWeight, findShaderParam(fmat, 'emission_color'));
         parseFMAT_ShaderParam_Color3(this.specularColorAndIntensity, findShaderParam(fmat, 'specular_color'));
         parseFMAT_ShaderParam_Color3(this.bakeLightScaleAndRoughness, findShaderParam(fmat, 'gsys_bake_light_scale'));
+        parseFMAT_ShaderParam_Color3(this.transmissionColorAndIntensity, findShaderParam(fmat, 'transmit_color'));
+
         this.albedoColorAndTransparency.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'transparency'));
         this.emissionColorAndNormalMapWeight.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'normal_map_weight'));
         this.specularColorAndIntensity.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'specular_intensity'));
         this.bakeLightScaleAndRoughness.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'specular_roughness'));
         this.emissionIntensity = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'emission_intensity'));
+        this.transmissionColorAndIntensity.a = parseFMAT_ShaderParam_Float(findShaderParam(fmat, 'transmit_intensity'));
 
         parseFMAT_ShaderParam_Float4(this.multiTexReg[0], findShaderParam(fmat, 'multi_tex_reg0'));
         parseFMAT_ShaderParam_Float4(this.multiTexReg[1], findShaderParam(fmat, 'multi_tex_reg1'));
@@ -1205,6 +1262,7 @@ class FMATInstance {
         offs += fillColor(d, offs, scratchColor);
         offs += fillColor(d, offs, this.specularColorAndIntensity);
         offs += fillColor(d, offs, this.bakeLightScaleAndRoughness);
+        offs += fillColor(d, offs, this.transmissionColorAndIntensity);
         offs += fillVec4v(d, offs, this.multiTexReg[0]);
         offs += fillVec4v(d, offs, this.multiTexReg[1]);
         offs += fillVec4v(d, offs, this.multiTexReg[2]);
@@ -1481,7 +1539,7 @@ class FSHPInstance {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 10 },
+    { numUniformBuffers: 2, numSamplers: 11 },
 ];
 
 export class FMDLRenderer {
