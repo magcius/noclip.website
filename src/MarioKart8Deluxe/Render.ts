@@ -707,7 +707,7 @@ void main() {
 
     //Adjust normals if needed based on front facing usage
     if (enable_opa_trans)
-        t_NormalWorld *= gl_FrontFacing ? t_NormalWorld : -t_NormalWorld;
+        t_NormalWorld = gl_FrontFacing ? t_NormalWorld : -t_NormalWorld;
 
     vec4 t_AlbedoTex = vec4(1.0);
     vec3 t_Albedo = u_AlbedoColor.rgb;
