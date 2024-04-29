@@ -6,7 +6,7 @@ import { ScreenSpaceProjection, divideByW } from "./Camera.js";
 import { Blue, Color, Green, Magenta, OpaqueBlack, Red, colorToCSS } from "./Color.js";
 import { downloadBuffer, downloadBufferSlice } from "./DownloadUtils.js";
 import { AABB } from "./Geometry.js";
-import { MathConstants, Vec3UnitX, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, transformVec3Mat4w0 } from "./MathHelpers.js";
+import { MathConstants, Vec3UnitX, Vec3UnitY, Vec3UnitZ, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, lerp, transformVec3Mat4w0 } from "./MathHelpers.js";
 import { Slider } from "./ui.js";
 import { assertExists, hexzero, nArray } from "./util.js";
 
@@ -121,6 +121,20 @@ export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, clipFromWorld
 
     getMatrixAxisZ(scratchVec3b, m);
     drawWorldSpaceVector(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag, Blue, thickness);
+}
+
+export function drawWorldSpaceLocator(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, pos: ReadonlyVec3, mag = 10, color = Magenta, thickness = 2): void {
+    vec3.scaleAndAdd(scratchVec3a, pos, Vec3UnitX, -mag);
+    vec3.scaleAndAdd(scratchVec3b, pos, Vec3UnitX, mag);
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, color, thickness);
+
+    vec3.scaleAndAdd(scratchVec3a, pos, Vec3UnitY, -mag);
+    vec3.scaleAndAdd(scratchVec3b, pos, Vec3UnitY, mag);
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, color, thickness);
+
+    vec3.scaleAndAdd(scratchVec3a, pos, Vec3UnitZ, -mag);
+    vec3.scaleAndAdd(scratchVec3b, pos, Vec3UnitZ, mag);
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, color, thickness);
 }
 
 export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, aabb: AABB, m: ReadonlyMat4 | null = null, color: Color = Magenta): void {
@@ -255,7 +269,9 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = options.align ?? 'start';
-    ctx.font = options.font ?? '14pt monospace';
+
+    const fontSize = 14 * window.devicePixelRatio;
+    ctx.font = options.font ?? `${fontSize}pt monospace`;
 
     if (options.outline) {
         const oldLineWidth = ctx.lineWidth;

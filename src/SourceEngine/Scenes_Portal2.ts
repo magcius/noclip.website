@@ -21,14 +21,14 @@ class trigger_portal_button extends trigger_multiple {
     public static override classname = `trigger_portal_button`;
     public button: BaseFloorButton | null = null;
 
-    protected override onStartTouch(entitySystem: EntitySystem): void {
-        super.onStartTouch(entitySystem);
-        this.button!.press(entitySystem);
+    protected override onStartTouch(entitySystem: EntitySystem, activator: BaseEntity): void {
+        super.onStartTouch(entitySystem, activator);
+        this.button!.press(entitySystem, activator);
     }
 
-    protected override onEndTouch(entitySystem: EntitySystem): void {
-        super.onEndTouch(entitySystem);
-        this.button!.unpress(entitySystem);
+    protected override onEndTouch(entitySystem: EntitySystem, activator: BaseEntity): void {
+        super.onEndTouch(entitySystem, activator);
+        this.button!.unpress(entitySystem, activator);
     }
 }
 
@@ -77,26 +77,26 @@ class BaseFloorButton extends BaseEntity {
         this.trigger.button = this;
     }
 
-    public press(entitySystem: EntitySystem): void {
+    public press(entitySystem: EntitySystem, activator: BaseEntity): void {
         this.resetSequence(this.downSequence);
         this.pressed = true;
         this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Down);
-        this.output_onPressed.fire(entitySystem, this);
+        this.output_onPressed.fire(entitySystem, this, activator);
     }
 
-    public unpress(entitySystem: EntitySystem): void {
+    public unpress(entitySystem: EntitySystem, activator: BaseEntity): void {
         this.resetSequence(this.upSequence);
         this.pressed = false;
         this.modelStudio!.setSkin(entitySystem.renderContext, BaseFloorButtonSkin.Up);
-        this.output_onUnPressed.fire(entitySystem, this);
+        this.output_onUnPressed.fire(entitySystem, this, activator);
     }
 
-    private input_pressin(entitySystem: EntitySystem): void {
-        this.press(entitySystem);
+    private input_pressin(entitySystem: EntitySystem, activator: BaseEntity): void {
+        this.press(entitySystem, activator);
     }
 
-    private input_pressout(entitySystem: EntitySystem): void {
-        this.unpress(entitySystem);
+    private input_pressout(entitySystem: EntitySystem, activator: BaseEntity): void {
+        this.unpress(entitySystem, activator);
     }
 }
 

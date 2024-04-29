@@ -783,7 +783,7 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterBoolean).getBool();
     }
 
-    protected paramGetNumber(name: string): number {
+    public paramGetNumber(name: string): number {
         return (this.param[name] as ParameterNumber).value;
     }
 
@@ -2569,6 +2569,8 @@ class Material_Generic extends BaseMaterial {
                 // this.megaStateFlags.depthCompare = GfxCompareMode.Always;
             } else if (renderMode === RenderMode.TransAdd) {
                 this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Add);
+            } else if (renderMode === RenderMode.TransTexture) {
+                this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
             } else {
                 // Haven't seen this render mode yet.
                 debugger;
@@ -4446,15 +4448,17 @@ ${MaterialShaderTemplateBase.Common}
 
 // In the future, we should use vertex data for some of this...
 layout(std140) uniform ub_ObjectParams {
-    vec4 u_BaseTextureScaleBias[4]; // Two animation frames, dual
+    vec4 u_BaseTextureScaleBias[5]; // Two animation frames, dual
     vec4 u_Color;
     vec4 u_Misc[1];
 };
-#define u_BlendFactor0 (u_Misc[0].x)
-#define u_BlendFactor1 (u_Misc[0].y)
+#define u_BlendFactor0          (u_Misc[0].x)
+#define u_BlendFactor1          (u_Misc[0].y)
+#define u_AddBaseTexture2Factor (u_Misc[0].z)
 
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
+varying vec4 v_TexCoord2;
 varying vec4 v_Color;
 varying vec4 v_Misc;
 
@@ -4469,6 +4473,7 @@ void mainVS() {
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[1]);
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[2]);
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[3]);
+    v_TexCoord2.xy = CalcScaleBias(a_TexCoord01.xy, u_BaseTextureScaleBias[4]);
     v_Color = u_Color;
     v_Misc.x = u_BlendFactor0;
     v_Misc.y = u_BlendFactor1;
@@ -4529,11 +4534,37 @@ void mainPS() {
     }
 
     vec4 t_FinalColor = t_Base;
-    // TODO(jstpierre): MOD2X, ADDSELF, ADDBASETEXTURE2
+    // TODO(jstpierre): MOD2X
 
-    t_FinalColor.rgba *= v_Color.rgba;
+    bool t_AddBaseTexture2 = ${getDefineBool(m, 'ADD_BASE_TEXTURE2')};
+    bool t_AddSelf = ${getDefineBool(m, 'ADDSELF')};
+    bool t_ExtractGreenAlpha = ${getDefineBool(m, 'EXTRACT_GREEN_ALPHA')};
+    bool t_Additive = ${getDefineBool(m, `ADDITIVE`)};
 
-    bool t_UseAlphaTest = true;
+    if (t_AddBaseTexture2) {
+        t_FinalColor.a *= v_Color.a;
+        t_FinalColor.rgb *= t_FinalColor.aaa;
+        if (t_ExtractGreenAlpha) {
+            t_FinalColor.rgb += u_AddBaseTexture2Factor * v_Color.a * t_FinalColor.rgb;
+        } else {
+            vec4 t_Tex2 = texture(SAMPLER_2D(u_Texture), v_TexCoord2.xy);
+            t_FinalColor.rgb += u_AddBaseTexture2Factor * v_Color.a * t_Tex2.rgb;
+        }
+        t_FinalColor.rgb *= v_Color.rgb;
+    } else if (t_AddSelf) {
+        // TODO(jstpierre): ADDSELF
+        t_FinalColor.a *= v_Color.a;
+		t_FinalColor.rgb *= t_FinalColor.aaa;
+		t_FinalColor.rgb += u_AddBaseTexture2Factor * v_Color.a * t_FinalColor.rgb;
+		t_FinalColor.rgb *= v_Color.rgb;
+    } else if (t_Additive) {
+        t_FinalColor.rgba *= v_Color.rgba;
+        t_FinalColor.rgb *= t_FinalColor.aaa;
+    } else {
+        t_FinalColor.rgba *= v_Color.rgba;
+    }
+
+    bool t_UseAlphaTest = ${getDefineBool(m, `ALPHA_TEST`)};
     if (t_UseAlphaTest) {
         if (t_FinalColor.a < (1.0/255.0))
             discard;
@@ -4563,6 +4594,11 @@ class Material_SpriteCard extends BaseMaterial {
         p['$maxlumframeblend2']     = new ParameterBoolean(false);
         p['$dualsequence']          = new ParameterBoolean(false);
         p['$sequence_blend_mode']   = new ParameterNumber(0);
+        p['$addbasetexture2']       = new ParameterNumber(0.0);
+        p['$addself']               = new ParameterBoolean(false);
+        p['$extractgreenalpha']     = new ParameterBoolean(false);
+        p['$addoverblend']          = new ParameterBoolean(false);
+        p['$zoomanimateseq2']       = new ParameterNumber(1.0);
 
         // Stuff hacked in by the particle system.
         p['_b00'] = new ParameterVector(4);
@@ -4571,6 +4607,7 @@ class Material_SpriteCard extends BaseMaterial {
         p['_b10'] = new ParameterVector(4);
         p['_b11'] = new ParameterVector(4);
         p['_blend1'] = new ParameterNumber(0);
+        p['_b2'] = new ParameterVector(4);
     }
 
     protected override initStatic(materialCache: MaterialCache) {
@@ -4582,9 +4619,17 @@ class Material_SpriteCard extends BaseMaterial {
         this.shaderInstance.setDefineBool(`MAX_LUM_FRAMEBLEND_2`, this.paramGetBoolean(`$maxlumframeblend2`));
         this.shaderInstance.setDefineBool(`DUAL_SEQUENCE`, this.paramGetBoolean(`$dualsequence`));
         this.shaderInstance.setDefineString(`DUAL_BLEND_MODE`, '' + this.paramGetInt(`$sequence_blend_mode`));
+        const addBaseTexture2 = this.paramGetNumber(`$addbasetexture2`) > 0.0;
+        this.shaderInstance.setDefineBool(`ADD_BASE_TEXTURE2`, addBaseTexture2);
+        this.shaderInstance.setDefineBool(`ADDSELF`, this.paramGetBoolean(`$addself`));
+        this.shaderInstance.setDefineBool(`EXTRACT_GREEN_ALPHA`, this.paramGetBoolean(`$extractgreenalpha`));
+        this.shaderInstance.setDefineBool(`ADDITIVE`, this.paramGetBoolean(`$additive`));
+        this.shaderInstance.setDefineBool(`ALPHA_TEST`, addBaseTexture2 || this.paramGetBoolean(`$addself`));
 
-        // TODO(jstpierre): Additive modes
         let isAdditive = this.paramGetBoolean('$additive');
+        if (addBaseTexture2 || this.paramGetBoolean('$addoverblend') || this.paramGetBoolean('$addself'))
+            isAdditive = true;
+
         this.setAlphaBlendMode(this.megaStateFlags, isAdditive ? AlphaBlendMode.Add : AlphaBlendMode.Blend);
         this.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
 
@@ -4610,15 +4655,16 @@ class Material_SpriteCard extends BaseMaterial {
 
         this.setupOverrideSceneParams(renderContext, renderInst);
 
-        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SolidEnergy.ub_ObjectParams, 24);
+        let offs = renderInst.allocateUniformBuffer(ShaderTemplate_SolidEnergy.ub_ObjectParams, 28);
         const d = renderInst.mapUniformBufferF32(ShaderTemplate_SolidEnergy.ub_ObjectParams);
 
         offs += this.paramFillVector4(d, offs, '_b00');
         offs += this.paramFillVector4(d, offs, '_b01');
         offs += this.paramFillVector4(d, offs, '_b10');
         offs += this.paramFillVector4(d, offs, '_b11');
+        offs += this.paramFillVector4(d, offs, '_b2');
         offs += this.paramFillGammaColor(d, offs, '$color', this.paramGetNumber('$alpha'));
-        offs += fillVec4(d, offs, this.paramGetNumber('_blend0'), this.paramGetNumber('_blend1'));
+        offs += fillVec4(d, offs, this.paramGetNumber('_blend0'), this.paramGetNumber('_blend1'), this.paramGetNumber(`$addbasetexture2`));
 
         renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
         renderInst.setGfxProgram(this.gfxProgram);

@@ -168,12 +168,19 @@ abstract class OperatorBase extends ModuleBase {
     }
 
     public calcWeight(curTime: number): number {
+        if (this.fadeOscillate > 0.0)
+            curTime = (curTime / this.fadeOscillate) % 1.0;
+
         if (curTime >= this.startFadeIn && curTime <= this.endFadeIn)
             return invlerp(this.startFadeIn, this.startFadeOut, curTime);
         else if (curTime >= this.startFadeOut && curTime <= this.endFadeOut)
             return invlerp(this.startFadeOut, this.endFadeOut, curTime);
         else
             return 1.0;
+    }
+
+    public getOperatePhase(): OperatePhase {
+        return OperatePhase.AfterEmit;
     }
 }
 
@@ -629,7 +636,7 @@ function createInitializer(elem: DMX.DMXElement): Initializer | null {
     else if (functionName === `lifetime from sequence`)
         return new Initializer_LifetimeFromSequence(elem);
 
-    console.log(`Unknown Initializer`, functionName)
+    console.log(`Unknown Initializer`, functionName);
     return null;
 }
 
@@ -728,6 +735,7 @@ function createEmitter(elem: DMX.DMXElement): Emitter | null {
 
 interface Operator extends ModuleBase {
     run(system: ParticleSystemInstance): void;
+    getOperatePhase(): OperatePhase;
 }
 
 class Operator_LifespanDecay extends OperatorBase {
@@ -1384,8 +1392,8 @@ class Renderer_AnimatedSprites extends ModuleBase {
                 sequenceNum2 = system.constSequenceNum2;
             }
 
+            const time = this.animationRate * (curTime - data[spawnTimeOffs]);
             if (isSpriteCard) {
-                const time = this.animationRate * (curTime - data[spawnTimeOffs]);
                 let blend: number;
 
                 // Sequence Num 1
@@ -1410,9 +1418,37 @@ class Renderer_AnimatedSprites extends ModuleBase {
                     blend = 0.0;
                 }
 
+                // XXX(jstpierre): Finish this off; the scale math should be OK, but it needs a bias term.
+                // The original game applies the zoom factor to UVs scaled to -1...1.
+                const zoomAnimateSeq2 = materialInstance.paramGetInt('$zoomanimateseq2');
+                if (false && zoomAnimateSeq2 !== 1.0) {
+                    const zoomB1 = 1.0 / zoomAnimateSeq2;
+                    const zoomB0 = 0.5 * zoomB1 + 0.5;
+                    const zoomOld = lerp(zoomB0, zoomB1, blend);
+                    scratchVec4a[0] *= zoomOld;
+                    scratchVec4a[1] *= zoomOld;
+                    const zoomNew = lerp(1.0, zoomB0, blend);
+                    scratchVec4b[0] *= zoomNew;
+                    scratchVec4b[1] *= zoomNew;
+                }
+
                 materialInstance.paramSetNumber('_blend1', blend);
                 (materialInstance.param['_b10'] as any).setArray(scratchVec4a);
                 (materialInstance.param['_b11'] as any).setArray(scratchVec4b);
+            } else {
+                if (sheet !== null) {
+                    // Hack for generic materials
+                    const basetexturetransform = (materialInstance.param['$basetexturetransform'] as any);
+                    if (basetexturetransform !== undefined && basetexturetransform.matrix !== undefined) {
+                        const m = basetexturetransform.matrix;
+                        sheet.calcScaleBias(scratchVec4a, scratchVec4b, sequenceNum, 0, time);
+                        mat4.identity(m);
+                        m[0] = scratchVec4a[0];
+                        m[5] = scratchVec4a[1];
+                        m[12] = scratchVec4a[2];
+                        m[13] = scratchVec4a[3];
+                    }
+                }
             }
 
             vec3.set(scratchVec3a, data[posOffs + 0], data[posOffs + 1], data[posOffs + 2]);
@@ -1457,11 +1493,20 @@ interface Controller {
     controlPoints: ParticleControlPoint[];
 }
 
+const enum OperatePhase {
+    BeforeEmit,
+    AfterEmit,
+}
+
+function ctz32(n: number): number {
+    return 31 - Math.clz32(n);
+}
+
 export class ParticleSystemInstance {
     // System definition stuff (can be cached if desired)
     public materialInstance: BaseMaterial | null = null;
     private sheet: Sheet | null | undefined = undefined;
-    private readonly operators: Operator[] = [];
+    private readonly operators: Operator[][] = [[], []];
     private readonly initializers: Initializer[] = [];
 
     private readonly streamMask: StreamMask = 0;
@@ -1533,7 +1578,8 @@ export class ParticleSystemInstance {
             streamRead |= mod.streamRead();
             streamReadInit |= mod.streamReadInit();
             streamReadOptional |= mod.streamReadOptional();
-            this.operators.push(mod);
+            const phase = mod.getOperatePhase();
+            this.operators[phase].push(mod);
         }
 
         const initializers = getAttribValue(def, `initializers`, DMX.DMXAttributeType.ElementArray, null);
@@ -1589,7 +1635,7 @@ export class ParticleSystemInstance {
         while (streamBits !== 0) {
             const stream = streamBits & -streamBits;
             const streamStride = getStreamStride(stream);
-            this.dataStreamOffs[Math.log2(stream) | 0] = this.dataStride;
+            this.dataStreamOffs[ctz32(stream)] = this.dataStride;
             this.dataStride += streamStride;
             streamBits &= ~stream;
         }
@@ -1600,7 +1646,7 @@ export class ParticleSystemInstance {
         while (streamInitBits !== 0) {
             const stream = streamInitBits & -streamInitBits;
             const streamStride = getStreamStride(stream);
-            this.dataInitStreamOffs[Math.log2(stream) | 0] = this.dataInitStride;
+            this.dataInitStreamOffs[ctz32(stream)] = this.dataInitStride;
             this.dataInitStride += streamStride;
             streamInitBits &= ~stream;
         }
@@ -1613,7 +1659,7 @@ export class ParticleSystemInstance {
         // Initialize constant data
         this.constRadius = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float, 5);
         this.constColor = getAttribValue(def, `color`, DMX.DMXAttributeType.Color, White);
-        this.constRotation = getAttribValue(def, `radius`, DMX.DMXAttributeType.Float, 0) * MathConstants.DEG_TO_RAD;
+        this.constRotation = getAttribValue(def, `rotation`, DMX.DMXAttributeType.Float, 0) * MathConstants.DEG_TO_RAD;
         this.constSequenceNum = getAttribValue(def, `sequence_number`, DMX.DMXAttributeType.Int, 0);
         this.constSequenceNum2 = getAttribValue(def, `sequence_number 1`, DMX.DMXAttributeType.Int, 0);
 
@@ -1678,12 +1724,12 @@ export class ParticleSystemInstance {
 
     public getStreamOffs(stream: StreamMask, p: number = 0): number {
         assert(this.hasStream(stream));
-        return this.dataStride * p + this.dataStreamOffs[Math.log2(stream) | 0];
+        return this.dataStride * p + this.dataStreamOffs[ctz32(stream)];
     }
 
     public getStreamInitOffs(stream: StreamMask, p: number = 0): number {
         assert(!!(this.streamInitMask & stream));
-        return this.dataInitStride * p + this.dataInitStreamOffs[Math.log2(stream) | 0];
+        return this.dataInitStride * p + this.dataInitStreamOffs[ctz32(stream)];
     }
 
     public getNum(): number {
@@ -1742,8 +1788,12 @@ export class ParticleSystemInstance {
             let streamConstBits = this.streamConstMask;
             while (streamConstBits !== 0) {
                 const stream = streamConstBits & -streamConstBits;
-                let offs = p * this.dataStride + this.dataStreamOffs[Math.log2(stream) | 0];
-                if (stream === StreamMask.Lifetime) {
+                let offs = p * this.dataStride + this.dataStreamOffs[ctz32(stream)];
+                if (stream === StreamMask.Position || stream === StreamMask.PrevPosition) {
+                    this.particleDataF32[offs++] = 0.0;
+                    this.particleDataF32[offs++] = 0.0;
+                    this.particleDataF32[offs++] = 0.0;
+                } else if (stream === StreamMask.Lifetime) {
                     this.particleDataF32[offs] = 1.0;
                 } else if (stream === StreamMask.Color) {
                     this.particleDataF32[offs++] = this.constColor.r;
@@ -1763,7 +1813,7 @@ export class ParticleSystemInstance {
             while (streamInitBits !== 0) {
                 const stream = streamInitBits & -streamInitBits;
                 const streamStride = getStreamStride(stream);
-                const offsIdx = Math.log2(stream) | 0;
+                const offsIdx = ctz32(stream);
                 let srcIdx = srcOffs + this.dataStreamOffs[offsIdx], dstIdx = dstOffs + this.dataInitStreamOffs[offsIdx];
                 for (let i = 0; i < streamStride; i++)
                     this.particleDataInitF32[dstIdx++] = this.particleDataF32[srcIdx++];
@@ -1783,24 +1833,27 @@ export class ParticleSystemInstance {
         this.deadParticleList.push(p);
     }
 
-    private operate(): void {
-        this.randF32OpCounter = 0;
-
-        for (let i = 0; i < this.operators.length; i++) {
-            this.operators[i].run(this);
-
-            if (this.deadParticleList.length > 0) {
-                // TODO(jstpierre): Do we need to maintain in-order?
-                let offs = 0;
-                for (let i = 0; i < this.deadParticleList.length; i++) {
-                    const dstIdx = this.deadParticleList[i] + offs--, srcIdx = --this.particleNum;
-                    this.particleDataF32.copyWithin(this.dataStride * dstIdx, this.dataStride * srcIdx, this.dataStride * srcIdx + this.dataStride);
-                    this.particleDataInitF32.copyWithin(this.dataInitStride * dstIdx, this.dataInitStride * srcIdx, this.dataInitStride * srcIdx + this.dataInitStride);
-                }
-
-                this.deadParticleList.length = 0;
+    private killDeadParticles(): void {
+        if (this.deadParticleList.length > 0) {
+            // TODO(jstpierre): Do we need to maintain in-order?
+            let offs = 0;
+            for (let i = 0; i < this.deadParticleList.length; i++) {
+                const dstIdx = this.deadParticleList[i] + offs--, srcIdx = --this.particleNum;
+                this.particleDataF32.copyWithin(this.dataStride * dstIdx, this.dataStride * srcIdx, this.dataStride * srcIdx + this.dataStride);
+                this.particleDataInitF32.copyWithin(this.dataInitStride * dstIdx, this.dataInitStride * srcIdx, this.dataInitStride * srcIdx + this.dataInitStride);
             }
 
+            this.deadParticleList.length = 0;
+        }
+    }
+
+    private operate(phase: OperatePhase): void {
+        this.randF32OpCounter = 0;
+
+        const operators = this.operators[phase];
+        for (let i = 0; i < operators.length; i++) {
+            operators[i].run(this);
+            this.killDeadParticles();
             this.randF32OpCounter += 17;
         }
     }
@@ -1818,8 +1871,9 @@ export class ParticleSystemInstance {
         if (this.curTime <= 0)
             return;
 
+        this.operate(OperatePhase.BeforeEmit);
         this.emit();
-        this.operate();
+        this.operate(OperatePhase.AfterEmit);
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].movement(renderContext);
@@ -1855,7 +1909,7 @@ export class ParticleSystemInstance {
             if (this.hasStream(StreamMask.Radius))
                 radius = data[this.getStreamOffs(StreamMask.Radius, p)];
 
-            drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, scratchColor, radius);
+            // drawWorldSpacePoint(ctx, renderContext.currentView.clipFromWorldMatrix, scratchVec3a, scratchColor, radius);
         }
     }
 

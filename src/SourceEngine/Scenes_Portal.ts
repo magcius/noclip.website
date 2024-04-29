@@ -15,12 +15,22 @@ class npc_portal_turret_floor extends BaseEntity {
     }
 }
 
+class prop_portal_stats_display extends BaseEntity {
+    public static classname = 'prop_portal_stats_display';
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+        this.setModelName(renderContext, 'models/props/Round_elevator_body.mdl');
+    }
+}
+
 class PortalSceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
     private registerEntityFactories(registry: EntityFactoryRegistry): void {
         registry.registerFactory(npc_portal_turret_floor);
+        registry.registerFactory(prop_portal_stats_display);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {

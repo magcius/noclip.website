@@ -1991,9 +1991,11 @@ export class StudioModelInstance {
 
                     // Find proper color mesh.
                     const colorMesh = data.mesh[hwi++];
-                    assert(colorMesh.lod === lod);
-
-                    meshInstance.bindColorMeshData(cache, data, colorMesh);
+                    // XXX(jstpierre): Undersized array here in Portal escape_01? We don't display LODs anyway...
+                    if (colorMesh !== undefined) {
+                        assert(colorMesh.lod === lod);
+                        meshInstance.bindColorMeshData(cache, data, colorMesh);
+                    }
                 }
             }
         }
