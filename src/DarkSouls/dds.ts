@@ -186,7 +186,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
             height: textureEntry.height,
             pixelFormat,
             dimension: textureEntry.isCubemap ? GfxTextureDimension.Cube : GfxTextureDimension.n2D,
-            depth: textureEntry.isCubemap ? 6 : 1,
+            depthOrArrayLayers: textureEntry.isCubemap ? 6 : 1,
             numLevels: textureEntry.levels.length,
             usage: GfxTextureUsage.Sampled,
         };

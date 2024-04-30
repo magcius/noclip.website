@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import { CameraController } from '../Camera.js';
 import { colorNewFromRGBA } from "../Color.js";
 import { SceneContext } from '../SceneBase.js';
-import { GfxrAttachmentClearDescriptor, makeAttachmentClearDescriptor, makeBackbufferDescSimple } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -27,8 +27,6 @@ class DKRRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
     private hasStarted = false;
-
-    public renderPassDescriptor: GfxrAttachmentClearDescriptor;
 
     private level: DkrLevel | null = null;
 
@@ -75,10 +73,10 @@ class DKRRenderer implements Viewer.SceneGfx {
         if(!!this.level) {
             clearColor = this.level.getClearColor();
         }
-        this.renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
+        const renderPassDescriptor = makeAttachmentClearDescriptor(clearColor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, renderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, renderPassDescriptor);
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {

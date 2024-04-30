@@ -1,7 +1,7 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView, GfxRenderPassAttachmentColor, GfxRenderPassAttachment, GfxRenderPassAttachmentDepthStencil } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
 import { assert, assertExists, gfxColorCopy, gfxColorEqual, gfxRenderAttachmentViewEquals, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
@@ -18,14 +18,9 @@ interface GfxBufferP_GL extends GfxBuffer {
     pageByteSize: number;
 }
 
-interface GfxTextureP_GL extends GfxTexture {
+interface GfxTextureP_GL extends GfxTextureImpl, GfxTextureDescriptor {
     gl_texture: WebGLTexture;
     gl_target: GLenum;
-    pixelFormat: GfxFormat;
-    width: number;
-    height: number;
-    depth: number;
-    numLevels: number;
     formatKind: GfxSamplerFormatKind;
 }
 
@@ -446,9 +441,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentColorAttachment: (GfxRenderTargetP_GL | null)[] = [];
     private _currentColorAttachmentView: (GfxRenderAttachmentView | null)[] = [];
     private _currentColorResolveTo: (GfxTextureP_GL | null)[] = [];
-    private _currentColorResolveToView: (GfxRenderAttachmentView | null)[] = [];
+    private _currentColorResolveView: (GfxRenderAttachmentView | null)[] = [];
     private _currentDepthStencilAttachment: GfxRenderTargetP_GL | null = null;
+    private _currentDepthStencilAttachmentView: GfxRenderAttachmentView | null = null;
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
+    private _currentDepthStencilResolveView: GfxTextureP_GL | null = null;
     private _currentSampleCount: number = -1;
     private _currentPipeline!: GfxRenderPipelineP_GL;
     private _currentIndexBufferByteOffset: number | null = null;
@@ -529,8 +526,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // Create our fake swap-chain texture.
         this._scTexture = {
             _T: _T.Texture,
+            dimension: GfxTextureDimension.n2D,
+            usage: GfxTextureUsage.RenderTarget,
             ResourceUniqueId: this.getNextUniqueId(),
-            width: 0, height: 0, depth: 1, numLevels: 1,
+            width: 0, height: 0, depthOrArrayLayers: 1, numLevels: 1,
             gl_target: null!, gl_texture: null!,
             pixelFormat: (this._contextAttributes.alpha === false) ? GfxFormat.U8_RGB_RT : GfxFormat.U8_RGBA_RT,
             formatKind: GfxSamplerFormatKind.Float,
@@ -574,7 +573,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const pixelFormat = formatKind === GfxSamplerFormatKind.Depth ? GfxFormat.D32F : GfxFormat.U8_RGBA_NORM;
         const texture = this.createTexture({
             dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
-            width: 1, height: 1, depth, numLevels: 1,
+            width: 1, height: 1, depthOrArrayLayers: depth, numLevels: 1,
         });
         if (formatKind === GfxSamplerFormatKind.Float)
             this.uploadTextureData(texture, 0, [new Uint8Array(4 * depth)]);
@@ -896,30 +895,32 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl_target = WebGL2RenderingContext.TEXTURE_2D;
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
-            assert(descriptor.depth === 1);
+            assert(descriptor.depthOrArrayLayers === 1);
         } else if (descriptor.dimension === GfxTextureDimension.n2DArray) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
             gl.bindTexture(gl_target, gl_texture);
-            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depthOrArrayLayers);
         } else if (descriptor.dimension === GfxTextureDimension.n3D) {
             gl_target = WebGL2RenderingContext.TEXTURE_3D;
             gl.bindTexture(gl_target, gl_texture);
-            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depthOrArrayLayers);
         } else if (descriptor.dimension === GfxTextureDimension.Cube) {
             gl_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP;
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
-            assert(descriptor.depth === 6);
+            assert(descriptor.depthOrArrayLayers === 6);
         } else {
             throw "whoops";
         }
         const texture: GfxTextureP_GL = { _T: _T.Texture, ResourceUniqueId: this.getNextUniqueId(),
             gl_texture, gl_target,
+            dimension: descriptor.dimension,
             pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
             height: descriptor.height,
-            depth: descriptor.depth,
-            numLevels,
+            depthOrArrayLayers: descriptor.depthOrArrayLayers,
+            numLevels: descriptor.numLevels,
+            usage: descriptor.usage,
             formatKind: getFormatSamplerKind(descriptor.pixelFormat),
         };
         return texture;
@@ -1223,19 +1224,26 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(this._currentRenderPassDescriptor === null);
         this._currentRenderPassDescriptor = descriptor;
 
-        const { colorAttachment, colorAttachmentView, colorClearColor, colorResolveTo, colorResolveToView, depthStencilAttachment, depthClearValue, stencilClearValue, depthStencilResolveTo } = descriptor;
-        this._setRenderPassParametersBegin(colorAttachment.length);
-        for (let i = 0; i < colorAttachment.length; i++)
-            this._setRenderPassParametersColor(i, colorAttachment[i] as GfxRenderTargetP_GL | null, colorAttachmentView[i], colorResolveTo[i]  as GfxTextureP_GL | null, colorResolveToView[i]);
-        this._setRenderPassParametersDepthStencil(depthStencilAttachment as GfxRenderTargetP_GL | null, depthStencilResolveTo as GfxTextureP_GL | null);
+        const { colorAttachments, depthStencilAttachment } = descriptor;
+        this._setRenderPassParametersBegin(colorAttachments.length);
+        for (let i = 0; i < colorAttachments.length; i++)
+            this._setRenderPassParametersColor(i, colorAttachments[i]);
+        this._setRenderPassParametersDepthStencil(depthStencilAttachment);
         this._validateCurrentAttachments();
-        for (let i = 0; i < colorAttachment.length; i++) {
-            const clearColor = colorClearColor[i];
+
+        for (let i = 0; i < colorAttachments.length; i++) {
+            const attachment = colorAttachments[i];
+            if (attachment === null)
+                continue;
+            const clearColor = attachment.clearColor;
             if (clearColor === 'load')
                 continue;
             this._setRenderPassParametersClearColor(i, clearColor.r, clearColor.g, clearColor.b, clearColor.a);
         }
-        this._setRenderPassParametersClearDepthStencil(depthClearValue, stencilClearValue);
+
+        if (depthStencilAttachment !== null)
+            this._setRenderPassParametersClearDepthStencil(depthStencilAttachment.clearDepth, depthStencilAttachment.clearStencil);
+
         return this;
     }
 
@@ -1324,7 +1332,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
 
-        const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
+        const { gl_texture, gl_target, pixelFormat, width, height, depthOrArrayLayers: depth, numLevels } = texture as GfxTextureP_GL;
         const isCompressed = this.isTextureFormatCompressed(pixelFormat);
         const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
         const isCube = gl_target === WebGL2RenderingContext.TEXTURE_CUBE_MAP;
@@ -1752,18 +1760,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
         }
 
-        if (this._currentDepthStencilAttachment !== null) {
-            if (sampleCount === -1) {
-                sampleCount = this._currentDepthStencilAttachment.sampleCount;
-                width = this._currentDepthStencilAttachment.width;
-                height = this._currentDepthStencilAttachment.height;
-            } else {
-                assert(sampleCount === this._currentDepthStencilAttachment.sampleCount);
-                assert(width === this._currentDepthStencilAttachment.width);
-                assert(height === this._currentDepthStencilAttachment.height);
-            }
-        }
-
         this._currentSampleCount = sampleCount;
     }
 
@@ -1788,8 +1784,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
-    private _setRenderPassParametersColor(i: number, attachment: GfxRenderTargetP_GL | null, attachmentView: GfxRenderAttachmentView | null, resolveTo: GfxTextureP_GL | null, resolveToView: GfxRenderAttachmentView | null): void {
+    private _setRenderPassParametersColor(i: number, passAttachment: GfxRenderPassAttachmentColor | null): void {
         const gl = this.gl;
+
+        const attachment = passAttachment !== null ? passAttachment.renderTarget as GfxRenderTargetP_GL : null;
+        const attachmentView = passAttachment !== null ? passAttachment.view : null;
 
         assert((!!attachment) === (!!attachmentView));
         if (this._currentColorAttachment[i] !== attachment || !gfxRenderAttachmentViewEquals(this._currentColorAttachmentView[i], attachmentView)) {
@@ -1799,29 +1798,38 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resolveColorAttachmentsChanged = true;
         }
 
-        assert((!!resolveTo) === (!!resolveToView));
-        if (this._currentColorResolveTo[i] !== resolveTo || this._currentColorResolveToView[i] !== resolveToView) {
+        const resolveTo = passAttachment !== null ? passAttachment.resolveTo as GfxTextureP_GL : null;
+        const resolveView = passAttachment !== null ? passAttachment.resolveView : null;
+
+        assert((!!resolveTo) === (!!resolveView));
+        if (this._currentColorResolveTo[i] !== resolveTo || this._currentColorResolveView[i] !== resolveView) {
             this._currentColorResolveTo[i] = resolveTo;
-            this._currentColorResolveToView[i] = resolveToView;
+            this._currentColorResolveView[i] = resolveView;
 
             if (resolveTo !== null)
                 this._resolveColorAttachmentsChanged = true;
         }
     }
 
-    private _setRenderPassParametersDepthStencil(depthStencilAttachment: GfxRenderTarget | null, depthStencilResolveTo: GfxTexture | null): void {
+    private _setRenderPassParametersDepthStencil(passAttachment: GfxRenderPassAttachmentDepthStencil | null): void {
         const gl = this.gl;
 
-        if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
-            this._currentDepthStencilAttachment = depthStencilAttachment as (GfxRenderTargetP_GL | null);
+        const attachment = passAttachment !== null ? passAttachment.renderTarget as GfxRenderTargetP_GL : null;
+        const attachmentView = passAttachment !== null ? passAttachment.view : null;
+
+        if (this._currentDepthStencilAttachment !== attachment) {
+            this._currentDepthStencilAttachment = attachment as (GfxRenderTargetP_GL | null);
             this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, this._currentDepthStencilAttachment);
             this._resolveDepthStencilAttachmentsChanged = true;
         }
 
-        if (this._currentDepthStencilResolveTo !== depthStencilResolveTo) {
-            this._currentDepthStencilResolveTo = depthStencilResolveTo as GfxTextureP_GL;
+        const resolveTo = passAttachment !== null ? passAttachment.resolveTo as GfxTextureP_GL : null;
+        const resolveView = passAttachment !== null ? passAttachment.resolveView : null;
 
-            if (depthStencilResolveTo !== null)
+        if (this._currentDepthStencilResolveTo !== resolveTo) {
+            this._currentDepthStencilResolveTo = resolveTo as GfxTextureP_GL;
+
+            if (resolveTo !== null)
                 this._resolveDepthStencilAttachmentsChanged = true;
         }
     }
@@ -1859,25 +1867,25 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.clearBufferfv(gl.COLOR, slot, [r, g, b, a]);
     }
 
-    private _setRenderPassParametersClearDepthStencil(depthClearValue: number | 'load', stencilClearValue: number | 'load'): void {
+    private _setRenderPassParametersClearDepthStencil(clearDepth: number | 'load', clearStencil: number | 'load'): void {
         const gl = this.gl;
 
-        if (depthClearValue !== 'load') {
+        if (clearDepth !== 'load') {
             assert(this._currentDepthStencilAttachment !== null);
             // GL clears obey the masks... bad API or worst API?
             if (!this._currentMegaState.depthWrite) {
                 gl.depthMask(true);
                 this._currentMegaState.depthWrite = true;
             }
-            gl.clearBufferfv(gl.DEPTH, 0, [depthClearValue]);
+            gl.clearBufferfv(gl.DEPTH, 0, [clearDepth]);
         }
-        if (stencilClearValue !== 'load') {
+        if (clearStencil !== 'load') {
             assert(this._currentDepthStencilAttachment !== null);
             if (!this._currentMegaState.stencilWrite) {
                 gl.stencilMask(0xFF);
                 this._currentMegaState.stencilWrite = true;
             }
-            gl.clearBufferiv(gl.STENCIL, 0, [stencilClearValue]);
+            gl.clearBufferiv(gl.STENCIL, 0, [clearStencil]);
         }
     }
 
@@ -2330,7 +2338,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             if (colorResolveFrom !== null) {
                 const colorResolveTo = this._currentColorResolveTo[i];
-                const colorStore = renderPassDescriptor.colorStore[i];
+                const colorStore = renderPassDescriptor.colorAttachments[i]!.store;
 
                 const boundReadFB = colorResolveTo !== null || !colorStore;
                 if (boundReadFB) {
@@ -2351,7 +2359,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     } else {
                         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
                         if (this._resolveColorAttachmentsChanged) {
-                            const view = assertExists(this._currentColorResolveToView[i]);
+                            const view = assertExists(this._currentColorResolveView[i]);
                             gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this._getTextureFramebufferTarget(colorResolveTo, view.z), colorResolveTo.gl_texture, view.level);
                         }
                     }
@@ -2371,8 +2379,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         const depthStencilResolveFrom = this._currentDepthStencilAttachment;
         if (depthStencilResolveFrom !== null) {
-            const depthStencilResolveTo = this._currentDepthStencilResolveTo;
-            const depthStencilStore = renderPassDescriptor.depthStencilStore;
+            const depthStencilResolveTo = this._currentDepthStencilResolveTo
+            const depthStencilStore = renderPassDescriptor.depthStencilAttachment!.store;
 
             const boundReadFB = depthStencilResolveTo !== null || !depthStencilStore;
             if (boundReadFB) {

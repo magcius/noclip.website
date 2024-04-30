@@ -451,8 +451,8 @@ export class GfxRenderInst {
         const passDescriptor = device.queryRenderPass(passRenderer);
 
         let sampleCount = -1;
-        for (let i = 0; i < passDescriptor.colorAttachment.length; i++) {
-            const colorAttachmentDescriptor = passDescriptor.colorAttachment[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachment[i]!) : null;
+        for (let i = 0; i < passDescriptor.colorAttachments.length; i++) {
+            const colorAttachmentDescriptor = passDescriptor.colorAttachments[i] !== null ? device.queryRenderTarget(passDescriptor.colorAttachments[i]!.renderTarget) : null;
             this._renderPipelineDescriptor.colorAttachmentFormats[i] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
             if (colorAttachmentDescriptor !== null) {
                 if (sampleCount === -1)
@@ -462,7 +462,7 @@ export class GfxRenderInst {
             }
         }
 
-        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment) : null;
+        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryRenderTarget(passDescriptor.depthStencilAttachment.renderTarget) : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
         if (depthStencilAttachmentDescriptor !== null) {
             if (sampleCount === -1)

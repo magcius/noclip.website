@@ -1,14 +1,16 @@
 
 // Things that should only be required by platform implementations.
 
-import { GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxTextureDimension } from "./GfxPlatform.js";
+import { GfxBindingLayoutSamplerDescriptor, GfxSamplerFormatKind, GfxTextureDescriptor, GfxTextureDimension } from "./GfxPlatform.js";
 
 // Hack to get nominal typing.
 export enum _T { Buffer, Texture, RenderTarget, Sampler, Program, Bindings, InputLayout, RenderPipeline, ComputePipeline, Readback, QueryPool }
 
+export interface GfxTextureImpl extends GfxResourceBase { _T: _T.Texture };
+
 export interface GfxResourceBase { ResourceName?: string, ResourceUniqueId: number };
 export interface GfxBuffer extends GfxResourceBase { _T: _T.Buffer };
-export interface GfxTexture extends GfxResourceBase { _T: _T.Texture };
+export interface GfxTexture extends GfxTextureImpl, Readonly<GfxTextureDescriptor> {};
 export interface GfxRenderTarget extends GfxResourceBase { _T: _T.RenderTarget };
 export interface GfxSampler extends GfxResourceBase { _T: _T.Sampler };
 export interface GfxProgram extends GfxResourceBase { _T: _T.Program };

@@ -1,9 +1,9 @@
 import { CameraController } from "../Camera.js";
 import { colorNewFromRGBA } from "../Color.js";
-import { GfxrAttachmentClearDescriptor, makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
+import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import InputManager from "../InputManager.js";

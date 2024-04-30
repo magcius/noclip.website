@@ -448,10 +448,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
-        this.mainColorDesc.colorClearColor = TransparentBlack;
+        this.mainColorDesc.clearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
-        this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
+        this.mainDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth!;
 
         this.mainColorTemporalTexture.setDescription(device, this.mainColorDesc);
 
@@ -464,7 +464,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // TODO(jstpierre): Re-enable this. This would require bouncing the Opaque after Shadow
         // pass to a temp MSAA RT if the sample counts differ, and then resolving...
         // this.maskDesc.sampleCount = 1;
-        this.maskDesc.colorClearColor = TransparentBlack;
+        this.maskDesc.clearColor = TransparentBlack;
 
         if (sceneObjHolder.fallOutFieldDraw !== null && sceneObjHolder.clipAreaHolder !== null && sceneObjHolder.clipAreaHolder.isActive && this.hasAnyDrawBuffer(DrawBufferType.ClippedMapParts)) {
             builder.pushPass((pass) => {
@@ -723,7 +723,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 // Render Bloom Objects
 
                 this.bloomObjectsDesc.copyDimensions(this.mainColorDesc);
-                this.bloomObjectsDesc.colorClearColor = TransparentBlack;
+                this.bloomObjectsDesc.clearColor = TransparentBlack;
                 const bloomObjectsTargetID = builder.createRenderTargetID(this.bloomObjectsDesc, 'Bloom Objects');
 
                 builder.pushPass((pass) => {

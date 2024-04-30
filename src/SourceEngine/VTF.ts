@@ -337,7 +337,7 @@ export class VTF {
             width: this.width,
             height: this.height,
             numLevels: this.numLevels,
-            depth: this.depth * faceCount,
+            depthOrArrayLayers: this.depth * faceCount,
             usage: GfxTextureUsage.Sampled,
         };
 

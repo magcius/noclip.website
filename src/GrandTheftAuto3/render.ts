@@ -143,7 +143,7 @@ export class TextureArray extends TextureMapping {
         const device = cache.device;
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray, pixelFormat,
-            width, height, depth: textures.length, numLevels: mipmaps.length, usage: GfxTextureUsage.Sampled,
+            width, height, depthOrArrayLayers: textures.length, numLevels: mipmaps.length, usage: GfxTextureUsage.Sampled,
         });
 
         device.uploadTextureData(gfxTexture, 0, mipmaps);

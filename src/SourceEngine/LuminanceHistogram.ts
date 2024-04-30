@@ -114,7 +114,7 @@ class ImplConservativeOccl {
 
     constructor(cache: GfxRenderCache, private histogram: LuminanceHistogram) {
         this.gfxProgram = cache.createProgram(new LuminanceThreshProgram());
-        this.dummyTargetDesc.colorClearColor = White;
+        this.dummyTargetDesc.clearColor = White;
         this.buckets = nArray(this.histogram.bucketArea.length, () => new ImplConservativeOcclBucket());
     }
 

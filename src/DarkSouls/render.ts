@@ -2854,7 +2854,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+        mainColorDesc.clearColor = standardFullClearRenderPassDescriptor.clearColor;
         setBackbufferDescSimple(mainColorDesc, viewerInput);
 
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -2876,7 +2876,7 @@ export class DarkSoulsRenderer implements Viewer.SceneGfx {
 
         const waterHeightDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
         waterHeightDesc.copyDimensions(mainColorDesc);
-        waterHeightDesc.colorClearColor = Red;
+        waterHeightDesc.clearColor = Red;
 
         const waterHeightTargetID = builder.createRenderTargetID(waterHeightDesc, 'Water Height');
         builder.pushPass((pass) => {

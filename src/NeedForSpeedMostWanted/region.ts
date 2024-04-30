@@ -269,7 +269,7 @@ export class NfsRegion {
                 pixelFormat: format,
                 width,
                 height,
-                depth: 1,
+                depthOrArrayLayers: 1,
                 numLevels: mipMapCount,
                 usage: GfxTextureUsage.Sampled
             };

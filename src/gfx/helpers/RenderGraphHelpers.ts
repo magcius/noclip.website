@@ -2,15 +2,15 @@
 import { GfxColor, GfxFormat } from "../platform/GfxPlatform.js";
 import { colorNewFromRGBA, OpaqueBlack } from "../../Color.js";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers.js";
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
+import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
 import { pushFXAAPass } from "../passes/FXAA.js";
 import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 
 export function makeAttachmentClearDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxrAttachmentClearDescriptor {
     return {
-        colorClearColor: clearColor,
-        depthClearValue: reverseDepthForClearValue(1.0),
-        stencilClearValue: 0.0,
+        clearColor: clearColor,
+        clearDepth: reverseDepthForClearValue(1.0),
+        clearStencil: 0.0,
     }
 }
 
@@ -48,12 +48,6 @@ export function setBackbufferDescSimple(desc: GfxrRenderTargetDescription, rende
     desc.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, sampleCount);
 }
 
-export interface GfxrAttachmentClearDescriptor {
-    colorClearColor: Readonly<GfxColor> | 'load';
-    depthClearValue: number;
-    stencilClearValue: number;
-}
-
 export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxrAttachmentClearDescriptor): GfxrRenderTargetDescription {
     const pixelFormat = selectFormatSimple(slot);
     const desc = new GfxrRenderTargetDescription(pixelFormat);
@@ -61,9 +55,9 @@ export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: 
     setBackbufferDescSimple(desc, renderInput);
 
     if (clearDescriptor !== null) {
-        desc.colorClearColor = clearDescriptor.colorClearColor;
-        desc.depthClearValue = clearDescriptor.depthClearValue;
-        desc.stencilClearValue = clearDescriptor.stencilClearValue;
+        desc.clearColor = clearDescriptor.clearColor;
+        desc.clearDepth = clearDescriptor.clearDepth;
+        desc.clearStencil = clearDescriptor.clearStencil;
     }
 
     return desc;

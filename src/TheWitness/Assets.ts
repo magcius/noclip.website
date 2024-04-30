@@ -197,7 +197,7 @@ export class Texture_Asset {
             dimension,
             width: this.width,
             height: this.height,
-            depth: this.depth,
+            depthOrArrayLayers: this.depth,
             numLevels: this.mipmap_count,
             pixelFormat: get_gfx_format(d3d_format, !!(this.flags & Texture_Asset_Flags.Is_sRGB)),
             usage: GfxTextureUsage.Sampled,

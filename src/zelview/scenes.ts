@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer.js';
-import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, GfxrAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxDevice, GfxCullMode } from '../gfx/platform/GfxPlatform.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { OpaqueBlack } from '../Color.js';
 import { SceneContext } from '../SceneBase.js';
@@ -10,7 +10,7 @@ import { RootMeshRenderer, MeshData, Mesh } from './render.js';
 import { RSPState, RSPOutput } from './f3dzex.js';
 import { CameraController } from '../Camera.js';
 import * as UI from '../ui.js';
-import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
+import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 
 const pathBase = `ZeldaOcarinaOfTime`;

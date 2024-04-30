@@ -51,7 +51,7 @@ function makeTexture(device: GfxDevice, blp: WowBlp, level = 0): GfxTexture {
     width: blp.header.width,
     height: blp.header.height,
     numLevels: mipmapCount,
-    depth: 1,
+    depthOrArrayLayers: 1,
     usage: GfxTextureUsage.Sampled,
   };
 
@@ -159,7 +159,7 @@ export class TextureCache {
         width: w,
         height: h,
         numLevels: 1,
-        depth: 1,
+        depthOrArrayLayers: 1,
         usage: GfxTextureUsage.Sampled,
       };
       const texture = device.createTexture(textureDescriptor);

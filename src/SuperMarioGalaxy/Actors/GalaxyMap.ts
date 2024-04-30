@@ -421,7 +421,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
 
         const layoutTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
         layoutTargetDesc.setDimensions(640, 456, 1);
-        layoutTargetDesc.colorClearColor = TransparentBlack;
+        layoutTargetDesc.clearColor = TransparentBlack;
         const layoutTargetID = builder.createRenderTargetID(layoutTargetDesc, 'Galaxy Map Layout');
 
         builder.pushPass((pass) => {

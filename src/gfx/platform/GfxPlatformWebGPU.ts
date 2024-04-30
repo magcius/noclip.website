@@ -4,7 +4,7 @@ import { HashMap, nullHashFunc } from "../../HashMap.js";
 import { rust } from "../../rustlib.js";
 import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingLayoutSamplerDescriptor, GfxBindings, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPrimitiveTopology, GfxProgram, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipeline, GfxRenderPipelineDescriptor, GfxRenderTarget, GfxRenderTargetDescriptor, GfxSampler, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxShadingLanguage, GfxSwapChain, GfxTexFilterMode, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView } from "./GfxPlatform.js";
 import { FormatFlags, FormatTypeFlags, getFormatByteSize, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
-import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
+import { GfxComputePipeline, GfxQueryPool, GfxReadback, GfxResource, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 import { align, assert, assertExists, gfxBindingLayoutDescriptorEqual } from "./GfxPlatformUtil.js";
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
@@ -12,31 +12,16 @@ interface GfxBufferP_WebGPU extends GfxBuffer {
     size: number;
 }
 
-interface GfxTextureSharedDescriptor {
-    dimension: GfxTextureDimension;
-    pixelFormat: GfxFormat;
-    width: number;
-    height: number;
-    depthOrArrayLayers: number;
-    numLevels: number;
+interface GfxTextureSharedDescriptor extends GfxTextureDescriptor {
     sampleCount: number;
-    usage: GfxTextureUsage;
 }
 
-interface GfxTextureSharedP_WebGPU {
-    pixelFormat: GfxFormat;
-    width: number;
-    height: number;
-    depthOrArrayLayers: number;
-    numLevels: number;
-    sampleCount: number;
-    usage: GPUTextureUsageFlags;
+interface GfxTextureSharedP_WebGPU extends GfxTextureSharedDescriptor {
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
-    dimension: GfxTextureDimension;
 }
 
-interface GfxTextureP_WebGPU extends GfxTextureSharedP_WebGPU, GfxTexture {
+interface GfxTextureP_WebGPU extends GfxTextureSharedP_WebGPU, GfxTextureImpl {
 }
 
 interface GfxAttachmentP_WebGPU extends GfxTextureSharedP_WebGPU, GfxRenderTarget {
@@ -541,98 +526,103 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
         this.gpuRenderPassDescriptor.colorAttachments = this.gpuColorAttachments;
 
-        const numColorAttachments = descriptor.colorAttachment.length;
+        const numColorAttachments = descriptor.colorAttachments.length;
         this.gfxColorAttachment.length = numColorAttachments;
         this.gfxColorResolveTo.length = numColorAttachments;
-        for (let i = 0; i < descriptor.colorAttachment.length; i++) {
-            let colorAttachment: GfxTextureSharedP_WebGPU | null = descriptor.colorAttachment[i] as GfxAttachmentP_WebGPU;
-            let colorResolveTo: GfxTextureSharedP_WebGPU | null = descriptor.colorResolveTo[i] as GfxTextureP_WebGPU;
+        for (let i = 0; i < descriptor.colorAttachments.length; i++) {
+            const passAttachment = descriptor.colorAttachments[i];
 
-            // Do some dumb juggling...
-            if (colorAttachment === null && colorResolveTo !== null) {
-                colorAttachment = colorResolveTo as GfxTextureP_WebGPU;
-                colorResolveTo = null;
-            }
+            if (passAttachment !== null) {
+                const attachment = passAttachment.renderTarget as GfxAttachmentP_WebGPU;
+                const resolveTo = passAttachment.resolveTo as GfxTextureP_WebGPU | null;
 
-            this.gfxColorAttachment[i] = colorAttachment;
-            this.gfxColorResolveTo[i] = colorResolveTo;
+                this.gfxColorAttachment[i] = attachment;
+                this.gfxColorAttachmentView[i] = passAttachment.view;
+                this.gfxColorResolveTo[i] = resolveTo;
+                this.gfxColorResolveToView[i] = passAttachment.resolveView;
 
-            this.gfxColorAttachmentView[i] = descriptor.colorAttachmentView[i];
-            this.gfxColorResolveToView[i] = descriptor.colorResolveToView[i];
-
-            if (colorAttachment !== null) {
                 if (!this.gpuColorAttachments[i])
                     this.gpuColorAttachments[i] = {} as GPURenderPassColorAttachment;
 
                 const dstAttachment = this.gpuColorAttachments[i]!;
-                dstAttachment.view = this.getTextureView(colorAttachment, assertExists(this.gfxColorAttachmentView[i]));
-                const clearColor = descriptor.colorClearColor[i];
+                dstAttachment.view = this.getTextureView(attachment, passAttachment.view);
+                const clearColor = passAttachment.clearColor;
                 if (clearColor === 'load') {
                     dstAttachment.loadOp = 'load';
                 } else {
                     dstAttachment.loadOp = 'clear';
                     dstAttachment.clearValue = clearColor;
                 }
-                dstAttachment.storeOp = descriptor.colorStore[i] ? 'store' : 'discard';
+                dstAttachment.storeOp = passAttachment.store ? 'store' : 'discard';
                 dstAttachment.resolveTarget = undefined;
-                if (colorResolveTo !== null) {
-                    if (colorAttachment.sampleCount > 1)
-                        dstAttachment.resolveTarget = this.getTextureView(colorResolveTo, assertExists(this.gfxColorResolveToView[i]));
+                if (resolveTo !== null) {
+                    if (attachment.sampleCount > 1)
+                        dstAttachment.resolveTarget = this.getTextureView(resolveTo, assertExists(passAttachment.resolveView));
                     else
                         dstAttachment.storeOp = 'store';
                 }
             } else {
                 this.gpuColorAttachments[i] = null;
+                this.gfxColorAttachment[i] = null;
+                this.gfxColorResolveTo[i] = null;
             }
         }
 
-        this.gfxDepthStencilAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
-        this.gfxDepthStencilResolveTo = descriptor.depthStencilResolveTo as GfxTextureP_WebGPU;
+        {
+            const passAttachment = descriptor.depthStencilAttachment;
 
-        if (descriptor.depthStencilAttachment !== null) {
-            const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
-            const dstAttachment = this.gpuDepthStencilAttachment;
-            dstAttachment.view = dsAttachment.gpuTextureView;
+            if (passAttachment !== null) {
+                const attachment = passAttachment.renderTarget as GfxAttachmentP_WebGPU;
+                const resolveTo = passAttachment.resolveTo as GfxTextureP_WebGPU | null;
 
-            const hasDepth = !!(getFormatFlags(dsAttachment.pixelFormat) & FormatFlags.Depth);
-            if (hasDepth) {
-                if (descriptor.depthClearValue === 'load') {
-                    dstAttachment.depthLoadOp = 'load';
+                this.gfxDepthStencilAttachment = attachment;
+                this.gfxDepthStencilResolveTo = resolveTo;
+
+                const dstAttachment = this.gpuDepthStencilAttachment;
+                dstAttachment.view = attachment.gpuTextureView;
+
+                const hasDepth = !!(getFormatFlags(attachment.pixelFormat) & FormatFlags.Depth);
+                if (hasDepth) {
+                    if (passAttachment.clearDepth === 'load') {
+                        dstAttachment.depthLoadOp = 'load';
+                    } else {
+                        dstAttachment.depthLoadOp = 'clear';
+                        dstAttachment.depthClearValue = passAttachment.clearDepth;
+                    }
+
+                    if (passAttachment.store || this.gfxDepthStencilResolveTo !== null)
+                        dstAttachment.depthStoreOp = 'store';
+                    else
+                        dstAttachment.depthStoreOp = 'discard';
                 } else {
-                    dstAttachment.depthLoadOp = 'clear';
-                    dstAttachment.depthClearValue = descriptor.depthClearValue;
+                    dstAttachment.depthLoadOp = undefined;
+                    dstAttachment.depthStoreOp = undefined;
                 }
 
-                if (descriptor.depthStencilStore || this.gfxDepthStencilResolveTo !== null)
-                    dstAttachment.depthStoreOp = 'store';
-                else
-                    dstAttachment.depthStoreOp = 'discard';
-            } else {
-                dstAttachment.depthLoadOp = undefined;
-                dstAttachment.depthStoreOp = undefined;
-            }
+                const hasStencil = !!(getFormatFlags(attachment.pixelFormat) & FormatFlags.Stencil);
+                if (hasStencil) {
+                    if (passAttachment.clearStencil === 'load') {
+                        dstAttachment.stencilLoadOp = 'load';
+                    } else {
+                        dstAttachment.stencilLoadOp = 'clear';
+                        dstAttachment.stencilClearValue = passAttachment.clearStencil;
+                    }
 
-            const hasStencil = !!(getFormatFlags(dsAttachment.pixelFormat) & FormatFlags.Stencil);
-            if (hasStencil) {
-                if (descriptor.stencilClearValue === 'load') {
-                    dstAttachment.stencilLoadOp = 'load';
+                    if (passAttachment.store || this.gfxDepthStencilResolveTo !== null)
+                        dstAttachment.stencilStoreOp = 'store';
+                    else
+                        dstAttachment.stencilStoreOp = 'discard';
                 } else {
-                    dstAttachment.stencilLoadOp = 'clear';
-                    dstAttachment.stencilClearValue = descriptor.stencilClearValue;
+                    dstAttachment.stencilLoadOp = undefined;
+                    dstAttachment.stencilStoreOp = undefined;
                 }
 
-                if (descriptor.depthStencilStore || this.gfxDepthStencilResolveTo !== null)
-                    dstAttachment.stencilStoreOp = 'store';
-                else
-                    dstAttachment.stencilStoreOp = 'discard';
+                this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
             } else {
-                dstAttachment.stencilLoadOp = undefined;
-                dstAttachment.stencilStoreOp = undefined;
+                this.gfxDepthStencilAttachment = null;
+                this.gfxDepthStencilResolveTo = null;
+                this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
             }
-
-            this.gpuRenderPassDescriptor.depthStencilAttachment = this.gpuDepthStencilAttachment;
-        } else {
-            this.gpuRenderPassDescriptor.depthStencilAttachment = undefined;
         }
 
         this.occlusionQueryPool = descriptor.occlusionQueryPool as GfxQueryPoolP_WebGPU;
@@ -947,7 +937,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const pixelFormat = formatKind === GfxSamplerFormatKind.Float ? GfxFormat.U8_RGBA_NORM : GfxFormat.D24;
         return this.createTexture({
             dimension, pixelFormat, usage: GfxTextureUsage.Sampled,
-            width: 1, height: 1, depth, numLevels: 1,
+            width: 1, height: 1, depthOrArrayLayers: depth, numLevels: 1,
         }) as GfxTextureP_WebGPU;
     }
 
@@ -1039,7 +1029,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             dimension: descriptor.dimension,
             width: descriptor.width,
             height: descriptor.height,
-            depthOrArrayLayers: descriptor.depth,
+            depthOrArrayLayers: descriptor.depthOrArrayLayers,
             numLevels: descriptor.numLevels,
             usage: descriptor.usage,
             sampleCount: 1,

@@ -831,7 +831,7 @@ export class SourceColorCorrection {
         this.gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n3D,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
-            width, height, depth, numLevels: 1, usage: GfxTextureUsage.Sampled,
+            width, height, depthOrArrayLayers: depth, numLevels: 1, usage: GfxTextureUsage.Sampled,
         });
 
         this.gfxSampler = cache.createSampler({
@@ -986,7 +986,7 @@ export class ProjectedLightRenderer {
         assert(this.enabled);
         const depthTargetDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         depthTargetDesc.setDimensions(renderContext.shadowMapSize, renderContext.shadowMapSize, 1);
-        depthTargetDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+        depthTargetDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
 
         const depthTargetID = builder.createRenderTargetID(depthTargetDesc, `Projected Texture Depth - ${this.debugName}`);
 
@@ -1341,11 +1341,11 @@ export class SourceWorldViewRenderer {
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.copyDimensions(renderTargetDesc);
-        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+        mainColorDesc.clearColor = standardFullClearRenderPassDescriptor.clearColor;
 
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         mainDepthDesc.copyDimensions(mainColorDesc);
-        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+        mainDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, `${this.name} - Main Color (sRGB)`);
 

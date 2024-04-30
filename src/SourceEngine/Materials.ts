@@ -5338,7 +5338,7 @@ class LightmapPage {
             pixelFormat,
             width: page.width,
             height: page.height,
-            depth: numSlices,
+            depthOrArrayLayers: numSlices,
             numLevels: 1,
         });
 

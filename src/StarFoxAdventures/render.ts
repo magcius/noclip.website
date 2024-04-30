@@ -317,10 +317,10 @@ export class SFARenderer implements Viewer.SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
-        this.mainColorDesc.colorClearColor = BACKGROUND_COLOR;
+        this.mainColorDesc.clearColor = BACKGROUND_COLOR;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
-        this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+        this.mainDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth;
 
         this.temporalTexture.setDescription(device, this.mainColorDesc);
 

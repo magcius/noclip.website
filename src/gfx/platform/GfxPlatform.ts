@@ -129,7 +129,7 @@ export interface GfxTextureDescriptor {
     pixelFormat: GfxFormat;
     width: number;
     height: number;
-    depth: number;
+    depthOrArrayLayers: number;
     numLevels: number;
     usage: GfxTextureUsage;
 }
@@ -137,7 +137,7 @@ export interface GfxTextureDescriptor {
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     const usage = GfxTextureUsage.Sampled;
-    return { dimension, pixelFormat, width, height, depth, numLevels, usage };
+    return { dimension, pixelFormat, width, height, depthOrArrayLayers: depth, numLevels, usage };
 }
 
 export interface GfxSamplerDescriptor {
@@ -305,18 +305,26 @@ export interface GfxRenderAttachmentView {
     z: number;
 }
 
+export interface GfxRenderPassAttachment {
+    renderTarget: GfxRenderTarget;
+    view: GfxRenderAttachmentView;
+    resolveTo: GfxTexture | null;
+    resolveView: GfxRenderAttachmentView | null;
+    store: boolean;
+}
+
+export interface GfxRenderPassAttachmentColor extends GfxRenderPassAttachment {
+    clearColor: GfxColor | 'load';
+}
+
+export interface GfxRenderPassAttachmentDepthStencil extends GfxRenderPassAttachment {
+    clearDepth: number | 'load';
+    clearStencil: number | 'load';
+}
+
 export interface GfxRenderPassDescriptor {
-    colorAttachment: (GfxRenderTarget | null)[];
-    colorAttachmentView: (GfxRenderAttachmentView | null)[];
-    colorClearColor: (GfxColor | 'load')[];
-    colorResolveTo: (GfxTexture | null)[];
-    colorResolveToView: (GfxRenderAttachmentView | null)[];
-    colorStore: boolean[];
-    depthStencilAttachment: GfxRenderTarget | null;
-    depthStencilResolveTo: GfxTexture | null;
-    depthStencilStore: boolean;
-    depthClearValue: number | 'load';
-    stencilClearValue: number | 'load';
+    colorAttachments: (GfxRenderPassAttachmentColor | null)[];
+    depthStencilAttachment: GfxRenderPassAttachmentDepthStencil | null;
 
     // Query system.
     occlusionQueryPool: GfxQueryPool | null;

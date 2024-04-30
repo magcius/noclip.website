@@ -849,7 +849,7 @@ class Main {
 
     // Hooks for people who want to mess with stuff.
     public getStandardClearColor(): Color {
-        return standardFullClearRenderPassDescriptor.colorClearColor as Color;
+        return standardFullClearRenderPassDescriptor.clearColor as Color;
     }
 
     public get scene() {

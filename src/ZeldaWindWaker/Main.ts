@@ -530,10 +530,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         setBackbufferDescSimple(this.mainColorDesc, viewerInput);
-        this.mainColorDesc.colorClearColor = TransparentBlack;
+        this.mainColorDesc.clearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
-        this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
+        this.mainDepthDesc.clearDepth = standardFullClearRenderPassDescriptor.clearDepth!;
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 

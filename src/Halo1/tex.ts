@@ -2,7 +2,7 @@
 import { BitmapFormat, HaloSceneManager, HaloBitmap, HaloBitmapReader } from "../../rust/pkg";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
@@ -84,13 +84,13 @@ function makeTexture(device: GfxDevice, bitmap: HaloBitmap, mgr: HaloSceneManage
     if (dimension === GfxTextureDimension.Cube)
         depth *= 6;
 
-    const textureDescriptor = {
+    const textureDescriptor: GfxTextureDescriptor = {
         dimension,
         pixelFormat: format,
         width: bitmapMetadata.width,
         height: bitmapMetadata.height,
         numLevels: mipmapCount,
-        depth,
+        depthOrArrayLayers: depth,
         usage: GfxTextureUsage.Sampled,
     };
 
