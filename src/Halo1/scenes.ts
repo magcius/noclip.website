@@ -972,6 +972,7 @@ class MaterialRender_TransparencyWater {
         desc.height = this.rippleTextureSize;
         desc.numLevels = this.shader.ripple_mipmap_levels;
         desc.sampleCount = 1;
+        desc.texture = this.rippleTexture;
         const renderTarget = builder.createRenderTargetID(desc, "Ripple Mipmap");
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -985,7 +986,7 @@ class MaterialRender_TransparencyWater {
         for (let i = 0; i < this.shader.ripple_mipmap_levels; i++) {
             builder.pushPass((pass) => {
                 pass.setDebugName(`Ripple Mipmap ${i}`);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, renderTarget, i);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, renderTarget, { level: i, z: 0 });
 
                 const renderInst = renderInstManager.newRenderInst();
 
@@ -1002,7 +1003,7 @@ class MaterialRender_TransparencyWater {
                     renderInst.drawOnPass(cache, passRenderer);
                 });
             });
-            builder.resolveRenderTargetToExternalTexture(renderTarget, this.rippleTexture, i);
+            // builder.resolveRenderTargetToExternalTexture(renderTarget, this.rippleTexture, { level: i, z: 0 });
         }
 
         renderInstManager.popTemplateRenderInst();

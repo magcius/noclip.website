@@ -1,10 +1,10 @@
 
-import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode } from './GfxPlatform.js';
+import { GfxAttachmentState, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBlendFactor, GfxBlendMode, GfxBufferBinding, GfxBufferFrequencyHint, GfxBufferUsage, GfxChannelBlendState, GfxChannelWriteMask, GfxClipSpaceNearZ, GfxCompareMode, GfxComputePass, GfxComputePipelineDescriptor, GfxComputeProgramDescriptor, GfxCullMode, GfxStatisticsGroup, GfxDevice, GfxDeviceLimits, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxPass, GfxPlatformFramebuffer, GfxPrimitiveTopology, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxQueryPoolType, GfxRenderPass, GfxRenderPassDescriptor, GfxRenderPipelineDescriptor, GfxRenderTargetDescriptor, GfxSamplerBinding, GfxSamplerDescriptor, GfxSamplerFormatKind, GfxSwapChain, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxVendorInfo, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxViewportOrigin, GfxWrapMode, GfxRenderAttachmentView } from './GfxPlatform.js';
 import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByteSize, getFormatCompByteSize, getFormatCompFlags, getFormatFlags, getFormatSamplerKind, getFormatTypeFlags } from "./GfxPlatformFormat.js";
 import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
-import { assert, assertExists, gfxColorCopy, gfxColorEqual, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
+import { assert, assertExists, gfxColorCopy, gfxColorEqual, gfxRenderAttachmentViewEquals, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -443,10 +443,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resourceUniqueId = 0;
 
     // Cached GL driver state
-    private _currentColorAttachments: (GfxRenderTargetP_GL | null)[] = [];
-    private _currentColorAttachmentLevels: number[] = [];
-    private _currentColorResolveTos: (GfxTextureP_GL | null)[] = [];
-    private _currentColorResolveToLevels: number[] = [];
+    private _currentColorAttachment: (GfxRenderTargetP_GL | null)[] = [];
+    private _currentColorAttachmentView: (GfxRenderAttachmentView | null)[] = [];
+    private _currentColorResolveTo: (GfxTextureP_GL | null)[] = [];
+    private _currentColorResolveToView: (GfxRenderAttachmentView | null)[] = [];
     private _currentDepthStencilAttachment: GfxRenderTargetP_GL | null = null;
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
     private _currentSampleCount: number = -1;
@@ -1223,10 +1223,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(this._currentRenderPassDescriptor === null);
         this._currentRenderPassDescriptor = descriptor;
 
-        const { colorAttachment, colorAttachmentLevel, colorClearColor, colorResolveTo, colorResolveToLevel, depthStencilAttachment, depthClearValue, stencilClearValue, depthStencilResolveTo } = descriptor;
+        const { colorAttachment, colorAttachmentView, colorClearColor, colorResolveTo, colorResolveToView, depthStencilAttachment, depthClearValue, stencilClearValue, depthStencilResolveTo } = descriptor;
         this._setRenderPassParametersBegin(colorAttachment.length);
         for (let i = 0; i < colorAttachment.length; i++)
-            this._setRenderPassParametersColor(i, colorAttachment[i] as GfxRenderTargetP_GL | null, colorAttachmentLevel[i], colorResolveTo[i]  as GfxTextureP_GL | null, colorResolveToLevel[i]);
+            this._setRenderPassParametersColor(i, colorAttachment[i] as GfxRenderTargetP_GL | null, colorAttachmentView[i], colorResolveTo[i]  as GfxTextureP_GL | null, colorResolveToView[i]);
         this._setRenderPassParametersDepthStencil(depthStencilAttachment as GfxRenderTargetP_GL | null, depthStencilResolveTo as GfxTextureP_GL | null);
         this._validateCurrentAttachments();
         for (let i = 0; i < colorAttachment.length; i++) {
@@ -1283,11 +1283,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._scPlatformFramebuffer);
         } else {
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
-            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, dst, 0);
+            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, dst);
         }
 
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
-        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, src, 0);
+        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, src);
 
         gl.blitFramebuffer(srcX, srcY, srcX + src.width, srcY + src.height, dstX, dstY, dstX + src.width, dstY + src.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
 
@@ -1683,8 +1683,26 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         program.compileState = GfxProgramCompileStateP_GL.Compiling;
     }
 
-    private _bindFramebufferAttachment(framebuffer: GLenum, binding: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null, level: number): void {
+    private _getTextureFramebufferTarget(texture_: GfxTexture, z: number): GLenum {
         const gl = this.gl;
+        const texture = texture_ as GfxTextureP_GL;
+
+        if (texture.gl_target === gl.TEXTURE_2D) {
+            assert(z === 0);
+            return gl.TEXTURE_2D;
+        } else if (texture.gl_target === gl.TEXTURE_CUBE_MAP) {
+            assert(z < 6);
+            return gl.TEXTURE_CUBE_MAP_POSITIVE_X + z;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    private _bindFramebufferAttachment(framebuffer: GLenum, binding: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null, attachmentView: GfxRenderAttachmentView | null = null): void {
+        const gl = this.gl;
+
+        const level = attachmentView !== null ? attachmentView.level : 0;
+        const z = attachmentView !== null ? attachmentView.z : 0;
 
         if (attachment === null) {
             gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, null);
@@ -1692,9 +1710,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (attachment.gl_renderbuffer !== null)
                 gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, attachment.gl_renderbuffer);
             else if (attachment.gfxTexture !== null)
-                gl.framebufferTexture2D(framebuffer, binding, gl.TEXTURE_2D, getPlatformTexture(attachment.gfxTexture), level);
+                gl.framebufferTexture2D(framebuffer, binding, this._getTextureFramebufferTarget(attachment.gfxTexture, z), getPlatformTexture(attachment.gfxTexture), level);
         } else if (attachment._T === _T.Texture) {
-            gl.framebufferTexture2D(framebuffer, binding, gl.TEXTURE_2D, getPlatformTexture(attachment), level);
+            gl.framebufferTexture2D(framebuffer, binding, this._getTextureFramebufferTarget(attachment, z), getPlatformTexture(attachment), level);
         }
     }
 
@@ -1704,21 +1722,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const flags = attachment !== null ? getFormatFlags(attachment.pixelFormat) : (FormatFlags.Depth | FormatFlags.Stencil);
         const depth = !!(flags & FormatFlags.Depth), stencil = !!(flags & FormatFlags.Stencil);
         if (depth && stencil) {
-            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_STENCIL_ATTACHMENT, attachment, 0);
+            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_STENCIL_ATTACHMENT, attachment);
         } else if (depth) {
-            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, attachment, 0);
-            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, null, 0);
+            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, attachment);
+            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, null);
         } else if (stencil) {
-            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, attachment, 0);
-            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, null, 0);
+            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, attachment);
+            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, null);
         }
     }
 
     private _validateCurrentAttachments(): void {
         let sampleCount = -1, width = -1, height = -1;
 
-        for (let i = 0; i < this._currentColorAttachments.length; i++) {
-            const attachment = this._currentColorAttachments[i];
+        for (let i = 0; i < this._currentColorAttachment.length; i++) {
+            const attachment = this._currentColorAttachment[i];
 
             if (attachment === null)
                 continue;
@@ -1754,37 +1772,39 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
         gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
-        for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++) {
-            const attachment = this._currentColorAttachments[i];
+        for (let i = numColorAttachments; i < this._currentColorAttachment.length; i++) {
+            const attachment = this._currentColorAttachment[i];
             if (!attachment)
                 continue;
             else if (attachment.gl_renderbuffer !== null)
                 gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
             else if (attachment.gfxTexture !== null)
                 gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
-            this._currentColorAttachments[i] = null;
+            this._currentColorAttachment[i] = null;
         }
-        this._currentColorAttachments.length = numColorAttachments;
+        this._currentColorAttachment.length = numColorAttachments;
 
         for (let i = this._currentMegaState.attachmentsState.length; i < numColorAttachments; i++)
             this._currentMegaState.attachmentsState[i] = copyAttachmentState(undefined, defaultMegaState.attachmentsState[0]);
     }
 
-    private _setRenderPassParametersColor(i: number, colorAttachment: GfxRenderTargetP_GL | null, attachmentLevel: number, colorResolveTo: GfxTextureP_GL | null, resolveToLevel: number): void {
+    private _setRenderPassParametersColor(i: number, attachment: GfxRenderTargetP_GL | null, attachmentView: GfxRenderAttachmentView | null, resolveTo: GfxTextureP_GL | null, resolveToView: GfxRenderAttachmentView | null): void {
         const gl = this.gl;
 
-        if (this._currentColorAttachments[i] !== colorAttachment || this._currentColorAttachmentLevels[i] !== attachmentLevel) {
-            this._currentColorAttachments[i] = colorAttachment;
-            this._currentColorAttachmentLevels[i] = attachmentLevel;
-            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, colorAttachment, attachmentLevel);
+        assert((!!attachment) === (!!attachmentView));
+        if (this._currentColorAttachment[i] !== attachment || !gfxRenderAttachmentViewEquals(this._currentColorAttachmentView[i], attachmentView)) {
+            this._currentColorAttachment[i] = attachment;
+            this._currentColorAttachmentView[i] = attachmentView;
+            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, attachment, attachmentView);
             this._resolveColorAttachmentsChanged = true;
         }
 
-        if (this._currentColorResolveTos[i] !== colorResolveTo || this._currentColorResolveToLevels[i] !== resolveToLevel) {
-            this._currentColorResolveTos[i] = colorResolveTo;
-            this._currentColorResolveToLevels[i] = resolveToLevel;
+        assert((!!resolveTo) === (!!resolveToView));
+        if (this._currentColorResolveTo[i] !== resolveTo || this._currentColorResolveToView[i] !== resolveToView) {
+            this._currentColorResolveTo[i] = resolveTo;
+            this._currentColorResolveToView[i] = resolveToView;
 
-            if (colorResolveTo !== null)
+            if (resolveTo !== null)
                 this._resolveColorAttachmentsChanged = true;
         }
     }
@@ -2074,9 +2094,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const currentMegaState = this._currentMegaState;
 
         if (this._OES_draw_buffers_indexed !== null) {
-            assert(newMegaState.attachmentsState.length === 1 || newMegaState.attachmentsState.length >= this._currentColorAttachments.length);
-            for (let i = 0; i < this._currentColorAttachments.length; i++) {
-                if (this._currentColorAttachments[i] === null)
+            assert(newMegaState.attachmentsState.length === 1 || newMegaState.attachmentsState.length >= this._currentColorAttachment.length);
+            for (let i = 0; i < this._currentColorAttachment.length; i++) {
+                if (this._currentColorAttachment[i] === null)
                     continue;
                 const newAttachmentState = newMegaState.attachmentsState.length === 1 ? newMegaState.attachmentsState[0] : newMegaState.attachmentsState[i];
                 this._setAttachmentStateIndexed(i, newAttachmentState);
@@ -2160,8 +2180,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _validatePipelineFormats(pipeline: GfxRenderPipelineP_GL): void {
-        for (let i = 0; i < this._currentColorAttachments.length; i++) {
-            const attachment = this._currentColorAttachments[i];
+        for (let i = 0; i < this._currentColorAttachment.length; i++) {
+            const attachment = this._currentColorAttachment[i];
             if (attachment === null)
                 continue;
             assert(attachment.pixelFormat === pipeline.colorAttachmentFormats[i]);
@@ -2305,18 +2325,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
 
         const renderPassDescriptor = this._currentRenderPassDescriptor!;
-        for (let i = 0; i < this._currentColorAttachments.length; i++) {
-            const colorResolveFrom = this._currentColorAttachments[i];
+        for (let i = 0; i < this._currentColorAttachment.length; i++) {
+            const colorResolveFrom = this._currentColorAttachment[i];
 
             if (colorResolveFrom !== null) {
-                const colorResolveTo = this._currentColorResolveTos[i];
+                const colorResolveTo = this._currentColorResolveTo[i];
                 const colorStore = renderPassDescriptor.colorStore[i];
 
                 const boundReadFB = colorResolveTo !== null || !colorStore;
                 if (boundReadFB) {
                     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
                     if (this._resolveColorAttachmentsChanged)
-                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentLevels[i]);
+                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom, this._currentColorAttachmentView[i]);
                 }
 
                 if (colorResolveTo !== null) {
@@ -2330,8 +2350,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._scPlatformFramebuffer);
                     } else {
                         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
-                        if (this._resolveColorAttachmentsChanged)
-                            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorResolveTo.gl_texture, this._currentColorResolveToLevels[i]);
+                        if (this._resolveColorAttachmentsChanged) {
+                            const view = assertExists(this._currentColorResolveToView[i]);
+                            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this._getTextureFramebufferTarget(colorResolveTo, view.z), colorResolveTo.gl_texture, view.level);
+                        }
                     }
 
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);

@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat, GfxBindingLayoutSamplerDescriptor } from './GfxPlatform.js';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxFormat, GfxBindingLayoutSamplerDescriptor, GfxRenderAttachmentView } from './GfxPlatform.js';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
 
 type EqualFunc<K> = (a: K, b: K) => boolean;
@@ -209,6 +209,12 @@ export function gfxSamplerDescriptorEquals(a: Readonly<GfxSamplerDescriptor>, b:
         a.maxAnisotropy === b.maxAnisotropy &&
         a.compareMode === b.compareMode
     );
+}
+
+export function gfxRenderAttachmentViewEquals(a: Readonly<GfxRenderAttachmentView | null>, b: Readonly<GfxRenderAttachmentView | null>): boolean {
+    if (a === b) return true;
+    if (a === null || b === null) return false;
+    return a.level === b.level && a.z === b.z;
 }
 
 export function gfxColorEqual(c0: Readonly<GfxColor>, c1: Readonly<GfxColor>): boolean {

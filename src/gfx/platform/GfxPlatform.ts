@@ -300,12 +300,17 @@ export interface GfxColor {
     a: number;
 }
 
+export interface GfxRenderAttachmentView {
+    level: number;
+    z: number;
+}
+
 export interface GfxRenderPassDescriptor {
     colorAttachment: (GfxRenderTarget | null)[];
-    colorAttachmentLevel: number[];
+    colorAttachmentView: (GfxRenderAttachmentView | null)[];
     colorClearColor: (GfxColor | 'load')[];
     colorResolveTo: (GfxTexture | null)[];
-    colorResolveToLevel: number[];
+    colorResolveToView: (GfxRenderAttachmentView | null)[];
     colorStore: boolean[];
     depthStencilAttachment: GfxRenderTarget | null;
     depthStencilResolveTo: GfxTexture | null;

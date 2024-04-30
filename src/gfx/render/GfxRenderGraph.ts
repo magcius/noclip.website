@@ -1,5 +1,5 @@
 
-import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxComputePass } from "../platform/GfxPlatform.js";
+import { GfxColor, GfxRenderTarget, GfxDevice, GfxFormat, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxComputePass, GfxRenderAttachmentView } from "../platform/GfxPlatform.js";
 import { GfxQueryPool } from "../platform/GfxPlatformImpl.js";
 import { assert, assertExists } from "../platform/GfxPlatformUtil.js";
 
@@ -23,6 +23,7 @@ export class GfxrRenderTargetDescription {
     public height: number = 0;
     public numLevels: number = 1;
     public sampleCount: number = 0;
+    public texture: GfxTexture | null = null;
 
     public colorClearColor: Readonly<GfxColor> | 'load' = 'load';
     public depthClearValue: number | 'load' = 'load';
@@ -100,7 +101,7 @@ export interface GfxrPass extends GfxrPassBase {
      *
      * This determines which render targets this pass will render to.
      */
-    attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: GfxrRenderTargetID, level?: number): void;
+    attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: GfxrRenderTargetID, view?: GfxRenderAttachmentView): void;
 
     /**
      * Attach the occlusion query pool used by this rendering pass.
@@ -129,12 +130,12 @@ class PassImpl implements GfxrPass {
 
     // GfxrAttachmentSlot => renderTargetID
     public renderTargetIDs: GfxrRenderTargetID[] = [];
-    public renderTargetLevels: number[] = [];
+    public renderTargetView: GfxRenderAttachmentView[] = [];
     // GfxrAttachmentSlot => resolveTextureID
     public resolveTextureOutputIDs: GfxrResolveTextureID[] = [];
     // GfxrAttachmentSlot => GfxTexture
-    public resolveTextureOutputExternalTextures: GfxTexture[] = [];
-    public resolveTextureOutputExternalTextureLevel: number[] = [];
+    public resolveTextureOutputExternalTexture: GfxTexture[] = [];
+    public resolveTextureOutputExternalTextureView: GfxRenderAttachmentView[] = [];
     // List of resolveTextureIDs that we have a reference to.
     public resolveTextureInputIDs: GfxrResolveTextureID[] = [];
     // GfxrAttachmentSlot => refcount.
@@ -147,9 +148,9 @@ class PassImpl implements GfxrPass {
     // Execution state computed by scheduling.
     public descriptor: GfxRenderPassDescriptor = {
         colorAttachment: [],
-        colorAttachmentLevel: [],
+        colorAttachmentView: [],
         colorResolveTo: [],
-        colorResolveToLevel: [],
+        colorResolveToView: [],
         colorStore: [],
         depthStencilAttachment: null,
         depthStencilResolveTo: null,
@@ -183,10 +184,10 @@ class PassImpl implements GfxrPass {
         this.viewportH = h;
     }
 
-    public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: GfxrRenderTargetID, level: number = 0): void {
+    public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: GfxrRenderTargetID, view: GfxRenderAttachmentView | null = null): void {
         assert(this.renderTargetIDs[attachmentSlot] === undefined);
         this.renderTargetIDs[attachmentSlot] = renderTargetID;
-        this.renderTargetLevels[attachmentSlot] = level;
+        this.renderTargetView[attachmentSlot] = view !== null ? view : { level: 0, z: 0 };
     }
 
     public attachResolveTexture(resolveTextureID: GfxrResolveTextureID): void {
@@ -313,7 +314,7 @@ export interface GfxrGraphBuilder {
      *
      * Warning: This API might change in the near future.
      */
-    resolveRenderTargetToExternalTexture(renderTargetID: GfxrRenderTargetID, texture: GfxTexture, level?: number): void;
+    resolveRenderTargetToExternalTexture(renderTargetID: GfxrRenderTargetID, texture: GfxTexture, view?: GfxRenderAttachmentView): void;
 
     /**
      * Return the description that a render target was created with. This allows the creator to
@@ -355,6 +356,7 @@ class RenderTarget {
     public texture: GfxTexture | null = null;
     public attachment: GfxRenderTarget;
     public age: number = 0;
+    public ownsTexture = true;
 
     constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
         this.pixelFormat = desc.pixelFormat;
@@ -370,7 +372,12 @@ class RenderTarget {
             this.attachment = device.createRenderTarget(this);
         } else {
             // Single-sampled textures can be backed by regular textures.
-            this.texture = device.createTexture(this);
+            if (desc.texture !== null) {
+                this.texture = desc.texture;
+                this.ownsTexture = false;
+            } else {
+                this.texture = device.createTexture(this);
+            }
 
             this.attachment = device.createRenderTargetFromTexture(this.texture);
         }
@@ -384,6 +391,9 @@ class RenderTarget {
     }
 
     public matchesDescription(desc: Readonly<GfxrRenderTargetDescription>): boolean {
+        if (desc.texture !== null)
+            return this.texture === desc.texture;
+
         return this.pixelFormat === desc.pixelFormat && this.width === desc.width && this.height === desc.height && this.numLevels === desc.numLevels && this.sampleCount === desc.sampleCount;
     }
 
@@ -393,7 +403,7 @@ class RenderTarget {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.texture !== null)
+        if (this.texture !== null && this.ownsTexture)
             device.destroyTexture(this.texture);
         device.destroyRenderTarget(this.attachment);
     }
@@ -501,7 +511,7 @@ export interface GfxrRenderGraph {
 interface ResolveParam {
     resolveTo: GfxTexture | null;
     store: boolean;
-    level: number;
+    view: GfxRenderAttachmentView | null;
 }
 
 class GfxrDebugThumbnailDesc {
@@ -595,7 +605,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
 
         // Check that the pass isn't resolving its attachment to another texture. Can't do both!
-        assert(renderPass.resolveTextureOutputExternalTextures[attachmentSlot] === undefined);
+        assert(renderPass.resolveTextureOutputExternalTexture[attachmentSlot] === undefined);
 
         return renderPass;
     }
@@ -618,13 +628,13 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         return this.resolveRenderTargetPassAttachmentSlot(renderPass, attachmentSlot);
     }
 
-    public resolveRenderTargetToExternalTexture(renderTargetID: GfxrRenderTargetID, texture: GfxTexture, level: number = 0): void {
+    public resolveRenderTargetToExternalTexture(renderTargetID: GfxrRenderTargetID, texture: GfxTexture, view: GfxRenderAttachmentView | null = null): void {
         const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         // We shouldn't be resolving to a resolve texture ID in this case.
         assert(renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined);
-        renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
-        renderPass.resolveTextureOutputExternalTextureLevel[attachmentSlot] = level;
+        renderPass.resolveTextureOutputExternalTexture[attachmentSlot] = texture;
+        renderPass.resolveTextureOutputExternalTextureView[attachmentSlot] = view !== null ? view : { level: 0, z: 0 };
     }
 
     public getRenderTargetDescription(renderTargetID: number): Readonly<GfxrRenderTargetDescription> {
@@ -636,7 +646,6 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
 
         if (debugLabel === undefined) {
-            const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
             const renderTargetDebugName = this.currentGraph!.renderTargetDebugNames[renderTargetID];
             debugLabel = `${renderPass.debugName}\n${renderTargetDebugName}`;
         }
@@ -816,7 +825,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
     private determineResolveParam(graph: GraphImpl, pass: PassImpl, slot: GfxrAttachmentSlot): ResolveParam {
         const renderTargetID = pass.renderTargetIDs[slot];
         const resolveTextureOutputID = pass.resolveTextureOutputIDs[slot];
-        const externalTexture = pass.resolveTextureOutputExternalTextures[slot];
+        const externalTexture = pass.resolveTextureOutputExternalTexture[slot];
 
         // We should have either an output ID or an external texture, not both.
         const hasResolveTextureOutputID = resolveTextureOutputID !== undefined;
@@ -825,7 +834,7 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
         let resolveTo: GfxTexture | null = null;
         let store = false;
-        let level = 0;
+        let view = null;
 
         if (this.renderTargetOutputCount[renderTargetID] > 1) {
             // A future pass is going to render to this RT, we need to store the results.
@@ -855,15 +864,19 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
                 }
 
                 resolveTo = this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture;
+                view = { level: 0, z: 0 };
             }
         } else if (hasExternalTexture) {
             resolveTo = externalTexture;
-            level = pass.resolveTextureOutputExternalTextureLevel[slot];
+            view = pass.resolveTextureOutputExternalTextureView[slot];
+        } else if (renderTargetID !== undefined && !this.renderTargetAliveForID[renderTargetID].ownsTexture) {
+            resolveTo = null;
+            store = true;
         } else {
             resolveTo = null;
         }
 
-        return { resolveTo, store, level };
+        return { resolveTo, store, view };
     }
 
     private schedulePass(graph: GraphImpl, pass: PassImpl) {
@@ -874,10 +887,10 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             const colorRenderTarget = this.acquireRenderTargetForID(graph, colorRenderTargetID);
             pass.renderTargets[slot] = colorRenderTarget;
             pass.descriptor.colorAttachment[slot] = colorRenderTarget !== null ? colorRenderTarget.attachment : null;
-            pass.descriptor.colorAttachmentLevel[slot] = pass.renderTargetLevels[slot];
-            const { resolveTo, store, level } = this.determineResolveParam(graph, pass, slot);
+            pass.descriptor.colorAttachmentView[slot] = pass.renderTargetView[slot];
+            const { resolveTo, store, view } = this.determineResolveParam(graph, pass, slot);
             pass.descriptor.colorResolveTo[slot] = resolveTo;
-            pass.descriptor.colorResolveToLevel[slot] = level;
+            pass.descriptor.colorResolveToView[slot] = view;
             pass.descriptor.colorStore[slot] = store;
             pass.descriptor.colorClearColor[slot] = (colorRenderTarget !== null && colorRenderTarget.needsClear) ? graph.renderTargetDescriptions[colorRenderTargetID].colorClearColor : 'load';
         }
@@ -897,8 +910,11 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
             if (!renderTarget)
                 continue;
 
-            const width = renderTarget.width >>> pass.renderTargetLevels[i];
-            const height = renderTarget.height >>> pass.renderTargetLevels[i];
+            const view = pass.renderTargetView[i];
+            const level = view !== null ? view.level : 0;
+
+            const width = renderTarget.width >>> level;
+            const height = renderTarget.height >>> level;
 
             if (rtWidth === 0) {
                 rtWidth = width;
