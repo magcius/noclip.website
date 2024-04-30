@@ -71,10 +71,10 @@ export class AntialiasingSupport {
 
     public pushPasses(builder: GfxrGraphBuilder, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
         if (renderInput.antialiasingMode === AntialiasingMode.FXAA) {
-            if (this.fxaa !== null)
+            if (this.fxaa === null)
                 this.fxaa = new FXAA(this.renderHelper.renderCache);
 
-            this.fxaa!.pushPasses(builder, this.renderHelper, mainColorTargetID);
+            this.fxaa.pushPasses(builder, this.renderHelper, mainColorTargetID);
         }
     }
 }
