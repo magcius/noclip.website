@@ -1,6 +1,6 @@
 import * as BIN from "./bin.js";
 import * as Viewer from '../viewer.js';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -62,7 +62,7 @@ class FFXRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

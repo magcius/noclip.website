@@ -14,7 +14,7 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { nArray, assertExists } from "../util.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { AABB } from '../Geometry.js';
@@ -545,7 +545,7 @@ export class PsychonautsRenderer {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

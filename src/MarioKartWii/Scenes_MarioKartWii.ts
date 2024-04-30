@@ -19,7 +19,7 @@ import { SceneContext, GraphObjBase } from '../SceneBase.js';
 import { EggLightManager, parseBLIGHT } from '../rres/Egg.js';
 import { GfxRendererLayer, GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { CameraController } from '../Camera.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { EggDrawPathBloom, EggDrawPathDOF, parseBBLM, parseBDOF } from './PostEffect.js';
 import { BTI, BTIData } from '../Common/JSYSTEM/JUTTexture.js';
@@ -238,7 +238,7 @@ class MarioKartWiiRenderer {
 
         this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         renderInstManager.popTemplateRenderInst();

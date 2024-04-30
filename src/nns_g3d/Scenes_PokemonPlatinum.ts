@@ -11,7 +11,7 @@ import { DataFetcher } from '../DataFetcher.js';
 import { AABB } from '../Geometry.js';
 import { SceneContext } from '../SceneBase.js';
 import { NITRO_Program } from '../SuperMario64DS/render.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { fillColor, fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
@@ -356,7 +356,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

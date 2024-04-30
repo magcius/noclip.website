@@ -15,7 +15,7 @@ import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilt
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder, GfxrRenderTargetID } from '../gfx/render/GfxRenderGraph.js';
-import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers.js';
 
@@ -763,7 +763,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
         // Maybe have copyTextureToTexture as a native device method?

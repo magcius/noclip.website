@@ -5,7 +5,7 @@ import * as MapShape from './map_shape.js';
 import * as Tex from './tex.js';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { OpaqueBlack, Color, colorNewFromRGBA } from '../Color.js';
 import * as BYML from '../byml.js';
 import { evtmgr, evt_exec, evt_handler, evt_user_func_ret, rommap } from './evt.js';
@@ -72,7 +72,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

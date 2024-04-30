@@ -1,6 +1,6 @@
 import { CameraController } from "../Camera.js";
 import { colorNewFromRGBA } from "../Color.js";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
@@ -298,7 +298,7 @@ class BARRenderer implements SceneGfx {
 
         //TODO: snow
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

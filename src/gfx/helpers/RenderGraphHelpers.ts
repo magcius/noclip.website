@@ -3,7 +3,7 @@ import { GfxColor, GfxFormat } from "../platform/GfxPlatform.js";
 import { colorNewFromRGBA, OpaqueBlack } from "../../Color.js";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers.js";
 import { GfxrAttachmentClearDescriptor, GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
-import { pushFXAAPass } from "../passes/FXAA.js";
+import { FXAA } from "../passes/FXAA.js";
 import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 
 export function makeAttachmentClearDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxrAttachmentClearDescriptor {
@@ -63,8 +63,18 @@ export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: 
     return desc;
 }
 
-export function pushAntialiasingPostProcessPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
-    if (renderInput.antialiasingMode === AntialiasingMode.FXAA) {
-        pushFXAAPass(builder, renderHelper, renderInput, mainColorTargetID);
+export class AntialiasingSupport {
+    private fxaa: FXAA | null = null;
+
+    constructor(private renderHelper: GfxRenderHelper) {
+    }
+
+    public pushPasses(builder: GfxrGraphBuilder, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
+        if (renderInput.antialiasingMode === AntialiasingMode.FXAA) {
+            if (this.fxaa !== null)
+                this.fxaa = new FXAA(this.renderHelper.renderCache);
+
+            this.fxaa!.pushPasses(builder, this.renderHelper, mainColorTargetID);
+        }
     }
 }

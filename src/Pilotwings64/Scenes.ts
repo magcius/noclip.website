@@ -17,7 +17,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, g
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
+import { standardFullClearRenderPassDescriptor, makeAttachmentClearDescriptor, makeBackbufferDescSimple } from "../gfx/helpers/RenderGraphHelpers.js";
 import { CameraController } from "../Camera.js";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers.js";
 import { TextureState, RSP_Geometry, translateCullMode } from "../BanjoKazooie/f3dex.js";
@@ -2911,7 +2911,7 @@ class Pilotwings64Renderer implements SceneGfx {
                 this.renderInstListPost.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

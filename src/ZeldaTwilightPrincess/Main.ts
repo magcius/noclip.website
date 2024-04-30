@@ -12,7 +12,7 @@ import { TextureMapping } from '../TextureHolder.js';
 import { readString, leftPad, assertExists, assert, nArray, hexzero } from '../util.js';
 import { GfxDevice, GfxRenderPass, GfxFormat } from '../gfx/platform/GfxPlatform.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
-import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { SceneContext } from '../SceneBase.js';
 import { range, getMatrixAxisZ } from '../MathHelpers.js';
@@ -564,7 +564,7 @@ export class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();

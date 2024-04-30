@@ -14,7 +14,7 @@ import { TransparentBlack, TransparentWhite, White, colorNewCopy, colorNewFromRG
 import { EggDrawPathBloom } from '../MarioKartWii/PostEffect.js';
 import { Destroyable, SceneContext } from '../SceneBase.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
 import { GfxDevice, GfxTexture, } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -469,7 +469,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 });
             });
         }
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.prepareToRender();

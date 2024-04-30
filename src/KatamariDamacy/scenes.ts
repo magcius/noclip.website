@@ -5,7 +5,7 @@ import { Camera, CameraController } from '../Camera.js';
 import { gsMemoryMapNew } from '../Common/PS2/GS.js';
 import { DataFetcher } from "../DataFetcher.js";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstList, GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager.js';
@@ -237,7 +237,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?

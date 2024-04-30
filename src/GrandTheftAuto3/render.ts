@@ -14,7 +14,7 @@ import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { CameraController, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { align, assert } from "../util.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager.js";
 import { ItemInstance, ObjectDefinition } from "./item.js";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color.js";
@@ -678,7 +678,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

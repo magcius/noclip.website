@@ -10,7 +10,7 @@ import * as UI from '../ui.js';
 import { GroupLayerPanel } from './ui.js';
 import { assert, assertExists } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4 } from 'gl-matrix';
 import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, GXTextureHolder } from '../gx/gx_render.js';
 import { SceneContext } from '../SceneBase.js';
@@ -129,7 +129,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(viewerInput);

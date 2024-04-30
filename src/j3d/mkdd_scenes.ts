@@ -6,7 +6,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { readString, assert, assertExists } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
 import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render.js';
 import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform.js';
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
@@ -105,7 +105,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

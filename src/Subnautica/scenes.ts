@@ -3,7 +3,7 @@ import { DeviceProgram } from '../Program.js';
 import { SceneContext } from '../SceneBase.js';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxDevice, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
@@ -157,7 +157,7 @@ class SubnauticaRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

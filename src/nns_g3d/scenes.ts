@@ -4,7 +4,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { FakeTextureHolder } from "../TextureHolder.js";
 import { ViewerRenderInput, SceneGfx } from "../viewer.js";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { assertExists } from "../util.js";
 import { parseNSBMD } from "./NNS_G3D.js";
 import { NITRO_Program } from "../SuperMario64DS/render.js";
@@ -63,7 +63,7 @@ class BasicNSBMDRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

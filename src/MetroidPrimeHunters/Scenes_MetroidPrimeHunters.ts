@@ -11,7 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { MPHRenderer } from './render.js';
 import { assert, assertExists } from '../util.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { FakeTextureHolder } from '../TextureHolder.js';
 import { SceneContext } from '../SceneBase.js';
 import { CameraController } from '../Camera.js';
@@ -116,7 +116,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

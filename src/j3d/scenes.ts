@@ -10,7 +10,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive.js';
 import { readBTI_Texture } from '../Common/JSYSTEM/JUTTexture.js';
 import { J3DModelData, J3DModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase.js';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GXMaterialHacks } from '../gx/gx_material.js';
@@ -88,7 +88,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

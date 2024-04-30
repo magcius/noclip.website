@@ -5,7 +5,7 @@ import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldS
 import { AABB, Frustum, Plane } from '../Geometry.js';
 import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxClipSpaceNearZ, GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxProgram } from '../gfx/platform/GfxPlatformImpl.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
@@ -675,7 +675,7 @@ export class WdtScene implements Viewer.SceneGfx {
         this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
       });
     });
-    pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+    this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
     builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
     this.prepareToRender();

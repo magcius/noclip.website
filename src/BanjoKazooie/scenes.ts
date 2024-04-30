@@ -21,7 +21,7 @@ import { MathConstants, scaleMatrix } from '../MathHelpers.js';
 import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles.js';
 import { CameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 
 const pathBase = `BanjoKazooie`;
 
@@ -139,7 +139,7 @@ class BKRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

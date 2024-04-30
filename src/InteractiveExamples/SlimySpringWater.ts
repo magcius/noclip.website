@@ -20,7 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { SceneContext, SceneDesc } from '../SceneBase.js';
 import { assert } from '../util.js';
 import { VertexAttributeInput } from '../gx/gx_displaylist.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { createModelInstance } from '../j3d/scenes.js';
 import { computeModelMatrixS } from '../MathHelpers.js';
 import { AABB } from '../Geometry.js';
@@ -320,7 +320,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

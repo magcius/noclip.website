@@ -15,7 +15,7 @@ import { Camera, CameraController } from "../Camera.js";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { WAD, WADLumpType } from "./WAD.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { LightmapPackerPage } from "../SourceEngine/BSPFile.js";
 
@@ -416,7 +416,7 @@ export class GoldSrcRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(renderInstManager, viewerInput);

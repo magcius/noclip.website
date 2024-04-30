@@ -4,6 +4,9 @@ import { TextureMapping } from "../../TextureHolder.js";
 import { nArray } from "../../util.js";
 import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers.js";
 import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary.js";
+import { GfxDevice } from "../platform/GfxPlatform.js";
+import { GfxProgram } from "../platform/GfxPlatformImpl.js";
+import { GfxRenderCache } from "../render/GfxRenderCache.js";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../render/GfxRenderHelper.js";
 
@@ -24,35 +27,38 @@ void main() {
 `;
 }
 
-interface RenderInput {
-}
+export class FXAA {
+    private gfxProgram: GfxProgram;
+    private textureMapping = nArray(1, () => new TextureMapping());
 
-const textureMapping = nArray(1, () => new TextureMapping());
-export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: GfxrRenderTargetID): void {
-    builder.pushPass((pass) => {
-        pass.setDebugName('FXAA');
-        pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-
-        const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
-        pass.attachResolveTexture(mainColorResolveTextureID);
-
-        const renderInst = renderHelper.renderInstManager.newRenderInst();
-        renderInst.setUniformBuffer(renderHelper.uniformBuffer);
-        renderInst.setAllowSkippingIfPipelineNotReady(false);
-
-        renderInst.setMegaStateFlags(fullscreenMegaState);
-        renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-        renderInst.setDrawCount(3);
-
+    constructor(renderCache: GfxRenderCache) {
         const fxaaProgram = new FXAAProgram();
-        const gfxProgram = renderHelper.renderCache.createProgram(fxaaProgram);
+        this.gfxProgram = renderCache.createProgram(fxaaProgram);
+    }
 
-        renderInst.setGfxProgram(gfxProgram);
-
-        pass.exec((passRenderer, scope) => {
-            textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-            renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
-            renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
+    public pushPasses(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, mainColorTargetID: GfxrRenderTargetID): void {
+        builder.pushPass((pass) => {
+            pass.setDebugName('FXAA');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+    
+            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+    
+            const renderInst = renderHelper.renderInstManager.newRenderInst();
+            renderInst.setUniformBuffer(renderHelper.uniformBuffer);
+            renderInst.setAllowSkippingIfPipelineNotReady(false);
+    
+            renderInst.setMegaStateFlags(fullscreenMegaState);
+            renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
+            renderInst.setDrawCount(3);
+    
+            renderInst.setGfxProgram(this.gfxProgram);
+    
+            pass.exec((passRenderer, scope) => {
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(renderHelper.renderCache, passRenderer);
+            });
         });
-    });
+    }
 }

@@ -5,7 +5,7 @@ import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase.js";
 import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxChannelWriteMask, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { DataFetcher } from "../DataFetcher.js";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color.js';
 import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager.js';
 import { TextureMapping } from '../TextureHolder.js';
@@ -448,7 +448,7 @@ class SceneRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

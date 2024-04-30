@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera.js";
@@ -505,7 +505,7 @@ export class Explorer implements SceneGfx {
                 this.indirectList.drawOnPassRenderer(renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

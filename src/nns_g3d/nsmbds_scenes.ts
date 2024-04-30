@@ -9,7 +9,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { MDL0Renderer, nnsG3dBindingLayouts } from './render.js';
 import { assert, assertExists } from '../util.js';
 import { mat4, vec3 } from 'gl-matrix';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA } from './NNS_G3D.js';
 import { CameraController } from '../Camera.js';
@@ -71,7 +71,7 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

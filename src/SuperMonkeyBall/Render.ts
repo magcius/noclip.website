@@ -3,7 +3,6 @@ import {
     makeAttachmentClearDescriptor,
     makeBackbufferDescSimple,
     opaqueBlackFullClearRenderPassDescriptor,
-    pushAntialiasingPostProcessPass,
 } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
@@ -119,7 +118,7 @@ export class Renderer implements Viewer.SceneGfx {
                 this.translucentInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput, this.opaqueInstList, this.translucentInstList);

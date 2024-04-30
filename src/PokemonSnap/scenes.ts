@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import * as BYML from '../byml.js';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { SceneContext } from '../SceneBase.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -129,7 +129,7 @@ class SnapRenderer implements Viewer.SceneGfx {
                 globals.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

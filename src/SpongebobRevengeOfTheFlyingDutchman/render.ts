@@ -7,7 +7,6 @@ import { AABB } from "../Geometry.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import {
     makeBackbufferDescSimple,
-    pushAntialiasingPostProcessPass,
     standardFullClearRenderPassDescriptor
 } from "../gfx/helpers/RenderGraphHelpers.js";
 import { fillColor, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
@@ -693,7 +692,7 @@ export class ROTFDRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

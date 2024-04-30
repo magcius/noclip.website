@@ -7,7 +7,7 @@ import * as CX from '../Common/Compression/CX.js';
 import { SceneContext } from '../SceneBase.js';
 import { TextureOverride } from '../TextureHolder.js';
 import { gfxDeviceNeedsFlipY } from '../gfx/helpers/GfxDeviceHelpers.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
@@ -114,7 +114,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 });
             });
         }
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.prepareToRender();

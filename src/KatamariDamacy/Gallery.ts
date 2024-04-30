@@ -4,7 +4,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController, OrbitCameraController } from '../Camera.js';
 import { colorFromHSL, colorNewCopy, White } from '../Color.js';
 import { gsMemoryMapNew } from '../Common/PS2/GS.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers.js';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform.js";
@@ -286,7 +286,7 @@ export class GallerySceneRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?

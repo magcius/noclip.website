@@ -1,6 +1,6 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { Color, OpaqueBlack } from "../../Color.js";
-import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, makeAttachmentClearDescriptor, opaqueBlackFullClearRenderPassDescriptor } from "../../gfx/helpers/RenderGraphHelpers.js";
 import { GfxChannelWriteMask, GfxDevice, GfxFormat, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot } from "../../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../../gfx/render/GfxRenderHelper.js";
@@ -585,7 +585,7 @@ export class RwEngine {
                 this.renderInstList.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, this.viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, this.viewerInput, mainColorTargetID);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.viewerInput.onscreenTexture);
         

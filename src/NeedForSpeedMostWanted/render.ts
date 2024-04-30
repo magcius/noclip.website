@@ -1,6 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { CameraController, computeViewMatrix } from "../Camera.js";
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { GfxAttachmentState, GfxBlendFactor, GfxBlendMode, GfxChannelWriteMask, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxProgram, GfxSamplerBinding, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxrAttachmentSlot, GfxrRenderTargetID, GfxrResolveTextureID} from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -307,7 +307,7 @@ export class NfsRenderer implements SceneGfx {
 
         this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, finalImage, viewerInput.mouseLocation);
 
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, finalImage);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, finalImage);
         builder.resolveRenderTargetToExternalTexture(finalImage, viewerInput.onscreenTexture);
 
         const cameraPos: vec3 = [viewerInput.camera.worldMatrix[12], viewerInput.camera.worldMatrix[13], viewerInput.camera.worldMatrix[14]];

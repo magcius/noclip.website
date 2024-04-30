@@ -11,7 +11,7 @@ import * as BCA from './sm64ds_bca.js';
 import { GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render.js';
-import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util.js';
 import AnimationController from '../AnimationController.js';
@@ -539,7 +539,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);

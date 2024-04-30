@@ -16,7 +16,7 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder.j
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers.js';
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxChannelWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform.js';
-import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderInstManager.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -639,7 +639,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
