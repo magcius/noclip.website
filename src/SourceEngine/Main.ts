@@ -1159,26 +1159,6 @@ export class SourceRenderContext {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 15, samplerEntries: [
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 0
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 1
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 2
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 3
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 4
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 5
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 6
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 7
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 8
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 9
-        { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },             // 10
-        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, },                 // 11
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, comparison: true }, // 12
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, },                  // 13
-        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Depth, },                  // 14
-    ] },
-];
-
 // Renders the entire world (2D skybox, 3D skybox, etc.) given a specific camera location.
 // It's distinct from a view, which is camera settings, which there can be multiple of in a world renderer view.
 export class SourceWorldViewRenderer {
@@ -1837,7 +1817,7 @@ export class SourceRenderer implements SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
-        template.setBindingLayouts(bindingLayouts);
+        template.setBindingLayouts(MaterialShaderTemplateBase.BindingLayouts);
 
         if (renderContext.currentPointCamera !== null)
             (renderContext.currentPointCamera as point_camera).preparePasses(this);

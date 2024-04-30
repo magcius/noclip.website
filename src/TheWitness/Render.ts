@@ -62,7 +62,7 @@ class TheWitnessShaderTemplate extends UberShaderTemplate<Render_Material> {
     }
 
     protected override createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: Render_Material, shaderTextOverride?: string): GfxProgramDescriptorSimple {
-        const programString = shaderTextOverride !== undefined ? shaderTextOverride : this.generateProgramString(variantSettings);
+        const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);
         const preprocessedVert = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'vert', programString);
         const preprocessedFrag = preprocessShader_GLSL(cache.device.queryVendorInfo(), 'frag', programString);
         return { preprocessedVert, preprocessedFrag };

@@ -123,13 +123,6 @@ function definesHash(m: DefinesMap): number {
     return hash;
 }
 
-function getGfxProgramDescriptorBasic(cache: GfxRenderCache, programString: string, variantSettings: DefinesMap): GfxProgramDescriptorSimple {
-    const vendorInfo = cache.device.queryVendorInfo();
-    const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', programString, variantSettings);
-    const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', programString, variantSettings);
-    return { preprocessedVert, preprocessedFrag };
-}
-
 export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
     public program: string = '';
 
@@ -142,9 +135,17 @@ export class UberShaderTemplateBasic extends UberShaderTemplate<DefinesMap> {
         return this.program;
     }
 
+    public getMaxSamplerBinding(): number {
+        return -1;
+    }
+
     protected createGfxProgramDescriptor(cache: GfxRenderCache, variantSettings: DefinesMap, shaderTextOverride?: string): GfxProgramDescriptorSimple {
-        const programString = shaderTextOverride !== undefined ? shaderTextOverride : this.generateProgramString(variantSettings);
-        return getGfxProgramDescriptorBasic(cache, programString, variantSettings);
+        const maxSamplerBinding = this.getMaxSamplerBinding();
+        const vendorInfo = cache.device.queryVendorInfo();
+        const programString = shaderTextOverride ?? this.generateProgramString(variantSettings);
+        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', programString, variantSettings, maxSamplerBinding);
+        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', programString, variantSettings, maxSamplerBinding);
+        return { preprocessedVert, preprocessedFrag };
     }
 
     protected override createGfxProgram(cache: GfxRenderCache, variantSettings: DefinesMap): GfxProgram {

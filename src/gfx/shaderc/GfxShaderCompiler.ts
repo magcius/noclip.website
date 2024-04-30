@@ -34,7 +34,7 @@ function getSeparateSamplerTypes(combinedSamplerType: string): [string, string] 
     return [textureType, samplerType];
 }
 
-export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null): string {
+export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null, maxSamplerBinding: number = -1): string {
     // Garbage WebGL2 shader compiler until I get something better down the line...
     const lines = source.split('\n').map((n) => {
         // Remove comments.
@@ -61,7 +61,6 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, implicitBinding = 0, location = 0;
 
-        let maxSamplerBinding = -1;
         assert(vendorInfo.separateSamplerTextures);
         rest = rest.replace(/^(layout\((.*)\))?\s*uniform sampler(\w+) (.*);/gm, (substr, cap, layout, combinedSamplerType, samplerName) => {
             let binding = parseBinding(layout);

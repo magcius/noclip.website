@@ -1707,6 +1707,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             r.querySet.label = `${s} QuerySet`;
             r.resolveBuffer.label = `${s} Resolve Buffer`;
             r.cpuBuffer.label = `${s} CPU Buffer`;
+        } else if (o._T === _T.Program) {
+            const r = o as GfxProgramP_WebGPU;
+            if (r.vertexStage !== null)
+                r.vertexStage.module.label = s;
+            if (r.fragmentStage !== null)
+                r.fragmentStage.module.label = s;
         }
     }
 

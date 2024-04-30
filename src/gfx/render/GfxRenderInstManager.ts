@@ -151,6 +151,7 @@ export class GfxRenderInst {
 
     // Debugging pointer for whomever wants it...
     public debug: any = null;
+    public debugMarker: string | null = null;
 
     // Pipeline building.
     private _renderPipelineDescriptor: GfxRenderPipelineDescriptor;
@@ -489,6 +490,9 @@ export class GfxRenderInst {
             device.pipelineForceReady(gfxPipeline);
         }
 
+        if (this.debugMarker !== null)
+            passRenderer.beginDebugGroup(this.debugMarker);
+
         passRenderer.setPipeline(gfxPipeline);
         passRenderer.setVertexInput(this._renderPipelineDescriptor.inputLayout, this._vertexBuffers, this._indexBuffer);
 
@@ -512,6 +516,9 @@ export class GfxRenderInst {
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
         }
+
+        if (this.debugMarker !== null)
+            passRenderer.endDebugGroup();
     }
 }
 //#endregion
