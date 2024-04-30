@@ -9,7 +9,7 @@ import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLib
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
@@ -813,7 +813,7 @@ void mainPS() {
     vec3 t_NormalWorld = normalize(CalcTangentToWorld(t_BumpMap.rgb, v_Tangent, v_Binormal, v_Normal));
     vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
 
-    vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube, N.xyz)).xyz;
+    vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube), N.xyz).xyz;
     vec3 specularColor = pow(reflectionColor, vec3(8.0));
 
     vec3 t_MixColor = mix(u_PerpendicularTint.rgb, u_ParallelTint.rgb, 0.5);
@@ -921,7 +921,16 @@ class MaterialRender_TransparencyWater {
 
     constructor(textureCache: TextureCache, cache: GfxRenderCache, private shader: HaloShaderTransparentWater, fogEnabled: boolean) {
         const device = cache.device;
-        this.rippleTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.rippleTextureSize, this.rippleTextureSize, this.shader.ripple_mipmap_levels));
+        this.rippleTexture = device.createTexture({
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            dimension: GfxTextureDimension.n2D,
+            width: this.rippleTextureSize,
+            height: this.rippleTextureSize,
+            depthOrArrayLayers: 1,
+            numLevels: this.shader.ripple_mipmap_levels,
+            usage: GfxTextureUsage.RenderTarget | GfxTextureUsage.Sampled,
+        });
+        device.setResourceName(this.rippleTexture, `Ripple Texture`);
 
         this.textureMapping[0] = textureCache.getTextureMapping(shader.get_base_bitmap(), 0, { wrap: false });
         this.textureMapping[7] = textureCache.getTextureMapping(shader.get_reflection_bitmap());
@@ -1331,7 +1340,7 @@ void mainVS() {
     private getReflectionSection(fragBody: String[]): void {
         fragBody.push(`
 vec3 N = normalize(2.0 * dot(t_NormalWorld, t_EyeWorld) * t_NormalWorld - t_EyeWorld);
-vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube, N.xyz)).xyz;
+vec3 reflectionColor = texture(SAMPLER_Cube(u_TextureCube), N.xyz).xyz;
 vec3 specularColor = pow(reflectionColor, vec3(8.0));
 float diffuseReflection = pow(dot(t_NormalWorld, t_EyeWorld), 2.0);
 float attenuation = mix(u_ReflectionParallelColor.a, u_ReflectionPerpendicularColor.a, diffuseReflection);

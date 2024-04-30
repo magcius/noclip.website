@@ -27,8 +27,8 @@ function getBitmapTextureFormat(format: BitmapFormat): GfxFormat {
         case rust.BitmapFormat.Dxt1: return GfxFormat.BC1;
         case rust.BitmapFormat.Dxt3: return GfxFormat.BC2;
         case rust.BitmapFormat.Dxt5: return GfxFormat.BC3;
-        case rust.BitmapFormat.R5g6b5: return GfxFormat.U16_RGB_565;
         // formats we convert to U8_RGBA_NORM
+        case rust.BitmapFormat.R5g6b5:
         case rust.BitmapFormat.X8r8g8b8:
         case rust.BitmapFormat.A8r8g8b8:
         case rust.BitmapFormat.A8:

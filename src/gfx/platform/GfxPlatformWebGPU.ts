@@ -24,7 +24,8 @@ interface GfxTextureSharedP_WebGPU extends GfxTextureSharedDescriptor {
 interface GfxTextureP_WebGPU extends GfxTextureSharedP_WebGPU, GfxTextureImpl {
 }
 
-interface GfxAttachmentP_WebGPU extends GfxTextureSharedP_WebGPU, GfxRenderTarget {
+interface GfxRenderTargetP_WebGPU extends GfxTextureSharedP_WebGPU, GfxRenderTarget {
+    ownsTexture: boolean;
 }
 
 interface GfxSamplerP_WebGPU extends GfxSampler {
@@ -533,7 +534,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const passAttachment = descriptor.colorAttachments[i];
 
             if (passAttachment !== null) {
-                const attachment = passAttachment.renderTarget as GfxAttachmentP_WebGPU;
+                const attachment = passAttachment.renderTarget as GfxRenderTargetP_WebGPU;
                 const resolveTo = passAttachment.resolveTo as GfxTextureP_WebGPU | null;
 
                 this.gfxColorAttachment[i] = attachment;
@@ -572,7 +573,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const passAttachment = descriptor.depthStencilAttachment;
 
             if (passAttachment !== null) {
-                const attachment = passAttachment.renderTarget as GfxAttachmentP_WebGPU;
+                const attachment = passAttachment.renderTarget as GfxRenderTargetP_WebGPU;
                 const resolveTo = passAttachment.resolveTo as GfxTextureP_WebGPU | null;
 
                 this.gfxDepthStencilAttachment = attachment;
@@ -1062,7 +1063,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return sampler;
     }
 
-    public createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget {
+    public createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTargetP_WebGPU {
         const texture = this.createTextureShared({
             pixelFormat: descriptor.pixelFormat,
             dimension: GfxTextureDimension.n2D,
@@ -1073,17 +1074,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             usage: GfxTextureUsage.RenderTarget,
             sampleCount: descriptor.sampleCount,
         });
-        return { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(), ...texture };
+        return { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(), ...texture, ownsTexture: true };
     }
 
-    public createRenderTargetFromTexture(gfxTexture: GfxTexture): GfxRenderTarget {
-        const { pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels, gpuTexture, gpuTextureView, usage } = gfxTexture as GfxTextureP_WebGPU;
+    public createRenderTargetFromTexture(gfxTexture: GfxTexture): GfxRenderTargetP_WebGPU {
+        const { pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels, gpuTexture, gpuTextureView, usage, dimension } = gfxTexture as GfxTextureP_WebGPU;
         assert(!!(usage & GPUTextureUsage.RENDER_ATTACHMENT));
-        const attachment: GfxAttachmentP_WebGPU = {
+        const attachment: GfxRenderTargetP_WebGPU = {
             _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(),
-            pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels,
-            usage, gpuTexture, gpuTextureView,
-            dimension: GfxTextureDimension.n2D,
+            pixelFormat, width, height, depthOrArrayLayers, sampleCount, numLevels, usage, dimension,
+            gpuTexture, gpuTextureView, ownsTexture: false,
         };
         return attachment;
     }
@@ -1425,8 +1425,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyRenderTarget(o: GfxRenderTarget): void {
-        const attachment = o as GfxAttachmentP_WebGPU;
-        attachment.gpuTexture.destroy();
+        const renderTarget = o as GfxRenderTargetP_WebGPU;
+        if (renderTarget.ownsTexture)
+            renderTarget.gpuTexture.destroy();
     }
 
     public destroyProgram(o: GfxProgram): void {
@@ -1658,6 +1659,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         }
 
         switch (format) {
+        case GfxFormat.U16_RGB_565: return false;
         case GfxFormat.U16_RGBA_NORM: return false;
         case GfxFormat.F32_RGBA: return false; // unfilterable
         }
@@ -1675,7 +1677,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor> {
-        const attachment = o as GfxAttachmentP_WebGPU;
+        const attachment = o as GfxRenderTargetP_WebGPU;
         return attachment;
     }
 
@@ -1690,7 +1692,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             r.gpuTexture.label = s;
             r.gpuTextureView.label = s;
         } else if (o._T === _T.RenderTarget) {
-            const r = o as GfxAttachmentP_WebGPU;
+            const r = o as GfxRenderTargetP_WebGPU;
             r.gpuTexture.label = s;
             r.gpuTextureView.label = s;
         } else if (o._T === _T.Sampler) {

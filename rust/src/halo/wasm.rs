@@ -45,6 +45,7 @@ fn get_and_convert_bitmap_data(bytes: &[u8], bitmap_data: &BitmapData) -> Vec<u8
         BitmapFormat::A8 => convert_a8_data(byte_range),
         BitmapFormat::Y8 => convert_y8_data(byte_range),
         BitmapFormat::A8y8 => convert_a8y8_data(byte_range),
+        BitmapFormat::R5g6b5 => convert_r5g6b5_data(byte_range),
         _ => Vec::from(byte_range),
     }
 }
