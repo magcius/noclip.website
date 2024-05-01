@@ -12,12 +12,13 @@ import { SceneGroup } from '../viewer.js';
 import { assert, assertExists, hexzero } from '../util.js';
 import { GfxDevice } from '../gfx/platform/GfxPlatform.js';
 import { OoT3DRenderer, ModelCache } from './oot3d_scenes.js';
-import { TransparentBlack } from '../Color.js';
+import { TransparentBlack, colorFromRGBA, colorNewFromRGBA } from '../Color.js';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import { SceneContext } from '../SceneBase.js';
 import { MathConstants } from "../MathHelpers.js";
 import { maybeDecompress } from './LzS.js';
+import { ZSIEnvironmentSettings } from './zsi.js';
 
 const pathBase = `ZeldaMajorasMask3D`;
 
@@ -891,6 +892,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const zsi = ZSI.parseScene(maybeDecompress(zsiBuffer));
         assert(zsi.rooms !== null);
+        if(zsi.environmentSettings.length === 0)
+        {
+            zsi.environmentSettings.push(new ZSIEnvironmentSettings());
+        }
 
         const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
         const cache = renderer.getRenderCache();

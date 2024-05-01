@@ -10,6 +10,7 @@ import { computeModelMatrixSRT, lerpAngle, lerp, MathConstants } from "../MathHe
 // CSAB (CTR Skeletal Animation Binary)
 
 const enum AnimationTrackType {
+    CONSTANT = 0x00,
     LINEAR = 0x01,
     HERMITE = 0x02,
 };
@@ -19,7 +20,7 @@ interface AnimationKeyframeLinear {
     value: number;
 }
 
-interface AnimationKeyframeHermite {
+export interface AnimationKeyframeHermite {
     time: number;
     value: number;
     tangentIn: number;
@@ -33,6 +34,7 @@ interface AnimationTrackLinear {
 
 interface AnimationTrackHermite {
     type: AnimationTrackType.HERMITE;
+    timeStart: number;
     timeEnd: number;
     frames: AnimationKeyframeHermite[];
 }
@@ -112,7 +114,7 @@ function parseTrackOcarina(version: Version, isRotationInt16: boolean, buffer: A
                 frames.push({ time, value, tangentIn, tangentOut });
             }
         }
-        return { type, frames, timeEnd };
+        return { type, timeStart, timeEnd, frames };
     } else {
         throw "whoops";
     }
@@ -121,18 +123,19 @@ function parseTrackOcarina(version: Version, isRotationInt16: boolean, buffer: A
 function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
     const view = buffer.createDataView();
 
-    // TODO(jstpierre): zelda2_snowman.gar/anim/sm_wait.csab CSAB has this as 1???
-    const unk0 = view.getUint8(0x00);
-    assert(unk0 === 0x00 || unk0 === 0x01);
-    const type = view.getUint8(0x01);
-    assert(type === AnimationTrackType.LINEAR);
+    let type = view.getUint8(0x00);
+    const isBaked = !!view.getUint8(0x01);
     const numKeyframes = view.getUint16(0x02, true);
 
-    if (type === AnimationTrackType.LINEAR) {
+    if (isBaked || type === AnimationTrackType.LINEAR) {
         const frames: AnimationKeyframeLinear[] = [];
         const scale = view.getFloat32(0x04, true);
-        let bias = view.getFloat32(0x08, true);
+        const bias = view.getFloat32(0x08, true);
 
+        if(isBaked)
+            type = AnimationTrackType.LINEAR;
+
+        //TODO(M-1): data\tbdanim_field.gar\cc_wait_bored.csab Scale results as -1.0?
         let keyframeTableIdx: number = 0x0C;
         for (let i = 0; i < numKeyframes; i++) {
             const time = i;
@@ -141,7 +144,26 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): Animation
             frames.push({ time, value });
         }
         return { type, frames };
-    } else {
+    } else if(type === AnimationTrackType.HERMITE){
+        const frames: AnimationKeyframeHermite[] = [];
+
+        const timeStart = view.getInt16(0x04, true);
+        const timeEnd = view.getInt16(0x06, true);
+        const scale = view.getFloat32(0x08, true);
+        const bias = view.getFloat32(0x0C, true);
+
+        let keyframeTableIdx: number = 0x10;
+        for (let i = 0; i < numKeyframes; i++) {
+            const time = view.getUint32(keyframeTableIdx + 0x00, true);
+            const value = view.getFloat32(keyframeTableIdx + 0x04, true);
+            const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
+            const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
+            keyframeTableIdx += 0x10;
+            frames.push({ time, value, tangentIn, tangentOut });
+        }
+        return { type, timeStart, timeEnd, frames };
+    }
+    else {
         throw "whoops";
     }
 }
@@ -149,7 +171,7 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): Animation
 function parseTrack(version: Version, isRotationInt16: boolean, buffer: ArrayBufferSlice): AnimationTrack {
     if (version === Version.Ocarina)
         return parseTrackOcarina(version, isRotationInt16, buffer);
-    else if (version === Version.Majora)
+    else if (version === Version.Majora || version === Version.LuigisMansion)
         return parseTrackMajora(version, buffer);
     else
         throw "xxx";
@@ -244,9 +266,9 @@ function parseMajora(version: Version, buffer: ArrayBufferSlice): CSAB {
     const subversion = view.getUint32(0x08, true);
     assert(subversion === 0x05);
     assert(view.getUint32(0x0C, true) === 0x00);
-    assert(view.getUint32(0x10, true) === 0x42200000);
-    assert(view.getUint32(0x14, true) === 0x42200000);
-    assert(view.getUint32(0x18, true) === 0x42200000);
+    //assert(view.getUint32(0x10, true) === 0x42200000);
+    //assert(view.getUint32(0x14, true) === 0x42200000);
+    //assert(view.getUint32(0x18, true) === 0x42200000);
 
     assert(view.getUint32(0x1C, true) === 0x01); // num animations?
     assert(view.getUint32(0x20, true) === 0x24); // location?
@@ -289,7 +311,7 @@ function parseMajora(version: Version, buffer: ArrayBufferSlice): CSAB {
 export function parse(version: Version, buffer: ArrayBufferSlice): CSAB {
     if (version === Version.Ocarina)
         return parseOcarina(version, buffer);
-    else if (version === Version.Majora)
+    else if (version === Version.Majora || version === Version.LuigisMansion)
         return parseMajora(version, buffer);
     else
         throw "xxx";
@@ -347,7 +369,7 @@ function sampleAnimationTrackLinearRotation(track: AnimationTrackLinear, frame: 
     return lerpAngle(k0.value, k1.value, t, MathConstants.TAU);
 }
 
-function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number, length: number): number {
+export function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number, length: number): number {
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
@@ -377,7 +399,7 @@ function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number
     return hermiteInterpolate(k0, k1, t, length);
 }
 
-function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
+export function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
     if (track.type === AnimationTrackType.LINEAR)
         return sampleAnimationTrackLinear(track, frame);
     else if (track.type === AnimationTrackType.HERMITE)

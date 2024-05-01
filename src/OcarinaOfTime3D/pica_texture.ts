@@ -30,6 +30,10 @@ export interface Texture {
 
 export function computeTextureByteSize(format: TextureFormat, width: number, height: number): number {
     switch (format) {
+    case TextureFormat.RGBA8:
+        return (width * height) * 4;
+    case TextureFormat.RGB8:
+        return (width * height) * 3;
     case TextureFormat.ETC1:
         return width * height / 2;
     case TextureFormat.ETC1A4:
@@ -37,12 +41,15 @@ export function computeTextureByteSize(format: TextureFormat, width: number, hei
     case TextureFormat.RGBA4444:
     case TextureFormat.RGBA5551:
     case TextureFormat.RGB565:
+    case TextureFormat.HILO8:
     case TextureFormat.LA8:
         return (width * height) * 2;
     case TextureFormat.A8:
     case TextureFormat.L8:
+    case TextureFormat.LA4:
         return (width * height);
     case TextureFormat.L4:
+    case TextureFormat.A4:
         return (width * height) / 2;
     default:
         throw "whoops";
@@ -253,6 +260,46 @@ function decodeTexture_Tiled(width: number, height: number, decoder: PixelDecode
     return pixels;
 }
 
+
+function decodeTexture_HiLo8(width: number, height: number, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
+    let srcOffs = 0;
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
+        const p = src.getInt16(srcOffs, true);
+        pixels[dstOffs + 0] = ((p >>> 8) & 0xFF);
+        pixels[dstOffs + 1] = ((p >>> 0) & 0xFF);
+        pixels[dstOffs + 2] = 0xFF;
+        pixels[dstOffs + 3] = 0xFF;
+        srcOffs += 2;
+    });
+}
+
+function decodeTexture_RGB8(width: number, height: number, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
+    let srcOffs = 0;
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
+        const p = src.getInt16(srcOffs, true);
+        pixels[dstOffs + 0] = src.getUint8(srcOffs + 0x02);
+        pixels[dstOffs + 1] = ((p >>> 8) & 0xFF);
+        pixels[dstOffs + 2] = ((p >>> 0) & 0xFF);
+        pixels[dstOffs + 3] = 0xFF;
+        srcOffs += 3;
+    });
+}
+
+function decodeTexture_RGBA8(width: number, height: number, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
+    let srcOffs = 0;
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
+        const p = src.getUint32(srcOffs, true);
+        pixels[dstOffs + 0] = ((p >>> 24) & 0xFF);
+        pixels[dstOffs + 1] = ((p >>> 16) & 0xFF);
+        pixels[dstOffs + 2] = ((p >>> 8) & 0xFF);
+        pixels[dstOffs + 3] = ((p >>> 0) & 0xFF);
+        srcOffs += 4;
+    });
+}
+
 function decodeTexture_RGBA4444(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
@@ -350,6 +397,12 @@ export function decodeTexture(format: TextureFormat, width: number, height: numb
         return decodeTexture_ETC1(width, height, texData, false);
     case TextureFormat.ETC1A4:
         return decodeTexture_ETC1(width, height, texData, true);
+    case TextureFormat.RGB8:
+        return decodeTexture_RGB8(width, height, texData);
+    case TextureFormat.RGBA8:
+        return decodeTexture_RGBA8(width, height, texData);
+    case TextureFormat.HILO8:
+        return decodeTexture_HiLo8(width, height, texData);
     case TextureFormat.RGBA4444:
         return decodeTexture_RGBA4444(width, height, texData);
     case TextureFormat.RGBA5551:
@@ -391,25 +444,35 @@ export function getTextureFormatName(format: TextureFormat): string {
 export enum TextureFormatGL {
     ETC1     = 0x0000675A,
     ETC1A4   = 0x0000675B,
+    RGB8     = 0x14016754,
+    RGBA8    = 0x14016752,
     RGBA4444 = 0x80336752,
     RGBA5551 = 0x80346752,
     RGB565   = 0x83636754,
     A8       = 0x14016756,
+    A4       = 0x67616756,
     L8       = 0x14016757,
     L4       = 0x67616757,
     LA8      = 0x14016758,
+    LA4      = 0x67606758,
+    HILO8    = 0x14016759,
 }
 
 export function getTextureFormatFromGLFormat(glFormat: TextureFormatGL): TextureFormat {
     switch (glFormat) {
     case TextureFormatGL.ETC1:     return TextureFormat.ETC1;
     case TextureFormatGL.ETC1A4:   return TextureFormat.ETC1A4;
+    case TextureFormatGL.RGB8:     return TextureFormat.RGB8;
+    case TextureFormatGL.RGBA8:    return TextureFormat.RGBA8;
     case TextureFormatGL.RGBA4444: return TextureFormat.RGBA4444;
     case TextureFormatGL.RGBA5551: return TextureFormat.RGBA5551;
     case TextureFormatGL.RGB565:   return TextureFormat.RGB565;
     case TextureFormatGL.A8:       return TextureFormat.A8;
+    case TextureFormatGL.A4:       return TextureFormat.A4;
     case TextureFormatGL.L8:       return TextureFormat.L8;
     case TextureFormatGL.L4:       return TextureFormat.L4;
     case TextureFormatGL.LA8:      return TextureFormat.LA8;
+    case TextureFormatGL.LA4:      return TextureFormat.LA4;
+    case TextureFormatGL.HILO8:    return TextureFormat.HILO8;
     }
 }

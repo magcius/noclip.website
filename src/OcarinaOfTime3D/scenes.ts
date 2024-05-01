@@ -10,7 +10,7 @@ import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 
 import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render.js";
-import { GfxDevice, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -18,6 +18,7 @@ import { OrbitCameraController } from '../Camera.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
+import { bindingLayouts } from './oot3d_scenes.js';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {
@@ -45,13 +46,13 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
-
 export class MultiCmbScene implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private renderInstListMain = new GfxRenderInstList();
+    private renderInstListSky = new GfxRenderInstList();
     public cmbData: CmbData[] = [];
     public cmbRenderers: CmbInstance[] = [];
+    public skyRenderers: CmbInstance[] = [];
     public cmab: CMAB.CMAB[] = [];
     public csab: CSAB.CSAB[] = [];
 
@@ -69,6 +70,12 @@ export class MultiCmbScene implements Viewer.SceneGfx {
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
+        if (this.skyRenderers.length > 0) {
+            renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+            for (let i = 0; i < this.skyRenderers.length; i++)
+                this.skyRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        }
+
         renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
@@ -85,6 +92,16 @@ export class MultiCmbScene implements Viewer.SceneGfx {
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
+
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
@@ -99,6 +116,7 @@ export class MultiCmbScene implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
+        this.renderInstListSky.reset();
         this.renderInstListMain.reset();
     }
 
@@ -187,7 +205,6 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
         for (let i = 0; i < this.cmbRenderers.length; i++) {
-            this.cmbRenderers[i].setIsActor(true)
             this.cmbRenderers[i].setRenderFog(false)
             this.cmbRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
@@ -299,8 +316,9 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
                 const cmab = CMAB.parse(this.archive.version, file.buffer);
                 this.textureHolder.addTextures(this.device, cmab.textures);
 
-                for (let i = 0; i < this.cmbRenderers.length; i++)
+                for (let i = 0; i < this.cmbRenderers.length; i++){
                     this.cmbRenderers[i].bindCMAB(cmab);
+                }
 
                 // Deselect all other CMAB files except ours.
                 for (let j = 0; j < this.archive.files.length; j++)
@@ -335,7 +353,18 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
             }
         }
 
-        return [archivePanel];
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        
+        const enableNormalsCheckbox = new UI.Checkbox('Show Vertex Normals', false);
+        enableNormalsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.cmbRenderers.length; i++)
+                this.cmbRenderers[i].setVertexNormalsEnabled(enableNormalsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableNormalsCheckbox.elem);
+
+        return [archivePanel, renderHacksPanel];
     }
 }
 
