@@ -1,8 +1,7 @@
-import { mat3, mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
-import { Color, colorNewFromRGBA } from '../Color.js';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { AABB, Frustum, Plane } from '../Geometry.js';
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { AABB, Frustum } from '../Geometry.js';
 import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -13,8 +12,8 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, PortalData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
-import { BaseProgram, DebugWmoPortalProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
 

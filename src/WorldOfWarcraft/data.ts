@@ -109,7 +109,7 @@ export class WowCache {
     return promise;
   }
 
-  public async loadModel(fileId: number, uniqueId: number | undefined = undefined): Promise<ModelData> {
+  public async loadModel(fileId: number): Promise<ModelData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new ModelData(fileId);
       await d.load(this);
@@ -117,7 +117,7 @@ export class WowCache {
     });
   }
 
-  public async loadWmo(fileId: number, uniqueId: number | undefined = undefined): Promise<WmoData> {
+  public async loadWmo(fileId: number): Promise<WmoData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new WmoData(fileId);
       await d.load(this);
@@ -1529,9 +1529,8 @@ export class AdtLodData {
 
   private loadDoodads(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
     return Promise.all(data.get_doodads(lodLevel).map(async (adtDoodad) => {
-      const uniqueId = adtDoodad.unique_id;
       const doodad = DoodadData.fromAdtDoodad(adtDoodad);
-      const modelData = await cache.loadModel(doodad.modelId, uniqueId);
+      const modelData = await cache.loadModel(doodad.modelId);
       doodad.setBoundingBoxFromModel(modelData);
       doodad.applyExteriorLighting = true;
       this.doodads.push(doodad);
@@ -1547,7 +1546,7 @@ export class AdtLodData {
 
   private loadWMOs(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
     return Promise.all(data.get_wmo_defs(lodLevel).map(async (wmoDef) => {
-      const wmo = await cache.loadWmo(wmoDef.name_id, wmoDef.unique_id);
+      const wmo = await cache.loadWmo(wmoDef.name_id);
       this.wmos.set(wmoDef.name_id, wmo);
       this.wmoDefs.push(WmoDefinition.fromAdtDefinition(wmoDef, wmo));
     }));
