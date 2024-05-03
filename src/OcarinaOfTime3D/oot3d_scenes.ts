@@ -70,9 +70,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         }
 
         renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
-        for (let i = 0; i < this.roomRenderers.length; i++){
+        for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
-        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -2407,7 +2406,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/fine_kumo_b1.cmb`);
             b.bindCMAB(parseCMAB(zar, `misc/fine_kumo_b.cmab`));
         } else if (whichSkybox === 0x1D) {
-            // TODO(M-1): Apply to a specific skybox?
+            // TODO(M-1): Apply to a specific skybox constColor?
             renderer.clearPass = makeAttachmentClearDescriptor(fogColor);
         }
     }
@@ -2476,7 +2475,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     roomRenderer.bindCMAB(cmab);
                 }
             }
-
             renderer.roomRenderers.push(roomRenderer);
 
             for (let j = 0; j < roomSetup.actors.length; j++)

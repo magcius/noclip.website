@@ -223,8 +223,10 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
 
     const animationType: AnimationType = view.getUint32(0x04, true);
     const materialIndex = view.getUint32(0x08, true);
-    let channelIndex = view.getUint32(0x0C, true);
+    let channelIndex = 0;
+    let trackOffsTableIdx = 0x0C;
 
+    //(M-1): Fake! Setup a fake channelIndex to use later when binding a CMAB
     switch(animationType){
         case AnimationType.DiffuseColor: channelIndex = ColorAnimType.Diffuse; break;
         case AnimationType.AmbientColor: channelIndex = ColorAnimType.Ambient; break;
@@ -232,8 +234,6 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
         case AnimationType.Spec1Color: channelIndex = ColorAnimType.Specular1; break;
         case AnimationType.EmissionColor: channelIndex = ColorAnimType.Emission; break;
     }
-
-    let trackOffsTableIdx = 0x0C;
 
     if (animationType === AnimationType.Translation || animationType === AnimationType.Rotation || animationType === AnimationType.Scale || animationType === AnimationType.TexturePalette || animationType === AnimationType.ConstColor) {
         channelIndex = view.getUint32(0x0C, true);

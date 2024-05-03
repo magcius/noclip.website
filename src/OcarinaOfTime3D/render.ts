@@ -947,7 +947,7 @@ class MaterialInstance {
                     this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
                 } else {
                     const texture = this.cmb.textures[binding.textureIdx];
-                    textureHolder.fillTextureMapping(this.textureMappings[texture.dimension ? 9 : i], texture.name);
+                    textureHolder.fillTextureMapping(this.textureMappings[texture.dimension === GfxTextureDimension.Cube ? 4 : i], texture.name);
                 }
 
                 scratchVec4[i] = this.packTexCoordParams(this.material.textureCoordinators[i]);
@@ -1241,7 +1241,7 @@ export class CmbInstance {
     public visible: boolean = true;
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
-    private lutsTexture: GfxTexture | null = null;
+    private gfxLutTexture: GfxTexture | null = null;
 
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
@@ -1253,12 +1253,12 @@ export class CmbInstance {
     constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         if(this.cmbData.cmb.lutTexture) {
             const texture = this.cmbData.cmb.lutTexture;
-            this.lutsTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, texture.width, texture.height, 1));
-            cache.device.uploadTextureData(this.lutsTexture, 0, texture.levels.map((level) => level.pixels));
+            this.gfxLutTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, texture.width, texture.height, 1));
+            cache.device.uploadTextureData(this.gfxLutTexture, 0, texture.levels.map((level) => level.pixels));
         }
         
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(cache, this.lutsTexture, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.gfxLutTexture, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
         
         for (let i = 0; i < this.cmbData.cmb.meshs.length; i++) {
             const mesh = this.cmbData.cmb.meshs[i];
@@ -1365,8 +1365,8 @@ export class CmbInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        if(this.lutsTexture)
-            device.destroyTexture(this.lutsTexture);
+        if(this.gfxLutTexture)
+            device.destroyTexture(this.gfxLutTexture);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].destroy(device);
