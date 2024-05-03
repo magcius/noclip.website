@@ -113,7 +113,6 @@ export const HSD_TEXP_TEX: _HSD_TExpTex = -1;
 export type HSD_TExp = HSD_TETev | HSD_TECnst | _HSD_TExpTex | _HSD_TExpRas;
 
 export class HSD_TExpList {
-    public debug: boolean = false;
     public root: HSD_TExp;
     public tevs: HSD_TETev[] = [];
     public cnsts: HSD_TECnst[] = [];
@@ -1127,8 +1126,6 @@ function AssignAlphaReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boo
                 cnst.reg = i;
                 cnst.idx = 3;
                 resource.regsAlpha[i] = 1;
-                if (window.debug)
-                    console.log('assigning alpha reg!', i);
                 break;
             }
         }
@@ -1280,99 +1277,12 @@ function TExp2TevDesc(mb: GXMaterialBuilder, i: number, tev: HSD_TETev, init: TE
     }
 }
 
-function DumpTExp(root: HSD_TExp): void {
-    function DumpTEType(exp: HSD_TExp | null, type: HSD_TExpType | null = HSD_TExpGetType(exp), arg: number | null = null, sel: HSD_TEInput | null = null, indent: string = ''): string {
-        function DumpTEArg(arg: HSD_TEArg): string {
-            return DumpTEType(arg.exp, arg.type, arg.arg, arg.sel, indent + '    ');
-        }
-
-        if (type === HSD_TExpType.TE_ZERO) {
-            return `TE_ZERO `;
-        } else if (type === HSD_TExpType.TE_TEV) {
-            const tev = exp as HSD_TETev;
-            assert(arg === null);
-            return `TE_TEV  {
-${indent}  CA: ${DumpTEArg(tev.colorIn[0])}
-${indent}  CB: ${DumpTEArg(tev.colorIn[1])}
-${indent}  CC: ${DumpTEArg(tev.colorIn[2])}
-${indent}  CD: ${DumpTEArg(tev.colorIn[3])}
-${indent}  
-${indent}  AA: ${DumpTEArg(tev.alphaIn[0])}
-${indent}  AB: ${DumpTEArg(tev.alphaIn[1])}
-${indent}  AC: ${DumpTEArg(tev.alphaIn[2])}
-${indent}  AD: ${DumpTEArg(tev.alphaIn[3])}
-${indent}}`;
-        } else if (type === HSD_TExpType.TE_TEX) {
-            assert(sel === HSD_TEInput.TE_RGB || sel === HSD_TEInput.TE_A);
-            return `TE_TEX  <${sel === HSD_TEInput.TE_RGB ? 'RGB' : 'A'}>`;
-        } else if (type === HSD_TExpType.TE_RAS) {
-            assert(sel === HSD_TEInput.TE_RGB || sel === HSD_TEInput.TE_A);
-            return `TE_RAS  <${sel === HSD_TEInput.TE_RGB ? 'RGB' : 'A'}>`;
-        } else if (type === HSD_TExpType.TE_CNST) {
-            const cnst = exp as HSD_TECnst;
-            assert(arg === null);
-            assert(sel === HSD_TEInput.TE_RGB || sel === HSD_TEInput.TE_X);
-            return `TE_CNST <${cnst.val}, ${sel === HSD_TEInput.TE_RGB ? 'RGB' : 'X'}>`;
-        } else if (type === HSD_TExpType.TE_IMM) {
-            assert(arg !== null);
-            assert(sel !== null);
-            return `TE_IMM  <${sel} / ${arg}>`;
-        } else {
-            return `UNDEF`;
-        }
-    }
-
-    console.log(DumpTEType(root));
-}
-
-function DumpTExpSchedule(order: HSD_TETev[]): void {
-    function DumpTEArg(arg: HSD_TEArg): string {
-        if (arg.type === HSD_TExpType.TE_TEV)
-            return `${HSD_TExpType[arg.type]} / ${arg.arg} / ${order.length - order.indexOf(arg.exp as HSD_TETev) - 1}`;
-        else
-            return `${arg.type === null ? 'UNDEF' : HSD_TExpType[arg.type]} / ${arg.arg}`;
-    }
-
-    function DumpTExp(tev: HSD_TETev, i: number): string {
-        return `[${i}] = TE_TEV {
-  CRef: ${tev.refColor}
-  CDst: ${tev.dstRegColor}
-  COp: ${tev.colorOp}
-  CA: ${DumpTEArg(tev.colorIn[0])}
-  CB: ${DumpTEArg(tev.colorIn[1])}
-  CC: ${DumpTEArg(tev.colorIn[2])}
-  CD: ${DumpTEArg(tev.colorIn[3])}
-
-  AA: ${DumpTEArg(tev.alphaIn[0])}
-  AB: ${DumpTEArg(tev.alphaIn[1])}
-  AC: ${DumpTEArg(tev.alphaIn[2])}
-  AD: ${DumpTEArg(tev.alphaIn[3])}
-}`;
-    }
-
-    let str = '';
-    for (let i = 0; i < order.length; i++)
-        str += DumpTExp(order[order.length - i - 1], i) + '\n';
-    console.log(str);
-}
-
 export function HSD_TExpCompile(list: HSD_TExpList, mb: GXMaterialBuilder): void {
     const root = list.root;
 
-    if (list.debug) {
-        console.log("Unsimplified");
-        DumpTExp(root);
-    }
-
     HSD_TExpRef(root, HSD_TEInput.TE_RGB);
     HSD_TExpRef(root, HSD_TEInput.TE_A);
-
     HSD_TExpSimplify(root);
-
-    if (list.debug) {
-        console.log("Simplify 1");
-        DumpTExp(root);
-    }
 
     const resource: HSD_TExpRes = {
         regsColor: nArray(8, () => 0),
@@ -1384,37 +1294,16 @@ export function HSD_TExpCompile(list: HSD_TExpList, mb: GXMaterialBuilder): void
     const order1 = HSD_TExpSchedule(resource, dags1);
     assert(order1.length >= 1);
 
-    if (list.debug) {
-        console.log("Schedule 1 Pre");
-        DumpTExpSchedule(order1);
-    }
-
     for (let i = 0; i < order1.length; i++) {
         const ret = TExpAssignReg(order1[i], resource);
         assert(ret);
     }
 
-    if (list.debug) {
-        console.log("Schedule 1 Assign");
-        DumpTExpSchedule(order1);
-    }
-
     for (let i = order1.length - 1; i >= 0; i--)
         HSD_TExpSimplify2(order1[i]);
 
-    if (list.debug) {
-        console.log("Simplify2");
-        DumpTExpSchedule(order1);
-    }
-
     const dags2 = HSD_TExpMakeDag(root);
     const order2 = HSD_TExpSchedule(resource, dags2);
-
-    if (list.debug) {
-        console.log("Schedule 2");
-        DumpTExpSchedule(order2);
-        debugger;
-    }
 
     // Final ordering. Compile to GXMaterialBuilder.
     const init: TExp2TevDescInit = { initCPREV: true, initAPREV: true };

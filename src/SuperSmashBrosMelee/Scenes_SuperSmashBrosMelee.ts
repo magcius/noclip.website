@@ -744,7 +744,7 @@ const sceneDescs = [
     new HSDDesc(`TyZeniga.dat`),
     new HSDDesc(`TyZkMen.dat`),
 
-    // new MeleeFtDesc(),
+    new MeleeFtDesc(),
     // new HSDDesc(`PlFxNr.dat`),
     // new HSDDesc(`PlKbNr.dat`),
     // new HSDDesc(`GmRgEBG3.dat`),

@@ -438,9 +438,9 @@ const sceneDescs = [
     // (end)
 
     'Ancient Maps',
-    new AncientMapSceneDesc('ancient0', "Ancient Unknown Pit Room", ANCIENT_DP_GAME_INFO, 0),
+    new AncientMapSceneDesc('ancient0', "Ancient Willow Grove", ANCIENT_DP_GAME_INFO, 0),
     new AncientMapSceneDesc('ancient1', "Ancient Dragon Rock", ANCIENT_DP_GAME_INFO, 1),
-    new AncientMapSceneDesc('ancient2', "Ancient Unknown Mine Room", ANCIENT_DP_GAME_INFO, 2),
+    new AncientMapSceneDesc('ancient2', "Ancient Dragon Rock Bottom", ANCIENT_DP_GAME_INFO, 2),
     new AncientMapSceneDesc('ancient3', "Ancient ThornTail Hollow", ANCIENT_DP_GAME_INFO, 3),
     new AncientMapSceneDesc('ancient4', "Ancient Northern Wastes", ANCIENT_DP_GAME_INFO, 4),
     new AncientMapSceneDesc('ancient5', "Ancient Warlock Mountain", ANCIENT_DP_GAME_INFO, 5),
@@ -451,9 +451,9 @@ const sceneDescs = [
     new AncientMapSceneDesc('ancient10', "Ancient Ice Mountain Track 2", ANCIENT_DP_GAME_INFO, 10),
     new AncientMapSceneDesc('ancient11', "Ancient Ice Mountain Track 3", ANCIENT_DP_GAME_INFO, 11),
     new AncientMapSceneDesc('ancient12', "Ancient DarkIce Mines Interior", ANCIENT_DP_GAME_INFO, 12),
-    new AncientMapSceneDesc('ancient13', "Ancient DarkIce Mines Boss Room", ANCIENT_DP_GAME_INFO, 13),
+    new AncientMapSceneDesc('ancient13', "Ancient DarkIce Mines Galadon Chamber", ANCIENT_DP_GAME_INFO, 13),
     new AncientMapSceneDesc('ancient14', "Ancient CloudRunner Fortress Race", ANCIENT_DP_GAME_INFO, 14),
-    new AncientMapSceneDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
+    new AncientMapSceneDesc('ancient15', "Ancient Walled City Klanadack Chamber", ANCIENT_DP_GAME_INFO, 15),
 ];
 
 const id = 'sfa';

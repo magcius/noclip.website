@@ -1,8 +1,7 @@
-import { mat3, mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
-import { Color, colorNewFromRGBA } from '../Color.js';
-import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk.js';
-import { AABB, Frustum, Plane } from '../Geometry.js';
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
+import { AABB, Frustum } from '../Geometry.js';
 import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
@@ -13,8 +12,8 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, PortalData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
-import { BaseProgram, DebugWmoPortalProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
 
@@ -577,6 +576,25 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.prepareToRenderTerrain(this.renderHelper.renderInstManager);
     }
 
+    let visibleWmoUniqueIds = new Set();
+    template.setGfxProgram(this.wmoProgram);
+    template.setBindingLayouts(WmoProgram.bindingLayouts);
+    for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
+      const defs = this.wmoIdToDefs.get(wmoId)!
+        .filter(wmoDef => wmoDef.visible)
+        .filter(wmoDef => {
+          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
+            wmoDef.setVisible(false);
+            return false;
+          }
+          visibleWmoUniqueIds.add(wmoDef.uniqueId);
+          return true;
+        });
+      renderer.prepareToRenderWmo(this.renderHelper.renderInstManager, defs);
+    }
+
+    // reset so we can draw liquids
+    visibleWmoUniqueIds.clear();
     template.setGfxProgram(this.waterProgram);
     template.setBindingLayouts(WaterProgram.bindingLayouts);
     for (let renderer of this.adtWaterRenderers.values()) {
@@ -584,18 +602,20 @@ export class WdtScene implements Viewer.SceneGfx {
       renderer.prepareToRenderAdtWater(this.renderHelper.renderInstManager);
     }
     for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
-      const defs = this.wmoIdToDefs.get(wmoId)!;
+      const defs = this.wmoIdToDefs.get(wmoId)!
+        .filter(wmoDef => wmoDef.visible)
+        .filter(wmoDef => {
+          if (visibleWmoUniqueIds.has(wmoDef.uniqueId)) {
+            return false;
+          }
+          visibleWmoUniqueIds.add(wmoDef.uniqueId);
+          return true;
+        });
       renderer.update(this.mainView);
       renderer.prepareToRenderWmoWater(this.renderHelper.renderInstManager, defs);
     }
 
-    template.setGfxProgram(this.wmoProgram);
-    template.setBindingLayouts(WmoProgram.bindingLayouts);
-    for (let [wmoId, renderer] of this.wmoRenderers.entries()) {
-      const defs = this.wmoIdToDefs.get(wmoId)!;
-      renderer.prepareToRenderWmo(this.renderHelper.renderInstManager, defs);
-    }
-
+    const visibleDoodadUniqueIds = new Set();
     template.setBindingLayouts(ModelProgram.bindingLayouts);
     template.setGfxProgram(this.modelProgram);
     if (this.activeSkyboxModelId !== undefined) {
@@ -607,11 +627,21 @@ export class WdtScene implements Viewer.SceneGfx {
       );
     }
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
-      const doodads = this.modelIdToDoodads.get(modelId)!;
-      const visibleDoodads = doodads.filter(doodad => doodad.visible);
-      if (visibleDoodads.length === 0) continue;
+      const doodads = this.modelIdToDoodads.get(modelId)!
+        .filter(doodad => doodad.visible)
+        .filter(doodad => {
+          if (doodad.uniqueId === undefined)
+            return true;
+
+          if (visibleDoodadUniqueIds.has(doodad.uniqueId)) {
+            return false;
+          }
+          visibleDoodadUniqueIds.add(doodad.uniqueId);
+          return true;
+        })
+      if (doodads.length === 0) continue;
       renderer.update(this.mainView);
-      renderer.prepareToRenderModel(this.renderHelper.renderInstManager, visibleDoodads);
+      renderer.prepareToRenderModel(this.renderHelper.renderInstManager, doodads);
     }
 
     this.renderHelper.renderInstManager.popTemplateRenderInst();
