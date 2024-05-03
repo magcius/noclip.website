@@ -6,7 +6,7 @@ import { assert, nArray, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, quat, vec3 } from 'gl-matrix';
 
-const enum Version {
+export const enum Version {
     Ocarina, Majora
 }
 
@@ -21,6 +21,7 @@ export interface ZSIScene {
 export class ZSIRoomSetup {
     public actors: Actor[] = [];
     public mesh: Mesh;
+    public timeSettings: number;
 }
 
 export class Light {
@@ -42,11 +43,13 @@ export class Light {
 export class ZSIEnvironmentSettings {
     
     public lights: Light[] = nArray(7, () => new Light());
-    public globalAmbient = colorNewCopy(TransparentBlack);
+    public actorGlobalAmbient = colorNewCopy(TransparentBlack);
+    public sceneGlobalAmbient = colorNewCopy(TransparentBlack);
 
     public fogColor = colorNewFromRGBA(0.5, 0.5, 0.5);
     public fogStart: number = 996.0;
     public fogEnd: number = 12800.0;
+    public blendRate: number = 1.0;
 
     public drawDistance: number = 20000.0;
 
@@ -55,15 +58,16 @@ export class ZSIEnvironmentSettings {
     }
 
     public reset(): void {
-        colorFromRGBA(this.globalAmbient, 0.5, 0.5, 0.5);
+        colorFromRGBA(this.actorGlobalAmbient, 0.5, 0.5, 0.5);
+        colorFromRGBA(this.sceneGlobalAmbient, 0.5, 0.5, 0.5);
         
-        vec3.set(this.lights[0].direction, -0.57715, -0.57715, -0.57715);
+        vec3.set(this.lights[0].direction, 0.57715, 0.57715, 0.57715);
         colorFromRGBA(this.lights[0].diffuse, 1.0, 1.0, 1.0);
         colorFromRGBA(this.lights[0].ambient, 0.0, 0.0, 0.0);
         colorFromRGBA(this.lights[0].specular0, 1.0, 1.0, 1.0);
         colorFromRGBA(this.lights[0].specular1, 1.0, 1.0, 1.0);
 
-        vec3.set(this.lights[1].direction, 0.57715, 0.57715, 0.57715);
+        vec3.set(this.lights[1].direction, -0.57715, -0.57715, -0.57715);
         colorFromRGBA(this.lights[1].diffuse, 0.0, 0.2, 0.3);
         colorFromRGBA(this.lights[1].ambient, 0.0, 0.0, 0.0);
         colorFromRGBA(this.lights[1].specular0, 0.1, 0.1, 0.1);
@@ -79,11 +83,13 @@ export class ZSIEnvironmentSettings {
     }
 
     public copy(o: ZSIEnvironmentSettings): void {
-        colorCopy(this.globalAmbient, o.globalAmbient);
+        colorCopy(this.actorGlobalAmbient, o.actorGlobalAmbient);
+        colorCopy(this.sceneGlobalAmbient, o.sceneGlobalAmbient);
         colorCopy(this.fogColor, o.fogColor);
         this.fogStart = o.fogStart;
         this.fogEnd = o.fogEnd;
         this.drawDistance = o.drawDistance;
+        this.blendRate = o.blendRate;
         
         for (let i = 0; i < o.lights.length; i++) {
             this.lights[i].copy(o.lights[i]);
@@ -98,6 +104,7 @@ const enum HeaderCommands {
     Rooms = 0x04,
     Mesh = 0x0A,
     DoorActor = 0x0E,
+    TimeSettings = 0x10,
     SkyboxSettings = 0x11,
     End = 0x14,
     MultiSetup = 0x18,
@@ -204,13 +211,13 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
         let setting = new ZSIEnvironmentSettings;
         
         if(version === Version.Majora){
-            const ambientColR = view.getUint8(offs + 0x00) / 0xFF;
-            const ambientColG = view.getUint8(offs + 0x01) / 0xFF;
-            const ambientColB = view.getUint8(offs + 0x02) / 0xFF;
+            const actorAmbientColR = view.getUint8(offs + 0x00) / 0xFF;
+            const actorAmbientColG = view.getUint8(offs + 0x01) / 0xFF;
+            const actorAmbientColB = view.getUint8(offs + 0x02) / 0xFF;
     
-            const unk03 = view.getUint8(offs + 0x03) / 0xFF;
-            const unk04 = view.getUint8(offs + 0x04) / 0xFF;
-            const unk05 = view.getUint8(offs + 0x05) / 0xFF;
+            const sceneAmbientColR = view.getUint8(offs + 0x03) / 0xFF;
+            const sceneAmbientColG = view.getUint8(offs + 0x04) / 0xFF;
+            const sceneAmbientColB = view.getUint8(offs + 0x05) / 0xFF;
 
             const light0DirX = view.getInt8(offs + 0x06) / 0x7F;
             const light0DirY = view.getInt8(offs + 0x07) / 0x7F;
@@ -232,6 +239,7 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
             const fogColorG = view.getUint8(offs + 0x13) / 0xFF;
             const fogColorB = view.getUint8(offs + 0x14) / 0xFF;
 
+            const blendRate = (view.getUint16(offs + 0x16, true) >> 10) * 4;
             const fogStart = view.getUint16(offs + 0x16, true) & 0x03FF;
             const fogEnd = view.getFloat32(offs + 0x18, true);
             const drawDistance = view.getFloat32(offs + 0x1C, true);
@@ -247,17 +255,19 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
             setting.lights[1].specular0 = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
             setting.lights[1].specular1 = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
 
+            setting.blendRate = blendRate;
             setting.drawDistance = drawDistance;
             setting.fogStart = fogStart;
             setting.fogEnd = fogEnd;
-            setting.globalAmbient = colorNewFromRGBA(ambientColR, ambientColG, ambientColB);
+            setting.actorGlobalAmbient = colorNewFromRGBA(actorAmbientColR, actorAmbientColG, actorAmbientColB);
+            setting.sceneGlobalAmbient = colorNewFromRGBA(sceneAmbientColR, sceneAmbientColG, sceneAmbientColB);
             setting.fogColor = colorNewFromRGBA(fogColorR, fogColorG, fogColorB);
         }
-        else
-        {
+        else{
             const drawDistance = view.getFloat32(offs + 0x00, true);
             const fogEnd = view.getFloat32(offs + 0x04, true);
             const fogStart = view.getUint16(offs + 0x08, true) & 0x03FF;
+            const blendRate = ((view.getUint16(offs + 0x08, true)) >> 10) * 4;
 
             const ambientColR = view.getUint8(offs + 0x0A) / 0xFF;
             const ambientColG = view.getUint8(offs + 0x0B) / 0xFF;
@@ -283,7 +293,6 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
             const fogColorG = view.getUint8(offs + 0x1A) / 0xFF;
             const fogColorB = view.getUint8(offs + 0x1B) / 0xFF;
 
-            //(M-1): Direction doesn't accurate...
             setting.lights[0].direction = vec3.fromValues(light0DirX, light0DirY, light0DirZ);
             setting.lights[0].diffuse = colorNewFromRGBA(light0ColR, light0ColG, light0ColB);
             setting.lights[0].ambient = colorNewFromRGBA(ambientColR, ambientColG, ambientColB);
@@ -292,6 +301,7 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
             setting.lights[1].diffuse = colorNewFromRGBA(light1ColR, light1ColG, light1ColB);
             setting.lights[1].ambient = colorNewFromRGBA(0, 0, 0);
 
+            setting.blendRate = blendRate;
             setting.drawDistance = drawDistance;
             setting.fogStart = (fogStart >= 996) ? 996: fogStart;
             setting.fogEnd = fogEnd;
@@ -302,12 +312,12 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
 
         //HACK(M-1) Until I figure how to handle "outdoor lighting"
         if(vec3.equals(setting.lights[0].direction, [0, 0, 0]) && vec3.equals(setting.lights[1].direction, [0, 0, 0])){
-            setting.lights[0].direction = vec3.fromValues(0.5, 0.5, 0.5);
-            setting.lights[0].direction = vec3.fromValues(-0.5, -0.5, -0.5);
-
-            colorFromRGBA(setting.lights[0].ambient, 0.5, 0.5, 0.5, 1);
-            colorFromRGBA(setting.lights[0].diffuse, 1, 1, 1, 1);
-            colorFromRGBA(setting.lights[1].diffuse, 0, 0, 0, 1);
+            vec3.set(setting.lights[0].direction, 0.57715, 0.57715, 0.57715);
+            vec3.set(setting.lights[1].direction, -0.57715, -0.57715, -0.57715);
+            
+            //colorFromRGBA(setting.lights[0].ambient, 0.5, 0.5, 0.5, 1);
+            //colorFromRGBA(setting.lights[0].diffuse, 1, 1, 1, 1);
+            //colorFromRGBA(setting.lights[1].diffuse, 0, 0, 0, 1);
         }
 
         if(colorEqual(setting.fogColor, OpaqueBlack)){
@@ -415,6 +425,9 @@ function readRoomHeaders(version: Version, buffer: ArrayBufferSlice, offs: numbe
             break;
 
         switch (cmdType) {
+        case HeaderCommands.TimeSettings:
+            mainSetup.timeSettings = cmd2;
+            break;
         case HeaderCommands.MultiSetup: {
             const nSetups = (cmd1 >>> 16) & 0xFF;
             let setupIdx = cmd2;

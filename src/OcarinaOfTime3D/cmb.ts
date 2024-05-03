@@ -3,7 +3,7 @@ import { assert, readString } from '../util.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture.js';
-import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform.js';
+import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxChannelWriteMask, GfxChannelBlendState, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color.js';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers.js';
@@ -31,7 +31,7 @@ export class CMB {
     public name: string;
     public version: Version;
     public textures: Texture[] = [];
-    public luts: Uint8Array[] = [];
+    public lutTexture: Texture | null = null;
     public vatrChunk: VatrChunk;
 
     public materials: Material[] = [];
@@ -164,36 +164,36 @@ export const enum CombineOpDMP {
 };
 
 export const enum LightingConfig {
-	Config0 = 0x62B0,
-	Config1 = 0x62B1,
-	Config2 = 0x62B2,
-	Config3 = 0x62B3,
-	Config4 = 0x62B4,
-	Config5 = 0x62B5,
-	Config6 = 0x62B6,
-	Config7 = 0x62B7,
+    Config0 = 0x62B0,
+    Config1 = 0x62B1,
+    Config2 = 0x62B2,
+    Config3 = 0x62B3,
+    Config4 = 0x62B4,
+    Config5 = 0x62B5,
+    Config6 = 0x62B6,
+    Config7 = 0x62B7,
 };
 
 export const enum FresnelSelector {
-	No     = 0x62C0,
-	Pri    = 0x62C1,
-	Sec    = 0x62C2,
-	PriSec = 0x62C3
+    No     = 0x62C0,
+    Pri    = 0x62C1,
+    Sec    = 0x62C2,
+    PriSec = 0x62C3
 };
 
 export const enum BumpMode {
     NotUsed   = 0x62C8,
-	AsBump    = 0x62C9,
-	AsTangent = 0x62CA// Doesn't exist in OoT3D?
+    AsBump    = 0x62C9,
+    AsTangent = 0x62CA// Doesn't exist in OoT3D?
 };
 
 export const enum LutInput {
-	CosNormalHalf  = 0x62A0,
-	CosViewHalf    = 0x62A1,
-	CosNormalView  = 0x62A2,
-	CosLightNormal = 0x62A3,
-	CosLightSpot   = 0x62A4,
-	CosPhi         = 0x62A5
+    CosNormalHalf  = 0x62A0,
+    CosViewHalf    = 0x62A1,
+    CosNormalView  = 0x62A2,
+    CosLightNormal = 0x62A3,
+    CosLightSpot   = 0x62A4,
+    CosPhi         = 0x62A5
 }
 
 export const enum TextureTransformType{
@@ -210,6 +210,13 @@ export const enum TexCoordConfig{
     Config0121,
     Config0122
 }
+
+export const enum BumpTexture {
+    TEXTURE0 = 0x84C0,
+    TEXTURE1 = 0x84C1,
+    TEXTURE2 = 0x84C2,
+    TEXTURE3 = 0x84C3,
+};
 
 export interface TextureCombiner {
     combineRGB: CombineResultOpDMP;
@@ -321,12 +328,12 @@ export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: 
     dst[13] = scaleT * ((0.5 * -sinR - 0.5 * cosR) + 0.5 - translationT);
 }
 
-function translateBumpTexture(bumpTexture: number): GfxCullMode {
+function translateBumpTexture(bumpTexture: number): number {
     switch (bumpTexture) {
-    case 0x84C0: return 0;
-    case 0x84C1: return 1;
-    case 0x84C2: return 2;
-    case 0x84C3: return 3;
+    case BumpTexture.TEXTURE0: return 0;
+    case BumpTexture.TEXTURE1: return 1;
+    case BumpTexture.TEXTURE2: return 2;
+    case BumpTexture.TEXTURE3: return 3;
     default:
         throw "whoops";
     }
@@ -376,9 +383,9 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const polygonOffsetUnit = view.getInt8(offs + 0x07);
         const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0xFFFE : 0;
 
-        let textureBindingTableCount = 3;
-        let textureCoordinatorTableCount = 3;
         let texCoordConfig: TexCoordConfig = TexCoordConfig.Config0120;
+        let textureBindingTableCount;
+        let textureCoordinatorTableCount;
 
         if(cmb.version > Version.Majora){
             texCoordConfig = view.getUint32(offs + 0x08, true);
@@ -629,7 +636,7 @@ export interface TextureLevel {
 }
 
 export interface Texture {
-    isCubemap: boolean;
+    dimension: GfxTextureDimension;
     name: string;
     width: number;
     height: number;
@@ -679,7 +686,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
                     endOffs.push(startOffs[i] + size);
                 }
 
-                for (let i = 0; i < 3; i++) {
+                for (let i = 0; i < maxLevel; i++) {
                     const pixels: Uint8Array = new Uint8Array((mipWidth * mipHeight * 4) * depth);
                     const mipSize = computeTextureByteSize(format, mipWidth, mipHeight);
                     let setOffs = 0;
@@ -709,7 +716,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
             }
         }
 
-        textures.push({ isCubemap:false, name, format, width, height, levels });
+        textures.push({ dimension: GfxTextureDimension.n2D, name, format, width, height, levels });
     }
 
     return textures;
@@ -719,7 +726,7 @@ function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSl
     cmb.textures = parseTexChunk(buffer, texData, cmb.name);
 }
 
-function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): Uint8Array[] {
+function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'luts');
@@ -727,53 +734,68 @@ function readLutsChunk(cmb: CMB, buffer: ArrayBufferSlice): Uint8Array[] {
 
     let offsTable = 0x10;
 
-    const lutTables: Uint8Array[] = [];
+    const width = 512;
+    const height = count;
+    const pixels: Uint8Array = new Uint8Array(width * height);
+
     for (let i = 0; i < count; i++) {
         const offs = view.getUint32(offsTable, true);
 
-        const timeStart = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x04, true) : view.getInt32(offs + 0x08, true);
-        let timeEnd = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x06, true) : view.getInt32(offs + 0x0C, true);
-        const numKeyframes = cmb.version > Version.Ocarina ? view.getInt16(offs + 0x02, true) : view.getUint32(offs + 0x04, true);
-        let keyframeTableIdx: number = offs + 0x10;
+        let timeStart, timeEnd, numKeyframes: number;
 
-        const isAbs = timeStart >= 0;
+        if(cmb.version > Version.Ocarina){
+            numKeyframes = view.getInt16(offs + 0x02, true);
+            timeStart = view.getInt16(offs + 0x04, true)
+            timeEnd = view.getInt16(offs + 0x06, true);
+        }
+        else{
+            numKeyframes = view.getUint32(offs + 0x04, true);
+            timeStart = view.getInt32(offs + 0x08, true)
+            timeEnd = view.getInt32(offs + 0x0C, true);
+        }
 
-        if(isAbs)
+        const isAbsolute = timeStart >= 0;
+
+        if(isAbsolute)
             timeEnd += 256;
 
         const frames: AnimationKeyframeHermite[] = [];
+        let keyframeTableIdx: number = offs + 0x10;
+        
         for (let j = 0; j < numKeyframes; j++) {
             let time = view.getInt32(keyframeTableIdx + 0x00, true);
             const value = view.getFloat32(keyframeTableIdx + 0x04, true);
             const tangentIn = view.getFloat32(keyframeTableIdx + 0x08, true);
             const tangentOut = view.getFloat32(keyframeTableIdx + 0x0C, true);
 
-            if(!isAbs)
+            if(!isAbsolute)
                 time +=256;
 
             keyframeTableIdx += 0x10;
             frames.push({ time, value, tangentIn, tangentOut });
         }
 
-        const data = new Uint8Array(512);
-        if(isAbs){
+        const Y = (i * width);
+        if(isAbsolute) {
             const clampValue = clamp(frames[0].value, 0, 1) * 255;
-            for (let i = 0; i < 256; i++) {
-                data[i + 256] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, i), 0, 1) * 255;
-                data[i] = clampValue;
+            for (let X = 0; X < 256; X++) {
+                pixels[Y + X + 256] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, X), 0, 1) * 255;
+                pixels[Y + X] = clampValue;
             }
         }
-        else{
-            for (let i = 0; i < 512; i++) {
-                data[i] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, i), 0, 1) * 255;
+        else {
+            for (let X = 0; X < 512; X++) {
+                pixels[Y + X] = clamp(sampleAnimationTrack({ type: 0x02, frames, timeStart, timeEnd }, X), 0, 1) * 255;
             }
         }
 
         offsTable += 4;
-        lutTables.push(data);
     }
 
-    return lutTables;
+    if(count > 0){
+        const name = `${cmb.name}_LUT`;
+        cmb.lutTexture = { dimension: GfxTextureDimension.n2D, name, format: TextureFormat.RGBA8, width, height, levels: [{ name, width, height, pixels }] };
+    }
 }
 
 function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
@@ -1005,10 +1027,13 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
         return { start, scale, dataType, mode, constant };
     }
 
-    let bitIdx = cmb.version !== Version.Ocarina ? 3 : 2;
-
-    sepd.hasVertexColors = ((flags >> bitIdx) & 1) !== 0;
-    sepd.hasTangents = cmb.version > Version.Ocarina ? ((flags >> 2) & 1) !== 0 : false;
+    if (cmb.version > Version.Ocarina) {
+        sepd.hasVertexColors = !!((flags >>> 3) & 1);
+        sepd.hasTangents = !!((flags >>> 2) & 1);
+    } else {
+        sepd.hasVertexColors = !!((flags >>> 2) & 1);
+        sepd.hasTangents = false;
+    }
     
     sepd.position = readVertexAttrib();
     sepd.normal = readVertexAttrib();
@@ -1112,7 +1137,7 @@ export function parse(buffer: ArrayBufferSlice): CMB {
 
     const lutsChunkOffs = view.getUint32(chunkIdx, true);
     chunkIdx += 0x04;
-    cmb.luts = readLutsChunk(cmb, buffer.slice(lutsChunkOffs));
+    readLutsChunk(cmb, buffer.slice(lutsChunkOffs));
 
     const vatrChunkOffs = view.getUint32(chunkIdx, true);
     chunkIdx += 0x04;

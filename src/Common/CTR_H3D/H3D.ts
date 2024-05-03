@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import { readString, assert } from "../../util.js";
 import { computeTextureByteSize, decodeTexture, TextureFormat } from "../../OcarinaOfTime3D/pica_texture.js";
 import { mat4 } from "gl-matrix";
+import { GfxTextureDimension } from "../../gfx/platform/GfxPlatform.js";
 
 //#region PICA
 const enum PICAReg {
@@ -106,7 +107,7 @@ export interface TextureLevel {
 }
 
 export interface Texture {
-    isCubemap: boolean,
+    dimension: GfxTextureDimension;
     name: string;
     width: number;
     height: number;
@@ -282,7 +283,7 @@ export function parse(buffer: ArrayBufferSlice): BCH {
             mipHeight /= 2;
         }
 
-        textures.push({ isCubemap: false, name, width: width0, height: height0, format, levels });
+        textures.push({ dimension: GfxTextureDimension.n2D, name, width: width0, height: height0, format, levels });
     }
 
     return { textures };

@@ -18,7 +18,7 @@ import { GrezzoTextureHolder, MultiCmbScene } from './scenes.js';
 import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers.js';
 import { SceneContext } from '../SceneBase.js';
 import { ZSIEnvironmentSettings } from './zsi.js';
-import { colorFromRGBA, colorNewCopy } from '../Color.js';
+import { colorFromRGBA } from '../Color.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 
 function bcsvHashLM(str: string): number {
@@ -66,8 +66,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const textureHolder = new GrezzoTextureHolder();
         const dataFetcher = context.dataFetcher;
 
-        function spawnVrbox(renderer: MultiCmbScene, cache: GfxRenderCache, garName: string): void
-        {
+        const spawnVrbox = (renderer: MultiCmbScene, cache: GfxRenderCache, garName: string) => {
             dataFetcher.fetchData(`${pathBase}/vrbox/${garName}`).then((garBuffer) => {
 
                 const vrGar = ZAR.parse(garBuffer);

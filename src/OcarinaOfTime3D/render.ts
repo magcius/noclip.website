@@ -36,7 +36,7 @@ function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
 }
 
 function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
-    const surfaces = texture.isCubemap ? [] : texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
+    const surfaces = texture.dimension ? [] : texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
 
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getTextureFormatName(texture.format));
@@ -51,8 +51,8 @@ export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
             width: texture.width,
             height: texture.height,
             pixelFormat: GfxFormat.U8_RGBA_NORM,
-            dimension: texture.isCubemap ? GfxTextureDimension.Cube : GfxTextureDimension.n2D,
-            depth: texture.isCubemap ? 6 : 1,
+            dimension: texture.dimension,
+            depthOrArrayLayers: texture.dimension === GfxTextureDimension.Cube ? 6 : 1,
             numLevels: texture.levels.length,
             usage: GfxTextureUsage.Sampled,
         };
@@ -153,13 +153,7 @@ layout(std140) uniform ub_PrmParams {
 uniform sampler2D u_Texture0;
 uniform sampler2D u_Texture1;
 uniform sampler2D u_Texture2;
-
-uniform sampler2D u_LUTDist0;
-uniform sampler2D u_LUTDist1;
-uniform sampler2D u_LUTFresnel;
-uniform sampler2D u_LUTReflecR;
-uniform sampler2D u_LUTReflecG;
-uniform sampler2D u_LUTReflecB;
+uniform sampler2D u_TextureLUT;
 
 uniform samplerCube u_Cubemap;
 `;
@@ -201,14 +195,14 @@ uniform samplerCube u_Cubemap;
 
         switch (which) {
         case 0: // Texture 0 has TexCoord 0
-            return `texture(SAMPLER_2D(u_Texture0), v_TexCoord0.st)`;
+            return `texture(SAMPLER_2D(u_Texture0), v_TexCoord0.xy)`;
         case 1: // Texture 1 has TexCoord 1
-            return `texture(SAMPLER_2D(u_Texture1), v_TexCoord1.st)`;
+            return `texture(SAMPLER_2D(u_Texture1), v_TexCoord1.xy)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input
             if (this.material.texCoordConfig == TexCoordConfig.Config0110 || this.material.texCoordConfig == TexCoordConfig.Config0111 || this.material.texCoordConfig == TexCoordConfig.Config0112)
-                return `texture(SAMPLER_2D(u_Texture2), v_TexCoord1.st)`;
+                return `texture(SAMPLER_2D(u_Texture2), v_TexCoord1.xy)`;
             else
-                return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2.st)`;
+                return `texture(SAMPLER_2D(u_Texture2), v_TexCoord2.xy)`;
         }
     }
 
@@ -268,9 +262,9 @@ uniform samplerCube u_Cubemap;
     private generateTexCombinerScale(combine: CMB.CombineResultOpDMP, scale: CMB.CombineScaleDMP): string {
         const s = this.generateTexCombinerCombine(combine);
         switch (scale) {
-        case CMB.CombineScaleDMP._1: return `clamp(${s}, vec4(0.0), vec4(1.0))`;
-        case CMB.CombineScaleDMP._2: return `(clamp(${s}, vec4(0.0), vec4(1.0)) * 2.0)`;
-        case CMB.CombineScaleDMP._4: return `(clamp(${s}, vec4(0.0), vec4(1.0)) * 4.0)`;
+        case CMB.CombineScaleDMP._1: return `saturate(${s})`;
+        case CMB.CombineScaleDMP._2: return `(saturate(${s}) * 2.0)`;
+        case CMB.CombineScaleDMP._4: return `(saturate(${s}) * 4.0)`;
         }
     }
 
@@ -324,7 +318,11 @@ uniform samplerCube u_Cubemap;
         S += `
     vec3 t_SurfNormal = ${material.bumpMode === BumpMode.AsBump ? bumpColor : `vec3(0.0, 0.0, 1.0);`}
     vec3 t_SurfTangent = ${material.bumpMode === BumpMode.AsTangent ? bumpColor : `vec3(1.0, 0.0, 0.0);`}
-    ${material.isBumpRenormEnabled ? `t_SurfNormal.z = sqrt(max(1.0 - dot(t_SurfNormal.xy, t_SurfNormal.xy), 0.0));` : ``}
+    
+    bool isBumpRenormEnabled = ${material.isBumpRenormEnabled};
+    if (isBumpRenormEnabled) {
+        t_SurfNormal.z = sqrt(max(1.0 - dot(t_SurfNormal.xy, t_SurfNormal.xy), 0.0));
+    }
     `;
 
         S += `
@@ -336,9 +334,13 @@ uniform samplerCube u_Cubemap;
         vec3 t_LightVector = normalize(u_SceneLights[i].Direction.xyz);
         vec3 t_HalfVector = t_LightVector + normalize(v_View.xyz);
         float t_DotProduct = max(dot(t_LightVector, t_Normal), 0.0);
-        ${material.isClampHighlight ? `\t\tt_ClampHighlights = sign(t_DotProduct);` : ``}
+
+        bool isClampHighlight = ${material.isClampHighlight};
+        if (isClampHighlight) {
+            t_ClampHighlights = sign(t_DotProduct);
+        }
     `;
-    
+        // Might have to support this later for LM3D
         const spot_atten = "1.0";
         const dist_atten = "1.0";
         let d0_lut_value = "1.0";
@@ -352,7 +354,7 @@ uniform samplerCube u_Cubemap;
         }
     
         if(material.isDist0Enabled && this.IsLUTSupported(MatLutType.Distribution0))
-            d0_lut_value = this.getLutInput(MatLutType.Distribution0);
+            d0_lut_value = this.getLutInput(material.lutDist0);
     
         let specular_0 = `(${d0_lut_value} * u_SceneLights[i].Specular0.xyz)`;
         if(material.isGeo0Enabled)
@@ -361,21 +363,21 @@ uniform samplerCube u_Cubemap;
         if(material.isReflectionEnabled){
             if(this.IsLUTSupported(MatLutType.ReflectR))
                 S+= `
-        t_ReflValue.r = ${this.getLutInput(MatLutType.ReflectR)};
-        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(MatLutType.ReflectG) : `t_ReflValue.r`};
-        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(MatLutType.ReflectB) : `t_ReflValue.r`};
+        t_ReflValue.r = ${this.getLutInput(material.lutReflecB)};
+        t_ReflValue.g = ${this.IsLUTSupported(MatLutType.ReflectG) ? this.getLutInput(material.lutReflecG) : `t_ReflValue.r`};
+        t_ReflValue.b = ${this.IsLUTSupported(MatLutType.ReflectB) ? this.getLutInput(material.lutReflecB) : `t_ReflValue.r`};
         `;
         }
     
         if(material.isDist1Enabled && this.IsLUTSupported(MatLutType.Distribution1))
-            d1_lut_value = this.getLutInput(MatLutType.Distribution1);
+            d1_lut_value = this.getLutInput(material.lutDist1);
     
         let specular_1 = `(${d1_lut_value} * t_ReflValue * u_SceneLights[i].Specular1.xyz)`;
         if(material.isGeo1Enabled)
             specular_1 = `(${specular_1} * t_GeoFactor)`;
     
         if (material.fresnelSelector !== FresnelSelector.No && this.IsLUTSupported(MatLutType.Fresnel)) {
-            const value = this.getLutInput(MatLutType.Fresnel);
+            const value = this.getLutInput(material.lutFesnel);
 
             // Only use the last light
             S += `\tif(i == 1){\n\t\t\t`;
@@ -412,29 +414,8 @@ uniform samplerCube u_Cubemap;
         }
     }
 
-    private getLutInput(lut: MatLutType): string {
-        let index, output, lutTexture: string;
-        let sampler = this.material.lutDist0;
-
-        switch(lut){
-            case MatLutType.Distribution0:
-                lutTexture = "u_LUTDist0"; break;
-            case MatLutType.Distribution1:
-                sampler = this.material.lutDist1;
-                lutTexture = "u_LUTDist1"; break;
-            case MatLutType.Fresnel:
-                sampler = this.material.lutFesnel;
-                lutTexture  = "u_LUTFresnel"; break;
-            case MatLutType.ReflectR:
-                sampler = this.material.lutReflecR;
-                lutTexture = "u_LUTReflecR"; break;
-            case MatLutType.ReflectG:
-                sampler = this.material.lutReflecG;
-                lutTexture = "u_LUTReflecG"; break;
-            case MatLutType.ReflectB:
-                sampler = this.material.lutReflecB;
-                lutTexture = "u_LUTReflecB"; break;
-        }
+    private getLutInput(sampler: CMB.MaterialLutSampler): string {
+        let index, output: string;
 
         switch (sampler.input) {
         case LutInput.CosNormalHalf:  index = `dot(t_Normal, normalize(t_HalfVector))`; break;
@@ -448,7 +429,7 @@ uniform samplerCube u_Cubemap;
             } break;
         }
 
-        output = `texture(SAMPLER_2D(${lutTexture}), vec2((${index} + 1.0) * 0.5, 0)).r`;
+        output = `texture(SAMPLER_2D(u_TextureLUT), vec2(((${index} + 1.0) * 0.5) + (1.0 / 512.0), ${this.generateFloat(sampler.index)})).r`;
 
         return `${output} * ${this.generateFloat(sampler.scale)}`;
     }
@@ -457,6 +438,7 @@ uniform samplerCube u_Cubemap;
         this.frag = `
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
+${GfxShaderLibrary.saturate}
 
 in vec4 v_Color;
 in vec3 v_TexCoord0;
@@ -711,9 +693,9 @@ void main() {
 
         for (int i = 0; i < 2; i++) {
             vec4 t_Diffuse = u_SceneLights[i].Diffuse * u_MatDiffuseColor;
-			vec4 t_Ambient = u_SceneLights[i].Ambient * u_MatAmbientColor;
-			float t_LightDir = max(dot(-u_SceneLights[i].Direction.xyz, v_Normal.xyz), 0.0);
-			t_VertexLightingColor += vec4((t_Diffuse * t_LightDir + t_Ambient).xyz, t_Diffuse.w);
+            vec4 t_Ambient = u_SceneLights[i].Ambient * u_MatAmbientColor;
+            float t_LightDir = max(dot(-u_SceneLights[i].Direction.xyz, v_Normal.xyz), 0.0);
+            t_VertexLightingColor += vec4((t_Diffuse * t_LightDir + t_Ambient).xyz, t_Diffuse.w);
         }
 
         v_Color = u_UseVertexColor > 0.0 ? (t_VertexLightingColor * a_Color) : t_VertexLightingColor;
@@ -727,8 +709,8 @@ void main() {
 #endif
 
     v_TexCoord0 = CalcTextureCoord(0);
-    v_TexCoord1 = CalcTextureCoord(1).st;
-    v_TexCoord2 = CalcTextureCoord(2).st;
+    v_TexCoord1 = CalcTextureCoord(1).xy;
+    v_TexCoord2 = CalcTextureCoord(2).xy;
 }
 `;
     }
@@ -745,7 +727,7 @@ const scratchVec4 = vec4.create();
 const scratchVec3 = vec3.create();
 const scratchColor = colorNewFromRGBA(0, 0, 0, 1);
 class MaterialInstance {
-    public textureMappings: TextureMapping[] = nArray(10, () => new TextureMapping());
+    public textureMappings: TextureMapping[] = nArray(5, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
     private colorAnimators: CMAB.ColorAnimator[] = [];
     private srtAnimators: CMAB.TextureSRTAnimator[] = [];
@@ -765,7 +747,6 @@ class MaterialInstance {
 
     private vertexNormalsEnabled: boolean = false;
     private uvEnabled: boolean = false;
-    private isActor: boolean = false;
     private renderFog: boolean = true;
     private vertexColorScale = 1;
     private program: DMPProgram | null = null;
@@ -773,7 +754,7 @@ class MaterialInstance {
 
     public environmentSettings = new ZSI.ZSIEnvironmentSettings;
 
-    constructor(cache: GfxRenderCache, public cmb: CMB.CMB, public material: CMB.Material) {
+    constructor(cache: GfxRenderCache, lutTexure: GfxTexture | null, public cmb: CMB.CMB, public material: CMB.Material) {
         this.diffuseColor = colorNewCopy(this.material.diffuseColor);
         this.ambientColor = colorNewCopy(this.material.ambientColor);
         this.specular0Color = colorNewCopy(this.material.specular0Color);
@@ -802,8 +783,8 @@ class MaterialInstance {
             });
             this.gfxSamplers.push(gfxSampler);
 
-            if(i == 0 && cmb.textures[binding.textureIdx].isCubemap)
-                this.textureMappings[9].gfxSampler = gfxSampler;
+            if(i == 0 && cmb.textures[binding.textureIdx].dimension === GfxTextureDimension.Cube)
+                this.textureMappings[4].gfxSampler = gfxSampler;
             else
                 this.textureMappings[i].gfxSampler = gfxSampler;
         }
@@ -811,15 +792,13 @@ class MaterialInstance {
         const lutSampler = cache.createSampler({
             wrapS: GfxWrapMode.Clamp,
             wrapT: GfxWrapMode.Clamp,
-            minFilter: GfxTexFilterMode.Point,
-            magFilter: GfxTexFilterMode.Point,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
             mipFilter: GfxMipFilterMode.NoMip,
         });
         this.gfxSamplers.push(lutSampler);
-
-        for (let i = 3; i < 9; i++) {
-            this.textureMappings[i].gfxSampler = lutSampler;
-        }
+        this.textureMappings[3].gfxSampler = lutSampler;
+        this.textureMappings[3].gfxTexture = lutTexure;
 
         this.createProgram();
     }
@@ -851,21 +830,14 @@ class MaterialInstance {
 
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         this.environmentSettings.copy(environmentSettings);
-        this.createProgram();
     }
 
     public setRenderFog(isFogEnabled: boolean): void {
         this.renderFog = isFogEnabled;
-        this.createProgram();
     }
 
     public setVertexColorScale(n: number): void {
         this.vertexColorScale = n;
-        this.createProgram();
-    }
-
-    public setIsActor(n: boolean): void {
-        this.isActor = n;
         this.createProgram();
     }
 
@@ -921,7 +893,7 @@ class MaterialInstance {
         offs += fillColor(mapped, offs, this.ambientColor);
         offs += fillVec4(mapped, offs, this.material.isVertexLightingEnabled ? 1:0, this.material.isFogEnabled? 1:0, this.renderFog ? 1:0, this.material.isFragmentLightingEnabled ? 1:0);
 
-        colorMult(scratchColor, this.ambientColor, this.environmentSettings.globalAmbient);
+        colorMult(scratchColor, this.ambientColor, this.environmentSettings.actorGlobalAmbient);
         colorAdd(scratchColor, this.emissionColor, scratchColor);
         colorClamp(scratchColor, scratchColor, 0, 1);
         offs += fillColor(mapped, offs, scratchColor);
@@ -947,34 +919,16 @@ class MaterialInstance {
                 offs += fillVec4(mapped, offs, scratchVec3[0], scratchVec3[1], scratchVec3[2]);
             }
         } else {
-            if(this.isActor) {
-                // OoT3D actor lights
-                for (let i = 0; i < 3; i++) {
-                    const light = this.environmentSettings.lights[i];
+            for (let i = 0; i < 3; i++) {
+                const light = this.environmentSettings.lights[i];
 
-                    offs += fillColor(mapped, offs, light.ambient);
-                    offs += fillColor(mapped, offs, light.diffuse);
-                    offs += fillColor(mapped, offs, light.specular0);
-                    offs += fillColor(mapped, offs, light.specular1);
-
-                    transformVec3Mat4w0(scratchVec3, viewMatrix, light.direction);
-                    offs += fillVec4(mapped, offs, -scratchVec3[0], -scratchVec3[1], -scratchVec3[2]);
-                }
-            } else {
-                const light = this.environmentSettings.lights[0];
-
-                // OoT3D scene lights
                 offs += fillColor(mapped, offs, light.ambient);
-                offs += fillVec4(mapped, offs, 0, 0, 0, 1);
-                offs += 8;// Skip specular colors
-                offs += fillVec4(mapped, offs, 0, -1, 0);
-    
-                offs += fillColor(mapped, offs, light.ambient);
-                offs += fillVec4(mapped, offs, 0, 0, 0, 1);
-                offs += 8;
-                offs += fillVec4(mapped, offs, 0, -1, 0);
-    
-                offs += 4*5;// Skip last light
+                offs += fillColor(mapped, offs, light.diffuse);
+                offs += fillColor(mapped, offs, light.specular0);
+                offs += fillColor(mapped, offs, light.specular1);
+
+                transformVec3Mat4w0(scratchVec3, viewMatrix, light.direction);
+                offs += fillVec4(mapped, offs, scratchVec3[0], scratchVec3[1], scratchVec3[2]);
             }
         }
 
@@ -993,7 +947,7 @@ class MaterialInstance {
                     this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
                 } else {
                     const texture = this.cmb.textures[binding.textureIdx];
-                    textureHolder.fillTextureMapping(this.textureMappings[texture.isCubemap ? 9 : i], texture.name);
+                    textureHolder.fillTextureMapping(this.textureMappings[texture.dimension ? 9 : i], texture.name);
                 }
 
                 scratchVec4[i] = this.packTexCoordParams(this.material.textureCoordinators[i]);
@@ -1020,24 +974,23 @@ class MaterialInstance {
             if (animEntry.materialIndex !== this.material.index)
                 continue;
 
-            if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION || animEntry.animationType === CMAB.AnimationType.SCALE) {
+            if (animEntry.animationType === CMAB.AnimationType.Translation || animEntry.animationType === CMAB.AnimationType.Rotation || animEntry.animationType === CMAB.AnimationType.Scale) {
                 this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureSRTAnimator(animationController, cmab, animEntry);
-            } else if (animEntry.animationType === CMAB.AnimationType.CONST_COLOR    || animEntry.animationType === CMAB.AnimationType.DIFFUSE_COLOR ||
-                       animEntry.animationType === CMAB.AnimationType.SPEC0_COLOR    || animEntry.animationType === CMAB.AnimationType.SPEC1_COLOR ||
-                       animEntry.animationType === CMAB.AnimationType.EMISSION_COLOR || animEntry.animationType === CMAB.AnimationType.AMBIENT_COLOR) {
+            } else if (animEntry.animationType === CMAB.AnimationType.ConstColor    || animEntry.animationType === CMAB.AnimationType.DiffuseColor ||
+                       animEntry.animationType === CMAB.AnimationType.Spec0Color    || animEntry.animationType === CMAB.AnimationType.Spec1Color ||
+                       animEntry.animationType === CMAB.AnimationType.EmissionColor || animEntry.animationType === CMAB.AnimationType.AmbientColor) {
                 this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
-            } else if (animEntry.animationType === CMAB.AnimationType.TEXTURE_PALETTE) {
+            } else if (animEntry.animationType === CMAB.AnimationType.TexturePalette) {
                 this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmab, animEntry);
             }
         }
     }
 
-    private calcColor(dst: Color, src: Color, type: ColorAnimType): void{
-        if(this.colorAnimators[type]){
-            this.colorAnimators[type].calcColor(dst, src);
-        }else{
-            colorCopy(dst, src);
-        }
+    private calcColor(dst: Color, fallback: Color, type: ColorAnimType): void{
+        if (this.colorAnimators[type])
+            this.colorAnimators[type].calcColor(dst, fallback);
+        else
+            colorCopy(dst, fallback);
     }
 
     private translateWrapMode(wrapMode: CMB.TextureWrapMode): GfxWrapMode {
@@ -1288,7 +1241,7 @@ export class CmbInstance {
     public visible: boolean = true;
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
-    public lutTextures: GfxTexture[] = [];
+    private lutsTexture: GfxTexture | null = null;
 
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
@@ -1298,14 +1251,15 @@ export class CmbInstance {
     public passMask: number = 1;
 
     constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
-        for (let i = 0; i < this.cmbData.cmb.luts.length; i++){
-            const gfxTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, 512, 1, 1));
-            cache.device.uploadTextureData(gfxTexture, 0, [this.cmbData.cmb.luts[i]]);
-            this.lutTextures.push(gfxTexture);
+        if(this.cmbData.cmb.lutTexture) {
+            const texture = this.cmbData.cmb.lutTexture;
+            this.lutsTexture = cache.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, texture.width, texture.height, 1));
+            cache.device.uploadTextureData(this.lutsTexture, 0, texture.levels.map((level) => level.pixels));
         }
-
+        
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(cache, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+            this.materialInstances.push(new MaterialInstance(cache, this.lutsTexture, this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+        
         for (let i = 0; i < this.cmbData.cmb.meshs.length; i++) {
             const mesh = this.cmbData.cmb.meshs[i];
             this.shapeInstances.push(new ShapeInstance(this.cmbData.sepdData[mesh.sepdIdx], this.materialInstances[mesh.matsIdx]));
@@ -1371,11 +1325,6 @@ export class CmbInstance {
         }
     }
 
-    public setIsActor(n: boolean): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setIsActor(n);
-    }
-
     private computeViewMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.isSkybox)
             computeViewMatrixSkybox(dst, viewerInput.camera);
@@ -1407,22 +1356,8 @@ export class CmbInstance {
             }
         }
 
-        for (let i = 0; i < this.materialInstances.length; i++){
-            const lutMapping = this.materialInstances[i].textureMappings;
-            lutMapping[3].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutDist0.index);
-            lutMapping[4].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutDist1.index);
-            lutMapping[5].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutFesnel.index);
-            lutMapping[6].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutReflecR.index);
-            lutMapping[7].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutReflecG.index);
-            lutMapping[8].gfxTexture = this.getLutTexture(this.materialInstances[i].material.lutReflecB.index);
-        }
-
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, this.textureHolder, this.boneMatrices, scratchViewMatrix, this.cmbData.inverseBindPoseMatrices);
-    }
-
-    private getLutTexture(index: number): GfxTexture | null {
-        return index != -1 ? this.lutTextures[index] : null;
     }
 
     public setVisible(visible: boolean): void {
@@ -1430,8 +1365,8 @@ export class CmbInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.lutTextures.length; i++)
-            device.destroyTexture(this.lutTextures[i]);
+        if(this.lutsTexture)
+            device.destroyTexture(this.lutsTexture);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].destroy(device);
@@ -1458,7 +1393,7 @@ export class RoomRenderer {
     public objectRenderers: CmbInstance[] = [];
     public roomSetups: ZSI.ZSIRoomSetup[] = [];
 
-    constructor(cache: GfxRenderCache, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
+    constructor(cache: GfxRenderCache, public version: ZSI.Version, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
         const device = cache.device;
 
         if (mesh.opaque !== null) {
@@ -1540,10 +1475,24 @@ export class RoomRenderer {
     }
 
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+
+        //(M-1): Temporay hack until I get kankyo implemented
+        const envSettingsRoom = new ZSI.ZSIEnvironmentSettings();
+        envSettingsRoom.copy(environmentSettings);
+
+        if(this.version === ZSI.Version.Ocarina){
+            envSettingsRoom.actorGlobalAmbient = envSettingsRoom.sceneGlobalAmbient;
+            envSettingsRoom.lights[0].diffuse = OpaqueBlack;
+            envSettingsRoom.lights[1].diffuse = OpaqueBlack;
+            envSettingsRoom.lights[1].ambient = environmentSettings.lights[0].ambient;
+        }
+        else
+            envSettingsRoom.actorGlobalAmbient = envSettingsRoom.sceneGlobalAmbient;
+
         if (this.opaqueMesh !== null)
-            this.opaqueMesh.setEnvironmentSettings(environmentSettings);
+            this.opaqueMesh.setEnvironmentSettings(envSettingsRoom);
         if (this.transparentMesh !== null)
-            this.transparentMesh.setEnvironmentSettings(environmentSettings);
+            this.transparentMesh.setEnvironmentSettings(envSettingsRoom);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
     }

@@ -917,7 +917,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop()!;
-                const roomRenderer = new RoomRenderer(cache, textureHolder, roomSetup.mesh, filename);
+                const roomRenderer = new RoomRenderer(cache, ZSI.Version.Majora, textureHolder, roomSetup.mesh, filename);
                 roomRenderer.roomSetups = roomSetups;
                 if (gar !== null) {
                     const cmabFile = gar.files.find((file) => file.name.startsWith(`ROOM${i}/`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));

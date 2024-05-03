@@ -10,14 +10,15 @@ import { getPointHermite } from "../Spline.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { CtrTextureHolder } from "./render.js";
 import { lerp } from "../MathHelpers.js";
+import { GfxTextureDimension } from "../gfx/platform/GfxPlatform.js";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
 
 const enum AnimationTrackType {
-    LINEAR = 0x01,
-    HERMITE = 0x02,
-    INTEGER = 0x03,
+    Linear = 0x01,
+    Hermite = 0x02,
+    Integer = 0x03,
 };
 
 interface AnimationKeyframeLinear {
@@ -35,21 +36,21 @@ interface AnimationKeyframeHermite {
 interface AnimationTrackLinear {
     timeStart: number;
     timeEnd: number;
-    type: AnimationTrackType.LINEAR;
+    type: AnimationTrackType.Linear;
     frames: AnimationKeyframeLinear[];
 }
 
 interface AnimationTrackHermite {
     timeStart: number;
     timeEnd: number;
-    type: AnimationTrackType.HERMITE;
+    type: AnimationTrackType.Hermite;
     frames: AnimationKeyframeHermite[];
 }
 
 interface AnimationTrackInteger {
     timeStart: number;
     timeEnd: number;
-    type: AnimationTrackType.INTEGER;
+    type: AnimationTrackType.Integer;
     frames: AnimationKeyframeLinear[];
 }
 
@@ -73,16 +74,16 @@ export interface CMAB extends AnimationBase {
 };
 
 export const enum AnimationType {
-    TRANSLATION = 0x01,
-    TEXTURE_PALETTE = 0x02,
-    DIFFUSE_COLOR = 0x03,
-    CONST_COLOR = 0x04,
-    ROTATION = 0x05,
-    SCALE = 0x06,
-    AMBIENT_COLOR = 0x07,
-    SPEC0_COLOR = 0x08,
-    SPEC1_COLOR = 0x09,
-    EMISSION_COLOR = 0x0A
+    Translation = 0x01,
+    TexturePalette = 0x02,
+    DiffuseColor = 0x03,
+    ConstColor = 0x04,
+    Rotation = 0x05,
+    Scale = 0x06,
+    AmbientColor = 0x07,
+    Spec0Color = 0x08,
+    Spec1Color = 0x09,
+    EmissionColor = 0x0A
 }
 
 export const enum ColorAnimType {
@@ -100,7 +101,7 @@ export const enum ColorAnimType {
 }
 
 const enum LoopMode {
-    ONCE, REPEAT,
+    Once, Repeat,
 }
 
 function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack | null {
@@ -109,7 +110,6 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
     let type: AnimationTrackType;
     let numKeyframes: number;
     let timeStart: number, timeEnd: number;
-    let scale: number, bias: number;
 
     if (version === Version.Ocarina) {
         type = view.getUint32(0x00, true);
@@ -122,8 +122,10 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         timeStart = view.getUint16(0x04, true);
         timeEnd = view.getUint16(0x06, true);
 
-        scale = view.getFloat32(0x08, true);
-        bias = view.getUint32(0x0C, true);
+        const scale = view.getFloat32(0x08, true);
+        const bias = view.getUint32(0x0C, true);
+        assert(scale === 1);
+        assert(bias === 0);
     } else {
         throw "whoops";
     }
@@ -134,7 +136,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
     if (numKeyframes === 0)
         return null;
 
-    if (type === AnimationTrackType.LINEAR) {
+    if (type === AnimationTrackType.Linear) {
         const frames: AnimationKeyframeLinear[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
@@ -143,7 +145,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             frames.push({ time, value });
         }
         return { timeStart, timeEnd, type, frames };
-    } else if (type === AnimationTrackType.HERMITE) {
+    } else if (type === AnimationTrackType.Hermite) {
         const frames: AnimationKeyframeHermite[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
@@ -154,7 +156,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             frames.push({ time, value, tangentIn, tangentOut });
         }
         return { timeStart, timeEnd, type, frames };
-    } else if (type === AnimationTrackType.INTEGER) {
+    } else if (type === AnimationTrackType.Integer) {
         const frames: AnimationKeyframeLinear[] = [];
         for (let i = 0; i < numKeyframes; i++) {
             const time = view.getUint32(keyframeTableIdx + 0x00, true);
@@ -206,7 +208,7 @@ function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, s
             }
         }
 
-        textures.push({ isCubemap, name, format, width, height, levels });
+        textures.push({ dimension: GfxTextureDimension.n2D, name, format, width, height, levels });
 
         txptTableIdx += 0x18;
     }
@@ -224,24 +226,22 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
     let channelIndex = view.getUint32(0x0C, true);
 
     switch(animationType){
-        case AnimationType.DIFFUSE_COLOR: channelIndex = ColorAnimType.Diffuse; break;
-        case AnimationType.AMBIENT_COLOR: channelIndex = ColorAnimType.Ambient; break;
-        case AnimationType.SPEC0_COLOR: channelIndex = ColorAnimType.Specular0; break;
-        case AnimationType.SPEC1_COLOR: channelIndex = ColorAnimType.Specular0; break;
-        case AnimationType.EMISSION_COLOR: channelIndex = ColorAnimType.Emission; break;
+        case AnimationType.DiffuseColor: channelIndex = ColorAnimType.Diffuse; break;
+        case AnimationType.AmbientColor: channelIndex = ColorAnimType.Ambient; break;
+        case AnimationType.Spec0Color: channelIndex = ColorAnimType.Specular0; break;
+        case AnimationType.Spec1Color: channelIndex = ColorAnimType.Specular1; break;
+        case AnimationType.EmissionColor: channelIndex = ColorAnimType.Emission; break;
     }
 
-    let trackOffsTableIdx = 0x10;
-    if(animationType !== AnimationType.CONST_COLOR &&
-        animationType !== AnimationType.TRANSLATION &&
-        animationType !== AnimationType.SCALE &&
-        animationType !== AnimationType.TEXTURE_PALETTE
-        && animationType !== AnimationType.ROTATION) {
-        trackOffsTableIdx -= 0x04;
+    let trackOffsTableIdx = 0x0C;
+
+    if (animationType === AnimationType.Translation || animationType === AnimationType.Rotation || animationType === AnimationType.Scale || animationType === AnimationType.TexturePalette || animationType === AnimationType.ConstColor) {
+        channelIndex = view.getUint32(0x0C, true);
+        trackOffsTableIdx += 0x04;
     }
 
     const tracks: AnimationTrack[] = [];
-    if (animationType === AnimationType.TRANSLATION || animationType === AnimationType.SCALE) {
+    if (animationType === AnimationType.Translation || animationType === AnimationType.Scale) {
         for (let i = 0; i < 2; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -253,7 +253,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.TEXTURE_PALETTE) {
+    } else if (animationType === AnimationType.TexturePalette) {
         for (let i = 0; i < 1; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -266,9 +266,9 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
                 tracks[i] = track;
         }
     }
-    else if (animationType === AnimationType.CONST_COLOR || animationType === AnimationType.DIFFUSE_COLOR ||
-             animationType === AnimationType.SPEC0_COLOR || animationType === AnimationType.SPEC1_COLOR ||
-             animationType === AnimationType.EMISSION_COLOR || animationType === AnimationType.AMBIENT_COLOR ){
+    else if (animationType === AnimationType.ConstColor || animationType === AnimationType.DiffuseColor ||
+             animationType === AnimationType.Spec0Color || animationType === AnimationType.Spec1Color ||
+             animationType === AnimationType.EmissionColor || animationType === AnimationType.AmbientColor ){
 
         for (let i = 0; i < 4; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
@@ -281,7 +281,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.ROTATION) {
+    } else if (animationType === AnimationType.Rotation) {
         for (let i = 0; i < 1; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -423,11 +423,11 @@ function sampleAnimationTrackInteger(track: AnimationTrackInteger, frame: number
 }
 
 function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
-    if (track.type === AnimationTrackType.LINEAR)
+    if (track.type === AnimationTrackType.Linear)
         return sampleAnimationTrackLinear(track, frame);
-    else if (track.type === AnimationTrackType.HERMITE)
+    else if (track.type === AnimationTrackType.Hermite)
         return sampleAnimationTrackHermite(track, frame);
-    else if (track.type === AnimationTrackType.INTEGER)
+    else if (track.type === AnimationTrackType.Integer)
         return sampleAnimationTrackInteger(track, frame);
     else
         throw "whoops";
@@ -436,11 +436,11 @@ function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
 function getAnimFrame(anim: AnimationBase, frame: number): number {
     // Be careful of floating point precision.
     const lastFrame = anim.duration;
-    if (anim.loopMode === LoopMode.ONCE) {
+    if (anim.loopMode === LoopMode.Once) {
         if (frame > lastFrame)
             frame = lastFrame;
         return frame;
-    } else if (anim.loopMode === LoopMode.REPEAT) {
+    } else if (anim.loopMode === LoopMode.Repeat) {
         while (frame > lastFrame)
             frame -= lastFrame;
         return frame;
@@ -451,21 +451,21 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
 
 export class TextureSRTAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.TRANSLATION || animEntry.animationType === AnimationType.ROTATION || animEntry.animationType === AnimationType.SCALE);
+        assert(animEntry.animationType === AnimationType.Translation || animEntry.animationType === AnimationType.Rotation || animEntry.animationType === AnimationType.Scale);
     }
 
     public calcTexMtx(dst: mat4): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
         mat4.identity(dst);
 
-        if (this.animEntry.animationType === AnimationType.TRANSLATION) {
+        if (this.animEntry.animationType === AnimationType.Translation) {
             const tx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             const ty = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 0;
             calcTexMtx(dst, 1, 1, 0, tx, ty);
-        } else if (this.animEntry.animationType === AnimationType.ROTATION) {
+        } else if (this.animEntry.animationType === AnimationType.Rotation) {
             const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             calcTexMtx(dst, 1, 1, r, 0, 0);
-        } else if (this.animEntry.animationType === AnimationType.SCALE) {
+        } else if (this.animEntry.animationType === AnimationType.Scale) {
             const sx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 1;
             const sy = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
             calcTexMtx(dst, sx, sy, 0, 0, 0);
@@ -477,24 +477,24 @@ export class TextureSRTAnimator {
 
 export class ColorAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.CONST_COLOR    || animEntry.animationType === AnimationType.DIFFUSE_COLOR ||
-               animEntry.animationType === AnimationType.SPEC0_COLOR    || animEntry.animationType === AnimationType.SPEC1_COLOR ||
-               animEntry.animationType === AnimationType.EMISSION_COLOR || animEntry.animationType === AnimationType.AMBIENT_COLOR);
+        assert(animEntry.animationType === AnimationType.ConstColor    || animEntry.animationType === AnimationType.DiffuseColor ||
+               animEntry.animationType === AnimationType.Spec0Color    || animEntry.animationType === AnimationType.Spec1Color ||
+               animEntry.animationType === AnimationType.EmissionColor || animEntry.animationType === AnimationType.AmbientColor);
     }
 
-    public calcColor(dst: Color, srcColor: Color): void {
+    public calcColor(dst: Color, fallback: Color): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
-        const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : srcColor.r;
-        const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : srcColor.g;
-        const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : srcColor.b;
-        const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : srcColor.a;
+        const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : fallback.r;
+        const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : fallback.g;
+        const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : fallback.b;
+        const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : fallback.a;
         colorFromRGBA(dst, r, g, b, a);
     }
 }
 
 export class TexturePaletteAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.TEXTURE_PALETTE);
+        assert(animEntry.animationType === AnimationType.TexturePalette);
     }
 
     public fillTextureMapping(textureHolder: CtrTextureHolder, textureMapping: TextureMapping): void {

@@ -10,7 +10,7 @@ import * as Viewer from '../viewer.js';
 import * as UI from '../ui.js';
 
 import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render.js";
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxSamplerFormatKind } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice} from "../gfx/platform/GfxPlatform.js";
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
