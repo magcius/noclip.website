@@ -62,11 +62,11 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
                 const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
                 const rgbaPixels = rgbaTexture.pixels;
                 device.uploadTextureData(gfxTexture, mipLevel, [rgbaPixels]);
-    
+
                 const canvas = document.createElement('canvas');
                 surfaceToCanvas(canvas, rgbaTexture);
                 canvases.push(canvas);
-            })
+            });
         }
 
         const extraInfo = new Map<string, string>();
@@ -480,6 +480,36 @@ vec4 SampleMultiTexB() {
     return texture(SAMPLER_2D(u_TextureMultiB), t_TexCoord.xy);
 }
 
+float CalcGeoMultiAlpha(PD_SAMPLER_2D(t_Texture)) {
+    int geo_multi_alpha_type = ${this.shaderOptionInt('geo_multi_alpha_type')};
+    if (geo_multi_alpha_type == 1) {
+        return texture(PU_SAMPLER_2D(t_Texture), SelectTexCoord(0)).a;
+    } else if (geo_multi_alpha_type == 2) {
+        return texture(PU_SAMPLER_2D(t_Texture), SelectTexCoord(2)).a;
+    } else if (geo_multi_alpha_type == 3) {
+        return texture(PU_SAMPLER_2D(t_Texture), SelectTexCoord(3)).a;
+    } else {
+        return v_VtxColor.a * u_Transparency;
+    }
+}
+
+void CalcGeoMultiTextureSpec(inout vec3 t_SpecMask) {
+    bool enable_geo_multi = ${this.shaderOptionBool('enable_geo_multi')};
+    if (!enable_geo_multi)
+        return;
+
+    int geo_multi_specmask_calc_type = ${this.shaderOptionInt('geo_multi_specmask_calc_type')};
+    if (geo_multi_specmask_calc_type == 0) {
+        int multi_tex_calc_type_color = ${this.shaderOptionInt('multi_tex_calc_type_color')};
+        if (multi_tex_calc_type_color == 0)
+            t_SpecMask.rgb = mix(t_SpecMask.rgb, SampleMultiTexB().rgb, CalcGeoMultiAlpha(PP_SAMPLER_2D(u_TextureAlbedo0)));
+        if (multi_tex_calc_type_color == 7)
+            t_SpecMask.rgb = mix(t_SpecMask.rgb, SampleMultiTexB().rgb, CalcGeoMultiAlpha(PP_SAMPLER_2D(u_TextureMultiA)));
+    } else if (geo_multi_specmask_calc_type == 1) {
+        t_SpecMask.rgb *= SampleMultiTexB().rgb;
+    }
+}
+
 void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
     bool enable_multi_texture = ${this.shaderOptionBool('enable_multi_texture')};
     if (!enable_multi_texture)
@@ -489,14 +519,27 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
     if (t_OutputType != multi_tex_output_type)
         return;
 
+    bool enable_geo_multi = ${this.shaderOptionBool('enable_geo_multi')};
+    if (enable_geo_multi) {
+        int geo_multi_alpha_type = ${this.shaderOptionInt('geo_multi_alpha_type')};
+        if (geo_multi_alpha_type == 1) {
+            t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTexA().rgb, CalcGeoMultiAlpha(PP_SAMPLER_2D(u_TextureMultiA)));
+        } else if (geo_multi_alpha_type == 2) {
+            t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTexA().rgb, CalcGeoMultiAlpha(PP_SAMPLER_2D(u_TextureAlbedo0)));
+        }
+
+        return;
+    }
+
     int multi_tex_calc_type_color = ${this.shaderOptionInt('multi_tex_calc_type_color')};
     if (multi_tex_calc_type_color == 0) {
-        // Seems to be the same as multi_tex_calc_type_color = 7. Fine, because this is a sane default.
-        t_Sample.rgb = mix(t_Sample.rgb, SampleMultiTextureA().rgb, SampleMultiTextureA().a);
+        // This space intentionally left blank.
     } else if (multi_tex_calc_type_color == 1) {
         t_Sample.rgb *= SampleMultiTexA().rgb;
     } else if (multi_tex_calc_type_color == 2) {
-        t_Sample.rgb *= SampleMultiTextureA().rgb * SampleMultiTextureB().rgb;
+        t_Sample.rgb *= SampleMultiTexA().rgb * SampleMultiTexB().rgb;
+    } else if (multi_tex_calc_type_color == 3) {
+        t_Sample.rgb = mix(t_Sample.rgb - SampleMultiTexA().rgb, SampleMultiTexA().rgb, t_Sample.a);
     } else if (multi_tex_calc_type_color == 5) {
         t_Sample.rgb = saturate((t_Sample.rgb + SampleMultiTexA().rgb - u_MultiTexReg[0].r) * u_MultiTexReg[0].g);
     } else if (multi_tex_calc_type_color == 6) {
@@ -506,19 +549,46 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
     } else if (multi_tex_calc_type_color == 8) {
         vec3 t_Sum = saturate(t_Sample.rgb + SampleMultiTexA().rgb + SampleMultiTexB().rgb - u_MultiTexReg[0].r) * u_MultiTexReg[0].g;
         t_Sample.rgb = mix(u_MultiTexReg[2].rgb, u_MultiTexReg[1].rgb, t_Sum);
+    } else if (multi_tex_calc_type_color == 11) {
+        t_Sample.rgb = mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, t_Sample.a);
     } else if (multi_tex_calc_type_color == 12) {
-        t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTextureA().rgb + SampleMultiTextureB().rgb);
+        t_Sample.rgb = saturate(t_Sample.rgb * SampleMultiTexA().rgb + SampleMultiTexB().rgb);
+    } else if (multi_tex_calc_type_color == 13) {
+        t_Sample.rgb = saturate(SampleMultiTexA().rgb + SampleMultiTexB().rgb - u_MultiTexReg[0].r) * u_MultiTexReg[0].g;
     } else if (multi_tex_calc_type_color == 14) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, t_Sample.rgb, t_Sample.a);
     } else if (multi_tex_calc_type_color == 17) {
         t_Sample.rgb = mix(SampleMultiTexA().rgb * u_MultiTexReg[0].rgb, t_Sample.rgb, u_MultiTexReg[0].a);
     } else if (multi_tex_calc_type_color == 19) {
-        t_Sample.rgb = t_Sample.rgb * saturate(SampleMultiTextureA().rgb + u_MultiTexReg[0].rgb);
+        t_Sample.rgb = t_Sample.rgb * saturate(SampleMultiTexA().rgb + u_MultiTexReg[0].rgb);
+    } else if (multi_tex_calc_type_color == 20) {
+        t_Sample.rgb = mix(u_MultiTexReg[0].rgb, t_Sample.rgb, v_VtxColor.rgb);
     } else if (multi_tex_calc_type_color == 21) {
         t_Sample.rgb = mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, (t_Sample.r + t_Sample.g + t_Sample.b) / 3.0);
+    } else if (multi_tex_calc_type_color == 22) {
+        t_Sample.rgb = saturate(t_Sample.rgb + SampleMultiTexA().rgb * SampleMultiTexB().rgb);
+    } else if (multi_tex_calc_type_color == 24) {
+        t_Sample.rgb += mix(u_MultiTexReg[0].rgb, u_MultiTexReg[1].rgb, SampleMultiTexA().r) * SampleMultiTexA().r * u_MultiTexReg[0].a * u_MultiTexReg[1].a;
+    } else if (multi_tex_calc_type_color == 25) {
+        t_Sample.rgb += mix(u_MultiTexReg[0].rgb + u_MultiTexReg[1].rgb,  u_MultiTexReg[2].rgb, SampleMultiTexA().r) * SampleMultiTexA().x * u_MultiTexReg[0].a * u_MultiTexReg[1].a;
+    } else if (multi_tex_calc_type_color == 27) {
+        t_Sample.rgb = saturate(SampleMultiTexA().rgb * u_MultiTexReg[0].rgb + t_Sample.rgb);
     } else if (multi_tex_calc_type_color == 30) {
-        // Not sure!
-        // t_Sample.rgb = SampleMultiTextureA().rgb;
+        t_Sample.rgb *= SampleMultiTexA().rgb + SampleMultiTexB().rgb;
+    } else if (multi_tex_calc_type_color == 33) {
+        t_Sample.rgb = SampleMultiTexA().rgb * u_MultiTexReg[0].rgb + t_Sample.rgb;
+    } else if (multi_tex_calc_type_color == 34) {
+        t_Sample.rgb = SampleMultiTexA().rgb + t_Sample.rgb;
+    } else if (multi_tex_calc_type_color == 35) {
+        t_Sample.rgb = SampleMultiTexA().rgb + t_Sample.rgb; // same as 34?
+    } else if (multi_tex_calc_type_color == 38) {
+        t_Sample.rgb += (SampleMultiTexA().rgb * (vec3(1.0) - SampleMultiTexB().rgb)) * u_MultiTexReg[0].r;
+    } else if (multi_tex_calc_type_color == 39) {
+        t_Sample.rgb *= u_MultiTexReg[0].rgb + u_MultiTexReg[1].rgb * SampleMultiTexA().rgb;
+    } else if (multi_tex_calc_type_color == 40) {
+        t_Sample.rgb = SampleMultiTexA().rgb * SampleMultiTexA().a * v_VtxColor.r + t_Sample.rgb;
+    } else if (multi_tex_calc_type_color == 44) {
+        t_Sample.rgb = saturate((t_Sample.rgb - SampleMultiTexA().rgb - u_MultiTexReg[0].rrr) * u_MultiTexReg[0].ggg);
     } else {
         // Unknown multi texture calc type.
         bool is_development = ${IS_DEVELOPMENT};
@@ -527,10 +597,16 @@ void CalcMultiTexture(in int t_OutputType, inout vec4 t_Sample) {
     }
 
     int multi_tex_calc_type_alpha = ${this.shaderOptionInt('multi_tex_calc_type_alpha')};
-    if (multi_tex_calc_type_alpha == 0) { // Nothing
+    if (multi_tex_calc_type_alpha == 0) {
         // This space intentionally left blank.
     } else if (multi_tex_calc_type_alpha == 1) {
-        t_Sample.a *= SampleMultiTextureA().a;
+        t_Sample.a *= SampleMultiTexA().a;
+    } else if (multi_tex_calc_type_alpha == 4) {
+        t_Sample.a = (SampleMultiTexA().a + SampleMultiTexA().b - u_MultiTexReg[0].b) * u_MultiTexReg[0].a;
+    } else if (multi_tex_calc_type_alpha == 6) {
+        t_Sample.a = SampleMultiTexA().a;
+    } else if (multi_tex_calc_type_alpha == 7) {
+        t_Sample.a = SampleMultiTexA().r;
     } else if (multi_tex_calc_type_alpha == 8) {
         t_Sample.a = SampleMultiTexB().r;
     } else {
@@ -645,6 +721,7 @@ void main() {
         t_Albedo.rgb *= t_AlbedoSample.rgb;
         t_Alpha *= t_AlbedoSample.a;
     }
+
     if (enable_vtx_color_diff) {
         t_Albedo.rgb *= v_VtxColor.rgb;
     }
@@ -658,6 +735,7 @@ void main() {
             vec4 t_SpecMaskSample = texture(SAMPLER_2D(u_TextureSpecMask), t_SpecularTexCoord.xy);
             CalcMultiTexture(3, t_SpecMaskSample);
             t_SpecMask.rgb = t_SpecMaskSample.rgb;
+            CalcGeoMultiTextureSpec(t_SpecMask);
 
             if (enable_specular_mask_rougness) {
                 t_SpecularRoughness *= 1.0 - t_SpecMask.g;
@@ -1348,7 +1426,7 @@ export class FSHPMeshData {
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors,
             vertexBufferDescriptors: fvtxData.inputBufferDescriptors,
         });
-    
+
         this.vertexBufferDescriptors = fvtxData.vertexBufferDescriptors;
         this.indexBuffer = makeStaticDataBufferFromSlice(cache.device, GfxBufferUsage.Index, mesh.indexBufferData);
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
