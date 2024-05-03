@@ -650,11 +650,6 @@ void mainVS() {
 #endif
 
 #ifdef FRAG
-vec2 rot2(vec2 p, float degree) {
-  float a = radians(degree);
-  return mat2(cos(a), -sin(a), sin(a), cos(a))*p;
-}
-
 void mainPS() {
     int liquidCategory = int(u_WaterParams.x);
     vec4 tex = texture(SAMPLER_2D(u_Texture0), v_TexCoord);
@@ -662,7 +657,7 @@ void mainPS() {
     if (liquidCategory == ${LiquidCategory.Slime} || liquidCategory == ${LiquidCategory.Lava}) {
         finalColor = vec4(saturate(tex.xyz), 1.0);
     } else {
-        vec4 lightColor = liquidCategory == ${LiquidCategory.Ocean} ? oceanCloseColor : riverCloseColor;
+        vec4 lightColor = liquidCategory == ${LiquidCategory.Ocean} ? oceanFarColor : riverFarColor;
         finalColor = vec4(saturate(lightColor.xyz + tex.xyz), 0.7);
     }
     finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);

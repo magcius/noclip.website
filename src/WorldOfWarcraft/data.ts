@@ -109,7 +109,7 @@ export class WowCache {
     return promise;
   }
 
-  public async loadModel(fileId: number): Promise<ModelData> {
+  public async loadModel(fileId: number, uniqueId: number | undefined = undefined): Promise<ModelData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new ModelData(fileId);
       await d.load(this);
@@ -117,7 +117,7 @@ export class WowCache {
     });
   }
 
-  public async loadWmo(fileId: number): Promise<WmoData> {
+  public async loadWmo(fileId: number, uniqueId: number | undefined = undefined): Promise<WmoData> {
     return this.getOrLoad(fileId, async (fileId: number) => {
       const d = new WmoData(fileId);
       await d.load(this);
@@ -955,7 +955,11 @@ function calculateWmoLiquidType(wmoFlags: WowWmoHeaderFlags, group: WmoGroupData
   const LIQUID_WMO_SLIME = 20;
   let liquidToConvert;
   if (wmoFlags.use_liquid_type_dbc_id) {
-    return group.groupLiquidType;
+    if (group.groupLiquidType < FIRST_NONBASIC_LIQUID_TYPE) {
+      liquidToConvert = group.groupLiquidType - 1;
+    } else {
+      return group.groupLiquidType;
+    }
   } else {
     if (group.groupLiquidType === GREEN_LAVA) {
       liquidToConvert = type;
@@ -1525,8 +1529,9 @@ export class AdtLodData {
 
   private loadDoodads(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
     return Promise.all(data.get_doodads(lodLevel).map(async (adtDoodad) => {
+      const uniqueId = adtDoodad.unique_id;
       const doodad = DoodadData.fromAdtDoodad(adtDoodad);
-      const modelData = await cache.loadModel(doodad.modelId);
+      const modelData = await cache.loadModel(doodad.modelId, uniqueId);
       doodad.setBoundingBoxFromModel(modelData);
       doodad.applyExteriorLighting = true;
       this.doodads.push(doodad);
@@ -1542,7 +1547,7 @@ export class AdtLodData {
 
   private loadWMOs(cache: WowCache, data: WowAdt, lodLevel: number): Promise<unknown> {
     return Promise.all(data.get_wmo_defs(lodLevel).map(async (wmoDef) => {
-      const wmo = await cache.loadWmo(wmoDef.name_id);
+      const wmo = await cache.loadWmo(wmoDef.name_id, wmoDef.unique_id);
       this.wmos.set(wmoDef.name_id, wmo);
       this.wmoDefs.push(WmoDefinition.fromAdtDefinition(wmoDef, wmo));
     }));
@@ -1815,7 +1820,7 @@ export class DoodadData {
   public interiorExteriorBlend = 0;
   public isSkybox = false;
 
-  constructor(public modelId: number, public modelMatrix: mat4, public color: number[] | null) {
+  constructor(public modelId: number, public modelMatrix: mat4, public color: number[] | null, public uniqueId: number | undefined = undefined) {
     mat4.mul(this.normalMatrix, this.modelMatrix, placementSpaceFromModelSpace);
     mat4.mul(this.normalMatrix, adtSpaceFromPlacementSpace, this.modelMatrix);
     mat4.invert(this.normalMatrix, this.normalMatrix);
@@ -1850,8 +1855,9 @@ export class DoodadData {
     mat4.mul(doodadMat, doodadMat, placementSpaceFromModelSpace);
     mat4.mul(doodadMat, adtSpaceFromPlacementSpace, doodadMat);
     const fileId = doodad.name_id;
+    const uniqueId = doodad.unique_id;
     doodad.free();
-    return new DoodadData(fileId, doodadMat, null);
+    return new DoodadData(fileId, doodadMat, null, uniqueId);
   }
 
   static fromWmoDoodad(doodad: WowDoodadDef, modelIds: Uint32Array, wmoDefModelMatrix: mat4): DoodadData {
