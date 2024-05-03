@@ -404,6 +404,11 @@ pub struct LiquidVertex {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidTile {
+    #[deku(bits = 1)]
+    pub fishable: u8,
+    #[deku(bits = 1)]
+    pub shared: u8,
+    #[deku(bits = 6)]
     pub data: u8,
 }
 

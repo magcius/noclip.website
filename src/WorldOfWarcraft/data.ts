@@ -955,7 +955,11 @@ function calculateWmoLiquidType(wmoFlags: WowWmoHeaderFlags, group: WmoGroupData
   const LIQUID_WMO_SLIME = 20;
   let liquidToConvert;
   if (wmoFlags.use_liquid_type_dbc_id) {
-    return group.groupLiquidType;
+    if (group.groupLiquidType < FIRST_NONBASIC_LIQUID_TYPE) {
+      liquidToConvert = group.groupLiquidType - 1;
+    } else {
+      return group.groupLiquidType;
+    }
   } else {
     if (group.groupLiquidType === GREEN_LAVA) {
       liquidToConvert = type;
@@ -1815,7 +1819,7 @@ export class DoodadData {
   public interiorExteriorBlend = 0;
   public isSkybox = false;
 
-  constructor(public modelId: number, public modelMatrix: mat4, public color: number[] | null) {
+  constructor(public modelId: number, public modelMatrix: mat4, public color: number[] | null, public uniqueId: number | undefined = undefined) {
     mat4.mul(this.normalMatrix, this.modelMatrix, placementSpaceFromModelSpace);
     mat4.mul(this.normalMatrix, adtSpaceFromPlacementSpace, this.modelMatrix);
     mat4.invert(this.normalMatrix, this.normalMatrix);
@@ -1850,8 +1854,9 @@ export class DoodadData {
     mat4.mul(doodadMat, doodadMat, placementSpaceFromModelSpace);
     mat4.mul(doodadMat, adtSpaceFromPlacementSpace, doodadMat);
     const fileId = doodad.name_id;
+    const uniqueId = doodad.unique_id;
     doodad.free();
-    return new DoodadData(fileId, doodadMat, null);
+    return new DoodadData(fileId, doodadMat, null, uniqueId);
   }
 
   static fromWmoDoodad(doodad: WowDoodadDef, modelIds: Uint32Array, wmoDefModelMatrix: mat4): DoodadData {
