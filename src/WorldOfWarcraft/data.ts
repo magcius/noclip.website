@@ -1022,7 +1022,7 @@ export class ModelRenderPass {
     this.tex3 = this.getBlp(3);
   }
 
-  public setMegaStateFlags(renderInst: GfxRenderInst, renderKey: number | undefined = undefined) {
+  public setMegaStateFlags(renderInst: GfxRenderInst) {
     const defaultBlendState = {
         blendMode: GfxBlendMode.Add,
         blendSrcFactor: GfxBlendFactor.One,
@@ -1040,9 +1040,6 @@ export class ModelRenderPass {
     };
 
     let sortKeyLayer = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.layer);
-    // if (renderKey !== undefined) {
-    //   sortKeyLayer = makeSortKey(renderKey);
-    // }
 
     // TODO setSortKeyDepth based on distance to transparent object
     switch (this.blendMode) {

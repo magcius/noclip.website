@@ -192,6 +192,7 @@ export class WdtScene implements Viewer.SceneGfx {
   private skyboxRenderer: SkyboxRenderer;
   private loadingAdtRenderer: LoadingAdtRenderer;
   private renderInstListMain = new GfxRenderInstList();
+  private renderInstListSky = new GfxRenderInstList();
 
   public ADT_LOD0_DISTANCE = 1000;
 
@@ -548,6 +549,8 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   private prepareToRender(): void {
+    const renderInstManager = this.renderHelper.renderInstManager;
+
     const template = this.renderHelper.pushTemplateRenderInst();
     template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
     template.setGfxProgram(this.skyboxProgram);
@@ -555,16 +558,14 @@ export class WdtScene implements Viewer.SceneGfx {
 
     const lightingData = this.db.getGlobalLightingData(this.world.lightdbMapId, this.mainView.cameraPos, this.mainView.time);
     BaseProgram.layoutUniformBufs(template, this.mainView, lightingData);
-    this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
-    this.skyboxRenderer.prepareToRenderSkybox(this.renderHelper.renderInstManager)
+    renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+    this.skyboxRenderer.prepareToRenderSkybox(renderInstManager);
 
     template.setGfxProgram(this.loadingAdtProgram);
     template.setBindingLayouts(LoadingAdtProgram.bindingLayouts);
+    renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
     this.loadingAdtRenderer.update(this.mainView);
-    this.loadingAdtRenderer.prepareToRenderLoadingBox(
-      this.renderHelper.renderInstManager,
-      this.loadingAdts
-    );
+    this.loadingAdtRenderer.prepareToRenderLoadingBox(renderInstManager, this.loadingAdts);
 
     if (this.shouldCull()) {
       this.cull();
@@ -573,7 +574,7 @@ export class WdtScene implements Viewer.SceneGfx {
     template.setGfxProgram(this.terrainProgram);
     template.setBindingLayouts(TerrainProgram.bindingLayouts);
     for (let renderer of this.terrainRenderers.values()) {
-      renderer.prepareToRenderTerrain(this.renderHelper.renderInstManager);
+      renderer.prepareToRenderTerrain(renderInstManager);
     }
 
     let visibleWmoUniqueIds = new Set();
@@ -590,7 +591,7 @@ export class WdtScene implements Viewer.SceneGfx {
           visibleWmoUniqueIds.add(wmoDef.uniqueId);
           return true;
         });
-      renderer.prepareToRenderWmo(this.renderHelper.renderInstManager, defs);
+      renderer.prepareToRenderWmo(renderInstManager, defs);
     }
 
     // reset so we can draw liquids
@@ -599,7 +600,7 @@ export class WdtScene implements Viewer.SceneGfx {
     template.setBindingLayouts(WaterProgram.bindingLayouts);
     for (let renderer of this.adtWaterRenderers.values()) {
       renderer.update(this.mainView);
-      renderer.prepareToRenderAdtWater(this.renderHelper.renderInstManager);
+      renderer.prepareToRenderAdtWater(renderInstManager);
     }
     for (let [wmoId, renderer] of this.wmoWaterRenderers.entries()) {
       const defs = this.wmoIdToDefs.get(wmoId)!
@@ -612,19 +613,18 @@ export class WdtScene implements Viewer.SceneGfx {
           return true;
         });
       renderer.update(this.mainView);
-      renderer.prepareToRenderWmoWater(this.renderHelper.renderInstManager, defs);
+      renderer.prepareToRenderWmoWater(renderInstManager, defs);
     }
 
     const visibleDoodadUniqueIds = new Set();
     template.setBindingLayouts(ModelProgram.bindingLayouts);
     template.setGfxProgram(this.modelProgram);
     if (this.activeSkyboxModelId !== undefined) {
+      renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
       const renderer = this.skyboxModelRenderers.get(this.activeSkyboxModelId)!;
       renderer.update(this.mainView);
-      renderer.prepareToRenderModel(
-        this.renderHelper.renderInstManager,
-        this.modelIdToDoodads.get(this.activeSkyboxModelId)
-      );
+      renderer.prepareToRenderModel(renderInstManager, this.modelIdToDoodads.get(this.activeSkyboxModelId));
+      renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
     }
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
       const doodads = this.modelIdToDoodads.get(modelId)!
@@ -641,10 +641,10 @@ export class WdtScene implements Viewer.SceneGfx {
         })
       if (doodads.length === 0) continue;
       renderer.update(this.mainView);
-      renderer.prepareToRenderModel(this.renderHelper.renderInstManager, doodads);
+      renderer.prepareToRenderModel(renderInstManager, doodads);
     }
 
-    this.renderHelper.renderInstManager.popTemplateRenderInst();
+    renderInstManager.popTemplateRenderInst();
     this.renderHelper.prepareToRender();
     this.updateCullingState();
   }
@@ -688,7 +688,6 @@ export class WdtScene implements Viewer.SceneGfx {
     viewerInput.camera.setClipPlanes(0.1);
     this.mainView.setupFromViewerInput(viewerInput);
     this.updateCurrentAdt();
-    const renderInstManager = this.renderHelper.renderInstManager;
 
     const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
     const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -697,6 +696,16 @@ export class WdtScene implements Viewer.SceneGfx {
 
     const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
     const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+    builder.pushPass((pass) => {
+      const skyDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Sky Depth');
+      pass.setDebugName('Sky');
+      pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+      pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
+      pass.exec((passRenderer) => {
+        this.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+      });
+    });
+
     builder.pushPass((pass) => {
       pass.setDebugName('Main');
       pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -711,6 +720,7 @@ export class WdtScene implements Viewer.SceneGfx {
     this.prepareToRender();
     this.renderHelper.renderGraph.execute(builder);
     this.renderInstListMain.reset();
+    this.renderInstListSky.reset();
   }
 
   destroy(device: GfxDevice): void {

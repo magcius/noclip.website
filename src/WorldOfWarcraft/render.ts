@@ -96,7 +96,6 @@ export class ModelRenderer {
     if (!this.isDrawable()) return;
 
     const visibleDoodads = doodads.filter(d => d.visible);
-    let isSkybox = false;
 
     for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
       const template = renderInstManager.pushTemplateRenderInst();
@@ -109,7 +108,6 @@ export class ModelRenderer {
       let offs = baseOffs;
       const mapped = template.mapUniformBufferF32(ModelProgram.ub_DoodadParams);
       for (let doodad of doodadChunk) {
-        isSkybox = doodad.isSkybox;
         offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
         offs += fillMatrix4x4(mapped, offs, doodad.normalMatrix);
         offs += fillVec4v(mapped, offs, doodad.ambientColor);
@@ -141,11 +139,7 @@ export class ModelRenderer {
           const renderPass = skinData.renderPasses[j];
           let renderInst = renderInstManager.newRenderInst();
           renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], indexBuffer);
-          if (isSkybox) {
-            renderPass.setMegaStateFlags(renderInst, GfxRendererLayer.BACKGROUND - j);
-          } else {
-            renderPass.setMegaStateFlags(renderInst);
-          }
+          renderPass.setMegaStateFlags(renderInst);
           renderInst.setDrawCount(renderPass.submesh.index_count, renderPass.submesh.index_start, doodadChunk.length);
           const mappings = this.skinPassTextures[i][j];
           renderInst.setAllowSkippingIfPipelineNotReady(false);
