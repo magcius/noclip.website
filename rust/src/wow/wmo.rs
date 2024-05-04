@@ -408,7 +408,11 @@ pub struct LiquidTile {
     pub fishable: u8,
     #[deku(bits = 1)]
     pub shared: u8,
-    #[deku(bits = 6)]
+    #[deku(bits = 1)]
+    pub _unknown_1: u8,
+    #[deku(bits = 1)]
+    pub _unknown_2: u8,
+    #[deku(bits = 4)]
     pub data: u8,
 }
 
@@ -483,11 +487,9 @@ impl WmoLiquid {
                 indices.push(index);
                 index += 4;
 
-                tile.is_lava(); 
-                if let Some(v) = last_tile_liquid {
-                    assert!(v == tile.data & 0x0F);
+                if last_tile_liquid.is_none() {
+                    last_tile_liquid = Some(tile.data);
                 }
-                last_tile_liquid = Some(tile.data & 0x0F);
             }
         }
         LiquidResult {
