@@ -10,6 +10,7 @@ import { getPointHermite } from "../Spline.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { CtrTextureHolder } from "./render.js";
 import { lerp } from "../MathHelpers.js";
+import { GfxTextureDimension } from "../gfx/platform/GfxPlatform.js";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -33,16 +34,22 @@ interface AnimationKeyframeHermite {
 }
 
 interface AnimationTrackLinear {
+    timeStart: number;
+    timeEnd: number;
     type: AnimationTrackType.Linear;
     frames: AnimationKeyframeLinear[];
 }
 
 interface AnimationTrackHermite {
+    timeStart: number;
+    timeEnd: number;
     type: AnimationTrackType.Hermite;
     frames: AnimationKeyframeHermite[];
 }
 
 interface AnimationTrackInteger {
+    timeStart: number;
+    timeEnd: number;
     type: AnimationTrackType.Integer;
     frames: AnimationKeyframeLinear[];
 }
@@ -69,9 +76,28 @@ export interface CMAB extends AnimationBase {
 export const enum AnimationType {
     Translation = 0x01,
     TexturePalette = 0x02,
+    DiffuseColor = 0x03,
     ConstColor = 0x04,
     Rotation = 0x05,
     Scale = 0x06,
+    AmbientColor = 0x07,
+    Spec0Color = 0x08,
+    Spec1Color = 0x09,
+    EmissionColor = 0x0A
+}
+
+export const enum ColorAnimType {
+    Const0,
+    Const1,
+    Const2,
+    Const3,
+    Const4,
+    Const5,
+    Diffuse,
+    Ambient,
+    Specular0,
+    Specular1,
+    Emission,
 }
 
 const enum LoopMode {
@@ -83,21 +109,23 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
 
     let type: AnimationTrackType;
     let numKeyframes: number;
-    let timeEnd: number;
-    let unk1: number, unk2: number;
+    let timeStart: number, timeEnd: number;
 
     if (version === Version.Ocarina) {
         type = view.getUint32(0x00, true);
         numKeyframes = view.getUint32(0x04, true);
-        timeEnd = view.getUint32(0x08, true);
-        unk1 = 1.0;
-        unk2 = view.getUint32(0x0C, true);
+        timeStart = view.getUint32(0x08, true);
+        timeEnd = view.getUint32(0x0C, true);
     } else if (version === Version.Majora || version === Version.LuigisMansion) {
         type = view.getUint16(0x00, true);
         numKeyframes = view.getUint16(0x02, true);
-        timeEnd = view.getUint32(0x04, true);
-        unk1 = view.getFloat32(0x08, true);
-        unk2 = view.getUint32(0x0C, true);
+        timeStart = view.getUint16(0x04, true);
+        timeEnd = view.getUint16(0x06, true);
+
+        const scale = view.getFloat32(0x08, true);
+        const bias = view.getUint32(0x0C, true);
+        assert(scale === 1);
+        assert(bias === 0);
     } else {
         throw "whoops";
     }
@@ -116,7 +144,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             keyframeTableIdx += 0x08;
             frames.push({ time, value });
         }
-        return { type, frames };
+        return { timeStart, timeEnd, type, frames };
     } else if (type === AnimationTrackType.Hermite) {
         const frames: AnimationKeyframeHermite[] = [];
         for (let i = 0; i < numKeyframes; i++) {
@@ -127,7 +155,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             keyframeTableIdx += 0x10;
             frames.push({ time, value, tangentIn, tangentOut });
         }
-        return { type, frames };
+        return { timeStart, timeEnd, type, frames };
     } else if (type === AnimationTrackType.Integer) {
         const frames: AnimationKeyframeLinear[] = [];
         for (let i = 0; i < numKeyframes; i++) {
@@ -136,7 +164,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             keyframeTableIdx += 0x08;
             frames.push({ time, value });
         }
-        return { type, frames };
+        return { timeStart, timeEnd, type, frames };
     } else {
         throw "whoops";
     }
@@ -146,13 +174,16 @@ function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, s
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === 'txpt');
 
-    const txptTableCount = view.getUint32(0x04, true);
+    const txptTableCount = view.getUint16(0x04, true);
+    const isTexDataEmpty = view.getUint16(0x06, true);
+    
     let txptTableIdx = 0x08;
     const textures: Texture[] = [];
     for (let i = 0; i < txptTableCount; i++) {
         const size = view.getUint32(txptTableIdx + 0x00, true);
         const maxLevel = view.getUint16(txptTableIdx + 0x04, true);
-        const unk06 = view.getUint16(txptTableIdx + 0x06, true);
+        const isETC1 = view.getUint8(txptTableIdx + 0x06);
+        const isCubemap = !!view.getUint8(txptTableIdx + 0x07);
         const width = view.getUint16(txptTableIdx + 0x08, true);
         const height = view.getUint16(txptTableIdx + 0x0A, true);
         const glFormat = view.getUint32(txptTableIdx + 0x0C, true);
@@ -177,7 +208,7 @@ function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, s
             }
         }
 
-        textures.push({ name, format, width, height, levels });
+        textures.push({ dimension: GfxTextureDimension.n2D, name, format, width, height, levels });
 
         txptTableIdx += 0x18;
     }
@@ -192,12 +223,25 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
 
     const animationType: AnimationType = view.getUint32(0x04, true);
     const materialIndex = view.getUint32(0x08, true);
-    const channelIndex = view.getUint32(0x0C, true);
+    let channelIndex = 0;
+    let trackOffsTableIdx = 0x0C;
 
-    let trackOffsTableIdx = 0x10;
+    //(M-1): Fake! Setup a fake channelIndex to use later when binding a CMAB
+    switch(animationType){
+        case AnimationType.DiffuseColor: channelIndex = ColorAnimType.Diffuse; break;
+        case AnimationType.AmbientColor: channelIndex = ColorAnimType.Ambient; break;
+        case AnimationType.Spec0Color: channelIndex = ColorAnimType.Specular0; break;
+        case AnimationType.Spec1Color: channelIndex = ColorAnimType.Specular1; break;
+        case AnimationType.EmissionColor: channelIndex = ColorAnimType.Emission; break;
+    }
+
+    if (animationType === AnimationType.Translation || animationType === AnimationType.Rotation || animationType === AnimationType.Scale || animationType === AnimationType.TexturePalette || animationType === AnimationType.ConstColor) {
+        channelIndex = view.getUint32(0x0C, true);
+        trackOffsTableIdx += 0x04;
+    }
+
     const tracks: AnimationTrack[] = [];
-
-    if (animationType === AnimationType.Translation) {
+    if (animationType === AnimationType.Translation || animationType === AnimationType.Scale) {
         for (let i = 0; i < 2; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -221,7 +265,11 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (track !== null)
                 tracks[i] = track;
         }
-    } else if (animationType === AnimationType.ConstColor) {
+    }
+    else if (animationType === AnimationType.ConstColor || animationType === AnimationType.DiffuseColor ||
+             animationType === AnimationType.Spec0Color || animationType === AnimationType.Spec1Color ||
+             animationType === AnimationType.EmissionColor || animationType === AnimationType.AmbientColor ){
+
         for (let i = 0; i < 4; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
             trackOffsTableIdx += 0x02;
@@ -282,8 +330,6 @@ export function parse(version: Version, buffer: ArrayBufferSlice, textureNamePre
     assert(view.getUint32(0x20, true) === 0xFFFFFFFF); // chunk type?
     const duration = view.getUint32(0x24, true);
     const loopMode: LoopMode = view.getUint32(0x28, true);
-    // TODO(jstpierre): This breaks in shrine. Loop mode, maybe?
-    // assert(view.getUint32(0x28, true) === 0x01); // num chunks?
     assert(view.getUint32(0x2C, true) === 0x14); // chunk location?
     const txptChunkOffs = view.getUint32(0x30, true);
 
@@ -431,7 +477,9 @@ export class TextureSRTAnimator {
 
 export class ColorAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
-        assert(animEntry.animationType === AnimationType.ConstColor);
+        assert(animEntry.animationType === AnimationType.ConstColor    || animEntry.animationType === AnimationType.DiffuseColor ||
+               animEntry.animationType === AnimationType.Spec0Color    || animEntry.animationType === AnimationType.Spec1Color ||
+               animEntry.animationType === AnimationType.EmissionColor || animEntry.animationType === AnimationType.AmbientColor);
     }
 
     public calcColor(dst: Color, fallback: Color): void {

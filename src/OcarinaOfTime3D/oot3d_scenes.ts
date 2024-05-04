@@ -13,12 +13,12 @@ import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController.js';
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
 import { CameraController } from '../Camera.js';
-import { TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
+import { Color, TransparentBlack, White, colorNewFromRGBA } from '../Color.js';
 import { DataFetcher } from '../DataFetcher.js';
 import { MathConstants, scaleMatrix } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxDevice } from '../gfx/platform/GfxPlatform.js';
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxSamplerFormatKind, GfxTextureDimension } from '../gfx/platform/GfxPlatform.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
@@ -27,13 +27,20 @@ import { assert, assertExists, hexzero } from '../util.js';
 import { SceneGroup } from '../viewer.js';
 import { CmbData, CmbInstance, CtrTextureHolder, RoomRenderer, fillSceneParamsDataOnTemplate } from './render.js';
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
+export const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 5, numUniformBuffers: 3, samplerEntries: [
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture0
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture1
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // Texture2
+        { dimension: GfxTextureDimension.n2D,  formatKind: GfxSamplerFormatKind.Float, }, // LutTexture
+        { dimension: GfxTextureDimension.Cube, formatKind: GfxSamplerFormatKind.Float, }, // Cubemap
+    ]}];
 
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
     public skyRenderers: CmbInstance[] = [];
     public roomRenderers: RoomRenderer[] = [];
     public environmentSettingsIndex = 0;
+    public clearPass = standardFullClearRenderPassDescriptor;
     private renderHelper: GfxRenderHelper;
     private renderInstListSky = new GfxRenderInstList();
     private renderInstListMain = new GfxRenderInstList();
@@ -74,8 +81,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearPass);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearPass);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -168,9 +175,10 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         environmentIndexSlider.setValue(this.environmentSettingsIndex);
         environmentIndexSlider.onvalue = () => {
             environmentIndexSlider.setLabel("Environment Settings: " + environmentIndexSlider.getValue());
-            FogFarSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogEnd)
-            FogNearSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogStart)
+            FogFarSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogEnd);
+            FogNearSlider.setValue(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogStart);
             this.setEnvironmentSettingsIndex(environmentIndexSlider.getValue());
+            this.clearPass = makeAttachmentClearDescriptor(this.zsi.environmentSettings[environmentIndexSlider.getValue()].fogColor);
         };
         renderHacksPanel.contents.appendChild(environmentIndexSlider.elem);
 
@@ -829,7 +837,6 @@ class SceneDesc implements Viewer.SceneDesc {
     private async spawnActorForRoom(scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
         const device = renderer.getRenderCache().device;
 
-        renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`);
         }
@@ -840,7 +847,6 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
-            cmbRenderer.setIsActor(true);
 
             scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
@@ -2354,7 +2360,6 @@ class SceneDesc implements Viewer.SceneDesc {
             phantom.shapeInstances[7].visible = false;
             phantom.shapeInstances[6].visible = false;
             phantom.shapeInstances[5].visible = false;
-            phantom.setEnvironmentSettings(renderer.zsi.environmentSettings[2]);
         } else if (actor.actorId === ActorId.Boss_Ganon2) {
             const zar = await fetchArchive(`zelda_ganon2.zar`);
             const b = buildModel(zar, `model/ganon.cmb`);
@@ -2377,7 +2382,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private spawnSkybox(renderer: OoT3DRenderer, zar: ZAR.ZAR, skyboxSettings: number): void {
+    private spawnSkybox(renderer: OoT3DRenderer, zar: ZAR.ZAR, skyboxSettings: number, fogColor: Color): void {
         // Attach the skybox to the first roomRenderer.
         const cache = renderer.getRenderCache();
 
@@ -2401,8 +2406,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/fine_kumo_b1.cmb`);
             b.bindCMAB(parseCMAB(zar, `misc/fine_kumo_b.cmab`));
         } else if (whichSkybox === 0x1D) {
-            // Environment color, used in a lot of scenes.
-            // TODO(jstpierre): Implement. Where does it get the color from?
+            // TODO(M-1): Apply to a specific skybox constColor?
+            renderer.clearPass = makeAttachmentClearDescriptor(fogColor);
         }
     }
 
@@ -2460,7 +2465,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             assert(roomSetup.mesh !== null);
             const filename = roomZSINames[i].split('/').pop()!;
-            const roomRenderer = new RoomRenderer(cache, textureHolder, roomSetup.mesh, filename);
+            const roomRenderer = new RoomRenderer(cache, ZSI.Version.Ocarina, textureHolder, roomSetup.mesh, filename);
             roomRenderer.roomSetups = roomSetups;
             if (zar !== null) {
                 const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}\\`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
@@ -2481,11 +2486,11 @@ class SceneDesc implements Viewer.SceneDesc {
             this.spawnActorForRoom(scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
 
         const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
-        this.spawnSkybox(renderer, skyboxZAR, zsi.skyboxSettings);
+        this.spawnSkybox(renderer, skyboxZAR, zsi.skyboxSettings, renderer.zsi.environmentSettings[this.environmentSettingsIndex].fogColor);
 
         await modelCache.waitForLoad();
-        renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
         renderer.environmentSettingsIndex = this.environmentSettingsIndex;
+        renderer.setEnvironmentSettingsIndex(this.environmentSettingsIndex);
 
         return renderer;
     }
