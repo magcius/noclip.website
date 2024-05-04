@@ -831,14 +831,14 @@ export class GloverWeatherRenderer {
                 continue;
             }
             mat4.fromTranslation(this.drawMatrixScratch,
-                [singleDebris.pos[0], singleDebris.pos[1], 0]);
+                [singleDebris.pos[0], singleDebris.pos[1], -1]);
             mat4.scale(this.drawMatrixScratch, this.drawMatrixScratch,
                 [singleDebris.scale[0]/screenWidth, -singleDebris.scale[1]/screenWidth, 1]);
             this.spriteRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch, singleDebris.curAlpha);
         }
 
         if (this.lightningColor.a > 0) {
-            mat4.fromTranslation(this.drawMatrixScratch, [0, 0, 0]);
+            mat4.fromTranslation(this.drawMatrixScratch, [0, 0, -1]);
             mat4.scale(this.drawMatrixScratch, this.drawMatrixScratch, [640, 480, 1]);
             this.lightningRenderer.primColor = this.lightningColor
             this.lightningRenderer.prepareToRender(device, renderInstManager, viewerInput, this.drawMatrixScratch);
