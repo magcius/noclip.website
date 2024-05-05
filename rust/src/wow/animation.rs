@@ -307,7 +307,14 @@ impl AnimationManager {
         bones: Vec<M2CompBone>,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
-        let mut current_animation = AnimationState::new(Some(sequences[0].clone()));
+        // pull out the "Stand" animation, which is the resting animation for all models
+        let mut stand_sequence = None;
+        for seq in &sequences {
+            if seq.id == 0 {
+                stand_sequence = Some(seq.clone());
+            }
+        }
+        let mut current_animation = AnimationState::new(Some(stand_sequence.unwrap()));
         let mut rng = LcgRng::new(1312);
         current_animation.calculate_animation_repeats(&mut rng);
         let next_animation = AnimationState::new(None);
@@ -441,9 +448,7 @@ impl AnimationManager {
 
         result
     }
-}
 
-impl AnimationManager {
     pub fn update(&mut self, delta_time: f64) {
         self.current_animation.animation_time += delta_time;
 
