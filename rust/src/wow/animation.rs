@@ -68,6 +68,13 @@ pub struct M2Sequence {
     pub alias_next: u16, // id in the list of animations, used to find actual animation if this sequence is an alias (flags & 0x40)
 }
 
+impl M2Sequence {
+    fn calculate_animation_repeats(&self, rng: &mut LcgRng) -> i32 {
+        let times = (self.replay_max - self.replay_min) as f32;
+        self.replay_min as i32 + (times * rng.next_f32()) as i32
+    }
+}
+
 #[derive(DekuRead, Debug, Clone)]
 pub struct M2TrackUnallocated<T> {
     pub interpolation_type: u16,
@@ -142,37 +149,24 @@ pub struct AnimationState {
     pub animation_index: Option<usize>,
     pub repeat_times: i32,
     pub animation_time: f64,
-    pub animation_record: Option<M2Sequence>,
     pub main_variation_index: usize,
-    pub main_variation_record: Option<M2Sequence>,
 }
 
 impl AnimationState {
-    fn new(first_sequence: Option<M2Sequence>) -> Self {
-        match first_sequence {
-            Some(seq) => AnimationState {
-                animation_index: Some(0),
+    fn new(maybe_index: Option<usize>) -> Self {
+        match maybe_index {
+            Some(index) => AnimationState {
+                animation_index: Some(index),
                 repeat_times: 0,
                 animation_time: 0.0,
-                animation_record: Some(seq.clone()),
-                main_variation_index: 0,
-                main_variation_record: Some(seq),
+                main_variation_index: index,
             },
             None => AnimationState {
                 animation_index: None,
                 repeat_times: 0,
                 animation_time: 0.0,
-                animation_record: None,
                 main_variation_index: 0,
-                main_variation_record: None,
             }
-        }
-    }
-
-    fn calculate_animation_repeats(&mut self, rng: &mut LcgRng) {
-        if let Some(record) = &self.animation_record {
-            let times = (record.replay_max - record.replay_min) as f32;
-            self.repeat_times = record.replay_min as i32 + (times * rng.next_f32()) as i32;
         }
     }
 }
@@ -267,6 +261,19 @@ impl AnimationManager {
         }
     }
 
+    pub fn get_sequence_ids(&self) -> Vec<u16> {
+        self.sequences.iter().map(|seq| seq.id).collect()
+    }
+
+    pub fn set_sequence_id(&mut self, id: u16) {
+        let index = self.sequences.iter()
+            .position(|seq| seq.id == id)
+            .unwrap();
+        self.current_animation = AnimationState::new(Some(index));
+        self.current_animation.repeat_times = self.sequences[index].calculate_animation_repeats(&mut self.rng);
+        self.next_animation = AnimationState::new(None);
+    }
+
     pub fn get_num_colors(&self) -> usize {
         self.colors.len()
     }
@@ -307,9 +314,13 @@ impl AnimationManager {
         bones: Vec<M2CompBone>,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
-        let mut current_animation = AnimationState::new(Some(sequences[0].clone()));
+        // pull out the "Stand" animation, which is the resting animation for all models
+        let index = sequences.iter()
+            .position(|seq| seq.id == 0)
+            .unwrap();
+        let mut current_animation = AnimationState::new(Some(index));
         let mut rng = LcgRng::new(1312);
-        current_animation.calculate_animation_repeats(&mut rng);
+        current_animation.repeat_times = sequences[index].calculate_animation_repeats(&mut rng);
         let next_animation = AnimationState::new(None);
 
         let calculated_transparencies: Vec<f32> = Vec::with_capacity(texture_weights.len());
@@ -441,9 +452,7 @@ impl AnimationManager {
 
         result
     }
-}
 
-impl AnimationManager {
     pub fn update(&mut self, delta_time: f64) {
         self.current_animation.animation_time += delta_time;
 
@@ -454,13 +463,13 @@ impl AnimationManager {
             }
         }
 
-        let current_record = self.current_animation.animation_record.as_ref().unwrap();
+        let main_variation_record = &self.sequences[self.current_animation.main_variation_index];
 
         // If we don't have a next animation yet, and this animation isn't set
         // to repeat again, choose the next one
         let mut sub_anim_record: Option<&M2Sequence> = None;
         if self.next_animation.animation_index.is_none()
-            && self.current_animation.main_variation_record.as_ref().unwrap().variation_next > -1
+            && main_variation_record.variation_next > -1
             && self.current_animation.repeat_times <= 0 {
 
             let probability = (self.rng.next_f32() * 0x7fff as f32) as u16;
@@ -480,16 +489,15 @@ impl AnimationManager {
             sub_anim_record = Some(next_record);
 
             self.next_animation.animation_index = Some(next_index);
-            self.next_animation.animation_record = Some(next_record.clone());
             self.next_animation.animation_time = 0.0;
             self.next_animation.main_variation_index = self.current_animation.main_variation_index;
-            self.next_animation.main_variation_record = self.current_animation.main_variation_record.clone();
-            self.next_animation.calculate_animation_repeats(&mut self.rng);
+            self.next_animation.repeat_times = self.sequences[next_index].calculate_animation_repeats(&mut self.rng);
         } else if self.current_animation.repeat_times > 0 {
             self.next_animation = self.current_animation.clone();
             self.next_animation.repeat_times -= 1;
         }
 
+        let current_record = &self.sequences[self.current_animation.animation_index.unwrap()];
         let current_animation_time_left = current_record.duration as f64 - self.current_animation.animation_time;
         let mut sub_anim_blend_time = 0.0;
 
@@ -522,12 +530,10 @@ impl AnimationManager {
                     }
                 }
                 self.next_animation.animation_index = Some(next_index);
-                self.next_animation.animation_record = Some(self.sequences[next_index].clone());
 
                 self.current_animation = self.next_animation.clone();
 
                 self.next_animation.animation_index = None;
-                self.next_animation.animation_record = None;
                 self.blend_factor = 1.0;
             } else if current_record.duration > 0 {
                 self.current_animation.animation_time %= current_record.duration as f64;
