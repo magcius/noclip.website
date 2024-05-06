@@ -1,5 +1,6 @@
 use polymorph::sheepfile::{get_data_filename, reader::SheepfileReader, Entry};
 use wasm_bindgen::prelude::*;
+use std::{io::{Read, Seek}, path::Path};
 
 /**
  * For more information about sheepfiles, check out `src/WorldOfWarcraft/util.ts`
@@ -44,5 +45,20 @@ impl SheepfileManager {
 
     pub fn get_file_name(&self, file_name: &str) -> Option<WasmEntry> {
         Some(self.sheepfile.get_entry_for_name(file_name)?.into())
+    }
+}
+// QOL utils for local testing
+impl SheepfileManager {
+    pub fn load_file_id_data<P: AsRef<Path>>(sheepfile_path: P, file_id: u32) -> Result<Vec<u8>, polymorph::error::Error> {
+        let index_path = sheepfile_path.as_ref().join("index.shp");
+        let reader = SheepfileReader::parse(&std::fs::read(index_path).unwrap())?;
+        let entry = reader.get_entry_for_file_id(file_id).unwrap();
+        let data_filename = get_data_filename(entry.data_file_index as usize);
+        let data_path = sheepfile_path.as_ref().join(data_filename);
+        let mut result = vec![0; entry.size_bytes as usize];
+        let mut file = std::fs::File::open(data_path).unwrap();
+        file.seek(std::io::SeekFrom::Start(entry.start_bytes as u64)).unwrap();
+        file.read_exact(&mut result).unwrap();
+        Ok(result)
     }
 }
