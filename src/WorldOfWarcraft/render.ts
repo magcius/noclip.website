@@ -142,7 +142,6 @@ export class ModelRenderer {
           renderPass.setMegaStateFlags(renderInst);
           renderInst.setDrawCount(renderPass.submesh.index_count, renderPass.submesh.index_start, doodadChunk.length);
           const mappings = this.skinPassTextures[i][j];
-          renderInst.setAllowSkippingIfPipelineNotReady(false);
           renderInst.setSamplerBindingsFromTextureMappings(mappings);
           renderPass.setModelParams(renderInst);
           renderInstManager.submitRenderInst(renderInst);

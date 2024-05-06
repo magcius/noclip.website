@@ -161,7 +161,7 @@ export class GfxRenderInst {
     private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
-    private _allowSkippingPipelineIfNotReady: boolean = false;
+    private _allowSkippingPipelineIfNotReady: boolean = true;
     private _vertexBuffers: (GfxVertexBufferDescriptor | null)[] | null = null;
     private _indexBuffer: GfxIndexBufferDescriptor | null = null;
     private _drawStart: number = 0;
