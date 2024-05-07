@@ -279,8 +279,6 @@ function convertWowAABB(aabb: WowAABBox): AABB {
     return result;
 }
 
-const TEX_PIVOT: vec3 = [0.5, 0.5, 0];
-const TEX_ANTIPIVOT: vec3 = [-0.5, -0.5, 0];
 export class ModelData {
   public skins: SkinData[] = [];
   public blps: BlpData[] = [];
@@ -300,8 +298,6 @@ export class ModelData {
   public boneTransforms: mat4[] = [];
   public bonePivots: mat4[] = [];
   public boneAntipivots: mat4[] = [];
-  public texturePivot = mat4.create();
-  public textureAntipivot = mat4.create();
   public boneParents: Int16Array;
   public boneFlags: WowM2BoneFlags[] = [];
   public materials: [WowM2BlendingMode, WowM2MaterialFlags][] = [];
@@ -313,8 +309,6 @@ export class ModelData {
   public modelAABB: AABB;
 
   constructor(public fileId: number) {
-    mat4.fromScaling(this.texturePivot, TEX_PIVOT);
-    mat4.fromScaling(this.textureAntipivot, TEX_ANTIPIVOT);
   }
 
   private loadTextures(cache: WowCache, m2: WowM2): Promise<BlpData[]> {
@@ -1162,7 +1156,7 @@ export class ModelRenderPass {
     return this.scratchMat4;
   }
 
-  private getTextureWeight(texIndex: number): number {
+  public getTextureWeight(texIndex: number): number {
     const lookupIndex = this.batch.texture_weight_combo_index + texIndex;
     const transparencyIndex = this.model.textureTransparencyLookupTable[lookupIndex];
     if (transparencyIndex !== undefined) {

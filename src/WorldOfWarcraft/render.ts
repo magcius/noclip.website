@@ -137,6 +137,9 @@ export class ModelRenderer {
         const indexBuffer = this.indexBuffers[i];
         for (let j=0; j < skinData.renderPasses.length; j++) {
           const renderPass = skinData.renderPasses[j];
+          if (renderPass.getTextureWeight(0) === 0) {
+            continue;
+          }
           let renderInst = renderInstManager.newRenderInst();
           renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], indexBuffer);
           renderPass.setMegaStateFlags(renderInst);

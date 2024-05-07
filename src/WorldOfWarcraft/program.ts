@@ -666,7 +666,7 @@ void mainPS() {
         vec4 oceanColor = mix(oceanCloseColor, oceanFarColor, deep);
         vec4 riverColor = mix(riverCloseColor, riverFarColor, deep);
         vec4 lightColor = liquidCategory == ${LiquidCategory.Ocean} ? oceanColor : riverColor;
-        finalColor = vec4(lightColor.xyz + tex.xyz, 0.7);
+        finalColor = vec4(saturate(lightColor.xyz + 3.0 * tex.xyz), 0.7);
     }
     finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
     gl_FragColor = finalColor;
