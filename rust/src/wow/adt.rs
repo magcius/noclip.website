@@ -685,21 +685,27 @@ impl LiquidData {
         if instance_header.layer_count == 0 {
             return Ok(None);
         }
+
+        let (_, attributes) = LiquidChunkAttributes::from_bytes((&data[instance_header.attributes_attributes as usize..], 0))
+            .map_err(|e| format!("{:?}", e))?;
+        let deep_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.deep);
+        let fishable_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.fishable);
+
         let mut layers: Vec<LiquidLayer> = Vec::with_capacity(instance_header.layer_count as usize);
         let start = instance_header.instances_offset as usize;
         let end = start + instance_header.layer_count as usize * 0x18;
         let instances: Vec<LiquidInstance> = parse_array(&data[start..end], 0x18)?;
 
         for instance in instances {
-            let mut bitmask_data: &[u8] = &[0xFF; 8];
+            let mut liquid_bitmask_data: &[u8] = &[0xFF; 8];
             if instance.bitmask_offset > 0 && instance.height > 0 {
                 let num_mask_bytes = ((instance.height as f32 * instance.width as f32) / 8.0).ceil() as usize;
                 assert!(num_mask_bytes <= 8);
                 let start = instance.bitmask_offset as usize;
                 let end = start + num_mask_bytes;
-                bitmask_data = &data[start..end];
+                liquid_bitmask_data = &data[start..end];
             }
-            let bitmask = BitSlice::<_, Lsb0>::from_slice(bitmask_data);
+            let liquid_bitmask = BitSlice::<_, Lsb0>::from_slice(liquid_bitmask_data);
 
             let height = instance.height as usize + 1;
             let width = instance.width as usize + 1;
@@ -716,6 +722,10 @@ impl LiquidData {
             let mut vertices: Vec<f32> = Vec::with_capacity(5 * height * width);
             for y in 0..height {
                 for x in 0..width {
+                    let bitmask_index = y.min(7) * 8 + x.min(7);
+                    let deep = *deep_bitmask.get(bitmask_index).as_deref().unwrap();
+                    let fishable = *fishable_bitmask.get(bitmask_index).as_deref().unwrap();
+
                     let x_pos = chunk_x - (y as f32 + instance.x_offset as f32) * UNIT_SIZE;
                     let y_pos = chunk_y - (x as f32 + instance.y_offset as f32) * UNIT_SIZE;
                     let mut z_pos = instance.min_height_level;
@@ -729,6 +739,8 @@ impl LiquidData {
                     vertices.push(z_pos);
                     vertices.push(y as f32 / (height - 1) as f32);
                     vertices.push(x as f32 / (width - 1) as f32);
+                    vertices.push(if deep { 1.0 } else { 0.0 });
+                    vertices.push(if fishable { 1.0 } else { 0.0 });
                     extents.update(x_pos, y_pos, z_pos);
                 }
             }
@@ -737,7 +749,7 @@ impl LiquidData {
             let mut indices: Vec<u16> = Vec::new();
             for y in 0..height - 1 {
                 for x in 0..width - 1 {
-                    if *bitmask.get(bit_offset).as_deref().unwrap_or(&false) {
+                    if *liquid_bitmask.get(bit_offset).as_deref().unwrap_or(&false) {
                         let vert_indices = [
                             y * width + x,
                             y * width + x + 1,
@@ -806,7 +818,14 @@ pub struct LiquidHeader {
 pub struct LiquidHeaderChunk {
     pub instances_offset: u32,
     pub layer_count: u32,
-    pub _attributes_attributes: u32,
+    pub attributes_attributes: u32,
+}
+
+#[derive(DekuRead, Debug, Clone)]
+pub struct LiquidChunkAttributes {
+    // These are both 8x8 bitmasks
+    pub deep: [u8; 8],
+    pub fishable: [u8; 8],
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -861,12 +880,11 @@ pub struct ShadowMapChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wow::sheep::SheepfileManager;
 
     #[test]
     fn test() {
-        let data = std::fs::read("../data/wow/world/maps/tanarisinstance/tanarisinstance_29_27.adt").unwrap();
+        let data = SheepfileManager::load_file_id_data("../data/WorldOfWarcraft/sheep1", 791170).unwrap();
         let adt = Adt::new(&data).unwrap();
-        // adt.append_lod_obj_adt(&std::fs::read("../data/wow/world/maps/azeroth/azeroth_34_46_obj1.adt").unwrap()).unwrap();
-        dbg!(&adt.liquids[0].as_ref().unwrap().layers[0]);
     }
 }

@@ -850,6 +850,7 @@ impl Database {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::wow::sheep::SheepfileManager;
 
     #[test]
     fn test_bitslicing() {
@@ -885,13 +886,14 @@ mod test {
 
     #[test]
     fn test() {
-        let d1 = std::fs::read("../data/wotlk/dbfilesclient/light.db2").unwrap();
-        let d2 = std::fs::read("../data/wotlk/dbfilesclient/lightparams.db2").unwrap();
-        let d3 = std::fs::read("../data/wotlk/dbfilesclient/lightdata.db2").unwrap();
-        let d4 = std::fs::read("../data/wotlk/dbfilesclient/liquidtype.db2").unwrap();
-        let d5 = std::fs::read("../data/wotlk/dbfilesclient/lightskybox.db2").unwrap();
-        let db = Database::new(&d1, &d3, &d2, &d4, &d5).unwrap();
-        let result = db.get_lighting_data(0, -7_829.538, -1_157.398_8, 218.613_53, 2000);
+        let sheep_path = "../data/WorldOfWarcraft/sheep0";
+        let d1 = SheepfileManager::load_file_id_data(sheep_path, 1375579).unwrap(); // lightDbData
+        let d2 = SheepfileManager::load_file_id_data(sheep_path, 1375580).unwrap(); // lightDataDbData
+        let d3 = SheepfileManager::load_file_id_data(sheep_path, 1334669).unwrap(); // lightParamsDbData
+        let d4 = SheepfileManager::load_file_id_data(sheep_path, 1371380).unwrap(); // liquidTypes
+        let d5 = SheepfileManager::load_file_id_data(sheep_path, 1308501).unwrap(); // lightSkyboxData
+        let db = Database::new(&d1, &d2, &d3, &d4, &d5).unwrap();
+        let result = db.get_lighting_data(0, -8693.8720703125, 646.1775512695312, 125.26680755615234, 1440);
         dbg!(result);
     }
 
