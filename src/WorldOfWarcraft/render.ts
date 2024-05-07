@@ -458,6 +458,7 @@ export class WaterRenderer {
   public megaStateFlags: Partial<GfxMegaStateDescriptor>;
   public time: number = 0;
   private scratchMat4 = mat4.identity(mat4.create());
+  public timeScale = 2.0;
 
   constructor(device: GfxDevice, renderHelper: GfxRenderHelper, public liquids: LiquidInstance[], public liquidTypes: Map<number, LiquidType>, private textureCache: TextureCache) {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -502,7 +503,7 @@ export class WaterRenderer {
   }
 
   public update(view: View) {
-    this.time = view.time;
+    this.time = view.time * this.timeScale;
   }
 
   public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, defs: WmoDefinition[]) {
