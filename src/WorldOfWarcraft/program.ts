@@ -119,7 +119,7 @@ layout(std140) uniform ub_SceneParams {
     vec4 riverFarColor;
     vec4 shadowOpacity;
     vec4 fogParams; // fogStart, fogEnd
-    vec4 waterAlphas; // waterShallow, waterDeep, oceanShallow, oceanDeep
+    vec4 waterAlphas; // riverShallow, riverDeep, oceanShallow, oceanDeep
     vec4 glow; // glow, highlightSky, _, _
 };
 
@@ -658,15 +658,22 @@ void mainPS() {
     int liquidCategory = int(u_WaterParams.x);
     vec4 tex = texture(SAMPLER_2D(u_Texture0), v_TexCoord);
     float deep = v_DeepFishable.x;
-    float _fishable = v_DeepFishable.y;
+    float fishable = v_DeepFishable.y;
     vec4 finalColor;
     if (liquidCategory == ${LiquidCategory.Slime} || liquidCategory == ${LiquidCategory.Lava}) {
         finalColor = vec4(saturate(tex.xyz), 1.0);
     } else {
-        vec4 oceanColor = mix(oceanCloseColor, oceanFarColor, deep);
-        vec4 riverColor = mix(riverCloseColor, riverFarColor, deep);
-        vec4 lightColor = liquidCategory == ${LiquidCategory.Ocean} ? oceanColor : riverColor;
-        finalColor = vec4(saturate(lightColor.xyz + 3.0 * tex.xyz), 0.7);
+        vec4 liquidColor;
+        if (liquidCategory == ${LiquidCategory.Ocean}) {
+            vec4 shallowColor = vec4(oceanCloseColor.rgb, waterAlphas.b);
+            vec4 deepColor = vec4(oceanFarColor.rgb, waterAlphas.a);
+            liquidColor = mix(shallowColor, deepColor, deep);
+        } else {
+            vec4 shallowColor = vec4(riverCloseColor.rgb, waterAlphas.r);
+            vec4 deepColor = vec4(riverFarColor.rgb, waterAlphas.g);
+            liquidColor = mix(shallowColor, deepColor, fishable);
+        }
+        finalColor = vec4(liquidColor.rgb + tex.rgb, liquidColor.a);
     }
     finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
     gl_FragColor = finalColor;

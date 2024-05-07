@@ -686,8 +686,16 @@ impl LiquidData {
             return Ok(None);
         }
 
-        let (_, attributes) = LiquidChunkAttributes::from_bytes((&data[instance_header.attributes_attributes as usize..], 0))
-            .map_err(|e| format!("{:?}", e))?;
+        let attributes: LiquidChunkAttributes;
+        if instance_header.attributes_offset > 0 {
+            attributes = LiquidChunkAttributes::from_bytes((&data[instance_header.attributes_offset as usize..], 0))
+                .map_err(|e| format!("{:?}", e))?.1;
+        } else {
+            attributes = LiquidChunkAttributes {
+                deep: [0xFF; 8],
+                fishable: [0xFF; 8],
+            };
+        }
         let deep_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.deep);
         let fishable_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.fishable);
 
@@ -818,14 +826,14 @@ pub struct LiquidHeader {
 pub struct LiquidHeaderChunk {
     pub instances_offset: u32,
     pub layer_count: u32,
-    pub attributes_attributes: u32,
+    pub attributes_offset: u32,
 }
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidChunkAttributes {
     // These are both 8x8 bitmasks
-    pub deep: [u8; 8],
     pub fishable: [u8; 8],
+    pub deep: [u8; 8],
 }
 
 #[derive(DekuRead, Debug, Clone)]

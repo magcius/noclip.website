@@ -452,7 +452,7 @@ impl WmoLiquid {
                 vertex_prototypes.push([
                     pos_x, pos_y, pos_z,
                     x as f32, y as f32,
-                    1.0, 0.0, // deep, fishable
+                    1.0, 1.0, // deep, fishable
                 ]);
                 extents.update(pos_x, pos_y, pos_z);
             }
