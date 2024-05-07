@@ -137,6 +137,9 @@ export class ModelRenderer {
         const indexBuffer = this.indexBuffers[i];
         for (let j=0; j < skinData.renderPasses.length; j++) {
           const renderPass = skinData.renderPasses[j];
+          if (renderPass.getTextureWeight(0) === 0) {
+            continue;
+          }
           let renderInst = renderInstManager.newRenderInst();
           renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], indexBuffer);
           renderPass.setMegaStateFlags(renderInst);
@@ -455,14 +458,16 @@ export class WaterRenderer {
   public megaStateFlags: Partial<GfxMegaStateDescriptor>;
   public time: number = 0;
   private scratchMat4 = mat4.identity(mat4.create());
+  public timeScale = 2.0;
 
   constructor(device: GfxDevice, renderHelper: GfxRenderHelper, public liquids: LiquidInstance[], public liquidTypes: Map<number, LiquidType>, private textureCache: TextureCache) {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
       { location: WaterProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB },
       { location: WaterProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 12, format: GfxFormat.F32_RG },
+      { location: WaterProgram.a_DeepFishable, bufferIndex: 0, bufferByteOffset: 20, format: GfxFormat.F32_RG },
     ];
     const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-      { byteStride: 20, frequency: GfxVertexBufferFrequency.PerVertex },
+      { byteStride: 28, frequency: GfxVertexBufferFrequency.PerVertex },
     ];
     const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
     const cache = renderHelper.renderCache;
@@ -498,7 +503,7 @@ export class WaterRenderer {
   }
 
   public update(view: View) {
-    this.time = view.time;
+    this.time = view.time * this.timeScale;
   }
 
   public prepareToRenderWmoWater(renderInstManager: GfxRenderInstManager, defs: WmoDefinition[]) {

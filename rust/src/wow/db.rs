@@ -539,6 +539,10 @@ impl LightResult {
 
     fn add_scaled(&mut self, other: &LightResult, t: f32) {
         self.glow += other.glow * t;
+        self.water_shallow_alpha += other.water_shallow_alpha * t;
+        self.water_deep_alpha += other.water_deep_alpha * t;
+        self.ocean_shallow_alpha += other.ocean_shallow_alpha * t;
+        self.ocean_deep_alpha += other.ocean_deep_alpha * t;
         self.ambient_color += other.ambient_color * t;
         self.direct_color += other.direct_color * t;
         self.sky_top_color += other.sky_top_color * t;
@@ -565,14 +569,13 @@ impl LightResult {
 impl Lerp for LightResult {
     fn lerp(self, other: Self, t: f32) -> Self {
         LightResult {
-            // should these lerp as well?
-            water_shallow_alpha: self.water_shallow_alpha,
-            water_deep_alpha: self.water_deep_alpha,
-            ocean_shallow_alpha: self.ocean_shallow_alpha,
-            ocean_deep_alpha: self.ocean_deep_alpha,
             highlight_sky: self.highlight_sky,
 
             glow: self.glow.lerp(other.glow, t),
+            water_shallow_alpha: self.water_shallow_alpha.lerp(other.water_shallow_alpha, t),
+            water_deep_alpha: self.water_deep_alpha.lerp(other.water_deep_alpha, t),
+            ocean_shallow_alpha: self.ocean_shallow_alpha.lerp(other.ocean_shallow_alpha, t),
+            ocean_deep_alpha: self.ocean_deep_alpha.lerp(other.ocean_deep_alpha, t),
             direct_color: self.direct_color.lerp(other.direct_color, t),
             ambient_color: self.ambient_color.lerp(other.ambient_color, t),
             sky_top_color: self.sky_top_color.lerp(other.sky_top_color, t),
@@ -850,6 +853,7 @@ impl Database {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::wow::sheep::SheepfileManager;
 
     #[test]
     fn test_bitslicing() {
@@ -885,13 +889,14 @@ mod test {
 
     #[test]
     fn test() {
-        let d1 = std::fs::read("../data/wotlk/dbfilesclient/light.db2").unwrap();
-        let d2 = std::fs::read("../data/wotlk/dbfilesclient/lightparams.db2").unwrap();
-        let d3 = std::fs::read("../data/wotlk/dbfilesclient/lightdata.db2").unwrap();
-        let d4 = std::fs::read("../data/wotlk/dbfilesclient/liquidtype.db2").unwrap();
-        let d5 = std::fs::read("../data/wotlk/dbfilesclient/lightskybox.db2").unwrap();
-        let db = Database::new(&d1, &d3, &d2, &d4, &d5).unwrap();
-        let result = db.get_lighting_data(0, -7_829.538, -1_157.398_8, 218.613_53, 2000);
+        let sheep_path = "../data/WorldOfWarcraft/sheep0";
+        let d1 = SheepfileManager::load_file_id_data(sheep_path, 1375579).unwrap(); // lightDbData
+        let d2 = SheepfileManager::load_file_id_data(sheep_path, 1375580).unwrap(); // lightDataDbData
+        let d3 = SheepfileManager::load_file_id_data(sheep_path, 1334669).unwrap(); // lightParamsDbData
+        let d4 = SheepfileManager::load_file_id_data(sheep_path, 1371380).unwrap(); // liquidTypes
+        let d5 = SheepfileManager::load_file_id_data(sheep_path, 1308501).unwrap(); // lightSkyboxData
+        let db = Database::new(&d1, &d2, &d3, &d4, &d5).unwrap();
+        let result = db.get_lighting_data(0, -8693.8720703125, 646.1775512695312, 125.26680755615234, 1440);
         dbg!(result);
     }
 
