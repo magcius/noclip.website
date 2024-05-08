@@ -923,10 +923,6 @@ export class WmoData {
       if (!portal.inFrustum(modelFrustum)) {
         continue;
       }
-      // check if the business end of the portal's facing us
-      if (!portal.isPortalFacingUs(modelCamera, portalRef.side)) {
-        continue;
-      }
       let portalFrustum = portal.clipFrustum(modelCamera, modelFrustum, portalRef.side);
       this.portalCull(
         modelCamera,
