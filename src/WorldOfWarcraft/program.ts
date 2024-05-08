@@ -858,7 +858,7 @@ varying vec2 v_UV3;
 varying vec4 v_DiffuseColor;
 varying vec3 v_Normal;
 varying vec3 v_Position;
-flat varying int v_InstanceID;
+varying float v_InstanceID;
 
 #ifdef VERT
 layout(location = ${ModelProgram.a_Position}) attribute vec3 a_Position;
@@ -926,7 +926,7 @@ void mainVS() {
     }
 
     gl_Position = Mul(u_Projection, vec4(viewPosition, 1.0));
-    v_InstanceID = gl_InstanceID;
+    v_InstanceID = float(gl_InstanceID); // FIXME: hack until we get flat variables working
 
     vec4 combinedColor = clamp(meshColor, 0.0, 1.0);
     vec4 combinedColorHalved = combinedColor * 0.5;
@@ -1151,7 +1151,7 @@ void mainPS() {
       finalOpacity = discardAlpha * v_DiffuseColor.a;
     }
 
-    int instanceID = v_InstanceID;
+    int instanceID = int(v_InstanceID + 0.5);
     DoodadInstance params = instances[instanceID];
     bool applyInterior = params.lightingParams.x > 0.0;
     bool applyExterior = params.lightingParams.y > 0.0;
