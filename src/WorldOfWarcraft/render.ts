@@ -464,10 +464,10 @@ export class WaterRenderer {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
       { location: WaterProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB },
       { location: WaterProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 12, format: GfxFormat.F32_RG },
-      { location: WaterProgram.a_DeepFishable, bufferIndex: 0, bufferByteOffset: 20, format: GfxFormat.F32_RG },
+      { location: WaterProgram.a_Depth, bufferIndex: 0, bufferByteOffset: 20, format: GfxFormat.F32_R },
     ];
     const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-      { byteStride: 28, frequency: GfxVertexBufferFrequency.PerVertex },
+      { byteStride: 24, frequency: GfxVertexBufferFrequency.PerVertex },
     ];
     const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
     const cache = renderHelper.renderCache;

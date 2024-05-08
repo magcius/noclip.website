@@ -569,8 +569,6 @@ impl LightResult {
 impl Lerp for LightResult {
     fn lerp(self, other: Self, t: f32) -> Self {
         LightResult {
-            highlight_sky: self.highlight_sky,
-
             glow: self.glow.lerp(other.glow, t),
             water_shallow_alpha: self.water_shallow_alpha.lerp(other.water_shallow_alpha, t),
             water_deep_alpha: self.water_deep_alpha.lerp(other.water_deep_alpha, t),
@@ -599,6 +597,7 @@ impl Lerp for LightResult {
 
             skybox_filename: self.skybox_filename,
             skybox_flags: self.skybox_flags,
+            highlight_sky: self.highlight_sky,
         }
     }
 }
