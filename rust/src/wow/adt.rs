@@ -36,6 +36,8 @@ impl Adt {
                 b"O2HM" => {
                     assert!(liquid_data.is_none());
                     let header: LiquidHeader = parse(chunk_data)?;
+                    // save this for later parsing, since map chunks might not
+                    // have been parsed yet
                     liquid_data = Some((header, chunk_data));
                 },
                 _ => println!("skipping {}", std::str::from_utf8(&chunk.magic).unwrap()),
@@ -45,12 +47,54 @@ impl Adt {
         let adt_base_pos = &map_chunks[0].header.position;
         let mut liquids: Vec<Option<LiquidData>> = Vec::new();
         if let Some((liquid_header, data)) = liquid_data {
-            for (i, instance_header) in liquid_header.chunks.iter().enumerate() {
+            let mut instance_chunks: Vec<(Vec<LiquidInstance>, Vec<usize>)> = Vec::with_capacity(liquid_header.chunks.len());
+            let mut instance_offsets: Vec<usize> = Vec::new();
+            for i in 0..liquid_header.chunks.len() {
+                let instance_header = &liquid_header.chunks[i];
+                if instance_header.attributes_offset > 0 {
+                    instance_offsets.push(instance_header.attributes_offset as usize);
+                }
+                let start = instance_header.instances_offset as usize;
+                let end = start + instance_header.layer_count as usize * 0x18;
+                let instances: Vec<LiquidInstance> = parse_array(&data[start..end], 0x18)?;
+                for instance in &instances {
+                    if instance.bitmask_offset > 0 {
+                        instance_offsets.push(instance.bitmask_offset as usize);
+                    }
+                    if instance.vertex_data_offset > 0 {
+                        instance_offsets.push(instance.vertex_data_offset as usize);
+                    }
+                }
+                instance_chunks.push((instances, Vec::new()));
+            }
+            instance_offsets.push(data.len());
+            instance_offsets.sort();
+
+            // calculate the size of each instance's vertex attributes section
+            // to determine its format (see https://wowdev.wiki/ADT/v18#instance_vertex_data)
+            for (instances, ref mut vertex_data_sizes) in instance_chunks.iter_mut() {
+                for instance in instances {
+                    if instance.vertex_data_offset == 0 {
+                        vertex_data_sizes.push(0);
+                        continue;
+                    }
+                    let height = instance.height as usize;
+                    let width = instance.width as usize;
+                    let next_offset_index = instance_offsets.iter().position(|offset| *offset == instance.vertex_data_offset as usize).unwrap() + 1;
+                    let size = instance_offsets[next_offset_index] - instance.vertex_data_offset as usize;
+                    let n_vertices = (height + 1) * (width + 1);
+                    assert_eq!(size % n_vertices, 0);
+                    assert!([1, 5, 8, 9].contains(&(size / n_vertices)));
+                    vertex_data_sizes.push(size / n_vertices);
+                }
+            }
+
+            for (i, (instances, vertex_data_sizes)) in instance_chunks.drain(..).enumerate() {
                 let x_chunk = (i / 16) as f32;
                 let y_chunk = (i % 16) as f32;
                 let x_coord = adt_base_pos.x - x_chunk * CHUNK_SIZE; 
                 let y_coord = adt_base_pos.y - y_chunk * CHUNK_SIZE;
-                let liquid = LiquidData::parse(instance_header, x_coord, y_coord, data)?;
+                let liquid = LiquidData::parse(instances, vertex_data_sizes, x_coord, y_coord, data)?;
                 liquids.push(liquid);
             }
         }
@@ -680,31 +724,107 @@ pub struct LiquidData {
     layers: Vec<LiquidLayer>,
 }
 
+#[derive(DekuRead, Debug, Clone)]
+struct LiquidUVMapEntry {
+    pub x: u16,
+    pub y: u16,
+}
+
+struct LiquidVertexAttributes<'a> {
+    instance: &'a LiquidInstance,
+    width: usize,
+    height: usize,
+    pub maybe_heightmap: Option<Vec<f32>>,
+    pub maybe_depthmap: Option<Vec<u8>>,
+    pub maybe_uv_map: Option<Vec<LiquidUVMapEntry>>,
+}
+
+impl<'a> LiquidVertexAttributes<'a> {
+    pub fn parse(instance: &'a LiquidInstance, data: &[u8], size_per_attribute: usize) -> Result<Self, String> {
+        let width = instance.width as usize + 1;
+        let height = instance.height as usize + 1;
+
+        let mut attribute_offset = instance.vertex_data_offset as usize;
+
+        let maybe_heightmap = match size_per_attribute {
+            5 | 8 | 9 => {
+                let start = attribute_offset;
+                let end = attribute_offset + 4 * width * height;
+                let heightmap = parse_array(&data[start..end], 4)?;
+                attribute_offset = end;
+                Some(heightmap)
+            },
+            1 | 0 => None,
+            _ => panic!("invalid size_per_attribute {}", size_per_attribute),
+        };
+
+        let maybe_depthmap = match size_per_attribute {
+            5 | 1 | 9 => {
+                let start = attribute_offset;
+                let end = attribute_offset + width * height;
+                let depthmap = parse_array(&data[start..end], 1)?;
+                attribute_offset = end;
+                Some(depthmap)
+            },
+            8 | 0 => None,
+            _ => panic!("invalid size_per_attribute {}", size_per_attribute),
+        };
+        let maybe_uv_map = match size_per_attribute {
+            8 | 9 => {
+                let start = attribute_offset;
+                let end = attribute_offset + 4 * width * height;
+                let uv_map = parse_array(&data[start..end], 4)?;
+                Some(uv_map)
+            },
+            1 | 5 | 0 => None,
+            _ => panic!("invalid size_per_attribute {}", size_per_attribute),
+        };
+
+        Ok(Self {
+            instance,
+            width,
+            height,
+            maybe_depthmap,
+            maybe_heightmap,
+            maybe_uv_map,
+        })
+    }
+
+    pub fn get_heightmap_value(&self, x: usize, y: usize) -> f32 {
+        if let Some(heights) = self.maybe_heightmap.as_ref() {
+            heights[y * self.width + x]
+        } else {
+            self.instance.min_height_level
+        }
+    }
+
+    pub fn get_depthmap_value(&self, x: usize, y: usize) -> f32 {
+        if let Some(depths) = self.maybe_depthmap.as_ref() {
+            depths[y * self.width + x] as f32
+        } else {
+            1000.0 // default to pretty deep (since oceans don't have depthmaps)
+        }
+    }
+
+    pub fn get_uv_value(&self, x: usize, y: usize) -> (f32, f32) {
+        if let Some(uvs) = self.maybe_uv_map.as_ref() {
+            let uv = &uvs[y * self.width + x];
+            (uv.x as f32 / 8.0, uv.y as f32 / 8.0)
+        } else {
+            (y as f32 / (self.height - 1) as f32, x as f32 / (self.width - 1) as f32)
+        }
+    }
+}
+
 impl LiquidData {
-    pub fn parse(instance_header: &LiquidHeaderChunk, chunk_x: f32, chunk_y: f32, data: &[u8]) -> Result<Option<Self>, String> {
-        if instance_header.layer_count == 0 {
+    pub fn parse(mut instances: Vec<LiquidInstance>, vertex_data_sizes: Vec<usize>, chunk_x: f32, chunk_y: f32, data: &[u8]) -> Result<Option<Self>, String> {
+        if instances.len() == 0 {
             return Ok(None);
         }
+        assert_eq!(instances.len(), vertex_data_sizes.len());
 
-        let attributes: LiquidChunkAttributes;
-        if instance_header.attributes_offset > 0 {
-            attributes = LiquidChunkAttributes::from_bytes((&data[instance_header.attributes_offset as usize..], 0))
-                .map_err(|e| format!("{:?}", e))?.1;
-        } else {
-            attributes = LiquidChunkAttributes {
-                deep: [0xFF; 8],
-                fishable: [0xFF; 8],
-            };
-        }
-        let deep_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.deep);
-        let fishable_bitmask = BitSlice::<_, Lsb0>::from_slice(&attributes.fishable);
-
-        let mut layers: Vec<LiquidLayer> = Vec::with_capacity(instance_header.layer_count as usize);
-        let start = instance_header.instances_offset as usize;
-        let end = start + instance_header.layer_count as usize * 0x18;
-        let instances: Vec<LiquidInstance> = parse_array(&data[start..end], 0x18)?;
-
-        for instance in instances {
+        let mut layers: Vec<LiquidLayer> = Vec::with_capacity(instances.len());
+        for (instance, vertex_data_size) in instances.drain(..).zip(vertex_data_sizes.iter()) {
             let mut liquid_bitmask_data: &[u8] = &[0xFF; 8];
             if instance.bitmask_offset > 0 && instance.height > 0 {
                 let num_mask_bytes = ((instance.height as f32 * instance.width as f32) / 8.0).ceil() as usize;
@@ -717,38 +837,26 @@ impl LiquidData {
 
             let height = instance.height as usize + 1;
             let width = instance.width as usize + 1;
-            let mut maybe_heightmap: Option<Vec<f32>> = None;
-            let uses_heightmap = !(instance.liquid_object_or_lvf == 42 && instance.liquid_type == 2)
-                                 && instance.liquid_object_or_lvf != 2;
-            if uses_heightmap && instance.vertex_data_offset != 0 {
-                let start = instance.vertex_data_offset as usize;
-                let end = start + 4 * width * height;
-                maybe_heightmap = Some(parse_array(&data[start..end], 4)?);
-            }
+
+            let vertex_attributes = LiquidVertexAttributes::parse(&instance, &data, *vertex_data_size)
+                .map_err(|e| format!("{:?}", e))?;
 
             let mut extents = AABBox::default();
             let mut vertices: Vec<f32> = Vec::with_capacity(5 * height * width);
             for y in 0..height {
                 for x in 0..width {
-                    let bitmask_index = y.min(7) * 8 + x.min(7);
-                    let deep = *deep_bitmask.get(bitmask_index).as_deref().unwrap();
-                    let fishable = *fishable_bitmask.get(bitmask_index).as_deref().unwrap();
-
                     let x_pos = chunk_x - (y as f32 + instance.x_offset as f32) * UNIT_SIZE;
                     let y_pos = chunk_y - (x as f32 + instance.y_offset as f32) * UNIT_SIZE;
-                    let mut z_pos = instance.min_height_level;
-
-                    if let Some(heights) = maybe_heightmap.as_ref() {
-                        z_pos = heights[y * width + x];
-                    }
+                    let z_pos = vertex_attributes.get_heightmap_value(x, y);
+                    let (u, v) = vertex_attributes.get_uv_value(x, y);
+                    let depth = vertex_attributes.get_depthmap_value(x, y);
 
                     vertices.push(x_pos);
                     vertices.push(y_pos);
                     vertices.push(z_pos);
-                    vertices.push(y as f32 / (height - 1) as f32);
-                    vertices.push(x as f32 / (width - 1) as f32);
-                    vertices.push(if deep { 1.0 } else { 0.0 });
-                    vertices.push(if fishable { 1.0 } else { 0.0 });
+                    vertices.push(u);
+                    vertices.push(v);
+                    vertices.push(depth);
                     extents.update(x_pos, y_pos, z_pos);
                 }
             }
@@ -819,11 +927,11 @@ impl LiquidLayer {
 #[derive(DekuRead, Debug, Clone)]
 pub struct LiquidHeader {
     #[deku(count = "256")]
-    pub chunks: Vec<LiquidHeaderChunk>,
+    pub chunks: Vec<LiquidChunkHeader>,
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct LiquidHeaderChunk {
+pub struct LiquidChunkHeader {
     pub instances_offset: u32,
     pub layer_count: u32,
     pub attributes_offset: u32,
@@ -892,7 +1000,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let data = SheepfileManager::load_file_id_data("../data/WorldOfWarcraft/sheep1", 791170).unwrap();
+        let data = SheepfileManager::load_file_id_data("../data/WorldOfWarcraft/sheep1", 778432).unwrap();
         let adt = Adt::new(&data).unwrap();
     }
 }

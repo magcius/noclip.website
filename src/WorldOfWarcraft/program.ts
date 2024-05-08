@@ -617,7 +617,7 @@ void mainPS() {
 export class WaterProgram extends BaseProgram {
   public static a_Position = 0;
   public static a_TexCoord = 1;
-  public static a_DeepFishable = 2;
+  public static a_Depth = 2;
 
   public static ub_WaterParams = 1;
 
@@ -631,7 +631,7 @@ ${BaseProgram.commonDeclarations}
 varying vec3 v_Color;
 varying vec4 v_Position;
 varying vec2 v_TexCoord;
-varying vec2 v_DeepFishable;
+varying float v_Depth;
 
 layout(std140) uniform ub_WaterParams {
     vec4 u_WaterParams; // LiquidCategory, _, _, _
@@ -643,11 +643,11 @@ layout(binding = 0) uniform sampler2D u_Texture0;
 #ifdef VERT
 layout(location = ${WaterProgram.a_Position}) attribute vec3 a_Position;
 layout(location = ${WaterProgram.a_TexCoord}) attribute vec2 a_TexCoord;
-layout(location = ${WaterProgram.a_DeepFishable}) attribute vec2 a_DeepFishable;
+layout(location = ${WaterProgram.a_Depth}) attribute float a_Depth;
 
 void mainVS() {
     v_TexCoord = a_TexCoord;
-    v_DeepFishable = a_DeepFishable;
+    v_Depth = a_Depth;
     v_Position = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
     gl_Position = Mul(u_Projection, Mul(u_ModelView, v_Position));
 }
@@ -657,23 +657,25 @@ void mainVS() {
 void mainPS() {
     int liquidCategory = int(u_WaterParams.x);
     vec4 tex = texture(SAMPLER_2D(u_Texture0), v_TexCoord);
-    float deep = v_DeepFishable.x;
-    float fishable = v_DeepFishable.y;
     vec4 finalColor;
     if (liquidCategory == ${LiquidCategory.Slime} || liquidCategory == ${LiquidCategory.Lava}) {
         finalColor = vec4(saturate(tex.xyz), 1.0);
     } else {
-        vec4 liquidColor;
+        // TODO: specular/diffuse color from sun direction
+        vec4 liquidColor, diffuseColor, specularColor;
+        float depth = saturate(v_Depth / 30.0);
         if (liquidCategory == ${LiquidCategory.Ocean}) {
             vec4 shallowColor = vec4(oceanCloseColor.rgb, waterAlphas.b);
             vec4 deepColor = vec4(oceanFarColor.rgb, waterAlphas.a);
-            liquidColor = mix(shallowColor, deepColor, deep);
+            liquidColor = mix(shallowColor, deepColor, depth);
         } else {
             vec4 shallowColor = vec4(riverCloseColor.rgb, waterAlphas.r);
             vec4 deepColor = vec4(riverFarColor.rgb, waterAlphas.g);
-            liquidColor = mix(shallowColor, deepColor, fishable);
+            liquidColor = mix(shallowColor, deepColor, depth);
         }
-        finalColor = vec4(liquidColor.rgb + tex.rgb, liquidColor.a);
+        diffuseColor = vec4(liquidColor.rgb + tex.rgb, liquidColor.a);
+        specularColor = vec4(vec3(0.25) * tex.a, 0.0);
+        finalColor = diffuseColor + specularColor;
     }
     finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
     gl_FragColor = finalColor;
