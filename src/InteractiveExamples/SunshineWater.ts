@@ -74,7 +74,7 @@ class PlaneShape {
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PerVertex, },
-            { byteStride: 4, frequency: GfxVertexBufferFrequency.PerInstance, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, },
         ];
 
         this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);

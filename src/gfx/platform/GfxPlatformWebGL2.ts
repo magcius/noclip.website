@@ -1061,6 +1061,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PerInstance) {
                 gl.vertexAttribDivisor(attr.location, 1);
+            } else if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.Constant) {
+                gl.vertexAttribDivisor(attr.location, 0xFFFFFFFF);
             }
 
             gl.enableVertexAttribArray(attr.location);

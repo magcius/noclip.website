@@ -172,7 +172,7 @@ class MDTData {
         }
 
         const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, },
             { byteStride: this.mdt.jointPerVertCount ? 80 : 48, frequency: GfxVertexBufferFrequency.PerVertex, },
         ];
 

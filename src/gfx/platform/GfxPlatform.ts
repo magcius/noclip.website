@@ -71,6 +71,7 @@ export const enum GfxBufferFrequencyHint {
 export const enum GfxVertexBufferFrequency {
     PerVertex   = 0x01,
     PerInstance = 0x02,
+    Constant    = 0x03,
 }
 
 export const enum GfxTextureDimension {

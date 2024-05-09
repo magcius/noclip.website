@@ -394,15 +394,6 @@ function translateIndexFormat(format: GfxFormat | null): GPUIndexFormat | undefi
         throw "whoops";
 }
 
-function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GPUVertexStepMode {
-    if (frequency === GfxVertexBufferFrequency.PerVertex)
-        return 'vertex';
-    else if (frequency === GfxVertexBufferFrequency.PerInstance)
-        return 'instance';
-    else
-        throw "whoops";
-}
-
 function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
     if (format === GfxFormat.U8_R)
         return 'uint8x2';
@@ -1240,8 +1231,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
                 (buffers[attr.bufferIndex].attributes as GPUVertexAttribute[]).push(attribute);
             } else {
                 const b = assertExists(inputLayoutDescriptor.vertexBufferDescriptors[attr.bufferIndex]);
-                const arrayStride = b.byteStride;
-                const stepMode = translateVertexBufferFrequency(b.frequency);
+                const arrayStride = b.frequency === GfxVertexBufferFrequency.Constant ? 0 : b.byteStride;
+                const stepMode: GPUVertexStepMode = b.frequency === GfxVertexBufferFrequency.PerInstance ? 'instance' : 'vertex';
                 const attributes: GPUVertexAttribute[] = [attribute];
                 buffers[attr.bufferIndex] = { arrayStride, stepMode, attributes };
             }

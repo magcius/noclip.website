@@ -291,7 +291,7 @@ export class SkyboxRenderer {
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });

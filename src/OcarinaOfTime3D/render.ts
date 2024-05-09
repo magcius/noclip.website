@@ -14,9 +14,9 @@ import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '..
 import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack, colorMult, colorAdd, colorClamp, OpaqueBlack } from '../Color.js';
 import { getTextureFormatName } from './pica_texture.js';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder.js';
-import { nArray, assert } from '../util.js';
+import { nArray, assert, align } from '../util.js';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderInstManager.js';
-import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat.js';
+import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags, getFormatByteSize } from '../gfx/platform/GfxPlatformFormat.js';
 import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera.js';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers.js';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk.js';
@@ -1051,7 +1051,7 @@ class PrmsData {
 
 class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
-    public vertexBufferDescriptors: (GfxVertexBufferDescriptor | null)[];
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public inputLayout: GfxInputLayout;
     public useVertexColor: boolean = false;
@@ -1060,20 +1060,31 @@ class SepdData {
 
     constructor(cache: GfxRenderCache, vertexBuffer: GfxBuffer, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
         const device = cache.device;
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
-        const perInstanceBufferData = new Float32Array(32);
-        let perInstanceBufferWordOffset = 0;
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+        let bufferNum = 0;
+        let perInstanceBufferIndex = -1;
+
+        const constantBufferData = new Float32Array(32);
+        let constantBufferWordOffset = 0;
         this.useVertexColor = sepd.hasVertexColors;
 
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1, bufferByteOffset: bufferOffs + vertexAttrib.start });
+                const bufferIndex = bufferNum++;
+                this.vertexBufferDescriptors[bufferIndex] = { buffer: vertexBuffer, byteOffset: vertexAttrib.start + bufferOffs };
+                vertexBufferDescriptors[bufferIndex] = { byteStride: getFormatByteSize(format), frequency: GfxVertexBufferFrequency.PerVertex, };
+                vertexAttributeDescriptors.push({ location, format, bufferIndex, bufferByteOffset: 0 });
             } else {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset * 0x04 });
-                perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
-                perInstanceBufferWordOffset += 0x04;
+                if (perInstanceBufferIndex === -1)
+                    perInstanceBufferIndex = bufferNum++;
+                this.vertexBufferDescriptors[perInstanceBufferIndex] = { buffer: null!, byteOffset: 0 };
+                vertexBufferDescriptors[perInstanceBufferIndex] = { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant, };
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: perInstanceBufferIndex, bufferByteOffset: constantBufferWordOffset * 0x04 });
+                constantBufferData.set(vertexAttrib.constant, constantBufferWordOffset);
+                constantBufferWordOffset += 0x04;
             }
         };
 
@@ -1092,16 +1103,10 @@ class SepdData {
         const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
         bindVertexAttrib(DMPProgram.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
 
-        let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
-        if (perInstanceBufferWordOffset !== 0) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(perInstanceBufferData.buffer).buffer);
-            perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
+        if (perInstanceBufferIndex !== -1) {
+            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(constantBufferData.buffer).buffer);
+            this.vertexBufferDescriptors[perInstanceBufferIndex]!.buffer = this.perInstanceBuffer;
         }
-
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerInstance, },
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PerVertex, },
-        ];
 
         let indexBufferCount = 0;
         for (let i = 0; i < this.sepd.prms.length; i++) {
@@ -1128,10 +1133,6 @@ class SepdData {
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.vertexBufferDescriptors = [
-            perInstanceBinding,
-            { buffer: vertexBuffer, byteOffset: 0 },
-        ];
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 

@@ -212,8 +212,8 @@ class MeshFragData {
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PerVertex, },
-            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerInstance },
-            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerInstance },
+            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant },
+            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PerVertex } : { byteStride: 0, frequency: GfxVertexBufferFrequency.Constant },
         ];
 
         this.inputLayout = cache.createInputLayout({
