@@ -525,7 +525,11 @@ void mainPS() {
             v_Normal,
             interiorAmbientColor,
             interiorDirectColor,
-            v_Color0.a,
+
+            // FIXME: this should be v_Color.a, but adding interior/exterior
+            // blending results in too-bright doorways
+            0.0,
+
             applyInteriorLight,
             applyExteriorLight,
             vec3(0.0) /*accumLight*/,
@@ -663,7 +667,7 @@ void mainPS() {
     } else {
         // TODO: specular/diffuse color from sun direction
         vec4 liquidColor, diffuseColor, specularColor;
-        float depth = saturate(v_Depth / 30.0);
+        float depth = saturate(v_Depth / 50.0);
         if (liquidCategory == ${LiquidCategory.Ocean}) {
             vec4 shallowColor = vec4(oceanCloseColor.rgb, waterAlphas.b);
             vec4 deepColor = vec4(oceanFarColor.rgb, waterAlphas.a);
