@@ -591,7 +591,7 @@ export class SourceEngineView {
     public aspect = 1.0;
 
     // Frustum is stored in Source engine world space.
-    public frustum = new Frustum();
+    public frustum = new Frustum(4);
 
     public mainList = new GfxRenderInstList();
     public indirectList = new GfxRenderInstList(null);

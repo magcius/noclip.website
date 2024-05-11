@@ -16,6 +16,7 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoD
 import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
+import { drawBspNodes } from './debug.js';
 
 export const MAP_SIZE = 17066;
 
@@ -60,7 +61,7 @@ export class View {
     public deltaTime: number;
     public cullingNearPlane = 0.1;
     public cullingFarPlane = 1000;
-    public cullingFrustum: Frustum = new Frustum();
+    public cullingFrustum: Frustum = new Frustum(4);
     public timeOffset = 1440;
     public secondsPerGameDay = 90;
     public fogEnabled = true;
@@ -217,9 +218,9 @@ export class WdtScene implements Viewer.SceneGfx {
   public cullingState = CullingState.Running;
   public cameraState = CameraState.Running;
   public frozenCamera = vec3.create();
-  public frozenFrustum = new Frustum();
+  public frozenFrustum = new Frustum(4);
   private modelCamera = vec3.create();
-  private modelFrustum = new Frustum();
+  private modelFrustum = new Frustum(4);
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
     console.time('WdtScene construction');
@@ -340,9 +341,7 @@ export class WdtScene implements Viewer.SceneGfx {
   public freezeCamera() {
     this.cameraState = CameraState.Frozen;
     vec3.copy(this.frozenCamera, this.mainView.cameraPos);
-    for (let i in this.frozenFrustum.planes) {
-      this.frozenFrustum.planes[i].copy(this.mainView.cullingFrustum.planes[i]);
-    }
+    this.frozenFrustum.copy(this.mainView.cullingFrustum);
   }
 
   public getCameraAndFrustum(): [vec3, Frustum] {
@@ -475,7 +474,7 @@ export class WdtScene implements Viewer.SceneGfx {
         }
         if (this.debug) {
           drawWorldSpaceAABB(getDebugOverlayCanvas2D(), this.mainView.clipFromWorldMatrix, group.scratchAABB, def.modelMatrix);
-          group.drawBspNodes(this.modelCamera, def.modelMatrix, this.mainView.clipFromWorldMatrix);
+          drawBspNodes(group, this.modelCamera, def.modelMatrix, this.mainView.clipFromWorldMatrix);
         }
       }
       if (this.modelFrustum.contains(groupAABB) && group.flags.exterior) {
@@ -519,7 +518,7 @@ export class WdtScene implements Viewer.SceneGfx {
     // do portal culling on the root groups
     let visibleGroups: number[] = [];
     for (let groupId of rootGroups) {
-      wmo.portalCull(this.modelCamera, this.modelFrustum, groupId, visibleGroups);
+      wmo.portalCull(this.modelCamera, this.modelFrustum, groupId, visibleGroups, []);
     }
 
     let hasExternalGroup = false;
