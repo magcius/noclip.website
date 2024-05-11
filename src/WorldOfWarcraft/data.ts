@@ -878,6 +878,9 @@ export class WmoData {
     for (let portalRef of group.portalRefs) {
       const portal = this.portals[portalRef.portal_index];
       const otherGroup = this.groups[portalRef.group_index];
+      if (!portal.isPortalFacingUs(modelCamera, portalRef.side)) {
+        continue;
+      }
       if (portal.inFrustum(modelFrustum) || portal.aabb.containsPoint(modelCamera)) {
         let portalFrustum = portal.clipFrustum(modelCamera, modelFrustum, portalRef.side);
         this.portalCull(
