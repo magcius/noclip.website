@@ -681,7 +681,7 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public adjustCameraController(c: CameraController) {
-      c.setSceneMoveSpeedMult(0.11 * 0.4);
+      c.setSceneMoveSpeedMult(0.01);
   }
 
   render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
