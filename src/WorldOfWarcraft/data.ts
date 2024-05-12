@@ -753,10 +753,9 @@ export class WmoGroupData {
         this.scratchAABB.unionPoint(vertex2);
       }
     }
-    // add a bit of headroom to flat AABBs (which are likely just floor)
-    if (this.scratchAABB.maxZ - this.scratchAABB.minZ < 10) {
-      this.scratchAABB.maxZ += 15;
-    }
+    // add a bit of headroom to AABBs, since WoW's AABBs are mostly built for
+    // ground-based transit
+    this.scratchAABB.maxZ += 50;
     return this.scratchAABB.containsPoint(pos);
   }
 }
