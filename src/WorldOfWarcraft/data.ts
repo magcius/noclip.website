@@ -1289,7 +1289,7 @@ export class PortalData {
   }
 
   public clipFrustum(cameraPoint: vec3, currentFrustum: Frustum, side: number): Frustum {
-    const result = new Frustum(currentFrustum.planes.length + this.points.length);
+    const result = new Frustum(currentFrustum.planes.length);
     result.copy(currentFrustum);
     for (let i = 0; i < this.points.length; i++) {
       let bIndex = i === this.points.length - 1 ? 0 : i + 1;
@@ -1297,13 +1297,14 @@ export class PortalData {
       let [a, b] = [this.points[i], this.points[bIndex]];
       let testPoint = this.points[testPointIndex];
 
-      const planeIndex = i + currentFrustum.planes.length;
-      result.planes[planeIndex].setTri(cameraPoint, a, b);
-      let dist = result.planes[planeIndex].distanceVec3(testPoint);
+      const plane = new Plane();
+      plane.setTri(cameraPoint, a, b);
+      let dist = plane.distanceVec3(testPoint);
       if (dist > 0) {
-        result.planes[planeIndex].negate();
+        plane.negate();
       }
-      assert(result.planes[planeIndex].distanceVec3(testPoint) <= 0)
+      assert(plane.distanceVec3(testPoint) <= 0)
+      result.planes.push(plane);
     }
     return result;
   }

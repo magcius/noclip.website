@@ -35,7 +35,7 @@ export class Camera {
     // Camera's linear (aka positional) velocity. Instantaneous for the frame.
     public linearVelocity = vec3.create();
 
-    public frustum = new Frustum(4);
+    public frustum = new Frustum();
     public fovY: number;
     public aspect: number;
     public isOrthographic: boolean = false;

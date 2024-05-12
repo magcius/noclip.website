@@ -61,7 +61,7 @@ export class View {
     public deltaTime: number;
     public cullingNearPlane = 0.1;
     public cullingFarPlane = 1000;
-    public cullingFrustum: Frustum = new Frustum(4);
+    public cullingFrustum: Frustum = new Frustum();
     public timeOffset = 1440;
     public secondsPerGameDay = 90;
     public fogEnabled = true;
@@ -218,9 +218,9 @@ export class WdtScene implements Viewer.SceneGfx {
   public cullingState = CullingState.Running;
   public cameraState = CameraState.Running;
   public frozenCamera = vec3.create();
-  public frozenFrustum = new Frustum(4);
+  public frozenFrustum = new Frustum();
   private modelCamera = vec3.create();
-  private modelFrustum = new Frustum(4);
+  private modelFrustum = new Frustum();
 
   constructor(private device: GfxDevice, public world: WorldData | LazyWorldData, public renderHelper: GfxRenderHelper, private db: Database) {
     console.time('WdtScene construction');

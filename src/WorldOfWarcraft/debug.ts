@@ -8,13 +8,19 @@ import { PortalData, WmoGroupData } from "./data.js";
 
 let drawFrustumScratchVec3a = vec3.create();
 let drawFrustumScratchVec3b = vec3.create();
+// Note that this assumes a frustum whose near/far planes are at index 4 and 5, respectively
 export function drawDebugFrustum(f: Frustum, transformMat: mat4, color: Color | undefined = undefined) {
   const clipMat = (window.main.scene as WdtScene).mainView.clipFromWorldMatrix;
+  const near = f.planes[4];
+  const far = f.planes[5];
   for (let i = 0; i < f.planes.length; i++) {
+    if (i === 4 || i === 5) {
+      continue;
+    }
     const p1 = f.planes[i];
     const p2 = f.planes[i === f.planes.length - 1 ? 0 : i + 1];
-    findIncidentPoint(drawFrustumScratchVec3a, p1, p2, f.near);
-    findIncidentPoint(drawFrustumScratchVec3b, p1, p2, f.far);
+    findIncidentPoint(drawFrustumScratchVec3a, p1, p2, near);
+    findIncidentPoint(drawFrustumScratchVec3b, p1, p2, far);
     vec3.transformMat4(drawFrustumScratchVec3a, drawFrustumScratchVec3a, transformMat);
     vec3.transformMat4(drawFrustumScratchVec3b, drawFrustumScratchVec3b, transformMat);
     drawWorldSpaceLine(

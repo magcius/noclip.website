@@ -34,7 +34,7 @@ export class Viewpoint {
     public cameraPos = vec3.create();
 
     // Frustum is stored in The Witness world space.
-    public frustum = new Frustum(4);
+    public frustum = new Frustum();
 
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
