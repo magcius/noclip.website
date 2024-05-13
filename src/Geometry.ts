@@ -2,7 +2,7 @@
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
 import { IS_DEPTH_REVERSED } from "./gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
-import { nArray } from "./util.js";
+import { assert, nArray } from "./util.js";
 
 const scratchVec4 = vec4.create();
 const scratchMatrix = mat4.create();
@@ -331,16 +331,20 @@ export enum IntersectionState {
 }
 
 export class Frustum {
-    // Left, Right, Top, Bottom, Near, Far
-    public planes: Plane[] = nArray(6, () => new Plane());
+    public planes: Plane[] = [];
+
+    constructor(nPlanes = 6) {
+        this.planes = nArray(nPlanes, () => new Plane());
+    }
 
     public updateClipFrustum(m: ReadonlyMat4, clipSpaceNearZ: GfxClipSpaceNearZ): void {
         // http://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
         // Note that we look down the -Z axis, rather than the +Z axis, so we have to invert all of our planes...
+        assert(this.planes.length === 6, `Frustum.updateClipFrustum expects 6 planes, this contains ${this.planes.length}`);
 
         this.planes[0].set4Unnormalized(-(m[3] + m[0]), -(m[7] + m[4]), -(m[11] + m[8]) , -(m[15] + m[12])); // Left
-        this.planes[1].set4Unnormalized(-(m[3] - m[0]), -(m[7] - m[4]), -(m[11] - m[8]) , -(m[15] - m[12])); // Right
-        this.planes[2].set4Unnormalized(-(m[3] + m[1]), -(m[7] + m[5]), -(m[11] + m[9]) , -(m[15] + m[13])); // Top
+        this.planes[1].set4Unnormalized(-(m[3] + m[1]), -(m[7] + m[5]), -(m[11] + m[9]) , -(m[15] + m[13])); // Top
+        this.planes[2].set4Unnormalized(-(m[3] - m[0]), -(m[7] - m[4]), -(m[11] - m[8]) , -(m[15] - m[12])); // Right
         this.planes[3].set4Unnormalized(-(m[3] - m[1]), -(m[7] - m[5]), -(m[11] - m[9]) , -(m[15] - m[13])); // Bottom
 
         if (clipSpaceNearZ === GfxClipSpaceNearZ.NegativeOne) {
@@ -352,11 +356,19 @@ export class Frustum {
         this.planes[5].set4Unnormalized(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Far
     }
 
+    public copy(o: Frustum) {
+        while (this.planes.length < o.planes.length) {
+            this.planes.push(new Plane());
+        }
+        for (let i in o.planes) {
+            this.planes[i].copy(o.planes[i]);
+        }
+    }
+
     public intersect(aabb: AABB): IntersectionState {
         let ret = IntersectionState.Inside;
         // Test planes.
-        for (let i = 0; i < 6; i++) {
-            const plane = this.planes[i];
+        for (const plane of this.planes) {
             // Nearest point to the frustum.
             const px = plane.n[0] >= 0 ? aabb.minX : aabb.maxX;
             const py = plane.n[1] >= 0 ? aabb.minY : aabb.maxY;
@@ -380,8 +392,8 @@ export class Frustum {
 
     private intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
         let res = IntersectionState.Inside;
-        for (let i = 0; i < 6; i++) {
-            const dist = this.planes[i].distance(v[0], v[1], v[2]);
+        for (const plane of this.planes) {
+            const dist = plane.distance(v[0], v[1], v[2]);
             if (dist > radius)
                 return IntersectionState.Outside;
             else if (dist > -radius)
@@ -396,8 +408,8 @@ export class Frustum {
     }
 
     public containsPoint(v: ReadonlyVec3): boolean {
-        for (let i = 0; i < 6; i++)
-            if (this.planes[i].distance(v[0], v[1], v[2]) > 0)
+        for (const plane of this.planes)
+            if (plane.distance(v[0], v[1], v[2]) > 0)
                 return false;
 
         return true;

@@ -16,6 +16,7 @@ import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoD
 import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
+import { drawBspNodes } from './debug.js';
 
 export const MAP_SIZE = 17066;
 
@@ -340,9 +341,7 @@ export class WdtScene implements Viewer.SceneGfx {
   public freezeCamera() {
     this.cameraState = CameraState.Frozen;
     vec3.copy(this.frozenCamera, this.mainView.cameraPos);
-    for (let i in this.frozenFrustum.planes) {
-      this.frozenFrustum.planes[i].copy(this.mainView.cullingFrustum.planes[i]);
-    }
+    this.frozenFrustum.copy(this.mainView.cullingFrustum);
   }
 
   public getCameraAndFrustum(): [vec3, Frustum] {
@@ -475,7 +474,7 @@ export class WdtScene implements Viewer.SceneGfx {
         }
         if (this.debug) {
           drawWorldSpaceAABB(getDebugOverlayCanvas2D(), this.mainView.clipFromWorldMatrix, group.scratchAABB, def.modelMatrix);
-          group.drawBspNodes(this.modelCamera, def.modelMatrix, this.mainView.clipFromWorldMatrix);
+          drawBspNodes(group, this.modelCamera, def.modelMatrix, this.mainView.clipFromWorldMatrix);
         }
       }
       if (this.modelFrustum.contains(groupAABB) && group.flags.exterior) {
@@ -519,7 +518,7 @@ export class WdtScene implements Viewer.SceneGfx {
     // do portal culling on the root groups
     let visibleGroups: number[] = [];
     for (let groupId of rootGroups) {
-      wmo.portalCull(this.modelCamera, this.modelFrustum, groupId, visibleGroups);
+      wmo.portalCull(this.modelCamera, this.modelFrustum, groupId, visibleGroups, []);
     }
 
     let hasExternalGroup = false;
@@ -681,7 +680,7 @@ export class WdtScene implements Viewer.SceneGfx {
   }
 
   public adjustCameraController(c: CameraController) {
-      c.setSceneMoveSpeedMult(0.11 * 0.4);
+      c.setSceneMoveSpeedMult(0.01);
   }
 
   render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {

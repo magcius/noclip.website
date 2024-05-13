@@ -1,7 +1,6 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg";
 import { DataFetcher } from "../DataFetcher.js";
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
@@ -14,7 +13,7 @@ import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxR
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
 import { ModelProgram, WmoProgram } from "./program.js";
-import { MapArray, View, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
+import { MapArray, View, WdtScene, adtSpaceFromPlacementSpace, modelSpaceFromPlacementSpace, noclipSpaceFromAdtSpace, placementSpaceFromAdtSpace, placementSpaceFromModelSpace } from "./scenes.js";
 import { Sheepfile } from "./util.js";
 
 export class Database {
@@ -722,42 +721,6 @@ export class WmoGroupData {
     group.free();
   }
 
-  public drawBspNodes(pos: vec3, m: ReadonlyMat4, clipFromWorldMatrix: ReadonlyMat4) {
-    let nodes: WowWmoBspNode[] = [];
-    this.bsp.query(pos, nodes);
-    if (nodes.length === 0) {
-      return;
-    }
-    for (let node of nodes) {
-      for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
-        const index0 = this.indices[3 * this.bspIndices[i] + 0];
-        const vertex0 = vec3.set(this.scratchVec3a,
-          this.vertices[3 * index0 + 0],
-          this.vertices[3 * index0 + 1],
-          this.vertices[3 * index0 + 2],
-        );
-        const index1 = this.indices[3 * this.bspIndices[i] + 1];
-        const vertex1 = vec3.set(this.scratchVec3b,
-          this.vertices[3 * index1 + 0],
-          this.vertices[3 * index1 + 1],
-          this.vertices[3 * index1 + 2],
-        );
-        const index2 = this.indices[3 * this.bspIndices[i] + 2];
-        const vertex2 = vec3.set(this.scratchVec3c,
-          this.vertices[3 * index2 + 0],
-          this.vertices[3 * index2 + 1],
-          this.vertices[3 * index2 + 2],
-        );
-        vec3.transformMat4(vertex0, vertex0, m);
-        vec3.transformMat4(vertex1, vertex1, m);
-        vec3.transformMat4(vertex2, vertex2, m);
-        drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex0, vertex1);
-        drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex1, vertex2);
-        drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMatrix, vertex2, vertex0);
-      }
-    }
-  }
-
   public bspContainsModelSpacePoint(pos: vec3): boolean {
     let nodes: WowWmoBspNode[] = [];
     this.bsp.query(pos, nodes);
@@ -790,10 +753,9 @@ export class WmoGroupData {
         this.scratchAABB.unionPoint(vertex2);
       }
     }
-    // add a bit of headroom to flat AABBs (which are likely just floor)
-    if (this.scratchAABB.maxZ - this.scratchAABB.minZ < 10) {
-      this.scratchAABB.maxZ += 15;
-    }
+    // add a bit of headroom to AABBs, since WoW's AABBs are mostly built for
+    // ground-based transit
+    this.scratchAABB.maxZ += 50;
     return this.scratchAABB.containsPoint(pos);
   }
 }
@@ -906,34 +868,28 @@ export class WmoData {
     return undefined;
   }
 
-  public cullGroups(worldCamera: vec3, worldFrustum: Frustum) {
-
-  }
-
-  public portalCull(modelCamera: vec3, modelFrustum: Frustum, currentGroupId: number, visibleGroups: number[]) {
-    if (visibleGroups.includes(currentGroupId)) return;
-    visibleGroups.push(currentGroupId);
+  public portalCull(modelCamera: vec3, modelFrustum: Frustum, currentGroupId: number, visibleGroups: number[], visitedGroups: number[]) {
+    if (visitedGroups.includes(currentGroupId)) return;
+    if (!visibleGroups.includes(currentGroupId)) {
+      visibleGroups.push(currentGroupId);
+    }
     const group = this.getGroup(currentGroupId)!;
     for (let portalRef of group.portalRefs) {
       const portal = this.portals[portalRef.portal_index];
       const otherGroup = this.groups[portalRef.group_index];
-      if (visibleGroups.includes(otherGroup.fileId)) {
-        continue;
-      }
-      if (!portal.inFrustum(modelFrustum)) {
-        continue;
-      }
-      // check if the business end of the portal's facing us
       if (!portal.isPortalFacingUs(modelCamera, portalRef.side)) {
         continue;
       }
-      let portalFrustum = portal.clipFrustum(modelCamera, modelFrustum, portalRef.side);
-      this.portalCull(
-        modelCamera,
-        portalFrustum,
-        otherGroup.fileId,
-        visibleGroups,
-      );
+      if (portal.inFrustum(modelFrustum) || portal.aabb.containsPoint(modelCamera)) {
+        let portalFrustum = portal.clipFrustum(modelCamera, modelFrustum, portalRef.side);
+        this.portalCull(
+          modelCamera,
+          portalFrustum,
+          otherGroup.fileId,
+          visibleGroups,
+          visitedGroups.concat([currentGroupId]),
+        );
+      }
     }
   }
 }
@@ -1332,32 +1288,23 @@ export class PortalData {
   }
 
   public clipFrustum(cameraPoint: vec3, currentFrustum: Frustum, side: number): Frustum {
-    const result = new Frustum();
-    const [p1, p2, p3, p4] = this.points;
-    const planePoints = [
-      [p4, p1, p2], // Left
-      [p2, p3, p4], // Right
-      [p1, p2, p3], // Top
-      [p3, p4, p1], // Bottom
-    ];
-    let planeIndex = 0;
-    for (let [a, b, testPoint] of planePoints) {
-      result.planes[planeIndex].setTri(cameraPoint, a, b);
-      let dist = result.planes[planeIndex].distanceVec3(testPoint);
+    const result = new Frustum(currentFrustum.planes.length);
+    result.copy(currentFrustum);
+    for (let i = 0; i < this.points.length; i++) {
+      let bIndex = i === this.points.length - 1 ? 0 : i + 1;
+      let testPointIndex = i === 0 ? this.points.length - 1 : i - 1;
+      let [a, b] = [this.points[i], this.points[bIndex]];
+      let testPoint = this.points[testPointIndex];
+
+      const plane = new Plane();
+      plane.setTri(cameraPoint, a, b);
+      let dist = plane.distanceVec3(testPoint);
       if (dist > 0) {
-        result.planes[planeIndex].negate();
+        plane.negate();
       }
-      dist = result.planes[planeIndex].distanceVec3(testPoint);
-      assert(dist <= 0);
-      planeIndex += 1;
+      assert(plane.distanceVec3(testPoint) <= 0)
+      result.planes.push(plane);
     }
-
-    result.planes[4].copy(this.plane); // Near
-    if (side < 0) {
-      result.planes[4].negate(); // Far
-    }
-    result.planes[5].copy(currentFrustum.planes[5]); // Far
-
     return result;
   }
 }
