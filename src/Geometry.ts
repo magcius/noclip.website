@@ -367,8 +367,10 @@ export class Frustum {
 
     public intersect(aabb: AABB): IntersectionState {
         let ret = IntersectionState.Inside;
+
         // Test planes.
-        for (const plane of this.planes) {
+        for (let i = 0; i < this.planes.length; i++) {
+            const plane = this.planes[i];
             // Nearest point to the frustum.
             const px = plane.n[0] >= 0 ? aabb.minX : aabb.maxX;
             const py = plane.n[1] >= 0 ? aabb.minY : aabb.maxY;
@@ -392,7 +394,8 @@ export class Frustum {
 
     private intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
         let res = IntersectionState.Inside;
-        for (const plane of this.planes) {
+        for (let i = 0; i < this.planes.length; i++) {
+            const plane = this.planes[i];
             const dist = plane.distance(v[0], v[1], v[2]);
             if (dist > radius)
                 return IntersectionState.Outside;
@@ -408,15 +411,17 @@ export class Frustum {
     }
 
     public containsPoint(v: ReadonlyVec3): boolean {
-        for (const plane of this.planes)
+        for (let i = 0; i < this.planes.length; i++) {
+            const plane = this.planes[i];
             if (plane.distance(v[0], v[1], v[2]) > 0)
                 return false;
+        }
 
         return true;
     }
 
     public transform(src: Frustum, m: ReadonlyMat4): void {
-        for (let i in this.planes) {
+        for (let i = 0; i < this.planes.length; i++) {
             this.planes[i].copy(src.planes[i]);
             this.planes[i].transform(m);
         }
