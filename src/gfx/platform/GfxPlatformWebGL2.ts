@@ -445,7 +445,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentDepthStencilAttachment: GfxRenderTargetP_GL | null = null;
     private _currentDepthStencilAttachmentView: GfxRenderAttachmentView | null = null;
     private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
-    private _currentDepthStencilResolveView: GfxTextureP_GL | null = null;
+    private _currentDepthStencilResolveView: GfxRenderAttachmentView | null = null;
     private _currentSampleCount: number = -1;
     private _currentPipeline!: GfxRenderPipelineP_GL;
     private _currentIndexBufferByteOffset: number | null = null;
@@ -1726,18 +1726,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _bindFramebufferDepthStencilAttachment(framebuffer: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null): void {
+    private _bindFramebufferDepthStencilAttachment(framebuffer: GLenum, attachment: GfxRenderTargetP_GL | GfxTextureP_GL | null, view: GfxRenderAttachmentView | null): void {
         const gl = this.gl;
 
         const flags = attachment !== null ? getFormatFlags(attachment.pixelFormat) : (FormatFlags.Depth | FormatFlags.Stencil);
         const depth = !!(flags & FormatFlags.Depth), stencil = !!(flags & FormatFlags.Stencil);
         if (depth && stencil) {
-            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_STENCIL_ATTACHMENT, attachment);
+            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_STENCIL_ATTACHMENT, attachment, view);
         } else if (depth) {
-            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, attachment);
+            this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, attachment, view);
             this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, null);
         } else if (stencil) {
-            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, attachment);
+            this._bindFramebufferAttachment(framebuffer, gl.STENCIL_ATTACHMENT, attachment, view);
             this._bindFramebufferAttachment(framebuffer, gl.DEPTH_ATTACHMENT, null);
         }
     }
@@ -1819,17 +1819,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const attachment = passAttachment !== null ? passAttachment.renderTarget as GfxRenderTargetP_GL : null;
         const attachmentView = passAttachment !== null ? passAttachment.view : null;
 
-        if (this._currentDepthStencilAttachment !== attachment) {
+        if (this._currentDepthStencilAttachment !== attachment || !gfxRenderAttachmentViewEquals(this._currentDepthStencilAttachmentView, attachmentView)) {
             this._currentDepthStencilAttachment = attachment as (GfxRenderTargetP_GL | null);
-            this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, this._currentDepthStencilAttachment);
+            this._currentDepthStencilAttachmentView = attachmentView;
+            this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, this._currentDepthStencilAttachment, attachmentView);
             this._resolveDepthStencilAttachmentsChanged = true;
         }
 
         const resolveTo = passAttachment !== null ? passAttachment.resolveTo as GfxTextureP_GL : null;
         const resolveView = passAttachment !== null ? passAttachment.resolveView : null;
 
-        if (this._currentDepthStencilResolveTo !== resolveTo) {
+        if (this._currentDepthStencilResolveTo !== resolveTo || !gfxRenderAttachmentViewEquals(this._currentDepthStencilResolveView, resolveView)) {
             this._currentDepthStencilResolveTo = resolveTo as GfxTextureP_GL;
+            this._currentDepthStencilResolveView = resolveView;
 
             if (resolveTo !== null)
                 this._resolveDepthStencilAttachmentsChanged = true;
@@ -2381,14 +2383,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         const depthStencilResolveFrom = this._currentDepthStencilAttachment;
         if (depthStencilResolveFrom !== null) {
-            const depthStencilResolveTo = this._currentDepthStencilResolveTo
+            const depthStencilResolveTo = this._currentDepthStencilResolveTo;
             const depthStencilStore = renderPassDescriptor.depthStencilAttachment!.store;
 
             const boundReadFB = depthStencilResolveTo !== null || !depthStencilStore;
             if (boundReadFB) {
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
                 if (this._resolveDepthStencilAttachmentsChanged)
-                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom);
+                    this._bindFramebufferDepthStencilAttachment(gl.READ_FRAMEBUFFER, depthStencilResolveFrom, this._currentDepthStencilAttachmentView);
             }
 
             if (depthStencilResolveTo !== null) {
@@ -2398,7 +2400,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
                 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDepthStencilDrawFramebuffer);
                 if (this._resolveDepthStencilAttachmentsChanged)
-                    this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, depthStencilResolveTo);
+                    this._bindFramebufferDepthStencilAttachment(gl.DRAW_FRAMEBUFFER, depthStencilResolveTo, this._currentDepthStencilResolveView);
 
                 gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
             }
