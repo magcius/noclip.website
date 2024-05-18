@@ -218,8 +218,8 @@ export class Viewer {
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
             const xrView: XRView = webXRContext.views[i];
-            const viewport: XRViewport = baseLayer.getViewport(xrView);
-            if (!viewport)
+            const viewport = baseLayer.getViewport(xrView);
+            if (viewport === undefined)
                 continue;
 
             // Render the viewport to our temp RT.

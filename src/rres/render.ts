@@ -9,7 +9,7 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB, IntersectionState } from "../Geometry.js";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers.js';
 import { GfxDevice, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatform.js";
-import { arrayCopy } from '../gfx/platform/GfxPlatformUtil.js';
+import { arrayCopy } from '../gfx/platform/GfxPlatformObjUtil.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { LoadedVertexDraw } from '../gx/gx_displaylist.js';

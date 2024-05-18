@@ -4,7 +4,9 @@ import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatByte
 import { GfxBindings, GfxBuffer, GfxComputePipeline, GfxInputLayout, GfxProgram, GfxQueryPool, GfxReadback, GfxRenderPipeline, GfxRenderTarget, GfxResource, GfxSampler, GfxTexture, GfxTextureImpl, _T, defaultBindingLayoutSamplerDescriptor } from "./GfxPlatformImpl.js";
 
 import { copyAttachmentState, copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers.js';
-import { assert, assertExists, gfxColorCopy, gfxColorEqual, gfxRenderAttachmentViewEquals, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
+import { assert, assertExists, leftPad, nArray, nullify } from './GfxPlatformUtil.js';
+import { gfxRenderAttachmentViewEquals } from './GfxPlatformObjUtil.js';
+import { gfxColorCopy, gfxColorEqual } from './GfxPlatformUtil.js';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388

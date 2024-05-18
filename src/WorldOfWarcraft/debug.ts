@@ -1,10 +1,10 @@
-import { ReadonlyMat4, ReadonlyVec3, mat3, mat4, quat, vec3, vec4 } from "gl-matrix";
+import { ReadonlyMat4, mat3, mat4, vec3 } from "gl-matrix";
+import { WowWmoBspNode } from "../../rust/pkg/index.js";
+import { Color } from "../Color.js";
 import { drawWorldSpaceAABB, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { Frustum, Plane } from "../Geometry.js";
-import { WdtScene } from "./scenes.js";
-import { WowWmoBspNode } from "../../rust/pkg";
-import { Color } from "../Color.js";
 import { PortalData, WmoGroupData } from "./data.js";
+import { WdtScene } from "./scenes.js";
 
 let drawFrustumScratchVec3a = vec3.create();
 let drawFrustumScratchVec3b = vec3.create();

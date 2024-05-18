@@ -20,7 +20,7 @@ import { assert } from "../util.js";
 import { Color, colorCopy, White } from "../Color.js";
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
-import { GloverObjbank } from './parsers';
+import { GloverObjbank } from './parsers/index.js';
 
 import { hashCodeNumberUpdate, HashMap } from '../HashMap.js';
 import { SRC_FRAME_TO_MS } from './timing.js';

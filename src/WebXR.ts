@@ -23,7 +23,7 @@ export class WebXRContext {
     public xrViewerSpace: XRReferenceSpace;
     public xrLocalSpace: XRReferenceSpace;
 
-    public views: XRView[];
+    public views: readonly XRView[];
 
     public onframe: ((time: number) => void) | null = null;
     public onsupportedchanged: (() => void) | null = null;

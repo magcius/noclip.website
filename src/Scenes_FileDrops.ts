@@ -134,14 +134,14 @@ export class DroppedFileSceneDesc implements SceneDesc {
     }
 }
 
-async function readAllDirEntries(reader: DirectoryReader): Promise<Entry[]> {
-    function readDirEntries(reader: DirectoryReader): Promise<Entry[]> {
+async function readAllDirEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+    function readDirEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
         return new Promise((resolve, reject) => {
             return reader.readEntries(resolve, reject);
         })
     }
 
-    const entries: Entry[] = [];
+    const entries: FileSystemEntry[] = [];
     // We need to keep calling readDirEntries until it returns nothing.
     while (true) {
         const result = await readDirEntries(reader);
@@ -158,15 +158,15 @@ export interface FileWithPath extends File {
     path: string;
 }
 
-async function traverseFileSystemEntry(entry: Entry, path: string = ''): Promise<FileWithPath[]> {
+async function traverseFileSystemEntry(entry: FileSystemEntry, path: string = ''): Promise<FileWithPath[]> {
     if (entry.isDirectory) {
-        const dirEntry = entry as DirectoryEntry;
+        const dirEntry = entry as FileSystemDirectoryEntry;
         const reader = dirEntry.createReader();
         const entries = await readAllDirEntries(reader);
 
         return traverseFileSystemEntryTree(entries, `${path}/${entry.name}`);
     } else if (entry.isFile) {
-        const fileEntry = entry as FileEntry;
+        const fileEntry = entry as FileSystemFileEntry;
 
         return new Promise((resolve, reject) => {
             fileEntry.file((file) => {
@@ -183,7 +183,7 @@ async function traverseFileSystemEntry(entry: Entry, path: string = ''): Promise
     }
 }
 
-async function traverseFileSystemEntryTree(entries: Entry[], path: string): Promise<FileWithPath[]> {
+async function traverseFileSystemEntryTree(entries: FileSystemEntry[], path: string): Promise<FileWithPath[]> {
     const files = await Promise.all(entries.map((entry) => {
         return traverseFileSystemEntry(entry, path);
     }));
@@ -202,7 +202,7 @@ export async function traverseFileSystemDataTransfer(dataTransfer: DataTransfer)
         const item = items[i];
         if (item === null)
             continue;
-        const entry = item.webkitGetAsEntry() as Entry | null;
+        const entry = item.webkitGetAsEntry() as FileSystemEntry | null;
         if (entry === null)
             continue;
         promises.push(traverseFileSystemEntry(entry));

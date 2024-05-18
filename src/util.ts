@@ -21,9 +21,11 @@ export function nullify<T>(v: T | undefined | null): T | null {
 
 export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true, encoding: string | null = null): string {
     const buf = buffer.createTypedArray(Uint8Array, offs);
+    if (length < 0)
+        length = buf.byteLength;
     let byteLength = 0;
     while (true) {
-        if (length >= 0 && byteLength >= length)
+        if (byteLength >= length)
             break;
         if (nulTerminated && buf[byteLength] === 0)
             break;

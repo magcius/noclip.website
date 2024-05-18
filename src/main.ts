@@ -89,7 +89,8 @@ import * as Scenes_WorldOfWarcraft from './WorldOfWarcraft/scenes.js';
 import * as Scenes_Glover from './Glover/scenes.js';
 import * as Scenes_HalfLife from './GoldSrc/Scenes_HalfLife.js';
 import * as Scenes_SuperMonkeyBall from './SuperMonkeyBall/Scenes_SuperMonkeyBall.js';
-import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js'
+import * as Scenes_DragonQuest8 from './DragonQuest8/scenes.js';
+import * as Scenes_Morrowind from './Morrowind/Scenes.js';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops.js';
 
@@ -216,6 +217,7 @@ const sceneGroups: (string | SceneGroup)[] = [
     Scenes_HalfLife.sceneGroup,
     Scenes_Left4Dead2.sceneGroup,
     Scenes_NeoTokyo.sceneGroup,
+    Scenes_Morrowind.sceneGroup,
 ];
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {

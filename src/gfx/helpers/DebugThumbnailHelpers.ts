@@ -1,5 +1,6 @@
 
-import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil.js';
+import { nArray, range } from '../platform/GfxPlatformUtil.js';
+import { gfxSamplerBindingNew } from '../platform/GfxPlatformObjUtil.js';
 import { GfxColor, GfxMipFilterMode, GfxProgram, GfxRenderPass, GfxRenderPassDescriptor, GfxSampler, GfxSamplerBinding, GfxTexFilterMode, GfxWrapMode } from '../platform/GfxPlatform.js';
 import { GfxShaderLibrary } from './GfxShaderLibrary.js';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler.js';

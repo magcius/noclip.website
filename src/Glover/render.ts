@@ -21,7 +21,7 @@ import { align, assert, assertExists, nArray } from "../util.js";
 
 import { Color, colorNewCopy, colorNewFromRGBA } from "../Color.js";
 
-import { GloverObjbank } from './parsers';
+import { GloverObjbank } from './parsers/index.js';
 
 export const enum GloverRendererLayer {
     OPAQUE,

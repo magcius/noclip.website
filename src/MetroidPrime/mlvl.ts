@@ -3,7 +3,7 @@
 
 import { assert, assertExists } from "../util.js";
 
-import { InputStream } from "./stream"
+import { InputStream } from "./stream.js"
 import { ResourceSystem } from "./resource.js";
 import * as STRG from "./strg.js";
 

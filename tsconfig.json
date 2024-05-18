@@ -22,16 +22,15 @@
             "dom"
         ],
         "sourceMap": true,
-        "moduleResolution": "node",
-        "module": "esNext",
+        "moduleResolution": "NodeNext",
+        "module": "NodeNext",
         "types": [
             "gl-matrix",
-            "filesystem"
+            "webxr"
         ]
     },
     "include": [
         "./src/",
-        "./src/vendor/webxr/",
         "node_modules/@webgpu/types"
     ],
     "exclude": [

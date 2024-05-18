@@ -594,11 +594,11 @@ class MIDIDevice {
     private onMessage = (ev: Event): void => {
         const e = ev as MIDIMessageEvent;
 
-        const messageType = e.data[0];
+        const messageType = e.data![0];
 
         if (messageType >= 0xB0 && messageType <= 0xBF && this.oncontrolmessage !== null) {
             // Control change message
-            const channel = e.data[0] & 0x0F, controlNumber = e.data[1], value = e.data[2];
+            const channel = e.data![0] & 0x0F, controlNumber = e.data![1], value = e.data![2];
 
             let boundControl = nullify(this.boundControls.find((control) => control.channel === channel && control.controlNumber === controlNumber));
             this.oncontrolmessage(this, boundControl, channel, controlNumber, value);

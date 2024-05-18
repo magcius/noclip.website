@@ -40,7 +40,7 @@ import * as GX from './gx_enum.js';
 import { Endianness, getSystemEndianness } from '../endian.js';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat.js';
 import { HashMap, nullHashFunc } from '../HashMap.js';
-import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformUtil.js';
+import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformObjUtil.js';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {

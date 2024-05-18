@@ -1,7 +1,8 @@
 
 import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxChannelWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform.js";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers.js";
-import { fallbackUndefined, gfxColorCopy, gfxColorNewCopy } from "../platform/GfxPlatformUtil.js";
+import { fallbackUndefined } from "../platform/GfxPlatformUtil.js";
+import { gfxColorCopy, gfxColorNewCopy } from '../platform/GfxPlatformUtil.js';
 
 function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
     dst.blendDstFactor = src.blendDstFactor;

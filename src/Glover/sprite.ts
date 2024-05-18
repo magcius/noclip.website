@@ -16,7 +16,7 @@ import { assert } from "../util.js";
 
 import { Color } from "../Color.js";
 
-import { GloverTexbank } from './parsers';
+import { GloverTexbank } from './parsers/index.js';
 import { Flipbook, FlipbookType } from './particles.js';
 import { SRC_FRAME_TO_MS } from './timing.js';
 import { lerp, subtractAngles } from './util.js';

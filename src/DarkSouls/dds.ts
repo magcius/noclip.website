@@ -3,7 +3,7 @@ import * as Viewer from '../viewer.js';
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 import { TextureHolder, LoadedTexture } from "../TextureHolder.js";
-import { GfxDevice, GfxFormat, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxFormat, GfxTexture, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture.js";
 
 export interface Level {
@@ -147,57 +147,62 @@ function decompressDDSLevel(dds: DDS, level: Level): DecodedSurfaceSW {
     }
 }
 
-export class DDSTextureHolder extends TextureHolder<DDS> {
-    public loadTexture(device: GfxDevice, textureEntry: DDS): LoadedTexture {
-        const surfaces: HTMLCanvasElement[] = [];
+export function createTexture(device: GfxDevice, dds: DDS): GfxTexture {
+    let pixelFormat: GfxFormat;
+    if (dds.format === 'DXT1')
+        pixelFormat = dds.isSRGB ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
+    // TODO(jstpierre): Support native BC3. Seems like texture sizes are too goofy right now?
+    // else if (textureEntry.format === 'DXT5' && device.queryTextureFormatSupported(GfxFormat.BC3_SRGB))
+    //     pixelFormat = GfxFormat.BC3_SRGB;
+    else
+        pixelFormat = dds.isSRGB ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
 
-        let pixelFormat: GfxFormat;
-        if (textureEntry.format === 'DXT1')
-            pixelFormat = textureEntry.isSRGB ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
-        // TODO(jstpierre): Support native BC3. Seems like texture sizes are too goofy right now?
-        // else if (textureEntry.format === 'DXT5' && device.queryTextureFormatSupported(GfxFormat.BC3_SRGB))
-        //     pixelFormat = GfxFormat.BC3_SRGB;
-        else
-            pixelFormat = textureEntry.isSRGB ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    if (!device.queryTextureFormatSupported(pixelFormat, dds.width, dds.height))
+        pixelFormat = dds.isSRGB ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
 
-        if (!device.queryTextureFormatSupported(pixelFormat, textureEntry.width, textureEntry.height))
-            pixelFormat = textureEntry.isSRGB ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    const levelDatas: Uint8Array[] = [];
+    for (let i = 0; i < dds.levels.length; i++) {
+        const level = dds.levels[i];
 
-        const levelDatas: Uint8Array[] = [];
-        for (let i = 0; i < textureEntry.levels.length; i++) {
-            const level = textureEntry.levels[i];
-
-            if (textureEntry.format === 'RGB') {
-                levelDatas.push(decodeRGB(level));
-            } else if (pixelFormat === GfxFormat.BC1 || pixelFormat === GfxFormat.BC1_SRGB /*|| pixelFormat === GfxFormat.BC3 || pixelFormat === GfxFormat.BC3_SRGB*/) {
-                levelDatas.push(level.data.createTypedArray(Uint8Array));
-            } else {
-                const decodedSurface = decompressDDSLevel(textureEntry, level);
-                levelDatas.push(decodedSurface.pixels as Uint8Array);
-                decodedSurface.pixels = null as unknown as Uint8Array;
-            }
-
-            // Delete expensive data
-            level.data = null as unknown as ArrayBufferSlice;
+        if (dds.format === 'RGB') {
+            levelDatas.push(decodeRGB(level));
+        } else if (pixelFormat === GfxFormat.BC1 || pixelFormat === GfxFormat.BC1_SRGB /*|| pixelFormat === GfxFormat.BC3 || pixelFormat === GfxFormat.BC3_SRGB*/) {
+            levelDatas.push(level.data.createTypedArray(Uint8Array));
+        } else {
+            const decodedSurface = decompressDDSLevel(dds, level);
+            levelDatas.push(decodedSurface.pixels as Uint8Array);
+            decodedSurface.pixels = null as unknown as Uint8Array;
         }
 
-        const descriptor: GfxTextureDescriptor = {
-            width: textureEntry.width,
-            height: textureEntry.height,
-            pixelFormat,
-            dimension: textureEntry.isCubemap ? GfxTextureDimension.Cube : GfxTextureDimension.n2D,
-            depthOrArrayLayers: textureEntry.isCubemap ? 6 : 1,
-            numLevels: textureEntry.levels.length,
-            usage: GfxTextureUsage.Sampled,
-        };
-        const gfxTexture = device.createTexture(descriptor);
-        device.setResourceName(gfxTexture, textureEntry.name);
-        device.uploadTextureData(gfxTexture, 0, levelDatas);
+        // Delete expensive data
+        level.data = null as unknown as ArrayBufferSlice;
+    }
+
+    const descriptor: GfxTextureDescriptor = {
+        width: dds.width,
+        height: dds.height,
+        pixelFormat,
+        dimension: dds.isCubemap ? GfxTextureDimension.Cube : GfxTextureDimension.n2D,
+        depthOrArrayLayers: dds.isCubemap ? 6 : 1,
+        numLevels: dds.levels.length,
+        usage: GfxTextureUsage.Sampled,
+    };
+
+    const tex = device.createTexture(descriptor);
+    device.setResourceName(tex, dds.name);
+    device.uploadTextureData(tex, 0, levelDatas);
+    return tex;
+}
+
+export class DDSTextureHolder extends TextureHolder<DDS> {
+    public loadTexture(device: GfxDevice, dds: DDS): LoadedTexture {
+        const surfaces: HTMLCanvasElement[] = [];
 
         const extraInfo = new Map<string, string>();
-        extraInfo.set('Format', textureEntry.format);
-        const viewerTexture: Viewer.Texture = { name: textureEntry.name, surfaces, extraInfo };
+        extraInfo.set('Format', dds.format);
+        const viewerTexture: Viewer.Texture = { name: dds.name, surfaces, extraInfo };
 
+        const gfxTexture = createTexture(device, dds);
         return { viewerTexture, gfxTexture };
     }
 }

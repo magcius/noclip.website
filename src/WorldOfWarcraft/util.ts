@@ -1,4 +1,4 @@
-import { WowSheepfileEntry, WowSheepfileManager } from "../../rust/pkg";
+import { WowSheepfileEntry, WowSheepfileManager } from "../../rust/pkg/index.js";
 import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher.js";
 import { rust } from '../rustlib.js';
 

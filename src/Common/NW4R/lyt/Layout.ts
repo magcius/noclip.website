@@ -15,7 +15,7 @@ import { TDDraw } from "../../../SuperMarioGalaxy/DDraw.js";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams } from "../../../gx/gx_render.js";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture.js";
 import { getPointHermite } from "../../../Spline.js";
-import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil.js";
+import { arrayCopy } from '../../../gfx/platform/GfxPlatformObjUtil.js';
 import { LoopMode } from "../../../rres/brres.js";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render.js";
 import { TPL } from "../../../PaperMarioTTYD/tpl.js";
