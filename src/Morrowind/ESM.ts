@@ -1,4 +1,5 @@
 
+import { vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorNewFromRGBA8 } from "../Color.js";
 import { assert, readString } from "../util.js";
@@ -53,14 +54,6 @@ class RIFFRecord {
     public findField(fourcc: string): RIFFField | null {
         return this._findField(FourCC(fourcc));
     }
-
-    private _findFields(fourcc: number): RIFFField[] {
-        return this.fields.filter((f) => f.fourcc === fourcc);
-    }
-
-    public findFields(fourcc: string): RIFFField[] {
-        return this._findFields(FourCC(fourcc));
-    }
 }
 
 type RecordHandler = (record: RIFFRecord) => void;
@@ -79,6 +72,13 @@ function parseRIFF(buffer: ArrayBufferSlice, recordHandler: RecordHandler): void
     }
 }
 
+class FRMR {
+    public referenceID = 0;
+    public objectID: string = '';
+    public position = vec3.create();
+    public rotation = vec3.create(); // euler angles
+}
+
 export class CELL {
     public name: string;
     public gridX: number;
@@ -92,10 +92,9 @@ export class CELL {
     public sunlightColor: Color | null = null;
     public fogColor: Color | null = null;
     public fogDensity: number = 0;
+    public frmr: FRMR[] = [];
 
     constructor(record: RIFFRecord) {
-        (this as any).record = record;
-
         for (let i = 0; i < record.fields.length; i++) {
             const field = record.fields[i];
             if (field.fourcc === FourCC('NAME')) {
@@ -122,9 +121,32 @@ export class CELL {
                 this.fogDensity = field.getFloat32(0x0C);
             } else if (field.fourcc === FourCC('FRMR')) {
                 // XXX(jstpierre): Form Reference
-                break;
+                i = this.parseFRMR(record, i);
             }
         }
+    }
+
+    private parseFRMR(record: RIFFRecord, idx: number): number {
+        const frmr = new FRMR();
+        for (let i = idx; i < record.fields.length; i++) {
+            const field = record.fields[i];
+            if (field.fourcc === FourCC('FRMR')) {
+                if (i !== idx) break; // found next FRMR record, abort
+
+                frmr.referenceID = field.getInt32();
+            } else if (field.fourcc === FourCC('NAME')) {
+                frmr.objectID = field.getString();
+            } else if (field.fourcc === FourCC('DATA')) {
+                frmr.position[0] = field.getFloat32(0x00);
+                frmr.position[1] = field.getFloat32(0x04);
+                frmr.position[2] = field.getFloat32(0x08);
+                frmr.rotation[0] = field.getFloat32(0x0C);
+                frmr.rotation[1] = field.getFloat32(0x10);
+                frmr.rotation[2] = field.getFloat32(0x14);
+            }
+        }
+        this.frmr.push(frmr);
+        return record.fields.length;
     }
 }
 
@@ -170,6 +192,15 @@ function normalizeTexturePath(path: string): string {
     return path;
 }
 
+function normalizeMeshesPath(path: string): string {
+    path = path.toLowerCase();
+    if (!path.startsWith('meshes\\'))
+        path = `meshes\\${path}`;
+    if (!path.endsWith('.nif'))
+        path = `${path.slice(0, -4)}.nif`;
+    return path;
+}
+
 class LTEX {
     public name: string;
     public index: number;
@@ -183,12 +214,11 @@ class LTEX {
 }
 
 export class ESM {
-    private records: RIFFRecord[] = []; // debug
-
     private recordHandler = new Map<number, RecordHandler>();
     public gameSettings = new Map<string, number | string>();
     public cell: CELL[] = [];
-    public ltex = new Map<number, LTEX>();
+    public ltex: LTEX[] = [];
+    public stat = new Map<string, string>();
 
     private currentCell: CELL | null = null; // parse state
 
@@ -197,6 +227,7 @@ export class ESM {
         this.register('CELL', this.handleRecord_CELL);
         this.register('LAND', this.handleRecord_LAND);
         this.register('LTEX', this.handleRecord_LTEX);
+        this.register('STAT', this.handleRecord_STAT);
 
         this.parse(buffer);
     }
@@ -222,14 +253,19 @@ export class ESM {
         this.currentCell = cell;
     }
 
-    private handleRecord_LTEX(record: RIFFRecord): void {
-        const ltex = new LTEX(record);
-        this.ltex.set(ltex.index, ltex);
-    }
-
     private handleRecord_LAND(record: RIFFRecord): void {
         const land = new LAND(record);
         this.currentCell!.land = land;
+    }
+
+    private handleRecord_LTEX(record: RIFFRecord): void {
+        this.ltex.push(new LTEX(record));
+    }
+
+    private handleRecord_STAT(record: RIFFRecord): void {
+        const name = record.findField('NAME')!.getString();
+        const modl = record.findField('MODL')!.getString();
+        this.stat.set(name, normalizeMeshesPath(modl));
     }
 
     public parse(buffer: ArrayBufferSlice): void {
@@ -237,7 +273,6 @@ export class ESM {
             const recordHandler = this.recordHandler.get(record.fourcc);
             if (recordHandler !== undefined)
                 recordHandler(record);
-            this.records.push(record);
         });
 
         this.currentCell = null;

@@ -1,22 +1,65 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
+import { Camera } from "../Camera.js";
 import * as DDS from "../DarkSouls/dds.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
+import { Frustum } from "../Geometry.js";
+import { computeModelMatrixT, getMatrixTranslation } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneContext } from "../SceneBase.js";
+import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { assert, assertExists } from "../util.js";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
 import { CELL, ESM, LAND } from "./ESM.js";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { computeModelMatrixT } from "../MathHelpers.js";
+import { NIF } from "./NIF.js";
+
+const noclipSpaceFromMorrowindSpace = mat4.fromValues(
+    1, 0, 0, 0,
+    0, 0, -1, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1,
+);
+
+class View {
+    // aka viewMatrix
+    public viewFromWorldMatrix = mat4.create();
+    // aka worldMatrix
+    public worldFromViewMatrix = mat4.create();
+    public clipFromWorldMatrix = mat4.create();
+    // aka projectionMatrix
+    public clipFromViewMatrix = mat4.create();
+
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
+    // The current camera position, in Morrowind world space.
+    public cameraPos = vec3.create();
+
+    // Frustum is stored in Morrowind world space.
+    public frustum = new Frustum();
+
+    public finishSetup(): void {
+        mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
+        mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
+        getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix, this.clipSpaceNearZ);
+    }
+
+    public setupFromCamera(camera: Camera): void {
+        this.clipSpaceNearZ = camera.clipSpaceNearZ;
+        mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromMorrowindSpace);
+        mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
+        this.finishSetup();
+    }
+}
 
 export class PluginData {
     constructor(public bsa: BSA[], public esm: ESM) {
@@ -68,9 +111,10 @@ export class ModelCache {
     }
 }
 
-export class RenderGlobals {
+export class Globals {
     public modelCache: ModelCache;
     public terrainIndexBuffer: GfxBuffer;
+    public view = new View();
 
     constructor(public device: GfxDevice, public pluginData: PluginData) {
         this.modelCache = new ModelCache(device, pluginData);
@@ -86,7 +130,7 @@ class TerrainTextureData {
 
     constructor(device: GfxDevice, pluginData: PluginData) {
         const ltex = pluginData.esm.ltex;
-        const depth = ltex.size;
+        const depth = ltex.length + 1;
 
         this.texture = device.createTexture({
             dimension: GfxTextureDimension.n2DArray,
@@ -125,8 +169,8 @@ class TerrainTextureData {
         };
 
         insertDDS(0, `textures\\_land_default.dds`);
-        for (const tex of ltex.values())
-            insertDDS(tex.index, tex.filename);
+        for (const tex of ltex)
+            insertDDS(tex.index + 1, tex.filename);
 
         device.uploadTextureData(this.texture, 0, levelDatas);
     }
@@ -139,16 +183,16 @@ class TerrainTextureData {
 class CellTerrain {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
+    public terrainMapTex: GfxTexture;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public indexCount = 0;
 
-    constructor(globals: RenderGlobals, land: LAND) {
+    constructor(globals: Globals, land: LAND) {
         assert(land.heightGradientData !== null);
 
-        const size = 8192;
         const vertexCount = land.sideLen * land.sideLen;
-        const vertexSizeInFloats = 3 + 3 + 3; // position, normal, color
+        const vertexSizeInFloats = 7; // height, normal, color
         const vertexData = new Float32Array(vertexCount * vertexSizeInFloats);
 
         let rowStart = land.heightOffset;
@@ -160,12 +204,7 @@ class CellTerrain {
                 if (x === 0)
                     rowStart = height;
 
-                const px = (x / (land.sideLen - 1) - 0.5) * size;
-                const py = (y / (land.sideLen - 1) - 0.5) * size;
-                const pz = height * 8;
-                vertexData[idx*9 + 0] = px;
-                vertexData[idx*9 + 1] = py;
-                vertexData[idx*9 + 2] = pz;
+                vertexData[idx*7 + 0] = height;
 
                 let nx = 0, ny = 0, nz = 1;
                 if (land.heightNormalData !== null) {
@@ -173,9 +212,9 @@ class CellTerrain {
                     ny = (land.heightNormalData[idx*3 + 1] / 0x7F) - 1.0;
                     nz = (land.heightNormalData[idx*3 + 2] / 0x7F) - 1.0;
                 }
-                vertexData[idx*9 + 3] = nx;
-                vertexData[idx*9 + 4] = ny;
-                vertexData[idx*9 + 5] = nz;
+                vertexData[idx*7 + 1] = nx;
+                vertexData[idx*7 + 2] = ny;
+                vertexData[idx*7 + 3] = nz;
 
                 let cr = 1, cg = 1, cb = 1;
                 if (land.heightColorData !== null) {
@@ -183,9 +222,9 @@ class CellTerrain {
                     cg = (land.heightColorData[idx*3 + 1]) / 255;
                     cb = (land.heightColorData[idx*3 + 2]) / 255;
                 }
-                vertexData[idx*9 + 6] = cr;
-                vertexData[idx*9 + 7] = cg;
-                vertexData[idx*9 + 8] = cb;
+                vertexData[idx*7 + 4] = cr;
+                vertexData[idx*7 + 5] = cg;
+                vertexData[idx*7 + 6] = cb;
             }
         }
 
@@ -222,16 +261,16 @@ class CellTerrain {
         this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.indexCount = indexData.length;
 
-        /*
+        this.terrainMapTex = device.createTexture(makeTextureDescriptor2D(GfxFormat.F32_R, 16, 16, 1));
+        const terrainMapData = new Float32Array(16*16);
         if (land.heightTexIdxData !== null) {
-            for (const ltexID of land.heightTexIdxData) {
-                const filename = ltexID === 0 ? `textures\\_land_default.dds` : globals.pluginData.esm.ltex.get(ltexID - 1)!.filename;
-                const texture = globals.modelCache.getTexture(filename);
-                this.texture.push(texture);
-                assert(texture.width === 256 && texture.height === 256);
+            for (let i = 0; i < land.heightTexIdxData.length; i++) {
+                // swizzle
+                const idx = (i & 0xC3) | ((i & 0x0C) << 2) | ((i & 0x30) >>> 2);
+                terrainMapData[idx] = land.heightTexIdxData[i];
             }
         }
-        */
+        device.uploadTextureData(this.terrainMapTex, 0, [terrainMapData]);
     }
 
     public destroy(device: GfxDevice): void {
@@ -242,10 +281,24 @@ class CellTerrain {
 
 class CellData {
     public terrain: CellTerrain | null = null;
+    public visible = true;
 
-    constructor(globals: RenderGlobals, public cell: CELL) {
-        if (cell.land !== null && cell.land.heightGradientData !== null)
-            this.terrain = new CellTerrain(globals, cell.land);
+    constructor(globals: Globals, public cell: CELL) {
+        const land = this.cell.land;
+        if (land !== null && land.heightGradientData !== null)
+            this.terrain = new CellTerrain(globals, land);
+
+        for (let i = 0; i < this.cell.frmr.length; i++) {
+            const frmr = this.cell.frmr[i];
+            const objectID = frmr.objectID;
+            const nif = globals.pluginData.esm.stat.get(objectID);
+            /*
+            if (nif !== undefined) {
+                const nifData = globals.pluginData.findFileData(nif)!;
+                const nif2 = new NIF(nifData);
+            }
+            */
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -255,7 +308,10 @@ class CellData {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 0 },
+    { numUniformBuffers: 2, numSamplers: 2, samplerEntries: [
+        { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
+        { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // TODO(jstpierre): Integer texture for the map lookup?
+    ] },
 ];
 
 class TerrainProgram extends DeviceProgram {
@@ -267,6 +323,9 @@ class TerrainProgram extends DeviceProgram {
     public static a_Color = 2;
 
     public override both = `
+precision mediump float;
+precision mediump sampler2DArray;
+
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
 };
@@ -274,26 +333,72 @@ layout(std140) uniform ub_SceneParams {
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_WorldFromLocal;
 };
+
+layout(location = 0) uniform sampler2DArray u_TextureTerrain;
+layout(location = 1) uniform sampler2D u_TextureTerrainMap;
 `;
     public override vert = `
-layout(location = 0) in vec3 a_Position;
+layout(location = 0) in float a_Height;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec3 a_Color;
 
+out vec2 v_CellUV;
 out vec3 v_Color;
 
 void main() {
-    vec3 t_PositionWorld = Mul(u_WorldFromLocal, vec4(a_Position, 1.0));
+    // 0-1 across the cell
+    vec2 uv = vec2(float(gl_VertexID % 65), float(gl_VertexID / 65)) / vec2(64.0);
+    v_CellUV = uv;
+
+    float x = (uv.x - 0.5) * 8192.0;
+    float y = (uv.y - 0.5) * 8192.0;
+    float z = a_Height * 8.0;
+    vec3 t_PositionWorld = Mul(u_WorldFromLocal, vec4(x, y, z, 1.0));
+
     gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
     v_Color = a_Color;
+
+    vec3 t_SunDirection = normalize(vec3(.2, .5, 1));
+    // https://github.com/OpenMW/openmw/blob/master/files/openmw.cfg
+    vec3 t_SunAmbient = vec3(137, 140, 160) / 255.0;
+    vec3 t_SunDiffuse = vec3(255, 252, 238) / 255.0;
+    v_Color *= dot(a_Normal, t_SunDirection) * t_SunDiffuse + t_SunAmbient;
 }
 `;
 
     public override frag = `
+in vec2 v_CellUV;
 in vec3 v_Color;
 
+vec4 SampleTerrain(vec2 t_TexCoord, ivec2 t_Offset) {
+    float t_TexLayer = texelFetch(SAMPLER_2D(u_TextureTerrainMap), ivec2(t_TexCoord) + t_Offset, 0).r;
+    return texture(SAMPLER_2DArray(u_TextureTerrain), vec3(t_TexCoord.xy, t_TexLayer));
+}
+
 void main() {
-    gl_FragColor = vec4(v_Color, 1.0);
+    vec2 t_TexCoord = v_CellUV * 16.0;
+
+    vec2 t_Frac = fract(t_TexCoord);
+    ivec2 t_TexCoordI = ivec2(t_TexCoord);
+    vec4 t_Terrain = SampleTerrain(t_TexCoord, ivec2(0, 0));
+
+    // XXX(jstpierre): This doesn't blend across chunk boundaries, need a dynamic terrain system
+    if (t_Frac.x > 0.5 && t_TexCoordI.x < 15)
+        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(1, 0)), t_Frac.x - 0.5);
+    else if (t_TexCoordI.x > 0)
+        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(-1, 0)), 0.5 - t_Frac.x);
+
+    if (t_Frac.y > 0.5 && t_TexCoordI.y < 15)
+        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, 1)), t_Frac.y - 0.5);
+    else if (t_TexCoordI.y > 0)
+        t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, -1)), 0.5 - t_Frac.y);
+
+    vec4 t_Diffuse = t_Terrain;
+    t_Diffuse.rgb *= v_Color;
+
+    // TODO(jstpierre): Lighting, weather
+
+    gl_FragColor = t_Diffuse;
 }
 `;
 }
@@ -303,8 +408,9 @@ class WorldManager {
     public cell: CellData[] = [];
     private terrainProgram: GfxProgram;
     private terrainInputLayout: GfxInputLayout;
+    private textureMapping = nArray(2, () => new TextureMapping());
 
-    constructor(globals: RenderGlobals) {
+    constructor(globals: Globals) {
         for (let i = 0; i < globals.pluginData.esm.cell.length; i++) {
             const cell = globals.pluginData.esm.cell[i];
             if (cell.interior)
@@ -317,26 +423,40 @@ class WorldManager {
         this.terrainProgram = renderCache.createProgram(new TerrainProgram());
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: TerrainProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*4 },
-            { location: TerrainProgram.a_Normal, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3*4 },
-            { location: TerrainProgram.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 6*4 },
+            { location: TerrainProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_R, bufferByteOffset: 0*4 },
+            { location: TerrainProgram.a_Normal, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 1*4 },
+            { location: TerrainProgram.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 4*4 },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 9*4, frequency: GfxVertexBufferFrequency.PerVertex },
+            { byteStride: 7*4, frequency: GfxVertexBufferFrequency.PerVertex },
         ];
         this.terrainInputLayout = renderCache.createInputLayout({
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
+
+        this.textureMapping[0].gfxTexture = globals.modelCache.getTerrainTexture();
+        this.textureMapping[0].gfxSampler = renderCache.createSampler({
+            wrapS: GfxWrapMode.Repeat,
+            wrapT: GfxWrapMode.Repeat,
+            minFilter: GfxTexFilterMode.Bilinear,
+            magFilter: GfxTexFilterMode.Bilinear,
+            mipFilter: GfxMipFilterMode.Linear,
+        });
+
+        this.textureMapping[1].gfxSampler = this.textureMapping[0].gfxSampler; // doesn't matter, only use texelFetch
     }
 
-    public prepareToRender(globals: RenderGlobals, renderInstManager: GfxRenderInstManager): void {
+    public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.terrainProgram);
 
         for (let i = 0; i < this.cell.length; i++) {
             const cell = this.cell[i];
+            if (!cell.visible)
+                continue;
+
             if (cell.terrain === null)
                 continue;
 
@@ -350,6 +470,10 @@ class WorldManager {
             offs += fillMatrix4x3(d, offs, scratchMatrix);
 
             renderInst.setVertexInput(this.terrainInputLayout, cell.terrain.vertexBufferDescriptors, cell.terrain.indexBufferDescriptor);
+
+            this.textureMapping[1].gfxTexture = cell.terrain.terrainMapTex;
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
             renderInst.setDrawCount(cell.terrain.indexCount);
 
             renderInstManager.submitRenderInst(renderInst);
@@ -368,24 +492,26 @@ export class MorrowindRenderer implements SceneGfx {
     private worldManager: WorldManager;
     private renderInstListMain = new GfxRenderInstList();
 
-    constructor(context: SceneContext, private renderGlobals: RenderGlobals) {
-        this.renderHelper = new GfxRenderHelper(context.device, context, this.renderGlobals.modelCache.renderCache);
-        this.worldManager = new WorldManager(this.renderGlobals);
+    constructor(context: SceneContext, private globals: Globals) {
+        this.renderHelper = new GfxRenderHelper(context.device, context, this.globals.modelCache.renderCache);
+        this.worldManager = new WorldManager(this.globals);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
+        const globals = this.globals;
+        globals.view.setupFromCamera(viewerInput.camera);
+
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(TerrainProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(TerrainProgram.ub_SceneParams);
 
-        mat4.mul(scratchMatrix, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
-        offs += fillMatrix4x4(mapped, offs, scratchMatrix);
+        offs += fillMatrix4x4(mapped, offs, globals.view.clipFromWorldMatrix);
 
         this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
 
-        this.worldManager.prepareToRender(this.renderGlobals, this.renderHelper.renderInstManager);
+        this.worldManager.prepareToRender(this.globals, this.renderHelper.renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();

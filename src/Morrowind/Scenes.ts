@@ -5,7 +5,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { SceneGfx } from "../viewer.js";
 import * as BSA from "./BSA.js";
 import * as ESM from "./ESM.js";
-import { MorrowindRenderer, PluginData, RenderGlobals } from "./Render.js";
+import { MorrowindRenderer, PluginData, Globals } from "./Render.js";
 
 const pathBase = `Morrowind`;
 
@@ -20,7 +20,7 @@ class MorrowindSceneDesc implements SceneDesc {
                 (async() => new ESM.ESM(await dataFetcher.fetchData(`${pathBase}/Morrowind.esm`)))(),
             ]);
             const pluginData = new PluginData([bsa], esm);
-            return new RenderGlobals(context.device, pluginData);
+            return new Globals(context.device, pluginData);
         });
         return new MorrowindRenderer(context, renderGlobals);
     }
