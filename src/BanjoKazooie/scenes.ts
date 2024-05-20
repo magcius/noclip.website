@@ -674,7 +674,7 @@ class SceneDesc implements Viewer.SceneDesc {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
-        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`)!, BYML.FileType.CRG1);
+        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=3`)!, BYML.FileType.CRG1);
 
         const viewerTextures: Viewer.Texture[] = [];
         const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
@@ -696,20 +696,21 @@ class SceneDesc implements Viewer.SceneDesc {
             xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
         }
 
-        const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
-        if (opaSkybox !== null) {
-            const geo = Geo.parseBK(opaSkybox.Data, Geo.RenderZMode.OPA, true);
+        for (let i = 0; i < obj.Skyboxes.length; i++) {
+            const skybox = obj.Skyboxes[i];
+            const skyboxFile = assertExists(findFileByID(obj, skybox.FileId));
+            const geo = Geo.parseBK(skyboxFile.Data, Geo.RenderZMode.OPA, true);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
-            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.OpaSkyboxScale);
-        }
-
-        const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
-        if (xluSkybox !== null) {
-            const geo = Geo.parseBK(xluSkybox.Data, Geo.RenderZMode.XLU, false);
-            const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-            renderer.isSkybox = true;
-            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.XluSkyboxScale);
+            if (skybox.RotationSpeed !== 0) {
+                renderer.movementController = new class implements MovementController {
+                    public movement(dst: mat4, time: number): void {
+                        mat4.identity(dst);
+                        scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, skybox.Scale);
+                        mat4.rotateY(dst, dst, time * skybox.RotationSpeed * MathConstants.DEG_TO_RAD);
+                    }
+                };
+            }
         }
 
         const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));

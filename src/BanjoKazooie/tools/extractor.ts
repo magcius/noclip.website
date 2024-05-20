@@ -92,6 +92,12 @@ function extractFile(fs: FS, file: FSFile): CRG1File {
     return { FileID: fileIndex, Data: buffer };
 }
 
+interface Skybox {
+    FileId: number;
+    Scale: number;
+    RotationSpeed: number;
+}
+
 function extractMap(fs: FS, name: string, sceneID: number): void {
     const fileTable: CRG1File[] = [];
 
@@ -105,11 +111,7 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
         OpaGeoFileId: -1,
         XluGeoFileId: -1,
 
-        // Skybox
-        OpaSkyboxFileId: -1,
-        OpaSkyboxScale: 1,
-        XluSkyboxFileId: -1,
-        XluSkyboxScale: 1,
+        Skyboxes: [] as Skybox[],
     };
 
     crg1.SetupFileId = extractFileAndAppend(fileTable, fs, sceneID + 0x71C);
@@ -129,18 +131,20 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
         }
     }
 
+    crg1.Skyboxes = [];
     for (let i = 0x87B0; i < 0x8BA0; i += 0x28) {
         const skyboxTableSceneID  = f9cae0View.getUint16(i + 0x00);
         if (skyboxTableSceneID === sceneID) {
-            const opaSkyboxId    = f9cae0View.getUint16(i + 0x04);
-            const opaSkyboxScale = f9cae0View.getFloat32(i + 0x08);
-            const xluSkyboxId    = f9cae0View.getUint16(i + 0x10);
-            const xluSkyboxScale = f9cae0View.getFloat32(i + 0x14);
+            for (let j = 0; j < 3; j++) {
+                const ModelId = f9cae0View.getUint16(i + 0x04 + j * 0x0C + 0x00);
+                if (ModelId === 0)
+                    break;
 
-            crg1.OpaSkyboxFileId = opaSkyboxId > 0 ? extractFileAndAppend(fileTable, fs, opaSkyboxId) : -1;
-            crg1.OpaSkyboxScale = opaSkyboxScale;
-            crg1.XluSkyboxFileId = xluSkyboxId > 0 ? extractFileAndAppend(fileTable, fs, xluSkyboxId) : -1;
-            crg1.XluSkyboxScale = xluSkyboxScale;
+                const FileId = extractFileAndAppend(fileTable, fs, ModelId);
+                const Scale = f9cae0View.getFloat32(i + 0x04 + j * 0x0C + 0x04);
+                const RotationSpeed = f9cae0View.getFloat32(i + 0x04 + j * 0x0C + 0x08);
+                crg1.Skyboxes.push({ FileId, Scale, RotationSpeed });
+            }
             break;
         }
     }

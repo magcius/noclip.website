@@ -44,6 +44,7 @@
     "build:ffx": "cd src/FinalFantasyX/tools && tsx extractor.ts",
     "build:zelview": "cd src/zelview/tools && tsx extractor.ts",
     "build:JetSetRadio": "cd src/JetSetRadio/tools && tsx extractor.ts",
+    "build:BanjoKazooie": "cd src/BanjoKazooie/tools && tsx extractor.ts",
     "test:DeBlob2": "cd src/DeBlob2/tools && tsx systest.ts",
     "typecheck": "tsc -w --noEmit"
   },
