@@ -1129,7 +1129,7 @@ float CalcFresnel(float t_DotProduct, float t_FresnelPow) {
 }
 
 vec2 SampleFramebufferCoord(vec2 t_TexCoord) {
-#if defined GFX_VIEWPORT_ORIGIN_TL
+#if GFX_VIEWPORT_ORIGIN_TL()
     t_TexCoord.y = 1.0 - t_TexCoord.y;
 #endif
     return t_TexCoord;
@@ -2058,7 +2058,7 @@ ${GfxShaderLibrary.invlerp}
 in vec2 v_TexCoord;
 
 float UnprojectViewSpaceDepth(float z) {
-#if !defined GFX_CLIPSPACE_NEAR_ZERO
+#if !GFX_CLIPSPACE_NEAR_ZERO()
     z = z * 2.0 - 1.0;
 #endif
     vec4 v = u_UnprojectParams;

@@ -1,7 +1,7 @@
 
 import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice, GfxViewportOrigin, GfxClipSpaceNearZ } from "../platform/GfxPlatform.js";
 import { assert } from "../platform/GfxPlatformUtil.js";
-import { GfxShaderLibrary } from "../helpers/GfxShaderLibrary.js";
+import { GfxShaderLibrary, glslGenerateFloat } from "../helpers/GfxShaderLibrary.js";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
@@ -51,12 +51,11 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 
     let precision = lines.filter((line) => line.startsWith('precision')).join('\n') || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
-    let extraDefines = '';
-
-    if (vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft)
-        extraDefines += `${defineStr(`GFX_VIEWPORT_ORIGIN_TL`, `1`)}\n`;
-    if (vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero)
-        extraDefines += `${defineStr(`GFX_CLIPSPACE_NEAR_ZERO`, `1`)}\n`;
+    let extraDefines = `
+#define GFX_CLIPSPACE_NEAR_Z()     (${glslGenerateFloat(vendorInfo.clipSpaceNearZ)})
+#define GFX_CLIPSPACE_NEAR_ZERO()  (${vendorInfo.clipSpaceNearZ === GfxClipSpaceNearZ.Zero ? '1' : '0'})
+#define GFX_VIEWPORT_ORIGIN_TL()   (${vendorInfo.viewportOrigin === GfxViewportOrigin.UpperLeft ? '1' : '0'})
+`;
 
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, implicitBinding = 0, location = 0;

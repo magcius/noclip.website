@@ -2090,7 +2090,7 @@ void mainPS() {
 
     // Clip space is between -1 and 1. Move it into 0...1 space.
     t_ProjectedLightCoord.xy = t_ProjectedLightCoord.xy * 0.5 + 0.5;
-#if !defined GFX_CLIPSPACE_NEAR_ZERO
+#if !GFX_CLIPSPACE_NEAR_ZERO()
     t_ProjectedLightCoord.z = t_ProjectedLightCoord.z * 0.5 + 0.5;
 #endif
 
@@ -2098,7 +2098,7 @@ void mainPS() {
     if (all(greaterThan(t_ProjectedLightCoord.xyz, vec3(0.0))) && all(lessThan(t_ProjectedLightCoord.xyz, vec3(1.0)))) {
         vec2 t_ProjectedGoboTexCoord = t_ProjectedLightCoord.xy;
 
-#if defined GFX_VIEWPORT_ORIGIN_TL
+#if GFX_VIEWPORT_ORIGIN_TL()
         t_ProjectedLightCoord.y = 1.0 - t_ProjectedLightCoord.y;
 #else
         t_ProjectedGoboTexCoord.y = 1.0 - t_ProjectedGoboTexCoord.y;
@@ -3196,7 +3196,7 @@ void mainVS() {
 
 #if defined FRAG
 vec2 SampleFramebufferCoord(vec2 t_TexCoord) {
-#if defined GFX_VIEWPORT_ORIGIN_TL
+#if GFX_VIEWPORT_ORIGIN_TL()
     t_TexCoord.y = 1.0 - t_TexCoord.y;
 #endif
     return t_TexCoord;
@@ -3215,7 +3215,7 @@ bool IsSomethingInFront(float t_DepthSample) {
 
 vec4 CalcPosClipFromViewport(vec3 t_PosViewport) {
     vec4 t_PosClip = vec4(t_PosViewport.xy * 2.0 - 1.0, t_PosViewport.z, 1.0);
-#if !defined GFX_CLIPSPACE_NEAR_ZERO
+#if !GFX_CLIPSPACE_NEAR_ZERO()
     t_PosClip.z = t_PosClip.z * 2.0 - 1.0;
 #endif
     return t_PosClip;
@@ -3793,7 +3793,7 @@ void mainPS() {
         for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
             vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
 
-#if defined GFX_VIEWPORT_ORIGIN_TL
+#if GFX_VIEWPORT_ORIGIN_TL()
             t_TexCoord.y = 1.0 - t_TexCoord.y;
 #endif
 
@@ -4003,7 +4003,7 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
     v_PositionWorld.w = -gl_Position.z;
-#if !defined GFX_CLIPSPACE_NEAR_ZERO
+#if !GFX_CLIPSPACE_NEAR_ZERO()
     v_PositionWorld.w = v_PositionWorld.w * 0.5 + 0.5;
 #endif
 

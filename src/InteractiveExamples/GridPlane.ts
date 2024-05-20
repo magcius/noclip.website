@@ -1,17 +1,15 @@
 
-import { DeviceProgram } from "../Program.js";
-import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers.js";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { White, colorNewCopy } from "../Color.js";
 import { mat4 } from "gl-matrix";
+import { White, colorNewCopy } from "../Color.js";
+import { DeviceProgram } from "../Program.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers.js";
+import { fillColor, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { ViewerRenderInput } from "../viewer.js";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -38,11 +36,11 @@ void main() {
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
     gl_Position.zw = vec2(1.0, 1.0);
 
-#if defined GFX_CLIPSPACE_NEAR_ZERO
+#if GFX_CLIPSPACE_NEAR_ZERO()
     gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
 #endif
 
-#ifdef GFX_VIEWPORT_ORIGIN_TL
+#if GFX_VIEWPORT_ORIGIN_TL()
     v_TexCoord.y = 1.0 - v_TexCoord.y;
 #endif
 }
@@ -60,8 +58,16 @@ vec3 CalcWorldPos(in vec2 t_ClipXY, in float t_ClipZ) {
 }
 
 vec3 IntersectPlane(in vec2 t_ClipXY, out float t_RayT, out vec3 t_Near, out vec3 t_Far) {
-    float t_ClipNearZ = ${IS_DEPTH_REVERSED ? `1.0` : `0.0`};
-    float t_ClipFarZ = 1.0 - t_ClipNearZ;
+    float t_ClipNearZ = GFX_CLIPSPACE_NEAR_Z();
+    float t_ClipFarZ = 1.0;
+
+    if (${IS_DEPTH_REVERSED}) {
+        t_ClipFarZ = t_ClipNearZ;
+        t_ClipNearZ = 1.0;
+    }
+
+    // With an infinite far plane, just choose halfway there instead of the full way there.
+    t_ClipFarZ = mix(t_ClipNearZ, t_ClipFarZ, 0.5);
 
     t_Near = CalcWorldPos(t_ClipXY, t_ClipNearZ);
     t_Far = CalcWorldPos(t_ClipXY, t_ClipFarZ);
@@ -92,7 +98,7 @@ void main() {
         t_PlaneClipPos.xyz /= t_PlaneClipPos.www;
 
         float t_PlaneClipZ = t_PlaneClipPos.z;
-#if !defined GFX_CLIPSPACE_NEAR_ZERO
+#if !GFX_CLIPSPACE_NEAR_ZERO()
         t_PlaneClipZ = t_PlaneClipZ * 0.5 + 0.5;
 #endif
 
