@@ -455,6 +455,13 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
         let scale = (view.getUint32(actorOffs + 0x0C) & 0x7FFFFF) / 100;
         if (scale === 0)
             scale = 1;
+        // some mysteries remain in scale logic
+        if (id === 0x21F)
+            scale = 1; // one jiggy in mayahem has a different value here?
+        else if (id === 0x4bc || id === 0x137 || id === 0x3e3 || id === 0x4a5)
+            scale = .2;
+        else if (id === 0x343)
+            scale = .05;
 
         const arc = renderer.modelCache.getActorArchive(id);
         const defView = arc.Definition.createDataView();
