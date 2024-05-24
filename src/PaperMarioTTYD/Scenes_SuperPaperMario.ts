@@ -52,36 +52,7 @@ class SPMSceneDesc implements Viewer.SceneDesc {
 
         const renderer = new SuperPaperMarioRenderer(device, d, textureHolder, backgroundTextureName);
         renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, 'spm');
-
-        /*
-        const agd1 = await renderer.animGroupCache!.requestAnimGroupData('e_3D_manera');
-        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.renderCache, agd1);
-        computeModelMatrixS(agi1.modelMatrix, 100);
-        renderer.animGroupInstances.push(agi1);
-
-        const label = document.createElement('div');
-        label.style.font = '32pt monospace';
-        label.style.position = 'absolute';
-        label.style.bottom = '48px';
-        label.style.right = '16px';
-        label.style.color = 'white';
-        label.style.textShadow = '0px 0px 4px black';
-        label.textContent = '(none)';
-        context.uiContainer.appendChild(label);
-        */
-
-        /*
-        let i = 0;
-        setInterval(() => {
-            let a = agd1.animGroup.anims[i++];
-            if (a === undefined) {
-                label.textContent = '(done)';
-                return;
-            }
-            agi1.playAnimation(a.name);
-            label.textContent = a.name;
-        }, 2000);
-        */
+        renderer.playAllAnimations();
 
         return renderer;
     }
