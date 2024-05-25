@@ -500,6 +500,7 @@ class OoT3DProgram extends DMPProgram {
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
 ${GfxShaderLibrary.MulNormalMatrix}
+${GfxShaderLibrary.saturate}
 
 layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
 layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
@@ -699,14 +700,15 @@ void main() {
         }
 
         v_Color = u_UseVertexColor > 0.0 ? (t_VertexLightingColor * a_Color) : t_VertexLightingColor;
-    }
-    else {
+    } else {
         v_Color = u_UseVertexColor > 0.0 ? a_Color : u_MatDiffuseColor;
     }
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
+
+    v_Color = saturate(v_Color);
 
     v_TexCoord0 = CalcTextureCoord(0);
     v_TexCoord1 = CalcTextureCoord(1).xy;
