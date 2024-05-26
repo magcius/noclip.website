@@ -8,6 +8,7 @@
     "@types/puppeteer": "^1.20.10",
     "@wasm-tool/wasm-pack-plugin": "^1.7.0",
     "@webgpu/types": "^0.1.40",
+    "@xmldom/xmldom": "^0.8.10",
     "buffer": "^6.0.3",
     "clean-webpack-plugin": "^3.0.0",
     "copy-webpack-plugin": "^7.0.0",

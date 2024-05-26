@@ -20,7 +20,7 @@ import { assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
 import { CELL, ESM, LAND } from "./ESM.js";
-import { NIF } from "./NIF.js";
+import { NIF } from "./NIFBase.js";
 
 const noclipSpaceFromMorrowindSpace = mat4.fromValues(
     1, 0, 0, 0,
@@ -296,6 +296,8 @@ class CellData {
             if (nif !== undefined) {
                 const nifData = globals.pluginData.findFileData(nif)!;
                 const nif2 = new NIF(nifData);
+                console.log(nif);
+                console.log(nif2);
             }
             */
         }

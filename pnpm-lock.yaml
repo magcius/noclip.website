@@ -39,6 +39,9 @@ importers:
       '@webgpu/types':
         specifier: ^0.1.40
         version: 0.1.40
+      '@xmldom/xmldom':
+        specifier: ^0.8.10
+        version: 0.8.10
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
@@ -470,6 +473,10 @@ packages:
     peerDependenciesMeta:
       webpack-dev-server:
         optional: true
+
+  '@xmldom/xmldom@0.8.10':
+    resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
+    engines: {node: '>=10.0.0'}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -2346,6 +2353,8 @@ snapshots:
       webpack-cli: 4.10.0(webpack-dev-server@4.15.1)(webpack@5.89.0)
     optionalDependencies:
       webpack-dev-server: 4.15.1(webpack-cli@4.10.0)(webpack@5.89.0)
+
+  '@xmldom/xmldom@0.8.10': {}
 
   '@xtuc/ieee754@1.2.0': {}
 

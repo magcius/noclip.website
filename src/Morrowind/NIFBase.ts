@@ -1,10 +1,11 @@
 
-import { mat3, mat4, vec3 } from "gl-matrix";
+import { mat3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { assert, nArray, readString } from "../util.js";
-import { str } from "crc-32/*";
+import { assert, readString } from "../util.js";
+import { NIFParse } from "./NIFParse.js";
+import { Color } from "../Color.js";
 
-class Stream {
+export class Stream {
     private offset: number = 0;
     private view: DataView;
 
@@ -14,16 +15,20 @@ class Stream {
         this.view = buffer.createDataView();
     }
 
-    public readUint8(): number {
-        return this.view.getUint8(this.offset++);
-    }
-
     public readBool(): boolean {
         return !!this.readUint32();
     }
 
+    public readUint8(): number {
+        return this.view.getUint8(this.offset++);
+    }
+
     public readUint16(): number {
         return this.view.getUint16(this.offset, (this.offset += 2, true));
+    }
+
+    public readInt16(): number {
+        return this.view.getInt16(this.offset, (this.offset += 2, true));
     }
 
     public readUint32(): number {
@@ -38,9 +43,13 @@ class Stream {
         return this.buffer.subarray(this.offset, (this.offset += n, n));
     }
 
-    public readString(): string {
+    public readSizedString(): string {
         const num = this.readUint32();
         return readString(this.buffer, this.offset, (this.offset += num, num));
+    }
+
+    public readString(): string {
+        return this.readSizedString();
     }
 
     public readLine(max = 0x100): string {
@@ -67,28 +76,20 @@ class Stream {
             this.readFloat32(), this.readFloat32(), this.readFloat32(),
         );
     }
-}
 
-function version(a: number, b: number, c: number, d: number) {
-    return a << 24 | b << 16 | c << 8 | d;
-}
-
-interface NiParse {
-    parse(stream: Stream): void;
-}
-
-// https://github.com/niftools/nifxml/blob/master/nif.xml
-class NiObjectNET {
-    public name: string;
-
-    public parse(stream: Stream): void {
-        this.name = stream.readString();
-        const extraDataPtr = stream.readUint32();
-        const timeController = stream.readUint32();
+    public readColor(dst: Color): void {
+        dst.r = this.readFloat32();
+        dst.g = this.readFloat32();
+        dst.b = this.readFloat32();
+        dst.a = this.readFloat32();
     }
 }
 
-class RecordRef<T> {
+export interface NiParse {
+    parse(stream: Stream): void;
+}
+
+export class RecordRef<T> {
     public index: number = -1;
 
     public parse(stream: Stream): void {
@@ -98,49 +99,6 @@ class RecordRef<T> {
     public get(nif: NIF): T | null {
         return nif.records[this.index] as T;
     }
-}
-
-class NiAVObject extends NiObjectNET {
-    public flags: number;
-    public translation = vec3.create();
-    public rotation = mat3.create();
-    public scale = 1.0;
-    public properties: RecordRef<NiParse>[] = [];
-
-    public override parse(stream: Stream): void {
-        super.parse(stream);
-
-        const flags = stream.readUint16();
-        stream.readVector3(this.translation);
-        stream.readMatrix33(this.rotation);
-        this.scale = stream.readFloat32();
-        stream.readVector3(vec3.create()); // velocity
-
-        const numProperties = stream.readUint32();
-        this.properties = nArray(numProperties, () => new RecordRef<NiParse>());
-        for (let i = 0; i < numProperties; i++)
-            this.properties[i].parse(stream);
-
-        const hasBounds = stream.readBool();
-        assert(!hasBounds);
-    }
-}
-
-class NiGeometryData {}
-class NiSkinData {}
-
-class NiGeometry extends NiAVObject {
-    public data = new RecordRef<NiGeometryData>();
-    public skin = new RecordRef<NiSkinData>();
-
-    public override parse(stream: Stream): void {
-        super.parse(stream);
-        this.data.parse(stream);
-        this.skin.parse(stream);
-    }
-}
-
-class NiTriShape extends NiGeometry {
 }
 
 export class NIF {
@@ -158,17 +116,10 @@ export class NIF {
     
         const numRecords = stream.readUint32();
         for (let i = 0; i < numRecords; i++) {
-            const type = stream.readString();
-            const record = this.newRecord(type);
+            const type = stream.readSizedString();
+            const record = NIFParse.newRecord(type);
             record.parse(stream);
             this.records.push(record);
         }
-    }
-
-    private newRecord(type: string): NiParse {
-        if (type === 'NiTriShape')
-            return new NiTriShape();
-        else
-            throw "whoops";
     }
 }
