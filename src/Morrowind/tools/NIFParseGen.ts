@@ -139,9 +139,34 @@ function lex(macroMap: MacroMap, s: string): Token[] {
     return tokens;
 }
 
-interface ExprCtx {
-    exprLoad(id: string): boolean | number | null;
-    exprMapName(id: string): string;
+class ExprCtx {
+    constructor(private struct: Struct | null, private nif: NifXML) {
+    }
+
+    public exprLoad(id: string): number | boolean | null {
+        if (id === `Version`)
+            return this.nif.versionBounds.exactVersion;
+        else if (id === `User Version`)
+            return this.nif.versionBounds.exactUserVersion;
+        else if (id === `BS Header\\BS Version`)
+            return this.nif.versionBounds.exactBSVersion;
+        return null;
+    }
+
+    public exprMapName(id: string) {
+        if (this.struct !== null) {
+            const field = this.struct.getField(id, true);
+            if (field !== null) {
+                return field.isMember ? `this.${field.name}` : field.name;
+            } else if (id === 'arg') {
+                return id;
+            } else {
+                throw new Error(`??? no field ${id}`);
+            }
+        } else {
+            return `this.${makeMemberFieldName(id)}`;
+        }
+    }
 }
 
 interface Expr {
@@ -447,11 +472,24 @@ class ModuleImport {
     }
 }
 
+class ModuleDefaultImport extends ModuleImport {
+    constructor(moduleName: string, private item: string) {
+        super(moduleName, []);
+    }
+
+    public override union(other: ModuleImport): void {
+    }
+
+    public override generate(): string {
+        return `import ${this.item} from "${this.moduleName}";`;
+    }
+}
+
 interface Type {
     name: string;
     fieldInitializer: string | null;
-    fieldGenerateParse(context: NifXML, dst: string, arg?: string): string;
-    specialize?(context: StructField): Type;
+    fieldGenerateParse(ctx: ExprCtx, dst: string, arg?: string): string;
+    specialize?(field: StructField): Type;
     generateBody?(context: NifXML): string;
     generateImports?(): ModuleImport[];
     resolve?(context: NifXML): void;
@@ -462,7 +500,7 @@ class BasicType implements Type {
     constructor(public name: string, public readMethod: string) {}
 
     public get fieldInitializer(): string | null { return null; }
-    public fieldGenerateParse(context: NifXML, dst: string): string { return `${dst} = stream.${this.readMethod}();`; }
+    public fieldGenerateParse(ctx: ExprCtx, dst: string): string { return `${dst} = stream.${this.readMethod}();`; }
     public findTypes(set: Set<Type>) { set.add(this); }
 }
 
@@ -471,7 +509,7 @@ class ExtraType implements Type {
     }
 
     public get fieldInitializer(): string | null { return this.createMethod; }
-    public fieldGenerateParse(context: NifXML, dst: string): string { return `stream.${this.readMethod}(${dst});`; }
+    public fieldGenerateParse(ctx: ExprCtx, dst: string): string { return `stream.${this.readMethod}(${dst});`; }
     public findTypes(set: Set<Type>) { set.add(this); }
     public generateImports(): ModuleImport[] {
         if (this.module !== null)
@@ -484,7 +522,21 @@ abstract class ClassType implements Type {
     public abstract name: string;
 
     public get fieldInitializer(): string | null { return `new ${this.name}()`; }
-    public fieldGenerateParse(context: NifXML, dst: string, arg?: string): string { return `${dst}.parse(stream${arg ? `, ${arg}` : ``});`; }
+    public fieldGenerateParse(ctx: ExprCtx, dst: string, arg?: string): string { return `${dst}.parse(stream${arg ? `, ${arg}` : ``});`; }
+    public findTypes(set: Set<Type>) { set.add(this); }
+}
+
+class ArrayBufferType implements Type { // replacement for ArrayType that stays as a
+    public name: string;
+
+    constructor(public length: string, public stride: number) {
+        this.name = `ArrayBufferSlice`;
+    }
+
+    public get fieldInitializer(): string | null { return null; }
+    public fieldGenerateParse(ctx: ExprCtx, dst: string): string {
+        return `${dst} = stream.readBytes(${this.length} * ${this.stride});`;
+    }
     public findTypes(set: Set<Type>) { set.add(this); }
 }
 
@@ -498,19 +550,19 @@ class ArrayType implements Type {
     }
 
     public get fieldInitializer(): string | null { return `[]`; }
-    public fieldGenerateParse(context: NifXML, dst: string): string {
+    public fieldGenerateParse(ctx: ExprCtx, dst: string, arg?: string): string {
         if (this.width !== null) {
             return fixIndent`for (let i = 0; i < ${this.length}; i++) {
     ${dst}[i] = [];
     for (let j = 0; j < ${this.width}; j++) {
         ${this.baseType.fieldInitializer !== null ? `${dst}[i][j] = ${this.baseType.fieldInitializer};
-` : ``}${this.baseType.fieldGenerateParse(context, `${dst}[i][j]`)}
+` : ``}${this.baseType.fieldGenerateParse(ctx, `${dst}[i][j]`, arg)}
     }
 }`;
         } else {
             return fixIndent`for (let i = 0; i < ${this.length}; i++) {
     ${this.baseType.fieldInitializer !== null ? `${dst}[i] = ${this.baseType.fieldInitializer};
-` : ``}${this.baseType.fieldGenerateParse(context, `${dst}[i]`)}
+` : ``}${this.baseType.fieldGenerateParse(ctx, `${dst}[i]`, arg)}
 }`;
         }
     }
@@ -525,10 +577,10 @@ class CondType implements Type {
     }
 
     public get fieldInitializer(): string | null { return `null`; }
-    public fieldGenerateParse(context: NifXML, dst: string): string {
-        return fixIndent`if (${this.cond.generate(context)}) {
+    public fieldGenerateParse(ctx: ExprCtx, dst: string, arg?: string): string {
+        return fixIndent`if (${this.cond.generate(ctx)}) {
     ${this.baseType.fieldInitializer !== null ? `${dst} = ${this.baseType.fieldInitializer};
-` : ``}${this.baseType.fieldGenerateParse(context, dst)}
+` : ``}${this.baseType.fieldGenerateParse(ctx, dst, arg)}
 }`;
     }
     public findTypes(set: Set<Type>) { this.baseType.findTypes(set); }
@@ -571,7 +623,7 @@ ${this.value.map((v) => {
     }
 
     public get fieldInitializer(): string | null { return null; }
-    public fieldGenerateParse(context: NifXML, dst: string): string { return this.storage.fieldGenerateParse(context, dst); }
+    public fieldGenerateParse(ctx: ExprCtx, dst: string): string { return this.storage.fieldGenerateParse(ctx, dst); }
     public findTypes(set: Set<Type>): void {
         set.add(this);
         this.storage.findTypes(set);
@@ -615,13 +667,15 @@ class Bitfield extends ClassType {
     }
 
     public generateBody(context: NifXML): string {
+        const exprCtx = new ExprCtx(null, context);
+
         return `class ${this.name} {
 ${this.member.map((member) => {
     return `    public ${member.memberName}: ${member.type.name};`;
 }).join('\n')}
 
     public parse(stream: Stream): void {
-        ${this.storage.fieldGenerateParse(context, 'const internal')}
+        ${this.storage.fieldGenerateParse(exprCtx, 'const internal')}
 ${this.member.map((member) => {
     const widthMask = (1 << member.width) - 1;
     let value = `(internal >>> ${member.pos}) & ${hexzero0x(widthMask, 8)}`;
@@ -651,6 +705,7 @@ function makeMemberFieldName(s: string): string {
 class StructField {
     public rawName: string;
     public rawType: string;
+    public rawDefault: string | null;
     public rawTemplate: string | null;
     public rawLength: string | null;
     public rawWidth: string | null;
@@ -676,9 +731,10 @@ class StructField {
     public runtimeCheckCond = false;
     public runtimeCheckVerCond = false;
 
-    constructor(context: NifXML, node: Element) {
+    constructor(context: NifXML, node: Element, public parentStruct: Struct) {
         this.rawName = assertExists(node.getAttribute('name'));
         this.rawType = assertExists(node.getAttribute('type'));
+        this.rawDefault = fixEmpty(node.getAttribute('default'));
         this.rawTemplate = fixEmpty(node.getAttribute('template'));
         this.rawLength = fixEmpty(node.getAttribute('length'));
         this.rawWidth = fixEmpty(node.getAttribute('width'));
@@ -719,7 +775,8 @@ class StructField {
         if (this.cond === null)
             return;
 
-        const r = this.cond.eval(context);
+        const exprCtx = new ExprCtx(this.parentStruct, context);
+        const r = this.cond.eval(exprCtx);
         if (r === null) {
             this.runtimeCheckCond = true;
             return;
@@ -733,7 +790,8 @@ class StructField {
         if (this.verCond === null)
             return;
 
-        const r = this.verCond.eval(context);
+        const exprCtx = new ExprCtx(this.parentStruct, context);
+        const r = this.verCond.eval(exprCtx);
         if (r === null) {
             this.runtimeCheckVerCond = true;
             return;
@@ -743,47 +801,65 @@ class StructField {
             this.isVisible = false;
     }
 
-    public generateMember(context: NifXML): string {
-        // const type = 
-        return ``;
+    public getMemberRef(): string {
+        return this.isMember ? `this.${this.name}` : this.name;
     }
 
-    public generateParse(context: NifXML): string {
+    public generateParse(xml: NifXML): string {
         // TODO(jstpierre): Runtime version checks
         const dst = this.isMember ? `this.${this.name}` : `const ${this.name}`;
-        const arg = this.arg === '#ARG#' ? 'arg' : this.arg;
+        const arg = this.resolveArg(xml);
 
-        return `${this.type.fieldGenerateParse(context, dst, arg)}`;
+        const exprCtx = new ExprCtx(this.parentStruct, xml);
+        return `${this.type.fieldGenerateParse(exprCtx, dst, arg)}`;
     }
 
-    private resolveLength(raw: string | null, expr: Expr | null, struct: Struct, context: NifXML): string | null {
+    private resolveLength(raw: string | null, expr: Expr | null, xml: NifXML): string | null {
         if (raw === null)
             return null;
 
-        const lengthField = struct.getField(raw);
+        const lengthField = this.parentStruct.getField(raw, false);
         if (lengthField !== null) {
-            if (struct.fields.includes(lengthField)) {
-                lengthField.isMember = false;
-                return lengthField.name;
-            } else {
-                lengthField.protection = `protected`;
-                return `this.${lengthField.name}`;
-            }
+            // if (this.parentStruct.fields.includes(lengthField))
+            //     lengthField.isMember = false;
+            lengthField.protection = `protected`;
+            return lengthField.getMemberRef();
         } else if (expr !== null) {
-            return expr.generate(context);
+            const exprCtx = new ExprCtx(this.parentStruct, xml);
+            return expr.generate(exprCtx);
         } else {
             return raw;
         }
     }
 
-    public resolve(struct: Struct, context: NifXML): void {
+    private resolveArg(xml: NifXML): string | undefined {
+        if (!this.arg)
+            return undefined;
+        if (this.arg === '#ARG#')
+            return `arg`;
+
+        const field = this.parentStruct.getField(this.arg, true);
+        if (field !== null) {
+            if (!field.isVisible) {
+                if (field.rawType === 'bool')
+                    return field.rawDefault ? '1' : undefined;
+                else
+                    return '' + Number(field.rawDefault);
+            }
+            return field.getMemberRef();
+        } else {
+            return this.arg;
+        }
+    }
+
+    public resolve(context: NifXML): void {
         if (this.rawTemplate !== null)
             this.template = context.getType(this.rawTemplate, this);
 
         this.type = context.getType(this.rawType, this);
         if (this.length !== null) {
-            const length = assertExists(this.resolveLength(this.rawLength, this.length, struct, context));
-            const width = this.resolveLength(this.rawWidth, this.width, struct, context);
+            const length = assertExists(this.resolveLength(this.rawLength, this.length, context));
+            const width = this.resolveLength(this.rawWidth, this.width, context);
             this.type = new ArrayType(this.type, length, width);
         }
 
@@ -795,17 +871,24 @@ class StructField {
         if (this.runtimeCheckVerCond)
             this.type = new CondType(this.type, this.verCond!);
     }
+
+    public convertToArrayBufferType(stride: number): void {
+        // XXX(jstpierre): Handle condType gracefully
+        assert(this.type instanceof ArrayType);
+        this.type = new ArrayBufferType(this.type.length, stride);
+    }
 }
 
 class Struct extends ClassType {
     public name: string;
+    public rawSpecialized: string = '';
     public rawInherit: string | null;
     public inherit: Type | null;
     public generic: boolean = false;
     public fields: StructField[] = [];
     public isNiObject = false;
 
-    constructor(context: NifXML, node: Element) {
+    constructor(private context: NifXML, private node: Element) {
         super();
 
         this.name = assertExists(node.getAttribute(`name`));
@@ -813,27 +896,28 @@ class Struct extends ClassType {
         this.generic = node.getAttribute("generic") === "true";
         this.isNiObject = node.nodeName === "niobject";
 
-        if (this.generic) // TODO
-            return;
-
         for (let p: Node | null = node.firstChild; p !== null; p = p.nextSibling)
             if (p.nodeName === "field")
-                this.fields.push(new StructField(context, p as Element));
+                this.fields.push(new StructField(context, p as Element, this));
     }
 
     public resolve(context: NifXML): void {
+        if (this.generic)
+            return;
+
         this.inherit = this.rawInherit ? context.getType(this.rawInherit) : null;
 
         for (let i = 0; i < this.fields.length; i++)
-            this.fields[i].resolve(this, context);
+            this.fields[i].resolve(context);
     }
 
-    public getField(rawName: string): StructField | null {
-        const v = fallbackUndefined(this.fields.find((field) => field.rawName === rawName), null);
+    public getField(rawName: string, allFields: boolean = false): StructField | null {
+        const fields = allFields ? this.fields : this.getVisibleFields();
+        const v = fallbackUndefined(fields.find((field) => field.rawName === rawName), null);
         if (v !== null)
             return v;
         if (this.inherit instanceof Struct)
-            return this.inherit.getField(rawName);
+            return this.inherit.getField(rawName, allFields);
         return null;
     }
 
@@ -848,10 +932,10 @@ class Struct extends ClassType {
     public generateBody(context: NifXML): string {
         const extend = this.inherit !== null ? ` extends ${this.inherit.name}` : ``;
 
-        const memberFields = this.getVisibleFields();
+        const memberFields = this.getMemberFields();
         const visibleFields = this.getVisibleFields();
 
-        return `${this.isNiObject ? `export ` : ``}class ${this.name}${extend} {
+        return `export class ${this.name}${extend} {
 ${memberFields.length !== 0 ? memberFields.map((field) => {
     return `    ${field.protection} ${field.name}: ${field.type.name}${field.type.fieldInitializer !== null ? ` = ${field.type.fieldInitializer}` : ``};`;
 }).join('\n') + `\n\n` : ``}    public ${this.inherit !== null ? `override ` : ``}parse(stream: Stream, arg: number | null = null): void {${this.inherit !== null ? `
@@ -871,6 +955,25 @@ ${visibleFields.length !== 0 ? visibleFields.map((field) => fixIndent`        ${
         const fields = this.getVisibleFields();
         for (let i = 0; i < fields.length; i++)
             fields[i].type.findTypes(set);
+    }
+
+    public specialize(field: StructField): Struct {
+        assert(this.generic);
+        const specializedType = new Struct(this.context, this.node);
+        specializedType.rawSpecialized = field.rawTemplate!;
+        specializedType.name += `$${field.template!.name}`;
+        specializedType.generic = false;
+        specializedType.fields.forEach((f) => {
+            let rawTemplate = field.rawTemplate;
+            if (rawTemplate === '#T#')
+                rawTemplate = field.parentStruct.rawSpecialized;
+
+            if (f.rawTemplate === '#T#')
+                f.rawTemplate = rawTemplate!;
+            if (f.rawType === '#T#')
+                f.rawType = rawTemplate!;
+        });
+        return specializedType;
     }
 }
 
@@ -926,7 +1029,7 @@ class VersionBounds {
     }
 }
 
-class NifXML implements ExprCtx {
+class NifXML {
     public types: Type[] = [];
 
     private typeRegistry = new Map<string, Type>();
@@ -971,15 +1074,17 @@ class NifXML implements ExprCtx {
         // Overrides
         this.registerType(`Vector3`, new ExtraType(`gl-matrix`, `vec3`, `vec3.create()`, `readVector3`));
         this.registerType(`Matrix33`, new ExtraType(`gl-matrix`, `mat3`, `mat3.create()`, `readMatrix33`));
-        this.registerType(`Color4`, new ExtraType(`../Color.js`, `Color`, `colorNewCopy(White)`, `readColor`, [`colorNewCopy`, `White`]));
+        this.registerType(`Color4`, new ExtraType(`../Color.js`, `Color`, `colorNewCopy(White)`, `readColor4`, [`colorNewCopy`, `White`]));
+        this.registerType(`Color3`, new ExtraType(`../Color.js`, `Color`, `colorNewCopy(White)`, `readColor3`, [`colorNewCopy`, `White`]));
     }
 
-    public registerType(name: string, type: Type): void {
+    public registerType(name: string, type: Type): Type {
         if (this.typeRegistry.has(name))
-            return;
+            return this.typeRegistry.get(name)!;
 
         this.typeRegistry.set(name, type);
         this.types.push(type);
+        return type;
     }
 
     private parseElem(p: Element): void {
@@ -1053,23 +1158,12 @@ class NifXML implements ExprCtx {
         let p = this.typeRegistry.get(rawType);
         if (p === undefined)
             throw new Error(`Missing type ${rawType}`);
-        if (p.specialize)
-            p = p.specialize(assertExists(context));
+        if (context !== null && context.template !== null) {
+            assert(p.specialize !== undefined);
+            p = p.specialize(context);
+            p = this.registerType(p.name, p);
+        }
         return p;
-    }
-
-    public exprLoad(id: string): number | boolean | null {
-        if (id === `Version`)
-            return this.versionBounds.exactVersion;
-        else if (id === `User Version`)
-            return this.versionBounds.exactUserVersion;
-        else if (id === `BS Header\\BS Version`)
-            return this.versionBounds.exactBSVersion;
-        return null;
-    }
-
-    public exprMapName(id: string) {
-        return `this.${makeMemberFieldName(id)}`;
     }
 }
 
@@ -1142,63 +1236,67 @@ function main() {
     generator.addType('NiVertexColorProperty');
     generator.addType('NiStringExtraData');
     generator.addType('NiTextureEffect');
+    generator.addType('NiZBufferProperty');
+    generator.addType('NiUVController');
+    generator.addType('NiBSAnimationNode');
+    generator.addType('NiBSParticleNode');
+    generator.addType('NiRotatingParticles');
+    generator.addType('NiRotatingParticlesData');
+    generator.addType('NiAutoNormalParticles');
+    generator.addType('NiAutoNormalParticlesData');
+    generator.addType('NiParticleSystemController');
+    generator.addType('NiParticleGrowFade');
+    generator.addType('NiGravity');
+    generator.addType('NiKeyframeController');
+    generator.addType('NiTextKeyExtraData');
     generator.addType('RootCollisionNode');
-    // generator.addType('NiAdditionalGeometryData');
+    
+    (xml.getType('NiTriShapeData') as Struct).getField('Triangles')?.convertToArrayBufferType(0x06);
 
+    xml.getType('NiGeometryData').generateImports = () => {
+        return [new ModuleDefaultImport("../ArrayBufferSlice.js", "ArrayBufferSlice")];
+    };
     xml.getType('NiGeometryData').generateBody = () => {
         // hand-write for now
+        // XXX: this only works for Morrowind. Need to figure out how to best handle this elsewhere.
         return `
 class NiGeometryData extends NiObject {
     public hasVertices: boolean;
-    public vertices: vec3[] | null = null;
+    protected numVertices: number;
+    public vertices: ArrayBufferSlice | null = null;
     public hasNormals: boolean;
-    public normals: vec3[] | null = null;
+    public normals: ArrayBufferSlice | null = null;
     public boundingSphere: NiBound = new NiBound();
     public hasVertexColors: boolean;
-    public vertexColors: Color[] | null = null;
+    public vertexColors: ArrayBufferSlice | null = null;
     public dataFlags: NiGeometryDataFlags = new NiGeometryDataFlags();
     public hasUV: boolean;
-    public uVSets: TexCoord[][] = [];
+    public uVSets: ArrayBufferSlice[] = [];
 
     public override parse(stream: Stream, arg: number | null = null): void {
         super.parse(stream, arg);
-        const numVertices = stream.readUint16();
+        this.numVertices = stream.readUint16();
         this.hasVertices = stream.readBool();
         if (this.hasVertices) {
-            this.vertices = [];
-            for (let i = 0; i < numVertices; i++) {
-                this.vertices[i] = vec3.create();
-                stream.readVector3(this.vertices[i]);
-            }
+            this.vertices = stream.readBytes(this.numVertices * 0x0C);
         }
         this.hasNormals = stream.readBool();
         if (this.hasNormals) {
-            this.normals = [];
-            for (let i = 0; i < numVertices; i++) {
-                this.normals[i] = vec3.create();
-                stream.readVector3(this.normals[i]);
-            }
+            this.normals = stream.readBytes(this.numVertices * 0x0C);
         }
         this.boundingSphere.parse(stream);
         this.hasVertexColors = stream.readBool();
         if (this.hasVertexColors) {
-            this.vertexColors = [];
-            for (let i = 0; i < numVertices; i++) {
-                this.vertexColors[i] = colorNewCopy(White);
-                stream.readColor(this.vertexColors[i]);
-            }
+            this.vertexColors = stream.readBytes(this.numVertices * 0x10);
         }
         this.dataFlags.parse(stream);
         this.hasUV = stream.readBool();
         for (let i = 0; i < this.dataFlags.numUVSets; i++) {
-            this.uVSets[i] = [];
-            for (let j = 0; j < numVertices; j++) {
-                this.uVSets[i][j] = new TexCoord();
-                this.uVSets[i][j].parse(stream);
-            }
+            this.uVSets[i] = stream.readBytes(this.numVertices * 0x08);
         }
     }
-}`;
+}
+`;
     };
 
     writeFileSync(relpath("../NIFParse.ts"), generator.generate());

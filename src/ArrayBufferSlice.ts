@@ -24,11 +24,6 @@ declare global {
 }
 
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
-export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
-// ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
-//     throw new Error("Do not use ArrayBuffer.prototype.slice");
-// };
-
 interface _TypedArrayConstructor<T extends ArrayBufferView> {
     readonly BYTES_PER_ELEMENT: number;
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): T;
@@ -83,7 +78,7 @@ export default class ArrayBufferSlice {
         const byteLength = absEnd - absBegin;
         assert(byteLength >= 0 && byteLength <= this.byteLength);
         if (copyData)
-            return new ArrayBufferSlice(ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absEnd));
+            return new ArrayBufferSlice(this.arrayBuffer.slice(absBegin, absEnd));
         else
             return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
@@ -107,7 +102,7 @@ export default class ArrayBufferSlice {
             byteLength = this.byteLength - begin;
         assert(byteLength >= 0 && byteLength <= this.byteLength);
         if (copyData)
-            return new ArrayBufferSlice(ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absBegin + byteLength));
+            return new ArrayBufferSlice(this.arrayBuffer.slice(absBegin, absBegin + byteLength));
         else
             return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
@@ -127,7 +122,7 @@ export default class ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         if (byteLength === undefined)
             byteLength = this.byteLength - begin;
-        return ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absBegin + byteLength);
+        return this.arrayBuffer.slice(absBegin, absBegin + byteLength) as ArrayBuffer;
     }
 
     public createDataView(offs: number = 0, length?: number): DataView {

@@ -1,8 +1,9 @@
 
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorNewFromRGBA8 } from "../Color.js";
 import { assert, readString } from "../util.js";
+import { computeModelMatrixSRT } from "../MathHelpers.js";
 
 // ESM appears to be a RIFF-like
 
@@ -72,11 +73,18 @@ function parseRIFF(buffer: ArrayBufferSlice, recordHandler: RecordHandler): void
     }
 }
 
-class FRMR {
+export class FRMR {
     public referenceID = 0;
     public objectID: string = '';
+    public scale = 1;
     public position = vec3.create();
     public rotation = vec3.create(); // euler angles
+
+    public calcModelMatrix(dst: mat4): void {
+        computeModelMatrixSRT(dst, this.scale, this.scale, this.scale,
+            this.rotation[0], this.rotation[1], -this.rotation[2],
+            this.position[0], this.position[1], this.position[2]);
+    }
 }
 
 export class CELL {
@@ -128,14 +136,16 @@ export class CELL {
 
     private parseFRMR(record: RIFFRecord, idx: number): number {
         const frmr = new FRMR();
+        this.frmr.push(frmr);
         for (let i = idx; i < record.fields.length; i++) {
             const field = record.fields[i];
             if (field.fourcc === FourCC('FRMR')) {
-                if (i !== idx) break; // found next FRMR record, abort
-
+                if (i !== idx) return i - 1; // found next FRMR record, abort
                 frmr.referenceID = field.getInt32();
             } else if (field.fourcc === FourCC('NAME')) {
                 frmr.objectID = field.getString();
+            } else if (field.fourcc === FourCC('XSCL')) {
+                frmr.scale = field.getFloat32(0x00);
             } else if (field.fourcc === FourCC('DATA')) {
                 frmr.position[0] = field.getFloat32(0x00);
                 frmr.position[1] = field.getFloat32(0x04);
@@ -145,7 +155,6 @@ export class CELL {
                 frmr.rotation[2] = field.getFloat32(0x14);
             }
         }
-        this.frmr.push(frmr);
         return record.fields.length;
     }
 }
@@ -183,7 +192,7 @@ export class LAND {
     }
 }
 
-function normalizeTexturePath(path: string): string {
+export function normalizeTexturePath(path: string): string {
     path = path.toLowerCase();
     if (!path.startsWith('textures\\'))
         path = `textures\\${path}`;

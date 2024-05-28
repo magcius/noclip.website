@@ -143,7 +143,8 @@ export class ModelRenderer {
           let renderInst = renderInstManager.newRenderInst();
           renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], indexBuffer);
           renderPass.setMegaStateFlags(renderInst);
-          renderInst.setDrawCount(renderPass.submesh.index_count, renderPass.submesh.index_start, doodadChunk.length);
+          renderInst.setDrawCount(renderPass.submesh.index_count, renderPass.submesh.index_start);
+          renderInst.setInstanceCount(doodadChunk.length);
           const mappings = this.skinPassTextures[i][j];
           renderInst.setSamplerBindingsFromTextureMappings(mappings);
           renderPass.setModelParams(renderInst);
@@ -334,65 +335,12 @@ export class TerrainRenderer {
   }
 
   public destroy(device: GfxDevice) {
-    device.destroyInputLayout(this.inputLayout);
     device.destroyBuffer(this.vertexBuffer.buffer);
     device.destroyBuffer(this.indexBuffer.buffer);
     for (let mapping of this.alphaTextureMappings) {
       if (mapping) {
         destroyTextureMapping(device, mapping);
       }
-    }
-  }
-}
-
-export class DebugWmoPortalRenderer {
-  private inputLayout: GfxInputLayout;
-  private vertexBuffer: GfxVertexBufferDescriptor;
-  private indexBuffer: GfxIndexBufferDescriptor;
-  private portals: [number, number][] = [];
-  private numIndices: number;
-
-  constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private wmo: WmoData) {
-    const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-      { location: LoadingAdtProgram.a_Position,   bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
-    ];
-    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-      { byteStride: 12, frequency: GfxVertexBufferFrequency.PerVertex, },
-    ];
-    const indexBufferFormat: GfxFormat = GfxFormat.U16_R;
-    this.inputLayout = renderHelper.renderCache.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-
-    let numIndices = 0;
-    for (let portal of this.wmo.portals) {
-      assert(portal.vertexCount > 0);
-      numIndices += (portal.vertexCount - 2) * 3;
-    }
-
-    const indices = new Uint16Array(numIndices);
-    let offset = 0;
-    for (let portal of this.wmo.portals) {
-      const start = offset;
-      convertToTrianglesRange(indices, offset, GfxTopology.TriFans, portal.vertexStart, portal.vertexCount);
-      offset += (portal.vertexCount - 2) * 3;
-      this.portals.push([start, offset - start])
-    }
-    this.numIndices = offset;
-
-    this.vertexBuffer = { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.wmo.portalVertices.buffer )}
-    this.indexBuffer = { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, new Uint16Array(indices).buffer )}
-  }
-
-  public prepareToRenderDebugPortals(renderInstManager: GfxRenderInstManager, defs: WmoDefinition[]) {
-    for (let def of defs) {
-      assert(def.wmoId === this.wmo.fileId, `WmoRenderer handed a WmoDefinition that doesn't belong to it (${def.wmoId} != ${this.wmo.fileId}`);
-      const renderInst = renderInstManager.newRenderInst();
-      let offs = renderInst.allocateUniformBuffer(DebugWmoPortalProgram.ub_ModelParams, 16);
-      const mapped = renderInst.mapUniformBufferF32(DebugWmoPortalProgram.ub_ModelParams);
-      offs += fillMatrix4x4(mapped, offs, def.modelMatrix);
-      renderInst.setVertexInput(this.inputLayout, [this.vertexBuffer], this.indexBuffer);
-      renderInst.setDrawCount(this.numIndices);
-      renderInst.setMegaStateFlags({ cullMode: GfxCullMode.None });
-      renderInstManager.submitRenderInst(renderInst);
     }
   }
 }
@@ -550,14 +498,15 @@ export class WaterRenderer {
   }
 
   public destroy(device: GfxDevice) {
-    device.destroyInputLayout(this.inputLayout);
+    for (const [indexBuffer, vertexBuffers] of this.buffers) {
+      device.destroyBuffer(indexBuffer.buffer);
+      for (const vertexBuffer of vertexBuffers)
+        device.destroyBuffer(vertexBuffer.buffer);
+    }
   }
 }
 
 function destroyTextureMapping(device: GfxDevice, mapping: TextureMapping) {
-  if (mapping.gfxSampler) {
-    device.destroySampler(mapping.gfxSampler);
-  }
   if (mapping.gfxTexture) {
     device.destroyTexture(mapping.gfxTexture);
   }

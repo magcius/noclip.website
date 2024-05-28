@@ -2841,16 +2841,6 @@ class SpinDriverShootPath {
         // TODO(jstpierre): Finish parabolic path code
         return this.parabolicPath === null;
     }
-
-    public debugDraw(sceneObjHolder: SceneObjHolder): void {
-        /*
-        this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
-        if (this.parabolicPath !== null) {
-            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisY, 100, Green);
-            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisX, 100, Blue);
-        }
-        */
-    }
 }
 
 const enum SpinDriverColor { Normal, Green, Pink }
@@ -2913,14 +2903,8 @@ class SpinDriverPathDrawer extends LiveActor {
     public override draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        /*const p = new ParabolicPath();
-        p.initFromUpVectorAddHeight(vec3.fromValues(100, 25, 0), vec3.fromValues(180, 50, 500), Vec3UnitX, 100);
-        p.debugDraw(sceneObjHolder);*/
-
         if (!isValidDraw(this) || !this.shootPath.shouldDraw())
             return;
-
-        this.shootPath.debugDraw(sceneObjHolder);
 
         const ddraw = this.ddraw;
         ddraw.beginDraw(sceneObjHolder.modelCache.cache);

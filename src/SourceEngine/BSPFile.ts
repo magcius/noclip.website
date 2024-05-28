@@ -1,7 +1,7 @@
 
 // Source Engine BSP.
 
-import ArrayBufferSlice, { ArrayBuffer_slice } from "../ArrayBufferSlice.js";
+import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { readString, assert, nArray, decodeString, ensureInList } from "../util.js";
 import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4, ReadonlyVec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
@@ -805,7 +805,7 @@ class ResizableArrayBuffer {
     }
 
     public finalize(): ArrayBuffer {
-        return ArrayBuffer_slice.call(this.buffer, 0, this.byteSize);
+        return this.buffer.slice(0, this.byteSize);
     }
 }
 

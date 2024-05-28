@@ -14,7 +14,7 @@ import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
 import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
 import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
-import { DebugWmoPortalRenderer, LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
+import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
 import { drawBspNodes } from './debug.js';
 
@@ -189,7 +189,6 @@ export class WdtScene implements Viewer.SceneGfx {
   private modelRenderers: Map<number, ModelRenderer> = new Map();
   private skyboxModelRenderers: Map<number, ModelRenderer> = new Map();
   private wmoRenderers: Map<number, WmoRenderer> = new Map();
-  private debugWmoPortalRenderers: Map<number, DebugWmoPortalRenderer> = new Map();
   private skyboxRenderer: SkyboxRenderer;
   private loadingAdtRenderer: LoadingAdtRenderer;
   private renderInstListMain = new GfxRenderInstList();
@@ -316,13 +315,6 @@ export class WdtScene implements Viewer.SceneGfx {
       wmo.liquidTypes,
       this.textureCache
     ));
-    if (wmo.portalVertices.length > 0) {
-      this.debugWmoPortalRenderers.set(wmo.fileId, new DebugWmoPortalRenderer(
-        this.device,
-        this.renderHelper,
-        wmo
-      ));
-    }
     for (let model of wmo.models.values()) {
       this.createModelRenderer(model);
     }
@@ -725,13 +717,20 @@ export class WdtScene implements Viewer.SceneGfx {
   destroy(device: GfxDevice): void {
     for (let renderer of this.terrainRenderers.values()) {
       renderer.destroy(device);
-    };
+    }
     for (let renderer of this.modelRenderers.values()) {
       renderer.destroy(device);
     }
     for (let renderer of this.wmoRenderers.values()) {
       renderer.destroy(device);
     }
+    for (let renderer of this.adtWaterRenderers.values()) {
+      renderer.destroy(device);
+    }
+    for (let renderer of this.wmoWaterRenderers.values()) {
+      renderer.destroy(device);
+    }
+    this.loadingAdtRenderer.destroy(device);
     this.skyboxRenderer.destroy(device);
     this.textureCache.destroy(device);
     this.renderHelper.destroy();

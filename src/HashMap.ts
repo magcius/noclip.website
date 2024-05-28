@@ -43,13 +43,9 @@ export class HashMap<K, V> {
         return -1;
     }
 
-    private findBucket(k: K): HashBucket<K, V> | undefined {
-        const bw = this.keyHashFunc(k);
-        return this.buckets.get(bw);
-    }
-
     public get(k: K): V | null {
-        const bucket = this.findBucket(k);
+        const bw = this.keyHashFunc(k);
+        const bucket = this.buckets.get(bw);
         if (bucket === undefined) return null;
         const bi = this.findBucketIndex(bucket, k);
         if (bi < 0) return null;
@@ -65,12 +61,15 @@ export class HashMap<K, V> {
     }
 
     public delete(k: K): void {
-        const bucket = this.findBucket(k);
+        const bw = this.keyHashFunc(k);
+        const bucket = this.buckets.get(bw);
         if (bucket === undefined) return;
         const bi = this.findBucketIndex(bucket, k);
         if (bi === -1) return;
         bucket.keys.splice(bi, 1);
         bucket.values.splice(bi, 1);
+        if (bucket.keys.length === 0)
+            this.buckets.delete(bw);
     }
 
     public clear(): void {

@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice.js";
+import ArrayBufferSlice from "./ArrayBufferSlice.js";
 import { assert, readString, align } from "./util.js";
 import { Endianness } from "./endian.js";
 
@@ -305,7 +305,7 @@ class GrowableBuffer {
         const buffer = this.buffer;
         // Clear out to avoid GC.
         (this as any).buffer = null;
-        return ArrayBuffer_slice.call(buffer, 0x00, this.userSize);
+        return buffer.slice(0x00, this.userSize);
     }
 }
 

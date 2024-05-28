@@ -613,8 +613,9 @@ class Device_Mesh {
     public setOnRenderInst(renderInst: GfxRenderInst): void {
         renderInst.setVertexInput(this.input_layout, this.vertex_buffer_descriptors, this.index_buffer_descriptor);
 
+        renderInst.setInstanceCount(this.instance_count);
         if (this.index_count > 0)
-            renderInst.setDrawCount(this.index_count, 0, this.instance_count);
+            renderInst.setDrawCount(this.index_count, 0);
         else
             renderInst.setDrawCount(this.vertex_count);
     }

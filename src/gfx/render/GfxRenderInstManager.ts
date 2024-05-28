@@ -166,7 +166,7 @@ export class GfxRenderInst {
     private _indexBuffer: GfxIndexBufferDescriptor | null = null;
     private _drawStart: number = 0;
     private _drawCount: number = 0;
-    private _drawInstanceCount: number = 0;
+    private _drawInstanceCount: number = 1;
 
     constructor() {
         this._renderPipelineDescriptor = {
@@ -290,16 +290,23 @@ export class GfxRenderInst {
      * determined by whether an index buffer is bound in the input layout. If this is an indexed draw, then
      * the counts are index counts. If this is an unindexed draw, then this is a vertex count.
      *
+     * @param count The index count, or vertex count.
+     * @param start The first index, or first vertex to render with.
+     */
+    public setDrawCount(count: number, start: number = 0): void {
+        this._drawCount = count;
+        this._drawStart = start;
+    }
+
+    /**
+     * Sets the number of instances to draw.
+     *
      * Instance counts are the same for both indexed and unindexed draws, however instanced draws are (currently)
      * only supported for indexed draws.
      *
-     * @param count The index count, or vertex count.
-     * @param start The first index, or first vertex to render with.
      * @param instanceCount The number of instances to render.
      */
-    public setDrawCount(count: number, start: number = 0, instanceCount: number = 1): void {
-        this._drawCount = count;
-        this._drawStart = start;
+    public setInstanceCount(instanceCount: number): void {
         this._drawInstanceCount = instanceCount;
     }
 

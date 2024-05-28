@@ -3,8 +3,8 @@ import { mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera.js";
 import * as DDS from "../DarkSouls/dds.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
-import { Frustum } from "../Geometry.js";
-import { computeModelMatrixT, getMatrixTranslation } from "../MathHelpers.js";
+import { AABB, Frustum } from "../Geometry.js";
+import { getMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneContext } from "../SceneBase.js";
 import { TextureMapping } from "../TextureHolder.js";
@@ -19,14 +19,14 @@ import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRender
 import { assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
-import { CELL, ESM, LAND } from "./ESM.js";
-import { NIF } from "./NIFBase.js";
+import { CELL, ESM, FRMR, LAND } from "./ESM.js";
+import { NIF, NIFData } from "./NIFBase.js";
 
 const noclipSpaceFromMorrowindSpace = mat4.fromValues(
-    1, 0, 0, 0,
-    0, 0, -1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1,
+    -1, 0, 0, 0,
+    0,  0, 1, 0,
+    0,  1, 0, 0,
+    0,  0, 0, 1,
 );
 
 class View {
@@ -78,10 +78,13 @@ export class PluginData {
 export class ModelCache {
     public renderCache: GfxRenderCache;
     public terrainTexture: TerrainTextureData | null = null;
+    public zeroBuffer: GfxBuffer;
     private textureCache = new Map<string, GfxTexture>();
+    private nifCache = new Map<string, NIFData>();
 
     constructor(public device: GfxDevice, private pluginData: PluginData) {
         this.renderCache = new GfxRenderCache(this.device);
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, new Uint8Array(16).buffer);
     }
 
     public getTerrainTexture(): GfxTexture {
@@ -102,11 +105,25 @@ export class ModelCache {
         return texture;
     }
 
+    public getNIFData(path: string): NIFData {
+        if (this.nifCache.has(path))
+            return this.nifCache.get(path)!;
+
+        const data = assertExists(this.pluginData.findFileData(path));
+        const nif = new NIF(data);
+        const nifData = new NIFData(this, nif);
+        this.nifCache.set(path, nifData);
+        return nifData;
+    }
+
     public destroy(device: GfxDevice): void {
         for (const texture of this.textureCache.values())
             device.destroyTexture(texture);
+        for (const nif of this.nifCache.values())
+            nif.destroy(device);
         if (this.terrainTexture !== null)
             this.terrainTexture.destroy(device);
+        device.destroyBuffer(this.zeroBuffer);
         this.renderCache.destroy();
     }
 }
@@ -186,7 +203,8 @@ class CellTerrain {
     public terrainMapTex: GfxTexture;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
-    public indexCount = 0;
+    public indexCount: number;
+    public aabb = new AABB();
 
     constructor(globals: Globals, land: LAND) {
         assert(land.heightGradientData !== null);
@@ -194,6 +212,9 @@ class CellTerrain {
         const vertexCount = land.sideLen * land.sideLen;
         const vertexSizeInFloats = 7; // height, normal, color
         const vertexData = new Float32Array(vertexCount * vertexSizeInFloats);
+
+        this.aabb.minX = this.aabb.minY = -4096;
+        this.aabb.maxX = this.aabb.maxY = 4096;
 
         let rowStart = land.heightOffset;
         for (let y = 0; y < land.sideLen; y++) {
@@ -205,6 +226,9 @@ class CellTerrain {
                     rowStart = height;
 
                 vertexData[idx*7 + 0] = height;
+
+                this.aabb.minZ = Math.min(this.aabb.minZ, height);
+                this.aabb.maxZ = Math.max(this.aabb.maxZ, height);
 
                 let nx = 0, ny = 0, nz = 1;
                 if (land.heightNormalData !== null) {
@@ -276,14 +300,82 @@ class CellTerrain {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyTexture(this.terrainMapTex);
+    }
+}
+
+class StaticModel {
+    public visible = true;
+    public instances: Static[] = [];
+
+    constructor(public nifData: NIFData) {
+    }
+
+    public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+        if (!this.visible)
+            return;
+
+        // Gather all visible instances.
+        const template = renderInstManager.getTemplateRenderInst();
+
+        const maxInstances = this.nifData.getMaxInstances();
+
+        let offs = 0;
+        let numInstances = 0;
+
+        const fillInstance = (instance: Static) => {
+            if (numInstances === 0)
+                offs = template.allocateUniformBuffer(1, maxInstances * 16);
+
+            const d = template.mapUniformBufferF32(1);
+            offs += fillMatrix4x3(d, offs, instance.modelMatrix);
+            if (++numInstances == maxInstances)
+                submitDraws();
+        };
+
+        const submitDraws = () => {
+            if (numInstances === 0)
+                return;
+            template.setInstanceCount(numInstances);
+            this.nifData.prepareToRender(globals, renderInstManager);
+            numInstances = 0;
+        };
+
+        for (let i = 0; i < this.instances.length; i++) {
+            const instance = this.instances[i];
+            if (!instance.checkFrustum(globals))
+                continue;
+            fillInstance(instance);
+        }
+        submitDraws();
+    }
+}
+
+class Static {
+    public visible = true;
+    private staticModel: StaticModel;
+    public modelMatrix = mat4.create();
+
+    constructor(worldManager: WorldManager, globals: Globals, public frmr: FRMR, public nifPath: string) {
+        this.staticModel = worldManager.getStaticModel(globals, this.nifPath);
+        this.staticModel.instances.push(this);
+        this.frmr.calcModelMatrix(this.modelMatrix);
+    }
+
+    public checkFrustum(globals: Globals): boolean {
+        if (vec3.squaredDistance(globals.view.cameraPos, this.frmr.position) >= (8192*6)**2)
+            return false;
+
+        return this.staticModel.nifData.checkFrustum(globals.view.frustum, this.modelMatrix);
     }
 }
 
 class CellData {
     public terrain: CellTerrain | null = null;
     public visible = true;
+    public static: Static[] = [];
 
-    constructor(globals: Globals, public cell: CELL) {
+    constructor(worldManager: WorldManager, globals: Globals, public cell: CELL) {
         const land = this.cell.land;
         if (land !== null && land.heightGradientData !== null)
             this.terrain = new CellTerrain(globals, land);
@@ -291,15 +383,9 @@ class CellData {
         for (let i = 0; i < this.cell.frmr.length; i++) {
             const frmr = this.cell.frmr[i];
             const objectID = frmr.objectID;
-            const nif = globals.pluginData.esm.stat.get(objectID);
-            /*
-            if (nif !== undefined) {
-                const nifData = globals.pluginData.findFileData(nif)!;
-                const nif2 = new NIF(nifData);
-                console.log(nif);
-                console.log(nif2);
-            }
-            */
+            const stat = globals.pluginData.esm.stat.get(objectID);
+            if (stat !== undefined)
+                this.static.push(new Static(worldManager, globals, frmr, stat));
         }
     }
 
@@ -309,11 +395,15 @@ class CellData {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+const bindingLayoutsTerrain: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 2, samplerEntries: [
         { dimension: GfxTextureDimension.n2DArray, formatKind: GfxSamplerFormatKind.Float, },
         { dimension: GfxTextureDimension.n2D, formatKind: GfxSamplerFormatKind.Float, }, // TODO(jstpierre): Integer texture for the map lookup?
     ] },
+];
+
+const bindingLayoutsStatic: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 3, numSamplers: 8 },
 ];
 
 class TerrainProgram extends DeviceProgram {
@@ -354,7 +444,7 @@ void main() {
 
     float x = (uv.x - 0.5) * 8192.0;
     float y = (uv.y - 0.5) * 8192.0;
-    float z = a_Height * 8.0;
+    float z = a_Height;
     vec3 t_PositionWorld = Mul(u_WorldFromLocal, vec4(x, y, z, 1.0));
 
     gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
@@ -411,6 +501,8 @@ class WorldManager {
     private terrainProgram: GfxProgram;
     private terrainInputLayout: GfxInputLayout;
     private textureMapping = nArray(2, () => new TextureMapping());
+    private staticModelCache = new Map<string, StaticModel>();
+    private staticModelCache2: StaticModel[] = [];
 
     constructor(globals: Globals) {
         for (let i = 0; i < globals.pluginData.esm.cell.length; i++) {
@@ -418,7 +510,7 @@ class WorldManager {
             if (cell.interior)
                 continue; // skip
 
-            this.cell.push(new CellData(globals, cell));
+            this.cell.push(new CellData(this, globals, cell));
         }
 
         const renderCache = globals.modelCache.renderCache;
@@ -450,10 +542,22 @@ class WorldManager {
         this.textureMapping[1].gfxSampler = this.textureMapping[0].gfxSampler; // doesn't matter, only use texelFetch
     }
 
-    public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+    public getStaticModel(globals: Globals, path: string): StaticModel {
+        if (this.staticModelCache.has(path))
+            return this.staticModelCache.get(path)!;
+
+        const nifData = globals.modelCache.getNIFData(path);
+        const staticModel = new StaticModel(nifData);
+        this.staticModelCache.set(path, staticModel);
+        this.staticModelCache2.push(staticModel);
+        return staticModel;
+    }
+
+    private prepareToRenderTerrain(globals: Globals, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.terrainProgram);
 
+        const scratchAABB = new AABB();
         for (let i = 0; i < this.cell.length; i++) {
             const cell = this.cell[i];
             if (!cell.visible)
@@ -463,7 +567,13 @@ class WorldManager {
                 continue;
 
             const x = cell.cell.gridX, y = cell.cell.gridY;
-            computeModelMatrixT(scratchMatrix, x * 8192, y * 8192, 0);
+            mat4.identity(scratchMatrix);
+            scratchMatrix[10] = 8;
+            scratchMatrix[12] = x * 8192 + 4196;
+            scratchMatrix[13] = y * 8192 + 4196;
+            scratchAABB.transform(cell.terrain.aabb, scratchMatrix);
+            if (!globals.view.frustum.contains(scratchAABB))
+                continue;
 
             const renderInst = renderInstManager.newRenderInst();
 
@@ -481,6 +591,21 @@ class WorldManager {
             renderInstManager.submitRenderInst(renderInst);
         }
         renderInstManager.popTemplateRenderInst();
+    }
+
+    private prepareToRenderStatic(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayoutsStatic);
+
+        for (const staticModel of this.staticModelCache.values())
+            staticModel.prepareToRender(globals, renderInstManager);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+        this.prepareToRenderTerrain(globals, renderInstManager);
+        this.prepareToRenderStatic(globals, renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -504,7 +629,7 @@ export class MorrowindRenderer implements SceneGfx {
         globals.view.setupFromCamera(viewerInput.camera);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
+        template.setBindingLayouts(bindingLayoutsTerrain);
 
         let offs = template.allocateUniformBuffer(TerrainProgram.ub_SceneParams, 16);
         const mapped = template.mapUniformBufferF32(TerrainProgram.ub_SceneParams);

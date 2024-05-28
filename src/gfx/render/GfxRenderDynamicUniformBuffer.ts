@@ -66,7 +66,7 @@ export class GfxRenderDynamicUniformBuffer {
      * it with the offset that was returned from {@see allocateChunk}.
      */
     public mapBufferF32(): Float32Array {
-        return assertExists(this.shadowBufferF32);
+        return this.shadowBufferF32!;
     }
 
     public prepareToRender(): void {

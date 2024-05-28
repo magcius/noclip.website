@@ -255,7 +255,6 @@ export class Scene implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.program);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy();
     }
