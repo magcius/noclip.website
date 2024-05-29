@@ -2,12 +2,12 @@
 import { ReadonlyMat4, mat3, mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, White, colorCopy, colorNewCopy } from "../Color.js";
-import { computeModelMatrixSRT, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { Frustum } from "../Geometry.js";
+import { computeModelMatrixSRT, scaleMatrix, transformVec3Mat4w1 } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
 import { fillColor, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxBuffer, GfxInputLayout, GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
@@ -16,7 +16,6 @@ import { assert, assertExists, fallbackUndefined, nArray, readString, setBitFlag
 import { normalizeTexturePath } from "./ESM.js";
 import { NIFParse } from "./NIFParse.js";
 import { Globals, ModelCache } from "./Render.js";
-import { AABB, Frustum } from "../Geometry.js";
 
 export class Stream {
     private offset: number = 0;
@@ -340,16 +339,21 @@ void main() {
 `;
 }
 
+const scratchMatrix = mat4.create();
 function calcModelMatrix(dst: mat4, obj: NIFParse.NiAVObject, parentMatrix: ReadonlyMat4 | null = null): void {
-    computeModelMatrixSRT(dst, obj.scale, obj.scale, obj.scale,
-        0, 0, 0,
-        obj.translation[0], obj.translation[1], obj.translation[2]);
+    mat4.translate(dst, dst, obj.translation);
+    mat4.set(dst,
+        obj.rotation[0], obj.rotation[1], obj.rotation[2], 0,
+        obj.rotation[3], obj.rotation[4], obj.rotation[5], 0,
+        obj.rotation[6], obj.rotation[7], obj.rotation[8], 0,
+        0, 0, 0, 1,
+    );
+    scaleMatrix(dst, dst, obj.scale);
     if (parentMatrix !== null)
         mat4.mul(dst, parentMatrix, dst);
 }
 
 const scratchVec3a = vec3.create();
-const scratchMatrix = mat4.create();
 class NiTriShape {
     private data: NiTriShapeData;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
