@@ -16,7 +16,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
-import { assert, assertExists, nArray } from "../util.js";
+import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
 import { CELL, ESM, FRMR, LAND } from "./ESM.js";
@@ -358,14 +358,17 @@ class Static {
 
     constructor(worldManager: WorldManager, globals: Globals, public frmr: FRMR, public nifPath: string) {
         this.staticModel = worldManager.getStaticModel(globals, this.nifPath);
-        this.staticModel.instances.push(this);
         this.frmr.calcModelMatrix(this.modelMatrix);
     }
 
-    public checkFrustum(globals: Globals): boolean {
-        if (vec3.squaredDistance(globals.view.cameraPos, this.frmr.position) >= (8192*6)**2)
-            return false;
+    public setRegistered(v: boolean): void {
+        if (v)
+            this.staticModel.instances.push(this);
+        else
+            arrayRemove(this.staticModel.instances, this);
+    }
 
+    public checkFrustum(globals: Globals): boolean {
         return this.staticModel.nifData.checkFrustum(globals.view.frustum, this.modelMatrix);
     }
 }
@@ -373,6 +376,7 @@ class Static {
 class CellData {
     public terrain: CellTerrain | null = null;
     public visible = true;
+    public registered: boolean = false;
     public static: Static[] = [];
 
     constructor(worldManager: WorldManager, globals: Globals, public cell: CELL) {
@@ -389,6 +393,34 @@ class CellData {
         }
     }
 
+    private isInDistanceRange(globals: Globals): boolean {
+        const cellX = this.cell.gridX * 8192 + 4096;
+        const cellY = this.cell.gridY * 8192 + 4096;
+
+        const camX = globals.view.cameraPos[0];
+        const camY = globals.view.cameraPos[1];
+
+        const dx = cellX - camX;
+        const dy = cellY - camY;
+        const sqd = dx*dx + dy*dy;
+        return sqd <= (8192*6)**2;
+    }
+    
+    public update(globals: Globals): void {
+        this.setRegistered(this.isInDistanceRange(globals));
+    }
+
+    private setRegistered(v: boolean): void {
+        if (this.registered === v)
+            return;
+
+        this.registered = v;
+        for (let i = 0; i < this.static.length; i++) {
+            const instance = this.static[i];
+            instance.setRegistered(v);
+        }
+    }
+    
     public destroy(device: GfxDevice): void {
         if (this.terrain !== null)
             this.terrain.destroy(device);
@@ -604,6 +636,9 @@ class WorldManager {
     }
 
     public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+        for (let i = 0; i < this.cell.length; i++)
+            this.cell[i].update(globals);
+
         this.prepareToRenderTerrain(globals, renderInstManager);
         this.prepareToRenderStatic(globals, renderInstManager);
     }
