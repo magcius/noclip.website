@@ -3,7 +3,7 @@ import { mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { Color, colorNewFromRGBA8 } from "../Color.js";
 import { assert, readString } from "../util.js";
-import { computeModelMatrixSRT } from "../MathHelpers.js";
+import { computeModelMatrixSRT, scaleMatrix, setMatrixTranslation } from "../MathHelpers.js";
 
 // ESM appears to be a RIFF-like
 
@@ -81,9 +81,12 @@ export class FRMR {
     public rotation = vec3.create(); // euler angles
 
     public calcModelMatrix(dst: mat4): void {
-        computeModelMatrixSRT(dst, this.scale, this.scale, this.scale,
-            this.rotation[0], this.rotation[1], -this.rotation[2],
-            this.position[0], this.position[1], this.position[2]);
+        mat4.identity(dst);
+        scaleMatrix(dst, dst, this.scale);
+        mat4.rotateX(dst, dst, -this.rotation[0]);
+        mat4.rotateY(dst, dst, -this.rotation[1]);
+        mat4.rotateZ(dst, dst, -this.rotation[2]);
+        setMatrixTranslation(dst, this.position);
     }
 }
 
@@ -228,6 +231,7 @@ export class ESM {
     public cell: CELL[] = [];
     public ltex: LTEX[] = [];
     public stat = new Map<string, string>();
+    public acti = new Map<string, string>();
 
     private currentCell: CELL | null = null; // parse state
 
@@ -237,6 +241,7 @@ export class ESM {
         this.register('LAND', this.handleRecord_LAND);
         this.register('LTEX', this.handleRecord_LTEX);
         this.register('STAT', this.handleRecord_STAT);
+        this.register('ACTI', this.handleRecord_ACTI);
 
         this.parse(buffer);
     }
@@ -275,6 +280,12 @@ export class ESM {
         const name = record.findField('NAME')!.getString();
         const modl = record.findField('MODL')!.getString();
         this.stat.set(name, normalizeMeshesPath(modl));
+    }
+
+    private handleRecord_ACTI(record: RIFFRecord): void {
+        const name = record.findField('NAME')!.getString();
+        const modl = record.findField('MODL')!.getString();
+        this.acti.set(name, normalizeMeshesPath(modl));
     }
 
     public parse(buffer: ArrayBufferSlice): void {

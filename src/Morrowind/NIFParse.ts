@@ -371,6 +371,71 @@ export class Triangle {
     }
 }
 
+export class SkinPartition {
+    protected numVertices: number;
+    protected numTriangles: number;
+    protected numBones: number;
+    protected numStrips: number;
+    protected numWeightsPerVertex: number;
+    public bones: number[] = [];
+    public vertexMap: number[] = [];
+    public vertexWeights: number[][] = [];
+    protected stripLengths: number[] = [];
+    public strips: number[][] | null = null;
+    public triangles: Triangle[] | null = null;
+    public hasBoneIndices: boolean;
+    public boneIndices: number[][] | null = null;
+
+    public parse(stream: Stream, arg: number | null = null): void {
+        this.numVertices = stream.readUint16();
+        this.numTriangles = stream.readUint16();
+        this.numBones = stream.readUint16();
+        this.numStrips = stream.readUint16();
+        this.numWeightsPerVertex = stream.readUint16();
+        for (let i = 0; i < this.numBones; i++) {
+            this.bones[i] = stream.readUint16();
+        }
+        for (let i = 0; i < this.numVertices; i++) {
+            this.vertexMap[i] = stream.readUint16();
+        }
+        for (let i = 0; i < this.numVertices; i++) {
+            this.vertexWeights[i] = [];
+            for (let j = 0; j < this.numWeightsPerVertex; j++) {
+                this.vertexWeights[i][j] = stream.readFloat32();
+            }
+        }
+        for (let i = 0; i < this.numStrips; i++) {
+            this.stripLengths[i] = stream.readUint16();
+        }
+        if ((this.numStrips !== 0)) {
+            this.strips = [];
+            for (let i = 0; i < this.numStrips; i++) {
+                this.strips[i] = [];
+                for (let j = 0; j < this.stripLengths[i]; j++) {
+                    this.strips[i][j] = stream.readUint16();
+                }
+            }
+        }
+        if ((this.numStrips === 0)) {
+            this.triangles = [];
+            for (let i = 0; i < this.numTriangles; i++) {
+                this.triangles[i] = new Triangle();
+                this.triangles[i].parse(stream);
+            }
+        }
+        this.hasBoneIndices = stream.readBool();
+        if (this.hasBoneIndices) {
+            this.boneIndices = [];
+            for (let i = 0; i < this.numVertices; i++) {
+                this.boneIndices[i] = [];
+                for (let j = 0; j < this.numWeightsPerVertex; j++) {
+                    this.boneIndices[i][j] = stream.readUint8();
+                }
+            }
+        }
+    }
+}
+
 export class NiPlane {
     public normal: vec3 = vec3.create();
     public constant: number;
@@ -657,6 +722,21 @@ export class NiKeyframeController extends NiSingleInterpController {
     }
 }
 
+export class NiFloatInterpController extends NiSingleInterpController {
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+    }
+}
+
+export class NiAlphaController extends NiFloatInterpController {
+    public data: RecordRef<NiFloatData> = new RecordRef<NiFloatData>();
+
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+        this.data.parse(stream);
+    }
+}
+
 export class NiGeometry extends NiAVObject {
     public data: RecordRef<NiGeometryData> = new RecordRef<NiGeometryData>();
     public skinInstance: RecordRef<NiSkinInstance> = new RecordRef<NiSkinInstance>();
@@ -777,6 +857,24 @@ export class NiAutoNormalParticlesData extends NiParticlesData {
     }
 }
 
+export class NiColorData extends NiObject {
+    public data: KeyGroup$Color = new KeyGroup$Color();
+
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+        this.data.parse(stream);
+    }
+}
+
+export class NiFloatData extends NiObject {
+    public data: KeyGroup$number = new KeyGroup$number();
+
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+        this.data.parse(stream);
+    }
+}
+
 export class NiGravity extends NiParticleModifier {
     public decay: number;
     public force: number;
@@ -873,6 +971,12 @@ export class NiNode extends NiAVObject {
     }
 }
 
+export class AvoidNode extends NiNode {
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+    }
+}
+
 export class NiBSAnimationNode extends NiNode {
     public override parse(stream: Stream, arg: number | null = null): void {
         super.parse(stream, arg);
@@ -882,6 +986,15 @@ export class NiBSAnimationNode extends NiNode {
 export class NiBSParticleNode extends NiNode {
     public override parse(stream: Stream, arg: number | null = null): void {
         super.parse(stream, arg);
+    }
+}
+
+export class NiParticleColorModifier extends NiParticleModifier {
+    public colorData: RecordRef<NiColorData> = new RecordRef<NiColorData>();
+
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+        this.colorData.parse(stream);
     }
 }
 
@@ -1032,12 +1145,14 @@ export class NiRotatingParticles extends NiParticles {
 export class NiSkinData extends NiObject {
     public skinTransform: NiTransform = new NiTransform();
     protected numBones: number;
+    public skinPartition: RecordRef<NiSkinPartition> = new RecordRef<NiSkinPartition>();
     public boneList: BoneData[] = [];
 
     public override parse(stream: Stream, arg: number | null = null): void {
         super.parse(stream, arg);
         this.skinTransform.parse(stream);
         this.numBones = stream.readUint32();
+        this.skinPartition.parse(stream);
         for (let i = 0; i < this.numBones; i++) {
             this.boneList[i] = new BoneData();
             this.boneList[i].parse(stream, 1);
@@ -1059,6 +1174,20 @@ export class NiSkinInstance extends NiObject {
         for (let i = 0; i < this.numBones; i++) {
             this.bones[i] = new RecordRef<NiNode>();
             this.bones[i].parse(stream);
+        }
+    }
+}
+
+export class NiSkinPartition extends NiObject {
+    protected numPartitions: number;
+    public partitions: SkinPartition[] = [];
+
+    public override parse(stream: Stream, arg: number | null = null): void {
+        super.parse(stream, arg);
+        this.numPartitions = stream.readUint32();
+        for (let i = 0; i < this.numPartitions; i++) {
+            this.partitions[i] = new SkinPartition();
+            this.partitions[i].parse(stream);
         }
     }
 }
@@ -1383,6 +1512,23 @@ export class KeyGroup$number {
     }
 }
 
+export class KeyGroup$Color {
+    protected numKeys: number;
+    public interpolation: KeyType | null = null;
+    public keys: Key$Color[] = [];
+
+    public parse(stream: Stream, arg: number | null = null): void {
+        this.numKeys = stream.readUint32();
+        if ((this.numKeys !== 0)) {
+            this.interpolation = stream.readUint32();
+        }
+        for (let i = 0; i < this.numKeys; i++) {
+            this.keys[i] = new Key$Color();
+            this.keys[i].parse(stream, this.interpolation);
+        }
+    }
+}
+
 export class QuatKey$Quaternion {
     public time: number;
     public value: Quaternion | null = null;
@@ -1441,6 +1587,31 @@ export class Key$string {
     }
 }
 
+export class Key$Color {
+    public time: number;
+    public value: Color = colorNewCopy(White);
+    public forward: Color | null = null;
+    public backward: Color | null = null;
+    public tBC: TBC | null = null;
+
+    public parse(stream: Stream, arg: number | null = null): void {
+        this.time = stream.readFloat32();
+        stream.readColor4(this.value);
+        if ((arg === 2)) {
+            this.forward = colorNewCopy(White);
+            stream.readColor4(this.forward);
+        }
+        if ((arg === 2)) {
+            this.backward = colorNewCopy(White);
+            stream.readColor4(this.backward);
+        }
+        if ((arg === 3)) {
+            this.tBC = new TBC();
+            this.tBC.parse(stream);
+        }
+    }
+}
+
 export class Key$vec3 {
     public time: number;
     public value: vec3 = vec3.create();
@@ -1479,6 +1650,8 @@ export function newRecord(recordType: string): NiParse {
         case 'NiInterpController': return new NiInterpController();
         case 'NiSingleInterpController': return new NiSingleInterpController();
         case 'NiKeyframeController': return new NiKeyframeController();
+        case 'NiFloatInterpController': return new NiFloatInterpController();
+        case 'NiAlphaController': return new NiAlphaController();
         case 'NiGeometry': return new NiGeometry();
         case 'NiTriBasedGeom': return new NiTriBasedGeom();
         case 'NiGeometryData': return new NiGeometryData();
@@ -1487,12 +1660,16 @@ export function newRecord(recordType: string): NiParse {
         case 'NiParticlesData': return new NiParticlesData();
         case 'NiRotatingParticlesData': return new NiRotatingParticlesData();
         case 'NiAutoNormalParticlesData': return new NiAutoNormalParticlesData();
+        case 'NiColorData': return new NiColorData();
+        case 'NiFloatData': return new NiFloatData();
         case 'NiGravity': return new NiGravity();
         case 'NiKeyframeData': return new NiKeyframeData();
         case 'NiMaterialProperty': return new NiMaterialProperty();
         case 'NiNode': return new NiNode();
+        case 'AvoidNode': return new AvoidNode();
         case 'NiBSAnimationNode': return new NiBSAnimationNode();
         case 'NiBSParticleNode': return new NiBSParticleNode();
+        case 'NiParticleColorModifier': return new NiParticleColorModifier();
         case 'NiParticleGrowFade': return new NiParticleGrowFade();
         case 'NiParticles': return new NiParticles();
         case 'NiAutoNormalParticles': return new NiAutoNormalParticles();
@@ -1503,6 +1680,7 @@ export function newRecord(recordType: string): NiParse {
         case 'NiRotatingParticles': return new NiRotatingParticles();
         case 'NiSkinData': return new NiSkinData();
         case 'NiSkinInstance': return new NiSkinInstance();
+        case 'NiSkinPartition': return new NiSkinPartition();
         case 'NiTexture': return new NiTexture();
         case 'NiSourceTexture': return new NiSourceTexture();
         case 'NiStringExtraData': return new NiStringExtraData();

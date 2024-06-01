@@ -1,21 +1,22 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { ReadonlyVec3, mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera.js";
+import { White, colorCopy, colorFromRGBA8, colorLerp, colorNewCopy } from "../Color.js";
 import * as DDS from "../DarkSouls/dds.js";
 import { NamedArrayBufferSlice } from "../DataFetcher.js";
 import { AABB, Frustum } from "../Geometry.js";
-import { getMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { getMatrixTranslation, invlerp, setMatrixTranslation } from "../MathHelpers.js";
 import { DeviceProgram } from "../Program.js";
 import { SceneContext } from "../SceneBase.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
+import { GfxRenderInstList, GfxRenderInstManager, gfxRenderInstCompareNone } from "../gfx/render/GfxRenderInstManager.js";
 import { arrayRemove, assert, assertExists, nArray } from "../util.js";
 import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { BSA } from "./BSA.js";
@@ -28,6 +29,17 @@ const noclipSpaceFromMorrowindSpace = mat4.fromValues(
     0,  1, 0, 0,
     0,  0, 0, 1,
 );
+
+function isInRangeXY(x: number, y: number, cameraPos: ReadonlyVec3, distSq: number): boolean {
+    const camX = cameraPos[0];
+    const camY = cameraPos[1];
+
+    const dx = x - camX;
+    const dy = y - camY;
+
+    const sqd = dx*dx + dy*dy;
+    return sqd <= distSq;
+}
 
 class View {
     // aka viewMatrix
@@ -46,6 +58,13 @@ class View {
     // Frustum is stored in Morrowind world space.
     public frustum = new Frustum();
 
+    public renderInstListOpa = new GfxRenderInstList();
+    public renderInstListXlu = new GfxRenderInstList();
+    public renderInstListSky = new GfxRenderInstList(gfxRenderInstCompareNone);
+
+    public nifCullFarOpaSq = (8192*6) ** 2;
+    public nifCullFarXluSq = (8192*3) ** 2;
+
     public finishSetup(): void {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, this.clipFromViewMatrix, this.viewFromWorldMatrix);
@@ -58,6 +77,12 @@ class View {
         mat4.mul(this.viewFromWorldMatrix, camera.viewMatrix, noclipSpaceFromMorrowindSpace);
         mat4.copy(this.clipFromViewMatrix, camera.projectionMatrix);
         this.finishSetup();
+    }
+
+    public reset(): void {
+        this.renderInstListOpa.reset();
+        this.renderInstListXlu.reset();
+        this.renderInstListSky.reset();
     }
 }
 
@@ -131,10 +156,16 @@ export class ModelCache {
 export class Globals {
     public modelCache: ModelCache;
     public terrainIndexBuffer: GfxBuffer;
+    public weatherManager = new WeatherManager();
     public view = new View();
+    public timeAdv = 0.005;
+    public time = 0;
 
     constructor(public device: GfxDevice, public pluginData: PluginData) {
         this.modelCache = new ModelCache(device, pluginData);
+
+        const today = new Date();
+        this.time = today.getHours();
     }
 
     public destroy(device: GfxDevice): void {
@@ -309,6 +340,7 @@ class StaticModel {
     public instances: Static[] = [];
 
     constructor(public nifData: NIFData) {
+        this.nifData.getTriShapes().forEach((triShape) => triShape.setCanInstance(true));
     }
 
     public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
@@ -317,7 +349,6 @@ class StaticModel {
 
         // Gather all visible instances.
         const template = renderInstManager.getTemplateRenderInst();
-
         const maxInstances = this.nifData.getMaxInstances();
 
         let offs = 0;
@@ -336,16 +367,29 @@ class StaticModel {
         const submitDraws = () => {
             if (numInstances === 0)
                 return;
+            renderInstManager.setCurrentRenderInstList(globals.view.renderInstListOpa);
             template.setInstanceCount(numInstances);
-            this.nifData.prepareToRender(globals, renderInstManager);
+            this.nifData.prepareToRenderInstanced(globals, renderInstManager);
             numInstances = 0;
+        };
+
+        const submitXluDraw = (instance: Static) => {
+            const x = instance.frmr.position[0];
+            const y = instance.frmr.position[1];
+            if (!isInRangeXY(x, y, globals.view.cameraPos, globals.view.nifCullFarXluSq))
+                return;
+
+            renderInstManager.setCurrentRenderInstList(globals.view.renderInstListXlu);
+            template.setInstanceCount(1);
+            this.nifData.prepareToRenderSingle(globals, renderInstManager, instance.modelMatrix);
         };
 
         for (let i = 0; i < this.instances.length; i++) {
             const instance = this.instances[i];
-            if (!instance.checkFrustum(globals))
+            if (!instance.visible || !instance.checkFrustum(globals))
                 continue;
             fillInstance(instance);
+            submitXluDraw(instance);
         }
         submitDraws();
     }
@@ -374,6 +418,7 @@ class Static {
 }
 
 class CellData {
+    private name: string;
     public terrain: CellTerrain | null = null;
     public visible = true;
     public registered: boolean = false;
@@ -388,29 +433,28 @@ class CellData {
             const frmr = this.cell.frmr[i];
             const objectID = frmr.objectID;
             const stat = globals.pluginData.esm.stat.get(objectID);
+            const acti = globals.pluginData.esm.acti.get(objectID);
             if (stat !== undefined)
                 this.static.push(new Static(worldManager, globals, frmr, stat));
+            else if (acti !== undefined)
+                this.static.push(new Static(worldManager, globals, frmr, acti));
         }
+
+        const cellName = this.cell.name ? this.cell.name : this.cell.regionName;
+        this.name = `${cellName} ${this.cell.gridX},${this.cell.gridY}`;
     }
 
-    private isInDistanceRange(globals: Globals): boolean {
+    private isInDistanceRange(globals: Globals, distSq: number): boolean {
         const cellX = this.cell.gridX * 8192 + 4096;
         const cellY = this.cell.gridY * 8192 + 4096;
-
-        const camX = globals.view.cameraPos[0];
-        const camY = globals.view.cameraPos[1];
-
-        const dx = cellX - camX;
-        const dy = cellY - camY;
-        const sqd = dx*dx + dy*dy;
-        return sqd <= (8192*6)**2;
+        return isInRangeXY(cellX, cellY, globals.view.cameraPos, distSq);
     }
-    
+
     public update(globals: Globals): void {
-        this.setRegistered(this.isInDistanceRange(globals));
+        this.setNifRegistered(this.visible && this.isInDistanceRange(globals, globals.view.nifCullFarOpaSq));
     }
 
-    private setRegistered(v: boolean): void {
+    private setNifRegistered(v: boolean): void {
         if (this.registered === v)
             return;
 
@@ -420,7 +464,7 @@ class CellData {
             instance.setRegistered(v);
         }
     }
-    
+
     public destroy(device: GfxDevice): void {
         if (this.terrain !== null)
             this.terrain.destroy(device);
@@ -434,7 +478,7 @@ const bindingLayoutsTerrain: GfxBindingLayoutDescriptor[] = [
     ] },
 ];
 
-const bindingLayoutsStatic: GfxBindingLayoutDescriptor[] = [
+const bindingLayoutsNIF: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8 },
 ];
 
@@ -452,6 +496,9 @@ precision mediump sampler2DArray;
 
 layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ClipFromWorld;
+    vec4 u_SunDirection;
+    vec4 u_SunDiffuse;
+    vec4 u_SunAmbient;
 };
 
 layout(std140) uniform ub_ObjectParams {
@@ -482,11 +529,8 @@ void main() {
     gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
     v_Color = a_Color;
 
-    vec3 t_SunDirection = normalize(vec3(.2, .5, 1));
     // https://github.com/OpenMW/openmw/blob/master/files/openmw.cfg
-    vec3 t_SunAmbient = vec3(137, 140, 160) / 255.0;
-    vec3 t_SunDiffuse = vec3(255, 252, 238) / 255.0;
-    v_Color *= dot(a_Normal, t_SunDirection) * t_SunDiffuse + t_SunAmbient;
+    v_Color *= dot(a_Normal, u_SunDirection.xyz) * u_SunDiffuse.xyz + u_SunAmbient.xyz;
 }
 `;
 
@@ -516,6 +560,12 @@ void main() {
         t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, 1)), t_Frac.y - 0.5);
     else if (t_TexCoordI.y > 0)
         t_Terrain = mix(t_Terrain, SampleTerrain(t_TexCoord, ivec2(0, -1)), 0.5 - t_Frac.y);
+
+    bool t_ShowGridLines = false;
+    if (t_ShowGridLines) {
+        if (t_Frac.x <= 0.01 || t_Frac.y <= 0.01)
+            t_Terrain.rgb = vec3(0.0);
+    }
 
     vec4 t_Diffuse = t_Terrain;
     t_Diffuse.rgb *= v_Color;
@@ -609,7 +659,7 @@ class WorldManager {
 
             const renderInst = renderInstManager.newRenderInst();
 
-            let offs = renderInst.allocateUniformBuffer(TerrainProgram.ub_ObjectParams, 16);
+            let offs = renderInst.allocateUniformBuffer(TerrainProgram.ub_ObjectParams, 12);
             const d = renderInst.mapUniformBufferF32(TerrainProgram.ub_ObjectParams);
             offs += fillMatrix4x3(d, offs, scratchMatrix);
 
@@ -627,7 +677,7 @@ class WorldManager {
 
     private prepareToRenderStatic(globals: Globals, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayoutsStatic);
+        template.setBindingLayouts(bindingLayoutsNIF);
 
         for (const staticModel of this.staticModelCache.values())
             staticModel.prepareToRender(globals, renderInstManager);
@@ -649,31 +699,304 @@ class WorldManager {
     }
 }
 
+class SkyManager {
+    private atmosphere: NIFData;
+    private clouds: NIFData;
+    private night01: NIFData;
+
+    constructor(globals: Globals) {
+        this.atmosphere = globals.modelCache.getNIFData(`meshes\\sky_atmosphere.nif`);
+        this.clouds = globals.modelCache.getNIFData(`meshes\\sky_clouds_01.nif`);
+        this.night01 = globals.modelCache.getNIFData(`meshes\\sky_night_01.nif`);
+    }
+
+    public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
+        this.atmosphere.getTriShapes().forEach((v) => {
+            colorCopy(v.emissiveColor, globals.weatherManager.current.skyColor);
+        });
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayoutsNIF);
+        template.allocateUniformBuffer(1, 64 * 16); // TODO(jstpierre): ugh
+        renderInstManager.setCurrentRenderInstList(globals.view.renderInstListSky);
+
+        mat4.identity(scratchMatrix);
+        setMatrixTranslation(scratchMatrix, globals.view.cameraPos);
+
+        this.atmosphere.prepareToRenderSingle(globals, renderInstManager, scratchMatrix);
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+class Weather {
+    public skyColor = colorNewCopy(White);
+    public fogColor = colorNewCopy(White);
+    public ambientColor = colorNewCopy(White);
+    public sunColor = colorNewCopy(White);
+
+    constructor(public name: string = "") {
+    }
+
+    public lerp(a: Weather, b: Weather, t: number): void {
+        colorLerp(this.skyColor, a.skyColor, b.skyColor, t);
+        colorLerp(this.fogColor, a.fogColor, b.fogColor, t);
+        colorLerp(this.ambientColor, a.ambientColor, b.ambientColor, t);
+        colorLerp(this.sunColor, a.sunColor, b.sunColor, t);
+    }
+}
+
+class WeatherManager {
+    private weatherSetting: Weather[][] = [];
+
+    // Start times of each
+    public hourSunrise = 6;
+    public hourDay = 8;
+    public hourSunset = 18;
+    public hourNight = 20;
+
+    private schedule: [number, number][] = [];
+
+    public current = new Weather();
+    public sunDirection = vec3.create();
+    public weatherIdx = 0;
+
+    constructor() {
+        this.schedule = [
+            [this.hourSunrise, 3],
+            [(this.hourSunrise + this.hourDay) / 2, 0],
+            [this.hourDay, 1],
+            [this.hourSunset, 1],
+            [(this.hourSunset + this.hourNight) / 2, 2],
+            [this.hourNight, 3],
+        ];
+
+        this.weatherSetting[0] = nArray(4, () => new Weather('Clear'));
+        colorFromRGBA8(this.weatherSetting[0][0].skyColor, 0x758DA4FF);
+        colorFromRGBA8(this.weatherSetting[0][1].skyColor, 0x5F87CBFF);
+        colorFromRGBA8(this.weatherSetting[0][2].skyColor, 0x385981FF);
+        colorFromRGBA8(this.weatherSetting[0][3].skyColor, 0x090A0BFF);
+        colorFromRGBA8(this.weatherSetting[0][0].fogColor, 0xFFBD9DFF);
+        colorFromRGBA8(this.weatherSetting[0][1].fogColor, 0xCEE3FFFF);
+        colorFromRGBA8(this.weatherSetting[0][2].fogColor, 0xFFBD9DFF);
+        colorFromRGBA8(this.weatherSetting[0][3].fogColor, 0x090A0BFF);
+        colorFromRGBA8(this.weatherSetting[0][0].ambientColor, 0x2F4260FF);
+        colorFromRGBA8(this.weatherSetting[0][1].ambientColor, 0x898CA0FF);
+        colorFromRGBA8(this.weatherSetting[0][2].ambientColor, 0x444B60FF);
+        colorFromRGBA8(this.weatherSetting[0][3].ambientColor, 0x20232AFF);
+        colorFromRGBA8(this.weatherSetting[0][0].sunColor, 0xF29F77FF);
+        colorFromRGBA8(this.weatherSetting[0][1].sunColor, 0xFFFCEEFF);
+        colorFromRGBA8(this.weatherSetting[0][2].sunColor, 0xFF724FFF);
+        colorFromRGBA8(this.weatherSetting[0][3].sunColor, 0x3B61B0FF);
+        this.weatherSetting[1] = nArray(4, () => new Weather('Cloudy'));
+        colorFromRGBA8(this.weatherSetting[1][0].skyColor, 0x7E9EADFF);
+        colorFromRGBA8(this.weatherSetting[1][1].skyColor, 0x75A0D7FF);
+        colorFromRGBA8(this.weatherSetting[1][2].skyColor, 0x6F729FFF);
+        colorFromRGBA8(this.weatherSetting[1][3].skyColor, 0x090A0BFF);
+        colorFromRGBA8(this.weatherSetting[1][0].fogColor, 0xFFCF95FF);
+        colorFromRGBA8(this.weatherSetting[1][1].fogColor, 0xF5EBE0FF);
+        colorFromRGBA8(this.weatherSetting[1][2].fogColor, 0xFF9B6AFF);
+        colorFromRGBA8(this.weatherSetting[1][3].fogColor, 0x090A0BFF);
+        colorFromRGBA8(this.weatherSetting[1][0].ambientColor, 0x424A57FF);
+        colorFromRGBA8(this.weatherSetting[1][1].ambientColor, 0x8991A0FF);
+        colorFromRGBA8(this.weatherSetting[1][2].ambientColor, 0x47505CFF);
+        colorFromRGBA8(this.weatherSetting[1][3].ambientColor, 0x202736FF);
+        colorFromRGBA8(this.weatherSetting[1][0].sunColor, 0xF1B163FF);
+        colorFromRGBA8(this.weatherSetting[1][1].sunColor, 0xFFECDDFF);
+        colorFromRGBA8(this.weatherSetting[1][2].sunColor, 0xFF5900FF);
+        colorFromRGBA8(this.weatherSetting[1][3].sunColor, 0x4D5B7CFF);
+        this.weatherSetting[2] = nArray(4, () => new Weather('Foggy'));
+        colorFromRGBA8(this.weatherSetting[2][0].skyColor, 0xC5BEB4FF);
+        colorFromRGBA8(this.weatherSetting[2][1].skyColor, 0xB8D3E4FF);
+        colorFromRGBA8(this.weatherSetting[2][2].skyColor, 0x8E9FB0FF);
+        colorFromRGBA8(this.weatherSetting[2][3].skyColor, 0x12171CFF);
+        colorFromRGBA8(this.weatherSetting[2][0].fogColor, 0xADA494FF);
+        colorFromRGBA8(this.weatherSetting[2][1].fogColor, 0x96BBD1FF);
+        colorFromRGBA8(this.weatherSetting[2][2].fogColor, 0x71879DFF);
+        colorFromRGBA8(this.weatherSetting[2][3].fogColor, 0x13181DFF);
+        colorFromRGBA8(this.weatherSetting[2][0].ambientColor, 0x302B25FF);
+        colorFromRGBA8(this.weatherSetting[2][1].ambientColor, 0x5C6D78FF);
+        colorFromRGBA8(this.weatherSetting[2][2].ambientColor, 0x1D354CFF);
+        colorFromRGBA8(this.weatherSetting[2][3].ambientColor, 0x1C2127FF);
+        colorFromRGBA8(this.weatherSetting[2][0].sunColor, 0xB1A289FF);
+        colorFromRGBA8(this.weatherSetting[2][1].sunColor, 0x6F8397FF);
+        colorFromRGBA8(this.weatherSetting[2][2].sunColor, 0x7D9DBDFF);
+        colorFromRGBA8(this.weatherSetting[2][3].sunColor, 0x516477FF);
+        this.weatherSetting[3] = nArray(4, () => new Weather('Thunderstorm'));
+        colorFromRGBA8(this.weatherSetting[3][0].skyColor, 0x232427FF);
+        colorFromRGBA8(this.weatherSetting[3][1].skyColor, 0x616873FF);
+        colorFromRGBA8(this.weatherSetting[3][2].skyColor, 0x232427FF);
+        colorFromRGBA8(this.weatherSetting[3][3].skyColor, 0x131416FF);
+        colorFromRGBA8(this.weatherSetting[3][0].fogColor, 0x464A55FF);
+        colorFromRGBA8(this.weatherSetting[3][1].fogColor, 0x616873FF);
+        colorFromRGBA8(this.weatherSetting[3][2].fogColor, 0x464A55FF);
+        colorFromRGBA8(this.weatherSetting[3][3].fogColor, 0x131416FF);
+        colorFromRGBA8(this.weatherSetting[3][0].ambientColor, 0x363636FF);
+        colorFromRGBA8(this.weatherSetting[3][1].ambientColor, 0x5A5A5AFF);
+        colorFromRGBA8(this.weatherSetting[3][2].ambientColor, 0x363636FF);
+        colorFromRGBA8(this.weatherSetting[3][3].ambientColor, 0x313336FF);
+        colorFromRGBA8(this.weatherSetting[3][0].sunColor, 0x5B637AFF);
+        colorFromRGBA8(this.weatherSetting[3][1].sunColor, 0x8A909BFF);
+        colorFromRGBA8(this.weatherSetting[3][2].sunColor, 0x606575FF);
+        colorFromRGBA8(this.weatherSetting[3][3].sunColor, 0x374C6EFF);
+        this.weatherSetting[4] = nArray(4, () => new Weather('Rain'));
+        colorFromRGBA8(this.weatherSetting[4][0].skyColor, 0x474A4BFF);
+        colorFromRGBA8(this.weatherSetting[4][1].skyColor, 0x74787AFF);
+        colorFromRGBA8(this.weatherSetting[4][2].skyColor, 0x494949FF);
+        colorFromRGBA8(this.weatherSetting[4][3].skyColor, 0x18191AFF);
+        colorFromRGBA8(this.weatherSetting[4][0].fogColor, 0x474A4BFF);
+        colorFromRGBA8(this.weatherSetting[4][1].fogColor, 0x74787AFF);
+        colorFromRGBA8(this.weatherSetting[4][2].fogColor, 0x494949FF);
+        colorFromRGBA8(this.weatherSetting[4][3].fogColor, 0x18191AFF);
+        colorFromRGBA8(this.weatherSetting[4][0].ambientColor, 0x615A58FF);
+        colorFromRGBA8(this.weatherSetting[4][1].ambientColor, 0x696E71FF);
+        colorFromRGBA8(this.weatherSetting[4][2].ambientColor, 0x586161FF);
+        colorFromRGBA8(this.weatherSetting[4][3].ambientColor, 0x323743FF);
+        colorFromRGBA8(this.weatherSetting[4][0].sunColor, 0x837A78FF);
+        colorFromRGBA8(this.weatherSetting[4][1].sunColor, 0x959DAAFF);
+        colorFromRGBA8(this.weatherSetting[4][2].sunColor, 0x787E83FF);
+        colorFromRGBA8(this.weatherSetting[4][3].sunColor, 0x323E65FF);
+        this.weatherSetting[5] = nArray(4, () => new Weather('Overcast'));
+        colorFromRGBA8(this.weatherSetting[5][0].skyColor, 0x5B636AFF);
+        colorFromRGBA8(this.weatherSetting[5][1].skyColor, 0x8F9295FF);
+        colorFromRGBA8(this.weatherSetting[5][2].skyColor, 0x6C7379FF);
+        colorFromRGBA8(this.weatherSetting[5][3].skyColor, 0x131619FF);
+        colorFromRGBA8(this.weatherSetting[5][0].fogColor, 0x5B636AFF);
+        colorFromRGBA8(this.weatherSetting[5][1].fogColor, 0x8F9295FF);
+        colorFromRGBA8(this.weatherSetting[5][2].fogColor, 0x6C7379FF);
+        colorFromRGBA8(this.weatherSetting[5][3].fogColor, 0x131619FF);
+        colorFromRGBA8(this.weatherSetting[5][0].ambientColor, 0x54585CFF);
+        colorFromRGBA8(this.weatherSetting[5][1].ambientColor, 0x5D6069FF);
+        colorFromRGBA8(this.weatherSetting[5][2].ambientColor, 0x534D4BFF);
+        colorFromRGBA8(this.weatherSetting[5][3].ambientColor, 0x393C42FF);
+        colorFromRGBA8(this.weatherSetting[5][0].sunColor, 0x577DA3FF);
+        colorFromRGBA8(this.weatherSetting[5][1].sunColor, 0xA3A9B7FF);
+        colorFromRGBA8(this.weatherSetting[5][2].sunColor, 0x55679DFF);
+        colorFromRGBA8(this.weatherSetting[5][3].sunColor, 0x203664FF);
+        this.weatherSetting[6] = nArray(4, () => new Weather('Snow'));
+        colorFromRGBA8(this.weatherSetting[6][0].skyColor, 0x6A5B5BFF);
+        colorFromRGBA8(this.weatherSetting[6][1].skyColor, 0x999EA6FF);
+        colorFromRGBA8(this.weatherSetting[6][2].skyColor, 0x607386FF);
+        colorFromRGBA8(this.weatherSetting[6][3].skyColor, 0x1F2327FF);
+        colorFromRGBA8(this.weatherSetting[6][0].fogColor, 0x6A5B5BFF);
+        colorFromRGBA8(this.weatherSetting[6][1].fogColor, 0x999EA6FF);
+        colorFromRGBA8(this.weatherSetting[6][2].fogColor, 0x607386FF);
+        colorFromRGBA8(this.weatherSetting[6][3].fogColor, 0x1F2327FF);
+        colorFromRGBA8(this.weatherSetting[6][0].ambientColor, 0x5C5454FF);
+        colorFromRGBA8(this.weatherSetting[6][1].ambientColor, 0x5D6069FF);
+        colorFromRGBA8(this.weatherSetting[6][2].ambientColor, 0x464F57FF);
+        colorFromRGBA8(this.weatherSetting[6][3].ambientColor, 0x313A44FF);
+        colorFromRGBA8(this.weatherSetting[6][0].sunColor, 0x8D6D6DFF);
+        colorFromRGBA8(this.weatherSetting[6][1].sunColor, 0xA3A9B7FF);
+        colorFromRGBA8(this.weatherSetting[6][2].sunColor, 0x65798DFF);
+        colorFromRGBA8(this.weatherSetting[6][3].sunColor, 0x37424DFF);
+        this.weatherSetting[7] = nArray(4, () => new Weather('Blizzard'));
+        colorFromRGBA8(this.weatherSetting[7][0].skyColor, 0x5B636AFF);
+        colorFromRGBA8(this.weatherSetting[7][1].skyColor, 0x798591FF);
+        colorFromRGBA8(this.weatherSetting[7][2].skyColor, 0x6C7379FF);
+        colorFromRGBA8(this.weatherSetting[7][3].skyColor, 0x1B1D1FFF);
+        colorFromRGBA8(this.weatherSetting[7][0].fogColor, 0x5B636AFF);
+        colorFromRGBA8(this.weatherSetting[7][1].fogColor, 0x798591FF);
+        colorFromRGBA8(this.weatherSetting[7][2].fogColor, 0x6C7379FF);
+        colorFromRGBA8(this.weatherSetting[7][3].fogColor, 0x15181CFF);
+        colorFromRGBA8(this.weatherSetting[7][0].ambientColor, 0x54585CFF);
+        colorFromRGBA8(this.weatherSetting[7][1].ambientColor, 0x5D6069FF);
+        colorFromRGBA8(this.weatherSetting[7][2].ambientColor, 0x534D4BFF);
+        colorFromRGBA8(this.weatherSetting[7][3].ambientColor, 0x353E46FF);
+        colorFromRGBA8(this.weatherSetting[7][0].sunColor, 0x728092FF);
+        colorFromRGBA8(this.weatherSetting[7][1].sunColor, 0xA3A9B7FF);
+        colorFromRGBA8(this.weatherSetting[7][2].sunColor, 0x6A7288FF);
+        colorFromRGBA8(this.weatherSetting[7][3].sunColor, 0x39424AFF);
+    }
+
+    private updateSunDirection(globals: Globals): void {
+        let hourFromSunrise = globals.time - this.hourSunrise; // relative to sunrise
+        if (hourFromSunrise < 0)
+            hourFromSunrise += 24;
+
+        const dayDuration = this.hourNight - this.hourSunrise;
+        const nightDuration = 24 - dayDuration;
+        const isNight = hourFromSunrise >= dayDuration;
+
+        let orbit: number;
+        if (isNight) {
+            const t = (hourFromSunrise - dayDuration) / nightDuration;
+            orbit = -(1 - t * 2);
+        } else {
+            const t = hourFromSunrise / dayDuration;
+            orbit = 1 - t * 2;
+        }
+
+        this.sunDirection[0] = -400.0 * orbit;
+        this.sunDirection[1] = 75.0;
+        this.sunDirection[2] = -100.0;
+
+        vec3.normalize(this.sunDirection, this.sunDirection);
+        vec3.negate(this.sunDirection, this.sunDirection);
+    }
+
+    public update(globals: Globals): void {
+        this.updateSunDirection(globals);
+
+        const setting = this.weatherSetting[this.weatherIdx];
+
+        for (let i = 0; i < this.schedule.length; i++) {
+            const i0 = i, i1 = (i + 1) % this.schedule.length;
+            let [h0, si0] = this.schedule[i0];
+            let [h1, si1] = this.schedule[i1];
+
+            let hour = globals.time % 24;
+            if (h1 < h0) {
+                h1 += 24;
+                hour += 24;
+            }
+
+            if (hour >= h0 && hour < h1) {
+                if (hour < h0)
+                    hour += 24;
+                const t = invlerp(h0, h1, hour);
+                const s0 = setting[si0];
+                const s1 = setting[si1];
+                this.current.lerp(s0, s1, t);
+                break;
+            }
+        }
+    }
+}
+
 export class MorrowindRenderer implements SceneGfx {
     private renderHelper: GfxRenderHelper;
     private worldManager: WorldManager;
-    private renderInstListMain = new GfxRenderInstList();
+    private skyManager: SkyManager;
 
     constructor(context: SceneContext, private globals: Globals) {
         this.renderHelper = new GfxRenderHelper(context.device, context, this.globals.modelCache.renderCache);
         this.worldManager = new WorldManager(this.globals);
+        this.skyManager = new SkyManager(this.globals);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const globals = this.globals;
+
+        globals.time += globals.timeAdv * (viewerInput.deltaTime / 1000 * 30);
+
+        globals.weatherManager.update(globals);
         globals.view.setupFromCamera(viewerInput.camera);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayoutsTerrain);
 
-        let offs = template.allocateUniformBuffer(TerrainProgram.ub_SceneParams, 16);
-        const mapped = template.mapUniformBufferF32(TerrainProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(TerrainProgram.ub_SceneParams, 28);
+        const d = template.mapUniformBufferF32(TerrainProgram.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, globals.view.clipFromWorldMatrix);
+        offs += fillVec3v(d, offs, globals.weatherManager.sunDirection);
+        offs += fillColor(d, offs, globals.weatherManager.current.sunColor);
+        offs += fillColor(d, offs, globals.weatherManager.current.ambientColor);
 
-        offs += fillMatrix4x4(mapped, offs, globals.view.clipFromWorldMatrix);
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.skyManager.prepareToRender(globals, renderInstManager);
 
-        this.renderHelper.renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
-
-        this.worldManager.prepareToRender(this.globals, this.renderHelper.renderInstManager);
+        this.renderHelper.renderInstManager.setCurrentRenderInstList(globals.view.renderInstListOpa);
+        this.worldManager.prepareToRender(globals, renderInstManager);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender();
@@ -686,13 +1009,23 @@ export class MorrowindRenderer implements SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.globals.view.renderInstListSky.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+            });
+        });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.globals.view.renderInstListOpa.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
+                this.globals.view.renderInstListXlu.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
@@ -700,7 +1033,7 @@ export class MorrowindRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(builder);
-        this.renderInstListMain.reset();
+        this.globals.view.reset();
     }
 
     public destroy(device: GfxDevice): void {

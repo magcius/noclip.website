@@ -149,6 +149,8 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8snorm';
     else if (format === GfxFormat.U32_R)
         return 'r32uint';
+    else if (format === GfxFormat.F32_R)
+        return 'r32float';
     else if (format === GfxFormat.F16_RGBA)
         return 'rgba16float';
     else if (format === GfxFormat.F32_RGBA)

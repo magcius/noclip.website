@@ -762,12 +762,12 @@ class StructField {
         const versionBounds = context.versionBounds;
         if (this.since !== null && versionBounds.minVersion !== null && this.since < versionBounds.minVersion)
             this.runtimeCheckSince = false;
-        if (this.since !== null && versionBounds.maxVersion !== null && this.since >= versionBounds.maxVersion)
+        if (this.since !== null && versionBounds.maxVersion !== null && this.since > versionBounds.maxVersion)
             this.isVisible = false;
 
         if (this.until !== null && versionBounds.minVersion !== null && this.until < versionBounds.minVersion)
             this.isVisible = false;
-        if (this.until !== null && versionBounds.maxVersion !== null && this.until >= versionBounds.maxVersion)
+        if (this.until !== null && versionBounds.maxVersion !== null && this.until > versionBounds.maxVersion)
             this.runtimeCheckUntil = false;
     }
 
@@ -823,7 +823,11 @@ class StructField {
             // if (this.parentStruct.fields.includes(lengthField))
             //     lengthField.isMember = false;
             lengthField.protection = `protected`;
-            return lengthField.getMemberRef();
+            if (lengthField.type instanceof ArrayType) { // ugfh ufh
+                return `${lengthField.getMemberRef()}[i]`;
+            } else {
+                return lengthField.getMemberRef();
+            }
         } else if (expr !== null) {
             const exprCtx = new ExprCtx(this.parentStruct, xml);
             return expr.generate(exprCtx);
@@ -1238,6 +1242,7 @@ function main() {
     generator.addType('NiTextureEffect');
     generator.addType('NiZBufferProperty');
     generator.addType('NiUVController');
+    generator.addType('NiAlphaController');
     generator.addType('NiBSAnimationNode');
     generator.addType('NiBSParticleNode');
     generator.addType('NiRotatingParticles');
@@ -1246,10 +1251,12 @@ function main() {
     generator.addType('NiAutoNormalParticlesData');
     generator.addType('NiParticleSystemController');
     generator.addType('NiParticleGrowFade');
+    generator.addType('NiParticleColorModifier');
     generator.addType('NiGravity');
     generator.addType('NiKeyframeController');
     generator.addType('NiTextKeyExtraData');
     generator.addType('RootCollisionNode');
+    generator.addType('AvoidNode');
     
     (xml.getType('NiTriShapeData') as Struct).getField('Triangles')?.convertToArrayBufferType(0x06);
 
