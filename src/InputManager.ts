@@ -73,7 +73,7 @@ export default class InputManager {
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
-        this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
+        this.toplevel.addEventListener('wheel', this._onWheel, { passive: true });
         this.toplevel.addEventListener('mousedown', (e) => {
             if (!this.isInteractive)
                 return;
@@ -90,10 +90,10 @@ export default class InputManager {
             this.buttons = e.buttons;
         });
 
-        this.toplevel.addEventListener('touchstart', this._onTouchChange);
-        this.toplevel.addEventListener('touchend', this._onTouchChange);
-        this.toplevel.addEventListener('touchcancel', this._onTouchChange);
-        this.toplevel.addEventListener('touchmove', this._onTouchMove);
+        this.toplevel.addEventListener('touchstart', this._onTouchChange, { passive: true });
+        this.toplevel.addEventListener('touchend', this._onTouchChange, { passive: true });
+        this.toplevel.addEventListener('touchcancel', this._onTouchChange, { passive: true });
+        this.toplevel.addEventListener('touchmove', this._onTouchMove, { passive: true });
 
         this.afterFrame();
 
@@ -197,7 +197,6 @@ export default class InputManager {
     };
 
     private _onWheel = (e: WheelEvent) => {
-        e.preventDefault();
         this.dz += Math.sign(e.deltaY) * -4;
         this._callScrollListeners();
     };
@@ -226,7 +225,6 @@ export default class InputManager {
     private _onTouchChange = (e: TouchEvent) => { // start, end or cancel a touch
         if (!this.isInteractive)
             return;
-        e.preventDefault();
         if (e.touches.length == 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
             this.touchGesture = TouchGesture.Scroll;
@@ -251,7 +249,6 @@ export default class InputManager {
     private _onTouchMove = (e: TouchEvent) => {
         if (!this.isInteractive)
             return;
-        e.preventDefault();
         if (e.touches.length == 1) {
             const scaledTouches = this._getScaledTouches(e.touches);
             this.touchGesture = TouchGesture.Scroll;
