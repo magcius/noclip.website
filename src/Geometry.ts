@@ -1,6 +1,5 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4, vec4, ReadonlyVec4, mat4 } from "gl-matrix";
-import { IS_DEPTH_REVERSED } from "./gfx/helpers/ReversedDepthHelpers.js";
 import { GfxClipSpaceNearZ } from "./gfx/platform/GfxPlatform.js";
 import { assert, nArray } from "./util.js";
 

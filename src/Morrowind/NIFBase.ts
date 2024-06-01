@@ -349,6 +349,8 @@ void main() {
     v_Color0 += t_AmbientColor * u_SunAmbient;
     v_Color0 += t_EmissiveColor;
 
+    v_Color0.a = u_AmbientColor.a;
+
     v_TexCoord0 = a_TexCoord0; // TODO(jstpierre): TexGen
 }
 `;
@@ -449,7 +451,7 @@ class NiTriShape {
                 this.bindTexture(6, prop.hasDecal0Texture!, prop.decal0Texture, modelCache, ctx);
                 // XXX(jstpierre): ApplyMode?
             } else if (prop instanceof NIFParse.NiMaterialProperty) {
-                colorCopy(this.diffuseColor, prop.diffuseColor);
+                colorCopy(this.diffuseColor, prop.diffuseColor, prop.alpha);
                 colorCopy(this.ambientColor, prop.ambientColor);
                 colorCopy(this.emissiveColor, prop.emissiveColor);
                 colorCopy(this.specularColor, prop.specularColor, prop.glossiness);
