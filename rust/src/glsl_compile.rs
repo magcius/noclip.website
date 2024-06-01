@@ -29,7 +29,7 @@ pub fn glsl_compile(source: &str, stage: &str, validation_enabled: bool) -> Stri
     }, &source) {
         Ok(v) => v,
         Err(errors) => {
-            for e in errors {
+            for e in errors.errors {
                 show_error(&"glsl::parse_str", e);
             }
 
