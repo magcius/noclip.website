@@ -56,6 +56,12 @@ class ShaderTextEditor {
             };
             onresize();
             win.document.body.appendChild(editor.elem);
+            window.addEventListener('beforeunload', () => {
+                win.close();
+            });
+            window.addEventListener('loadNewScene', () => {
+                win.close();
+            });
         };
 
         if (win.document.readyState === 'complete')

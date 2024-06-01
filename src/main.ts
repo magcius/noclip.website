@@ -789,6 +789,7 @@ class Main {
             this.viewer.gfxDevice.checkForLeaks();
 
         this.dataShare.loadNewScene();
+        window.dispatchEvent(new Event('loadNewScene'));
 
         this.loadingSceneDesc = sceneDesc;
         const promise = sceneDesc.createScene(device, context);
