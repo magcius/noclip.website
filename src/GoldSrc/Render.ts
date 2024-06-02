@@ -174,13 +174,13 @@ in vec4 v_TexCoord;
 
 void main() {
     vec2 t_TexCoordDiffuse = v_TexCoord.xy / vec2(textureSize(TEXTURE(u_TextureDiffuse), 0));
-    vec4 t_DiffuseSample = texture(u_TextureDiffuse, t_TexCoordDiffuse.xy);
+    vec4 t_DiffuseSample = texture(SAMPLER_2D(u_TextureDiffuse), t_TexCoordDiffuse.xy);
 
     if (t_DiffuseSample.a < 0.1)
         discard;
 
     vec2 t_TexCoordLightmap = v_TexCoord.zw / vec2(textureSize(TEXTURE(u_TextureLightmap), 0));
-    vec4 t_LightmapSample = texture(u_TextureLightmap, t_TexCoordLightmap.xy);
+    vec4 t_LightmapSample = texture(SAMPLER_2D(u_TextureLightmap), t_TexCoordLightmap.xy);
 
     gl_FragColor = t_DiffuseSample.rgba * t_LightmapSample.rgba;
 }
