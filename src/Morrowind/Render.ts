@@ -10,9 +10,9 @@ import { DeviceProgram } from "../Program.js";
 import { SceneContext } from "../SceneBase.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
+import { makeAttachmentClearDescriptor, makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers.js";
 import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxClipSpaceNearZ, GfxCullMode, GfxDevice, GfxFormat, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMipFilterMode, GfxProgram, GfxSamplerFormatKind, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph.js";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
@@ -299,8 +299,8 @@ class CellTerrain {
                 const y0 = y - 1, y1 = y - 0;
 
                 const i0 = y0*land.sideLen + x0;
-                const i1 = y1*land.sideLen + x0;
-                const i2 = y0*land.sideLen + x1;
+                const i1 = y0*land.sideLen + x1;
+                const i2 = y1*land.sideLen + x0;
                 const i3 = y1*land.sideLen + x1;
 
                 indexData[indexIdx++] = i0;
@@ -335,12 +335,19 @@ class CellTerrain {
     }
 }
 
+const bindingLayoutsNifInstanced: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 3, numSamplers: 8 },
+];
+
+const bindingLayoutsNifSingle: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 8 },
+];
+
 class StaticModel {
     public visible = true;
     public instances: Static[] = [];
 
     constructor(public nifData: NIFData) {
-        this.nifData.getTriShapes().forEach((triShape) => triShape.setCanInstance(true));
     }
 
     public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
@@ -349,39 +356,54 @@ class StaticModel {
 
         // Gather all visible instances.
         const template = renderInstManager.getTemplateRenderInst();
+        const uniformBuffer = template.getUniformBuffer();
         const maxInstances = this.nifData.getMaxInstances();
+        const triShapes = this.nifData.getTriShapes();
 
-        let offs = 0;
+        let baseOffs = 0, offs = 0;
         let numInstances = 0;
 
         const fillInstance = (instance: Static) => {
             if (numInstances === 0)
-                offs = template.allocateUniformBuffer(1, maxInstances * 16);
+                baseOffs = offs = uniformBuffer.allocateChunk(maxInstances * 16);
 
-            const d = template.mapUniformBufferF32(1);
+            const d = uniformBuffer.mapBufferF32();
             offs += fillMatrix4x3(d, offs, instance.modelMatrix);
             if (++numInstances == maxInstances)
-                submitDraws();
+                submitDrawInstanced();
         };
 
-        const submitDraws = () => {
+        const submitDrawInstanced = () => {
             if (numInstances === 0)
                 return;
             renderInstManager.setCurrentRenderInstList(globals.view.renderInstListOpa);
+            template.setBindingLayouts(bindingLayoutsNifInstanced);
+            template.setUniformBufferOffset(2, baseOffs, maxInstances * 16);
             template.setInstanceCount(numInstances);
-            this.nifData.prepareToRenderInstanced(globals, renderInstManager);
+            for (let i = 0; i < triShapes.length; i++) {
+                const triShape = triShapes[i];
+                if (!triShape.isOpa)
+                    continue;
+                triShape.prepareToRenderInstanced(globals, renderInstManager);
+            }
             numInstances = 0;
         };
 
-        const submitXluDraw = (instance: Static) => {
+        const submitDrawXlu = (instance: Static) => {
             const x = instance.frmr.position[0];
             const y = instance.frmr.position[1];
             if (!isInRangeXY(x, y, globals.view.cameraPos, globals.view.nifCullFarXluSq))
                 return;
 
             renderInstManager.setCurrentRenderInstList(globals.view.renderInstListXlu);
+            template.setBindingLayouts(bindingLayoutsNifSingle);
             template.setInstanceCount(1);
-            this.nifData.prepareToRenderSingle(globals, renderInstManager, instance.modelMatrix);
+            for (let i = 0; i < triShapes.length; i++) {
+                const triShape = triShapes[i];
+                if (triShape.isOpa)
+                    continue;
+                triShape.prepareToRenderSingle(globals, renderInstManager, instance.modelMatrix);
+            }
         };
 
         for (let i = 0; i < this.instances.length; i++) {
@@ -389,9 +411,9 @@ class StaticModel {
             if (!instance.visible || !instance.checkFrustum(globals))
                 continue;
             fillInstance(instance);
-            submitXluDraw(instance);
+            submitDrawXlu(instance);
         }
-        submitDraws();
+        submitDrawInstanced();
     }
 }
 
@@ -478,10 +500,6 @@ const bindingLayoutsTerrain: GfxBindingLayoutDescriptor[] = [
     ] },
 ];
 
-const bindingLayoutsNIF: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 8 },
-];
-
 class TerrainProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
@@ -528,8 +546,6 @@ void main() {
 
     gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
     v_Color = a_Color;
-
-    // https://github.com/OpenMW/openmw/blob/master/files/openmw.cfg
     v_Color *= dot(a_Normal, u_SunDirection.xyz) * u_SunDiffuse.xyz + u_SunAmbient.xyz;
 }
 `;
@@ -638,6 +654,7 @@ class WorldManager {
     private prepareToRenderTerrain(globals: Globals, renderInstManager: GfxRenderInstManager): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setGfxProgram(this.terrainProgram);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.Back });
 
         const scratchAABB = new AABB();
         for (let i = 0; i < this.cell.length; i++) {
@@ -676,13 +693,8 @@ class WorldManager {
     }
 
     private prepareToRenderStatic(globals: Globals, renderInstManager: GfxRenderInstManager): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayoutsNIF);
-
         for (const staticModel of this.staticModelCache.values())
             staticModel.prepareToRender(globals, renderInstManager);
-
-        renderInstManager.popTemplateRenderInst();
     }
 
     public prepareToRender(globals: Globals, renderInstManager: GfxRenderInstManager): void {
@@ -715,16 +727,13 @@ class SkyManager {
             colorCopy(v.emissiveColor, globals.weatherManager.current.skyColor);
         });
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayoutsNIF);
-        template.allocateUniformBuffer(1, 64 * 16); // TODO(jstpierre): ugh
         renderInstManager.setCurrentRenderInstList(globals.view.renderInstListSky);
 
-        mat4.identity(scratchMatrix);
-        setMatrixTranslation(scratchMatrix, globals.view.cameraPos);
+        mat4.fromTranslation(scratchMatrix, globals.view.cameraPos);
 
-        this.atmosphere.prepareToRenderSingle(globals, renderInstManager, scratchMatrix);
-        renderInstManager.popTemplateRenderInst();
+        this.atmosphere.getTriShapes().forEach((triShape) => {
+            triShape.prepareToRenderSingle(globals, renderInstManager, scratchMatrix);
+        });
     }
 }
 
@@ -947,12 +956,11 @@ class WeatherManager {
             let hour = globals.time % 24;
             if (h1 < h0) {
                 h1 += 24;
-                hour += 24;
+                if (hour < h0)
+                    hour += 24;
             }
 
             if (hour >= h0 && hour < h1) {
-                if (hour < h0)
-                    hour += 24;
                 const t = invlerp(h0, h1, hour);
                 const s0 = setting[si0];
                 const s1 = setting[si1];
@@ -1003,8 +1011,10 @@ export class MorrowindRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+        const renderPassDescriptor = makeAttachmentClearDescriptor(this.globals.weatherManager.current.fogColor);
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, renderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, renderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 

@@ -169,9 +169,8 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(viewMatrix: ReadonlyMat4
  * The returned value can be passed directly to {@link GfxRenderInstManager.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
-    transformVec3Mat4w1(v_, viewMatrix, v);
-    return -v_[2];
+export function computeViewSpaceDepthFromWorldSpacePoint(viewMatrix: ReadonlyMat4, v: ReadonlyVec3): number {
+    return -(viewMatrix[2] * v[0] + viewMatrix[6] * v[1] + viewMatrix[10] * v[2] + viewMatrix[14]);
 }
 
 export function divideByW(dst: vec4, src: ReadonlyVec4): void {

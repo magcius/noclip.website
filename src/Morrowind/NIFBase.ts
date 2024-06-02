@@ -9,7 +9,7 @@ import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { fillColor, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxMipFilterMode, GfxSamplerDescriptor, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
 import { GfxBuffer, GfxInputLayout, GfxProgram } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeDepthKey, makeSortKey, makeSortKeyTranslucent, setSortKeyDepthKey, setSortKeyTranslucentDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { assert, assertExists, fallbackUndefined, nArray, readString, setBitFlagEnabled } from "../util.js";
@@ -259,7 +259,6 @@ enum FeatureFlag {
     HasBaseTexture = 1 << 0,
     HasVertexColor = 1 << 8,
     ColorEmission  = 1 << 9,
-    HasInstancing  = 1 << 10,
 }
 
 class NifShader extends DeviceProgram {
@@ -270,8 +269,8 @@ class NifShader extends DeviceProgram {
     public static a_Color0 = 2;
     public static a_TexCoord0 = 3;
 
-    public static ub_InstanceParams = 1;
-    public static ub_ObjectParams = 2;
+    public static ub_ObjectParams = 1;
+    public static ub_InstanceParams = 2;
 
     public override both = `
 precision mediump float;
@@ -284,10 +283,6 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_SunAmbient;
 };
 
-layout(std140) uniform ub_InstanceParams {
-    Mat4x3 u_WorldFromLocal[${NifShader.MaxInstances}];
-};
-
 layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_LocalFromNode;
     vec4 u_Misc[1];
@@ -295,6 +290,12 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_AmbientColor;
     vec4 u_EmissiveColor;
 };
+
+#if USE_INSTANCING()
+layout(std140) uniform ub_InstanceParams {
+    Mat4x3 u_WorldFromLocal[${NifShader.MaxInstances}];
+};
+#endif
 
 #define u_FeatureFlags (uint(u_Misc[0].x))
 #define u_AlphaThreshold (u_Misc[0].y)
@@ -321,14 +322,14 @@ void main() {
 
     vec3 t_PositionWorld;
     vec3 t_NormalWorld;
-    if (CheckFeatureFlag(${FeatureFlag.HasInstancing})) {
-        Mat4x3 t_WorldFromLocal = u_WorldFromLocal[gl_InstanceID];
-        t_PositionWorld = Mul(t_WorldFromLocal, vec4(t_PositionLocal, 1.0));
-        t_NormalWorld = normalize(Mul(t_WorldFromLocal, vec4(t_NormalLocal, 0.0)));
-    } else {
-        t_PositionWorld = t_PositionLocal;
-        t_NormalWorld = normalize(t_NormalLocal);
-    }
+#if USE_INSTANCING()
+    Mat4x3 t_WorldFromLocal = u_WorldFromLocal[gl_InstanceID];
+    t_PositionWorld = Mul(t_WorldFromLocal, vec4(t_PositionLocal, 1.0));
+    t_NormalWorld = normalize(Mul(t_WorldFromLocal, vec4(t_NormalLocal, 0.0)));
+#else
+    t_PositionWorld = t_PositionLocal;
+    t_NormalWorld = normalize(t_NormalLocal);
+#endif
 
     gl_Position = Mul(u_ClipFromWorld, vec4(t_PositionWorld, 1.0));
 
@@ -400,7 +401,8 @@ const scratchVec3a = vec3.create();
 class NiTriShape {
     private data: NiTriShapeData;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
-    private gfxProgram: GfxProgram;
+    private gfxProgramSingle: GfxProgram;
+    private gfxProgramInstanced: GfxProgram;
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
     private alphaThreshold: number;
     private featureFlags: number = 0;
@@ -408,8 +410,8 @@ class NiTriShape {
     public ambientColor = colorNewCopy(White);
     public emissiveColor = colorNewCopy(White);
     public specularColor = colorNewCopy(White);
+    public isOpa: boolean = true;
     private modelMatrix = mat4.create();
-    private isOpa: boolean = true;
 
     constructor(modelCache: ModelCache, private nif: NIFParse.NiTriShape, ctx: NIF, parentMatrix: ReadonlyMat4 | null) {
         calcModelMatrix(this.modelMatrix, this.nif, parentMatrix);
@@ -471,7 +473,11 @@ class NiTriShape {
             }
         }
 
-        this.gfxProgram = modelCache.renderCache.createProgram(program);
+        program.setDefineString('USE_INSTANCING()', '0');
+        this.gfxProgramSingle = modelCache.renderCache.createProgram(program);
+
+        program.setDefineString('USE_INSTANCING()', '1');
+        this.gfxProgramInstanced = modelCache.renderCache.createProgram(program);
     }
 
     public getBoundingSphere(): NIFParse.NiBound {
@@ -532,7 +538,6 @@ class NiTriShape {
     public setOnRenderInst(renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4): void {
         this.data.setOnRenderInst(renderInst);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         let offs = renderInst.allocateUniformBuffer(NifShader.ub_ObjectParams, 12 + 4 + 4*3);
@@ -544,10 +549,6 @@ class NiTriShape {
         offs += fillColor(d, offs, this.emissiveColor);
     }
 
-    public setCanInstance(v: boolean): void {
-        this.featureFlags = setBitFlagEnabled(this.featureFlags, FeatureFlag.HasInstancing, this.isOpa && v);
-    }
-
     public checkFrustum(frustum: Frustum, parentMatrix: ReadonlyMat4 | null = null): boolean {
         const bound = this.getBoundingSphere();
         transformVec3Mat4w1(scratchVec3a, parentMatrix !== null ? mat4.mul(scratchMatrix, parentMatrix, this.modelMatrix) : this.modelMatrix, bound.center);
@@ -555,18 +556,13 @@ class NiTriShape {
     }
 
     public prepareToRenderInstanced(globals: Globals, renderInstManager: GfxRenderInstManager): void {
-        if (!(this.featureFlags & FeatureFlag.HasInstancing))
-            return;
-
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.setGfxProgram(this.gfxProgramInstanced);
         this.setOnRenderInst(renderInst, this.modelMatrix);
         renderInstManager.submitRenderInst(renderInst);
     }
 
     public prepareToRenderSingle(globals: Globals, renderInstManager: GfxRenderInstManager, parentMatrix: ReadonlyMat4): void {
-        if (this.featureFlags & FeatureFlag.HasInstancing)
-            return;
-
         const renderInst = renderInstManager.newRenderInst();
         mat4.mul(scratchMatrix, parentMatrix, this.modelMatrix);
         this.setOnRenderInst(renderInst, scratchMatrix);
@@ -574,6 +570,7 @@ class NiTriShape {
         const depth = computeViewSpaceDepthFromWorldSpacePoint(globals.view.viewFromWorldMatrix, scratchVec3a);
         const depthKey = makeDepthKey(depth, true);
         renderInst.sortKey = setSortKeyTranslucentDepth(0, depthKey);
+        renderInst.setGfxProgram(this.gfxProgramSingle);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -618,26 +615,6 @@ class NodeBase {
             if (this.node[i].checkFrustum(frustum, parentMatrix))
                 return true;
         return false;
-    }
-
-    public prepareToRenderInstanced(globals: Globals, renderInstManager: GfxRenderInstManager): void {
-        if (!this.visible)
-            return;
-
-        for (let i = 0; i < this.node.length; i++)
-            this.node[i].prepareToRenderInstanced(globals, renderInstManager);
-        for (let i = 0; i < this.triShape.length; i++)
-            this.triShape[i].prepareToRenderInstanced(globals, renderInstManager);
-    }
-
-    public prepareToRenderSingle(globals: Globals, renderInstManager: GfxRenderInstManager, parentMatrix: ReadonlyMat4): void {
-        if (!this.visible)
-            return;
-
-        for (let i = 0; i < this.node.length; i++)
-            this.node[i].prepareToRenderSingle(globals, renderInstManager, parentMatrix);
-        for (let i = 0; i < this.triShape.length; i++)
-            this.triShape[i].prepareToRenderSingle(globals, renderInstManager, parentMatrix);
     }
 
     public destroy(device: GfxDevice): void {
