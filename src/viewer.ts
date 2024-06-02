@@ -390,10 +390,21 @@ async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement)
     return InitErrorCode.SUCCESS;
 }
 
-export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const platformBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2');
+function getPlatformBackend(): 'WebGPU' | 'WebGL2' {
+    if (location.search.includes('webgpu'))
+        return 'WebGPU';
+    else if (location.search.includes('webgl2'))
+        return 'WebGL2';
 
+    const platformBackend = GlobalSaveManager.loadSetting<string>('PlatformBackend', 'WebGL2');
     if (platformBackend === 'WebGPU')
+        return 'WebGPU';
+    else
+        return 'WebGL2';
+}
+
+export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
+    if (getPlatformBackend() === 'WebGPU')
         return initializeViewerWebGPU(out, canvas);
     else
         return initializeViewerWebGL2(out, canvas);
