@@ -524,7 +524,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         const numColorAttachments = descriptor.colorAttachments.length;
         this.gfxColorAttachment.length = numColorAttachments;
         this.gfxColorResolveTo.length = numColorAttachments;
-        this.gpuColorAttachments.length = 0;
         for (let i = 0; i < descriptor.colorAttachments.length; i++) {
             const passAttachment = descriptor.colorAttachments[i];
 
@@ -536,8 +535,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                 this.gfxColorAttachmentView[i] = passAttachment.view;
                 this.gfxColorResolveTo[i] = resolveTo;
                 this.gfxColorResolveToView[i] = passAttachment.resolveView;
-
-                this.gpuColorAttachments.length = i;
 
                 if (!this.gpuColorAttachments[i])
                     this.gpuColorAttachments[i] = {} as GPURenderPassColorAttachment;
@@ -560,6 +557,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
                         dstAttachment.storeOp = 'store';
                 }
             } else {
+                this.gpuColorAttachments[i] = null;
                 this.gfxColorAttachment[i] = null;
                 this.gfxColorResolveTo[i] = null;
             }
