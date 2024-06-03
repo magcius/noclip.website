@@ -194,19 +194,28 @@ export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorld
     drawViewportSpacePoint(ctx, x, y, color, size);
 }
 
-export function drawWorldSpaceCircle(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, center: ReadonlyVec3, radius: number, axis: ReadonlyVec3, nPoints: number = 32): void {
+// https://jcgt.org/published/0006/01/01/
+function branchlessONB(dstA: vec3, dstB: vec3, n: ReadonlyVec3): void {
+    const sign = n[2] >= 0.0 ? 1.0 : -1.0;
+    const a = -1.0 / (sign + n[2]);
+    const b = n[0] * n[1] * a;
+    vec3.set(dstA, 1.0 + sign * n[0] * n[0] * a, sign * b, -sign * n[0]);
+    vec3.set(dstB, b, sign + n[1] * n[1] * a, -n[1]);
+}
+
+export function drawWorldSpaceCircle(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, center: ReadonlyVec3, radius: number, axis: ReadonlyVec3, color = Magenta, nPoints: number = 32): void {
     for (let i = 0; i < nPoints; i++) {
+        branchlessONB(scratchVec3a, scratchVec3b, axis);
+
         const t0 = ((i + 0) / nPoints) * MathConstants.TAU;
-        mat4.fromRotation(scratchMatrix, t0, axis);
-        transformVec3Mat4w0(scratchVec3a, scratchMatrix, Vec3UnitX);
-        vec3.scaleAndAdd(scratchVec3a, center, scratchVec3a, radius);
+        vec3.scaleAndAdd(scratchVec3v, center, scratchVec3a, Math.sin(t0) * radius);
+        vec3.scaleAndAdd(scratchVec3v, scratchVec3v, scratchVec3b, Math.cos(t0) * radius);
 
         const t1 = ((i + 1) / nPoints) * MathConstants.TAU;
-        mat4.fromRotation(scratchMatrix, t1, axis);
-        transformVec3Mat4w0(scratchVec3b, scratchMatrix, Vec3UnitX);
-        vec3.scaleAndAdd(scratchVec3b, center, scratchVec3b, radius);
+        vec3.scaleAndAdd(scratchVec3a, center, scratchVec3a, Math.sin(t1) * radius);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, Math.cos(t1) * radius);
 
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, scratchVec3v, scratchVec3a, color);
     }
 }
 
