@@ -385,17 +385,16 @@ vec3 calcSpec(float texAlpha) {
       sunColor = interiorDirectColor.rgb;
 
       if (enableExteriorLight) {
-        sunDir = Slerp(sunDir, -exteriorDirectColor.rgb, v_Color0.a);
-        sunColor = mix(sunColor, exteriorDirectColor.xyz, v_Color0.a);
+        sunDir = Slerp(sunDir, -exteriorDirectColorDir.xyz, v_Color0.a);
+        sunColor = mix(sunColor, exteriorDirectColor.rgb, v_Color0.a);
       }
     }
 
-    vec3 t849 = normalize((sunDir + normalize(-(v_Position.xyz))));
-    float dirAtten_956 = clamp(dot(normal, sunDir), 0.0, 1.0);
-    float spec = (1.25 * pow(clamp(dot(normal, t849), 0.0, 1.0), 8.0));
-    vec3 specTerm = ((((vec3(mix(pow((1.0 - clamp(dot(sunDir, t849), 0.0, 1.0)), 5.0), 1.0, texAlpha)) * spec) * sunColor) * dirAtten_956));
-    float distFade = 1.0;
-    specTerm = (specTerm * distFade);
+    vec3 dirToEye = normalize(u_CameraPos.xyz - v_Position.xyz);
+    vec3 halfDir = normalize(sunDir + dirToEye);
+    float dirAtten = saturate(dot(normal, sunDir));
+    float spec = (1.25 * pow(saturate(dot(normal, halfDir)), 8.0));
+    vec3 specTerm = ((((vec3(mix(pow((1.0 - saturate(dot(sunDir, halfDir))), 5.0), 1.0, texAlpha)) * spec) * sunColor) * dirAtten));
     return specTerm;
 }
 
@@ -765,11 +764,14 @@ void mainPS() {
       vec3(0.0) // emissive
     ), 1.0);
 
+    vec3 sunDir = -exteriorDirectColorDir.xyz;
+    vec3 sunColor = exteriorDirectColor.rgb;
     float specBlend = tex.a;
-    vec3 halfVec = -normalize(exteriorDirectColorDir.xyz + normalize(v_Position));
-    vec3 lSpecular = exteriorDirectColor.xyz * pow(max(0.0, dot(halfVec, v_Normal)), 20.0);
+    vec3 dirToEye = normalize(u_CameraPos.xyz - v_Position.xyz);
+    vec3 halfDir = normalize(sunDir + dirToEye);
+    vec3 lSpecular = sunColor * pow(saturate(dot(halfDir, v_Normal)), 20.0);
     float adtSpecMult = 1.0;
-    vec3 specTerm = vec3(specBlend) * lSpecular * adtSpecMult;
+    vec3 specTerm = specBlend * lSpecular * adtSpecMult;
     finalColor.rgb += specTerm;
 
     finalColor.rgb = calcFog(finalColor.rgb, v_Position);
