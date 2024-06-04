@@ -24,6 +24,7 @@ import { GloverObjbank } from './parsers/index.js';
 
 import { hashCodeNumberUpdate, HashMap } from '../HashMap.js';
 import { SRC_FRAME_TO_MS } from './timing.js';
+import { rayTriangleIntersect } from '../MathHelpers.js';
 
 const depthScratch = vec3.create();
 const lookatScratch = vec3.create();
@@ -449,7 +450,6 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
     }
 
     public collides(rayOrigin: ReadonlyVec3, rayVector: ReadonlyVec3, boundingSphereCheck: boolean = true): Shadows.Collision | null {
-        let closestIntersection = null;
         let closestFace = null;
         let closestIntersectionDist = Infinity;
 
@@ -482,25 +482,23 @@ export class GloverActorRenderer implements Shadows.Collidable, Shadows.ShadowCa
                 vec3.transformMat4(triangle[0], triangle[0], this.modelMatrix);
                 vec3.transformMat4(triangle[1], triangle[1], this.modelMatrix);
                 vec3.transformMat4(triangle[2], triangle[2], this.modelMatrix);
-                const intersection = Shadows.rayTriangleIntersection(rayOrigin, rayVector, triangle);
-                if (intersection === null) {
+                const t = rayTriangleIntersect(null, rayOrigin, rayVector, triangle[0], triangle[1], triangle[2]);
+                if (t <= 0.0)
                     continue;
-                } else {
-                    const dist = vec3.dist(intersection, rayOrigin);
-                    if (dist < closestIntersectionDist) {
-                        closestIntersection = intersection;
-                        closestIntersectionDist = dist;
-                        closestFace = triangle;
-                    }
+
+                if (t < closestIntersectionDist) {
+                    closestIntersectionDist = t;
+                    closestFace = triangle;
                 }
             }
         });
  
-        if (closestIntersection !== null && closestFace !== null) {
+        if (closestFace !== null) {
             const v1 = vec3.sub(closestFace[1], closestFace[1], closestFace[0]);
             const v2 = vec3.sub(closestFace[2], closestFace[2], closestFace[0]);
             vec3.cross(closestFace[0], v1, v2);
             vec3.normalize(closestFace[0], closestFace[0]);
+            const closestIntersection = vec3.scaleAndAdd(vec3.create(), rayOrigin, rayVector, closestIntersectionDist);
             return {
                 position: closestIntersection,
                 normal: closestFace[0]

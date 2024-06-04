@@ -1,7 +1,8 @@
 import { assert, assertExists } from "../util.js";
 import { InputStream } from "./stream.js";
 import { AABB } from '../Geometry.js';
-import { vec3 } from 'gl-matrix';
+import { ReadonlyVec3, vec3 } from 'gl-matrix';
+import { rayTriangleIntersect } from "../MathHelpers.js";
 
 export enum CollisionMaterial {
     Solid = 0x1,
@@ -104,7 +105,7 @@ function parseCollisionIndexData(stream: InputStream, version: number): Collisio
     for (let i = 0; i < numEdgeMatIDs; i++) indexData.edgeMaterialIDs.push( stream.readUint8() );
     const numTriMatIDs = stream.readUint32();
     for (let i = 0; i < numTriMatIDs; i++) indexData.triMaterialIDs.push( stream.readUint8() );
-    
+
     const numEdges = stream.readUint32();
     for (let i = 0; i < numEdges; i++) {
         let edge = new CollisionEdge;
@@ -127,7 +128,7 @@ function parseCollisionIndexData(stream: InputStream, version: number): Collisio
         const unkIdxCount = stream.readUint32();
         stream.skip(unkIdxCount*2);
     }
-    
+
     const numVerts = stream.readUint32();
     for (let i = 0; i < numVerts; i++) {
         let vert = vec3.create();
@@ -215,52 +216,8 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
-const scratchVec3e = vec3.create();
-const scratchVec3f = vec3.create();
-const scratchBary = vec3.create();
 
-function triangleLineCheck(bary: vec3, p0: vec3, p1: vec3, t0: vec3, t1: vec3, t2: vec3): boolean {
-    const ab = scratchVec3a;
-    const ac = scratchVec3b;
-    const qp = scratchVec3c;
-    const n = scratchVec3d;
-    const ap = scratchVec3e;
-    const e = scratchVec3f;
-    vec3.sub(ab, t1, t0);
-    vec3.sub(ac, t2, t0);
-    vec3.sub(qp, p0, p1);
-
-    // Compute triangle normal
-    vec3.cross(n, ab, ac);
-    
-    // Compute denominator d. If d <= 0, segment is parallel to or points away from triangle
-    const d = vec3.dot(qp, n);
-    if (d <= 0) return false;
-
-    // Compute intersection t value of pq with plane of triangle.
-    vec3.sub(ap, p0, t0);
-    let t = vec3.dot(ap, n);
-    if (t < 0 || t > d) return false;
-
-    // Compute barycentric coordinate components and test if within bounds
-    vec3.cross(e, qp, ap);
-    let v = vec3.dot(ac, e);
-    if (v < 0 || v > d) return false;
-    
-    let w = -vec3.dot(ab, e);
-    if (w < 0 || v+w > d) return false;
-
-    // Segment/ray intersects triangle.
-    const ood = 1/d;
-    t *= ood;
-    v *= ood;
-    w *= ood;
-    let u = 1.0 - v - w;
-    vec3.set(bary, u, v, w);
-    return true;
-}
-
-function aabbLineCheck(p0: vec3, p1: vec3, aabb: AABB): boolean {
+function aabbLineCheck(p0: ReadonlyVec3, dir: ReadonlyVec3, aabb: AABB): boolean {
     // Box center-point
     const c = scratchVec3a;
     vec3.set(c, (aabb.minX + aabb.maxX)/2, (aabb.minY + aabb.maxY)/2, (aabb.minZ + aabb.maxZ)/2);
@@ -269,11 +226,10 @@ function aabbLineCheck(p0: vec3, p1: vec3, aabb: AABB): boolean {
     vec3.set(e, aabb.maxX - c[0], aabb.maxY - c[1], aabb.maxZ - c[2]);
     // Segment midpoint
     const m = scratchVec3c;
-    vec3.add(m, p0, p1);
-    vec3.scale(m, m, 0.5);
+    vec3.scaleAndAdd(m, p0, dir, 0.5);
     // Segment halflength vector
     const d = scratchVec3d;
-    vec3.sub(d, p1, m);
+    vec3.scale(d, dir, 0.5);
 
     vec3.sub(m, m, c); // Translate box and segment to origin
 
@@ -300,16 +256,16 @@ function aabbLineCheck(p0: vec3, p1: vec3, aabb: AABB): boolean {
 
 const scratchAABB = new AABB();
 
-function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, bounds: AABB, collision: AreaCollision): boolean {
+function octreeNodeLineCheck(p0: ReadonlyVec3, dir: ReadonlyVec3, node: CollisionOctreeNode, bounds: AABB, collision: AreaCollision): boolean {
     if (node === null) return false;
-    if (!aabbLineCheck(p0, p1, bounds)) return false;
-    
+    if (!aabbLineCheck(p0, dir, bounds)) return false;
+
     if (node.type === CollisionOctreeNodeType.Branch) {
         const branch = node as CollisionOctreeBranch;
         const minX = bounds.minX;   const minY = bounds.minY;   const minZ = bounds.minZ;
         const maxX = bounds.maxX;   const maxY = bounds.maxY;   const maxZ = bounds.maxZ;
         const midX = (minX+maxX)/2; const midY = (minY+maxY)/2; const midZ = (minZ+maxZ)/2;
-        
+
         for (let i = 0; i < 8; i++) {
             // build child AABB
             const bb = scratchAABB;
@@ -319,8 +275,8 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
             bb.maxY = (i & 2) ? maxY : midY;
             bb.minZ = (i & 4) ? midZ : minZ;
             bb.maxZ = (i & 4) ? maxZ : midZ;
-            
-            if (octreeNodeLineCheck(p0, p1, branch.children[i], bb, collision)) {
+
+            if (octreeNodeLineCheck(p0, dir, branch.children[i], bb, collision)) {
                 return true;
             }
         }
@@ -329,7 +285,7 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
         return false;
     } else {
         const leaf = node as CollisionOctreeLeaf;
-        if (!aabbLineCheck(p0, p1, leaf.bounds)) return false;
+        if (!aabbLineCheck(p0, dir, leaf.bounds)) return false;
 
         // test tris
         const indexData = collision.indexData;
@@ -343,11 +299,11 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
             const isSolid = (material & CollisionMaterial.Solid) != 0;
             const isFlipped = (material & CollisionMaterial.FlippedTri) != 0;
 
-            if (!isSolid) continue;
+            if (!isSolid)
+                continue;
 
             const e0 = indexData.edges[triangle.e0];
             const e1 = indexData.edges[triangle.e1];
-            const e2 = indexData.edges[triangle.e2];
 
             let i0 = e0.v0;
             let i1 = e0.v1;
@@ -362,15 +318,10 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
             const v0 = indexData.vertices[i0];
             const v1 = indexData.vertices[i1];
             const v2 = indexData.vertices[i2];
-            
-            if (triangleLineCheck(scratchBary, p0, p1, v0, v1, v2)) {
-                // arf arf arf
-                const x = scratchBary[0]*v0[0] + scratchBary[1]*v1[0] + scratchBary[2]*v2[0];
-                const y = scratchBary[0]*v0[1] + scratchBary[1]*v1[1] + scratchBary[2]*v2[1];
-                const z = scratchBary[0]*v0[2] + scratchBary[1]*v1[2] + scratchBary[2]*v2[2];
 
+            const t = rayTriangleIntersect(null, p0, dir, v0, v1, v2);
+            if (t >= 0.0 && t <= 1.0)
                 return true;
-            }
         }
 
         // No triangle intersection
@@ -378,6 +329,6 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
     }
 }
 
-export function areaCollisionLineCheck(p0: vec3, p1: vec3, collision: AreaCollision): boolean {
-    return octreeNodeLineCheck(p0, p1, collision.octree.rootNode, collision.octree.bounds, collision);
+export function areaCollisionLineCheck(p0: ReadonlyVec3, dir: ReadonlyVec3, collision: AreaCollision): boolean {
+    return octreeNodeLineCheck(p0, dir, collision.octree.rootNode, collision.octree.bounds, collision);
 }

@@ -725,72 +725,45 @@ export function randomRange(a: number, b = -a): number {
 }
 
 /**
- * Calculates where the line defined by points ({@param p}, {@param q})
- * intersect the triangle ({@param a}, {@param b}, {@param c}), setting the
- * barycentric coordinates of intersection if they exist. Returns true if an
- * intersection was found, and false if not.
+ * Calculates where the line/ray defined by points ({@param p}, {@param q})
+ * intersects the triangle ({@param a}, {@param b}, {@param c}), optionally setting the
+ * barycentric coordinates of intersection {@param barycentricOut}. Returns distance "t"
+ * along the line.
  * 
  * From Christer Ericson's Realtime Collision Detection.
- * 
- * @param barycentricOut: vec3 where barycentric result will be stored
- * @param p
- * @param q 
- * @param a 
- * @param b 
- * @param c 
- * @returns Whether the intersection exists
  */
-export function intersectLineTriangle(
-  barycentricOut: vec3,
-  p: vec3,
-  q: vec3,
-  a: vec3,
-  b: vec3,
-  c: vec3,
-): boolean {
-  const pq = vec3.sub(scratchVec3a, q, p);
-  const pa = vec3.sub(scratchVec3b, a, p);
-  const pb = vec3.sub(scratchVec3c, b, p);
-  const pc = vec3.sub(scratchVec3d, c, p);
-  let u = scalarTripleProduct(pq, pc, pb);
-  if (u < 0) {
-    return false;
-  }
-  let v = scalarTripleProduct(pq, pa, pc);
-  if (v < 0) {
-    return false;
-  }
-  let w = scalarTripleProduct(pq, pb, pa);
-  if (w < 0) {
-    return false;
-  }
-  const denom = 1.0 / (u + v + w);
-  u *= denom;
-  v *= denom;
-  w *= denom;
-  vec3.set(barycentricOut, u, v, w);
-  return true;
-}
+export function rayTriangleIntersect(barycentricOut: vec3 | null, p: ReadonlyVec3, dir: ReadonlyVec3, a: ReadonlyVec3, b: ReadonlyVec3, c: ReadonlyVec3): number {
+    const ab = vec3.sub(scratchVec3a, b, a);
+    const ac = vec3.sub(scratchVec3b, c, a);
+    // Compute triangle normal
+    const n = vec3.cross(scratchVec3c, ab, ac);
 
-export function scalarTripleProduct(a: vec3, b: vec3, c: vec3): number {
-  return vec3.dot(vec3.cross(scratchVec3e, a, b), c);
-}
+    const d = -vec3.dot(dir, n);
+    if (d <= 0.0)
+        return 0.0;
 
-/**
- * Returns an array whose elements are weighted sums of three (presumed equal length) arrays,
- * {@param v0}, {@param v1}, and {@param v2}, and whose weights are given by the barycentric
- * vec {@param bary}.
- * 
- * @param bary 
- * @param v0 
- * @param v1 
- * @param v2 
- * @returns Array whose elements are weighted sums of v0, v1, and v2
- */
-export function barycentricInterp<T extends ArrayLike<number>>(bary: vec3, v0: T, v1: T, v2: T): number[] {
-  let result: number[] = [];
-  for (let i=0; i<v1.length; i++) {
-    result[i] = v0[i] * bary[0] + v1[i] * bary[1] + v2[i] * bary[2];
-  }
-  return result;
+    const ap = vec3.sub(scratchVec3e, p, a);
+    let t = vec3.dot(ap, n);
+    if (t < 0.0)
+        return 0.0;
+
+    // Compute bary
+    const e = vec3.cross(scratchVec3c, ap, dir);
+    let v = vec3.dot(ac, e);
+    if (v < 0.0 || v > d)
+        return 0.0;
+
+    let w = -vec3.dot(ab, e);
+    if (w < 0.0 || v + w > d)
+        return 0.0;
+
+    const denom = 1.0 / d;
+    t *= denom;
+    if (barycentricOut !== null) {
+        v *= denom;
+        w *= denom;
+        const u = 1.0 - (v + w);
+        vec3.set(barycentricOut, u, v, w);
+    }
+    return t;
 }

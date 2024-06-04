@@ -2,7 +2,7 @@ import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
 import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, barycentricInterp, intersectLineTriangle, setMatrixTranslation } from "../MathHelpers.js";
+import { MathConstants, Vec3NegZ, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -566,7 +566,7 @@ export class BspTree {
   constructor(public nodes: WowWmoBspNode[]) {
   }
 
-  public query(pos: vec3, nodes: WowWmoBspNode[], i = 0) {
+  public query(pos: ReadonlyVec3, nodes: WowWmoBspNode[], i = 0) {
     if (i < 0) {
       return undefined;
     }
@@ -709,10 +709,9 @@ export class WmoGroupData {
     return { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer) }
   }
 
-  private getClosestIntersectedTriangle(barycentricOut: vec3, p: vec3, q: vec3): number[] | undefined {
+  private getClosestIntersectedTriangle(barycentricOut: vec3, p: ReadonlyVec3, dir: ReadonlyVec3): number[] | undefined {
     const bspNodes: WowWmoBspNode[] = [];
     const scratchBary = vec3.create();
-    const scratchP = vec3.create();
     let minDist = Infinity;
     let resultIndices = undefined;
     this.bsp.query(p, bspNodes);
@@ -752,24 +751,24 @@ export class WmoGroupData {
           if (plane.n[2] < 0.0001) {
             continue;
           }
-          
+
           let verts, indices;
-          if (plane.distanceVec3(p) > 0) {
+          if (plane.distanceVec3(p) < 0) {
             verts = [vertex2, vertex1, vertex0];
             indices = [index2, index1, index0];
           } else {
             verts = [vertex0, vertex1, vertex2];
             indices = [index0, index1, index2];
           }
-          if (intersectLineTriangle(scratchBary, q, p, verts[0], verts[1], verts[2])) {
-            let baryCoords = barycentricInterp(scratchBary, verts[0], verts[1], verts[2]);
-            let intersection = vec3.set(scratchP, baryCoords[0], baryCoords[1], baryCoords[2]);
-            let dist = vec3.sqrDist(intersection, p);
-            if (dist < minDist) {
-              minDist = dist;
-              vec3.copy(barycentricOut, scratchBary);
-              resultIndices = indices;
-            }
+
+          const t = rayTriangleIntersect(scratchBary, p, dir, verts[0], verts[1], verts[2]);
+          if (t <= 0.0)
+            continue;
+
+          if (t < minDist) {
+            minDist = t;
+            vec3.copy(barycentricOut, scratchBary);
+            resultIndices = indices;
           }
         }
       }
@@ -778,19 +777,16 @@ export class WmoGroupData {
   }
 
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
-    // project a line downwards by 10 units for an intersection test
-    const q = vec3.copy(this.scratchVec3a, p);
-    q[2] = p[2] - 10;
-    let barycentricCoords = this.scratchVec3b;
-    const indices = this.getClosestIntersectedTriangle(barycentricCoords, p, q);
+    // project a line downwards for an intersection test
+    const w = this.scratchVec3b;
+    const indices = this.getClosestIntersectedTriangle(w, p, Vec3NegZ);
     if (indices !== undefined) {
-      const color0 = this.colors.subarray(4 * indices![0], 4 * (indices![0] + 1));
-      const color1 = this.colors.subarray(4 * indices![1], 4 * (indices![1] + 1));
-      const color2 = this.colors.subarray(4 * indices![2], 4 * (indices![2] + 1));
-      const baryColor = barycentricInterp(barycentricCoords, color0, color1, color2);
-      const overrideAmbientColor = vec4.set(this.scratchVec4, baryColor[0], baryColor[1], baryColor[2], baryColor[3]);
-      vec4.scale(overrideAmbientColor, overrideAmbientColor, 1/255);
-      return overrideAmbientColor;
+      const idx0 = 4*indices[0], idx1 = 4*indices[1], idx2 = 4*indices[2];
+      const r = (this.colors[idx0+0]*w[0] + this.colors[idx1+0]*w[1] + this.colors[idx2+0]*w[2]) / 255.0;
+      const g = (this.colors[idx0+1]*w[0] + this.colors[idx1+1]*w[1] + this.colors[idx2+1]*w[2]) / 255.0;
+      const b = (this.colors[idx0+2]*w[0] + this.colors[idx1+2]*w[1] + this.colors[idx2+2]*w[2]) / 255.0;
+      const a = (this.colors[idx0+3]*w[0] + this.colors[idx1+3]*w[1] + this.colors[idx2+3]*w[2]) / 255.0;
+      return vec4.set(this.scratchVec4, r, g, b, a);
     }
     return undefined;
   }
@@ -1539,19 +1535,19 @@ export class WmoDefinition {
         doodad.worldAABB.centerPoint(p);
         vec3.transformMat4(p, p, this.invModelMatrix);
 
-        let overrideAmbientColor = undefined;
+        let bspAmbientColor: vec4 | undefined = undefined;
         for (const groupId of groupIds) {
           const groupCandidate = wmo.getGroup(groupId)!;
-          overrideAmbientColor = groupCandidate.getVertexColorForModelSpacePoint(p);
-          if (overrideAmbientColor !== undefined) {
+          bspAmbientColor = groupCandidate.getVertexColorForModelSpacePoint(p);
+          if (bspAmbientColor !== undefined) {
             break;
           }
         }
 
         if (group.flags.interior && !group.flags.exterior_lit) {
           const groupAmbientColor = this.groupAmbientColors.get(group.fileId)!;
-          if (overrideAmbientColor) {
-            doodad.ambientColor = vec4.scaleAndAdd(overrideAmbientColor, groupAmbientColor, overrideAmbientColor, 2.0);
+          if (bspAmbientColor) {
+            vec4.scaleAndAdd(doodad.ambientColor, groupAmbientColor, bspAmbientColor, 2.0);
             const maxComponent = Math.max(doodad.ambientColor[0], doodad.ambientColor[1], doodad.ambientColor[2]);
             // scale the color down to a range of 0-96
             const limit = 96 / 255;
@@ -1559,7 +1555,7 @@ export class WmoDefinition {
               vec4.scale(doodad.ambientColor, doodad.ambientColor, limit / maxComponent);
             }
           } else {
-            doodad.ambientColor = vec4.clone(groupAmbientColor);
+            vec4.copy(doodad.ambientColor, groupAmbientColor);
           }
           doodad.applyInteriorLighting = true;
           doodad.applyExteriorLighting = false;
@@ -1892,7 +1888,7 @@ export class DoodadData {
   public visible = true;
   public worldAABB = new AABB();
   public normalMatrix = mat4.create();
-  public ambientColor: vec4 = [0, 0, 0, 0];
+  public ambientColor = vec4.create();
   public applyInteriorLighting = false;
   public applyExteriorLighting = false;
   public interiorExteriorBlend = 0;

@@ -101,6 +101,7 @@ class ActorLights {
                     // Shadow cast logic
                     if (light.castShadows && lightParams.options != WorldLightingOptions.NoShadowCast) {
                         actorBounds.centerPoint(scratchVec3);
+                        vec3.sub(scratchVec3, scratchVec3, light.gxLight.Position);
 
                         let lightIsVisible = true;
                         if (lightIsVisible && mrea.collision !== null)
