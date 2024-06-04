@@ -27,7 +27,8 @@ vec3 calcLight(
   vec3 accumLight,
   vec3 precomputedLight,
   vec3 specular,
-  vec3 emissive) {
+  vec3 emissive,
+  float shadow) {
     vec3 lDiffuse = vec3(0.0);
     vec3 localDiffuse = accumLight;
     vec3 currentColor = vec3(0.0);
@@ -38,7 +39,7 @@ vec3 calcLight(
       currentColor = exteriorAmbientColor.rgb + precomputedLight;
       vec3 skyColor = currentColor * 1.1f;
       vec3 groundColor = currentColor * 0.7f;
-      lDiffuse = exteriorDirectColor.xyz * nDotL;
+      lDiffuse = (exteriorDirectColor.xyz * nDotL) * (1.0 - shadow);
       currentColor = mix(groundColor, skyColor, nDotL * 0.5 + 0.5); // wrapped lighting
     }
 
@@ -58,6 +59,8 @@ vec3 calcLight(
 
     vec3 gammaDiffTerm = diffuseColor * (currentColor + lDiffuse);
     vec3 linearDiffTerm = (diffuseColor * diffuseColor) * localDiffuse;
+
+    specular *= (1.0 - shadow);
 
     return sqrt(gammaDiffTerm*gammaDiffTerm + linearDiffTerm) + specular + emissive;
 }
@@ -521,7 +524,8 @@ void mainPS() {
             vec3(0.0) /*accumLight*/,
             v_Color0.rgb,
             spec,
-            emissive
+            emissive,
+            0.0
         ),
         finalOpacity
     );
@@ -682,7 +686,7 @@ export class TerrainProgram extends BaseProgram {
   public static a_Lighting = 4;
 
   public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers, numSamplers: super.numSamplers + 5 },
+      { numUniformBuffers: super.numUniformBuffers, numSamplers: super.numSamplers + 6 },
   ];
 
   public override both = `
@@ -693,6 +697,7 @@ layout(binding = 1) uniform sampler2D u_Texture1;
 layout(binding = 2) uniform sampler2D u_Texture2;
 layout(binding = 3) uniform sampler2D u_Texture3;
 layout(binding = 4) uniform sampler2D u_AlphaTexture0;
+layout(binding = 5) uniform sampler2D u_ShadowTexture;
 
 varying vec3 v_Normal;
 varying vec4 v_Color;
@@ -731,12 +736,22 @@ void mainVS() {
 void mainPS() {
     vec2 alphaCoord = v_ChunkCoords / 8.0;
     vec4 alphaBlend = texture(SAMPLER_2D(u_AlphaTexture0), alphaCoord);
+    float shadow = texture(SAMPLER_2D(u_ShadowTexture), alphaCoord).r;
     vec4 tex0 = texture(SAMPLER_2D(u_Texture0), v_ChunkCoords);
     vec4 tex1 = texture(SAMPLER_2D(u_Texture1), v_ChunkCoords);
     vec4 tex2 = texture(SAMPLER_2D(u_Texture2), v_ChunkCoords);
     vec4 tex3 = texture(SAMPLER_3D(u_Texture3), v_ChunkCoords);
     vec4 tex = mix(mix(mix(tex0, tex1, alphaBlend.g), tex2, alphaBlend.b), tex3, alphaBlend.a);
     vec4 diffuse = 2.0 * tex * v_Color;
+
+    vec3 sunDir = -exteriorDirectColorDir.xyz;
+    vec3 sunColor = exteriorDirectColor.rgb;
+    float specBlend = tex.a;
+    vec3 dirToEye = normalize(u_CameraPos.xyz - v_Position.xyz);
+    vec3 halfDir = normalize(sunDir + dirToEye);
+    vec3 lSpecular = sunColor * pow(saturate(dot(halfDir, v_Normal)), 20.0);
+    vec3 specular = specBlend * lSpecular;
+
     vec4 finalColor = vec4(calcLight(
       diffuse.rgb,
       v_Normal,
@@ -747,19 +762,10 @@ void mainPS() {
       true, // apply exterior light
       v_Lighting.rgb, // accumLight
       vec3(0.0), // precomputedLight
-      vec3(0.0), // specular
-      vec3(0.0) // emissive
+      specular,
+      vec3(0.0), // emissive
+      shadow
     ), 1.0);
-
-    vec3 sunDir = -exteriorDirectColorDir.xyz;
-    vec3 sunColor = exteriorDirectColor.rgb;
-    float specBlend = tex.a;
-    vec3 dirToEye = normalize(u_CameraPos.xyz - v_Position.xyz);
-    vec3 halfDir = normalize(sunDir + dirToEye);
-    vec3 lSpecular = sunColor * pow(saturate(dot(halfDir, v_Normal)), 20.0);
-    float adtSpecMult = 1.0;
-    vec3 specTerm = specBlend * lSpecular * adtSpecMult;
-    finalColor.rgb += specTerm;
 
     finalColor.rgb = calcFog(finalColor.rgb, v_Position);
 
@@ -1190,7 +1196,8 @@ void mainPS() {
         accumLight,
         precomputedLight,
         specular,
-        vec3(0.0) // emissive
+        vec3(0.0), // emissive
+        0.0
       ), finalOpacity);
     } else {
       finalColor = vec4(matDiffuse.rgb, finalOpacity);

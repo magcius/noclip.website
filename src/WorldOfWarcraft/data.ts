@@ -1868,12 +1868,14 @@ export class AdtData {
 
 export class ChunkData {
   public alphaTexture: Uint8Array | undefined;
+  public shadowTexture: Uint8Array | undefined;
   public indexCount: number;
   public indexOffset: number;
   public visible = true;
 
   constructor(chunk: WowAdtChunkDescriptor, public textures: BlpData[], public worldSpaceAABB: AABB) {
     this.alphaTexture = chunk.alpha_texture;
+    this.shadowTexture = chunk.shadow_texture;
     this.indexCount = chunk.index_count;
     this.indexOffset = chunk.index_offset;
     chunk.free();
