@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::wow::common::{parse, parse_array, ChunkedData};
 
-use super::{adt::UNIT_SIZE, common::{AABBox, Argb, Plane, Quat, Vec3}};
+use super::{adt::UNIT_SIZE, common::{AABBox, Bgra, Plane, Quat, Rgba, Vec3}};
 
 #[wasm_bindgen(js_name = "WowWmoHeader")]
 #[derive(DekuRead, Debug, Copy, Clone)]
@@ -15,7 +15,7 @@ pub struct WmoHeader {
     pub num_doodad_names: u32,
     pub num_doodad_defs: u32,
     pub num_doodad_sets: u32,
-    pub ambient_color: Argb,
+    pub ambient_color: Bgra,
     pub wmo_id: u32,
     pub bounding_box: AABBox,
     pub flags: u16,
@@ -70,7 +70,7 @@ pub struct Wmo {
     portals: Option<Vec<Portal>>,
     portal_refs: Option<Vec<PortalRef>>,
     portal_vertices: Option<Vec<f32>>,
-    _ambient_volumes: Vec<AmbientVolume>,
+    ambient_volumes: Vec<AmbientVolume>,
 }
 
 #[wasm_bindgen(js_class = "WowWmo")]
@@ -146,7 +146,7 @@ impl Wmo {
             portals,
             group_text,
             global_ambient_volumes: mavg,
-            _ambient_volumes: mavd,
+            ambient_volumes: mavd,
         })
     }
 
@@ -166,10 +166,16 @@ impl Wmo {
         self.group_text.get(index).cloned()
     }
 
-    pub fn get_ambient_color(&self, doodad_set_id: u16) -> Argb {
-        match self.global_ambient_volumes.iter().find(|av| av.doodad_set_id == doodad_set_id) {
-            Some(av) => av.get_color(),
-            None => self.header.ambient_color,
+    pub fn get_ambient_color(&self, doodad_set_id: u16) -> Bgra {
+        if self.global_ambient_volumes.len() > 0 {
+            match self.global_ambient_volumes.iter().find(|av| av.doodad_set_id == doodad_set_id) {
+                Some(av) => av.get_color(),
+                None => self.global_ambient_volumes[0].get_color(),
+            }
+        } else if self.ambient_volumes.len() > 0 {
+            self.ambient_volumes[0].get_color()
+        } else {
+            self.header.ambient_color
         }
     }
 
@@ -234,7 +240,6 @@ pub struct Mosi {
 #[derive(Debug, Clone)]
 pub struct WmoGroup {
     pub header: WmoGroupHeader,
-    pub material_info: Vec<MaterialInfo>,
     indices: Option<Vec<u16>>,
     vertices: Option<Vec<f32>>,
     normals: Option<Vec<u8>>,
@@ -248,7 +253,7 @@ pub struct WmoGroup {
     pub num_color_bufs: usize,
     pub first_color_buf_len: Option<usize>,
     pub batches: Vec<MaterialBatch>,
-    pub replacement_for_header_color: Option<Argb>,
+    pub replacement_for_header_color: Option<Rgba>,
     liquids: Option<Vec<WmoLiquid>>,
 }
 
@@ -260,7 +265,6 @@ impl WmoGroup {
         assert_eq!(mver.magic_str(), "REVM");
         let (_, mhdr_data) = chunked_data.next().unwrap();
         let header: WmoGroupHeader = parse(mhdr_data)?;
-        let mut mopy: Option<Vec<MaterialInfo>> = None;
         let mut indices: Option<Vec<u16>> = None;
         let mut vertices: Option<Vec<f32>> = None;
         let mut normals: Option<Vec<u8>> = None;
@@ -274,12 +278,11 @@ impl WmoGroup {
         let mut bsp_indices: Vec<u16> = Vec::new();
         let mut bsp_nodes: Vec<BspNode> = Vec::new();
         let mut batches: Option<Vec<MaterialBatch>> = None;
-        let mut replacement_for_header_color: Option<Argb> = None;
+        let mut replacement_for_header_color: Option<Rgba> = None;
         let mut doodad_refs: Option<Vec<u16>> = None;
         let mut chunked_data = ChunkedData::new(&data[0x58..]);
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
-                b"YPOM" => mopy = Some(parse_array(chunk_data, 2)?),
                 b"IVOM" => indices = Some(parse_array(chunk_data, 2)?),
                 b"LADM" => replacement_for_header_color = Some(parse(chunk_data)?),
                 b"QILM" => liquids.push(parse(chunk_data)?),
@@ -315,7 +318,6 @@ impl WmoGroup {
 
         Ok(WmoGroup {
             header,
-            material_info: mopy.ok_or("WMO group didn't have MOPY chunk")?,
             indices,
             vertices: Some(vertices.ok_or("WMO group didn't have vertices")?),
             num_vertices,
@@ -546,16 +548,16 @@ pub struct AmbientVolume {
     pub position: Vec3,
     pub start: f32,
     pub end: f32,
-    pub color1: Argb,
-    pub color2: Argb,
-    pub color3: Argb,
+    pub color1: Bgra,
+    pub color2: Bgra,
+    pub color3: Bgra,
     pub flags: u32,
     #[deku(pad_bytes_after = "10")]
     pub doodad_set_id: u16,
 }
 
 impl AmbientVolume {
-    pub fn get_color(&self) -> Argb {
+    pub fn get_color(&self) -> Bgra {
         if self.flags & 1 > 0 {
             self.color3
         } else {
@@ -646,13 +648,6 @@ pub struct MaterialBatch {
     pub material_id: u8,
 }
 
-#[wasm_bindgen(js_name = "WowWmoMaterialInfo")]
-#[derive(DekuRead, Debug, Clone)]
-pub struct MaterialInfo {
-    pub flags: u8,
-    pub material_id: u8, // index into MOMT, or 0xff for collision faces
-}
-
 #[wasm_bindgen(js_name = "WowWmoGroupHeader", getter_with_clone)]
 #[derive(DekuRead, Debug, Clone)]
 pub struct WmoGroupHeader {
@@ -725,10 +720,10 @@ pub struct Fog {
     pub larger_radius: f32,
     pub fog_end: f32,
     pub fog_start_scalar: f32,
-    pub fog_color: Argb,
+    pub fog_color: Rgba,
     pub uw_fog_end: f32,
     pub uw_fog_start_scalar: f32,
-    pub uw_fog_color: Argb,
+    pub uw_fog_color: Bgra,
 }
 
 #[wasm_bindgen(js_name = "WowDoodadDef")]
@@ -739,7 +734,7 @@ pub struct DoodadDef {
     pub position: Vec3,
     pub orientation: Quat,
     pub scale: f32,
-    pub color: Argb, // BRGRA
+    pub color: Bgra,
 }
 
 #[wasm_bindgen(js_name = "WowWmoGroupInfo")]
@@ -786,13 +781,13 @@ pub struct WmoMaterial {
     pub shader_index: u32,
     pub blend_mode: u32,
     pub texture_1: u32,
-    pub sidn_color: Argb,
-    pub frame_sidn_color: Argb,
+    pub sidn_color: Bgra,
+    pub frame_sidn_color: Bgra,
     pub texture_2: u32,
-    pub diff_color: Argb,
+    pub diff_color: Bgra,
     pub ground_type: u32,
     pub texture_3: u32,
-    pub color_2: Argb,
+    pub color_2: Rgba,
     pub flags_2: u32,
     _runtime_data: [u32; 4],
 }

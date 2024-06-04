@@ -466,7 +466,7 @@ export class WdtScene implements Viewer.SceneGfx {
         }
         if (this.debug) {
           drawWorldSpaceAABB(getDebugOverlayCanvas2D(), this.mainView.clipFromWorldMatrix, group.scratchAABB, def.modelMatrix);
-          drawBspNodes(group, this.modelCamera, def.modelMatrix, this.mainView.clipFromWorldMatrix);
+          drawBspNodes(group, this.modelCamera, def.modelMatrix);
         }
       }
       if (this.modelFrustum.contains(groupAABB) && group.flags.exterior) {

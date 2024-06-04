@@ -174,13 +174,33 @@ pub struct Vec2 {
     pub y: f32,
 }
 
-#[wasm_bindgen(js_name = "WowArgb")]
+#[wasm_bindgen(js_name = "WowRgba")]
 #[derive(DekuRead, Debug, Clone, Copy)]
-pub struct Argb {
+pub struct Rgba {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub a: u8,
+}
+
+#[wasm_bindgen(js_name = "WowBgra")]
+#[derive(DekuRead, Debug, Clone, Copy)]
+pub struct Bgra {
+    pub b: u8,
+    pub g: u8,
+    pub r: u8,
+    pub a: u8,
+}
+
+impl From<Bgra> for Rgba {
+    fn from(value: Bgra) -> Self {
+        Rgba {
+            r: value.r,
+            g: value.g,
+            b: value.b,
+            a: value.a,
+        }
+    }
 }
 
 #[wasm_bindgen(js_name = "WowPlane")]
@@ -277,6 +297,12 @@ impl From<Quat16> for Quat {
         };
         result.normalize();
         result
+    }
+}
+
+impl Lerp for u8 {
+    fn lerp(self, other: Self, t: f32) -> Self {
+        ((self as f32) * (1.0 - t) + (other as f32) * t) as u8
     }
 }
 

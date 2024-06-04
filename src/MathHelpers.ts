@@ -233,7 +233,7 @@ export function transformVec3Mat4w0(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3)
     dst[2] = m[2] * x + m[6] * y + m[10] * z;
 }
 
-const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
+const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create(), scratchVec3d = vec3.create(), scratchVec3e = vec3.create();
 
 export function compareEpsilon(a: number, b: number) {
     return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
@@ -722,4 +722,75 @@ export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillb
 
 export function randomRange(a: number, b = -a): number {
     return lerp(a, b, Math.random());
+}
+
+/**
+ * Calculates where the line defined by points ({@param p}, {@param q})
+ * intersect the triangle ({@param a}, {@param b}, {@param c}), setting the
+ * barycentric coordinates of intersection if they exist. Returns true if an
+ * intersection was found, and false if not.
+ * 
+ * From Christer Ericson's Realtime Collision Detection.
+ * 
+ * @param barycentricOut: vec3 where barycentric result will be stored
+ * @param p
+ * @param q 
+ * @param a 
+ * @param b 
+ * @param c 
+ * @returns Whether the intersection exists
+ */
+export function intersectLineTriangle(
+  barycentricOut: vec3,
+  p: vec3,
+  q: vec3,
+  a: vec3,
+  b: vec3,
+  c: vec3,
+): boolean {
+  const pq = vec3.sub(scratchVec3a, q, p);
+  const pa = vec3.sub(scratchVec3b, a, p);
+  const pb = vec3.sub(scratchVec3c, b, p);
+  const pc = vec3.sub(scratchVec3d, c, p);
+  let u = scalarTripleProduct(pq, pc, pb);
+  if (u < 0) {
+    return false;
+  }
+  let v = scalarTripleProduct(pq, pa, pc);
+  if (v < 0) {
+    return false;
+  }
+  let w = scalarTripleProduct(pq, pb, pa);
+  if (w < 0) {
+    return false;
+  }
+  const denom = 1.0 / (u + v + w);
+  u *= denom;
+  v *= denom;
+  w *= denom;
+  vec3.set(barycentricOut, u, v, w);
+  return true;
+}
+
+export function scalarTripleProduct(a: vec3, b: vec3, c: vec3): number {
+  return vec3.dot(vec3.cross(scratchVec3e, a, b), c);
+}
+
+/**
+ * Returns an array whose elements are weighted sums of three (presumed equal length) arrays,
+ * {@param v0}, {@param v1}, and {@param v2}, and whose weights are given by the barycentric
+ * vec {@param bary}.
+ * 
+ * @param bary 
+ * @param v0 
+ * @param v1 
+ * @param v2 
+ * @returns Array whose elements are weighted sums of v0, v1, and v2
+ */
+export function barycentricInterp<T extends ArrayLike<number>>(bary: vec3, v0: T, v1: T, v2: T): number[] {
+  let result: number[] = [];
+  for (let i=0; i<v1.length; i++) {
+    result[i] = v0[i] * bary[0] + v1[i] * bary[1] + v2[i] * bary[2];
+  }
+  return result;
 }
