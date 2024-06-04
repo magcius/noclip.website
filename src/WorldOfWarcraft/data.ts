@@ -624,6 +624,9 @@ export class WmoGroupData {
   private scratchVec3a = vec3.create();
   private scratchVec3b = vec3.create();
   private scratchVec3c = vec3.create();
+  private scratchVec3d = vec3.create();
+  private scratchVec3e = vec3.create();
+  private scratchVec4 = vec4.create();
 
   constructor(public fileId: number) {
   }
@@ -718,29 +721,28 @@ export class WmoGroupData {
         const node = bspNodes[nodeIndex];
         for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
           const index0 = this.indices[3 * this.bspIndices[i] + 0];
-          const vertex0 = vec3.set(vec3.create(),
+          const vertex0 = vec3.set(this.scratchVec3c,
               this.vertices[3 * index0 + 0],
               this.vertices[3 * index0 + 1],
               this.vertices[3 * index0 + 2],
           );
           const index1 = this.indices[3 * this.bspIndices[i] + 1];
-          const vertex1 = vec3.set(vec3.create(),
+          const vertex1 = vec3.set(this.scratchVec3d,
               this.vertices[3 * index1 + 0],
               this.vertices[3 * index1 + 1],
               this.vertices[3 * index1 + 2],
           );
           const index2 = this.indices[3 * this.bspIndices[i] + 2];
-          const vertex2 = vec3.set(vec3.create(),
+          const vertex2 = vec3.set(this.scratchVec3e,
               this.vertices[3 * index2 + 0],
               this.vertices[3 * index2 + 1],
               this.vertices[3 * index2 + 2],
           );
           // check if the tri is above/below our point
-          let scratchAABB = new AABB();
-          scratchAABB.setFromPoints([vertex0, vertex1, vertex2]);
-          scratchAABB.minZ = -Infinity;
-          scratchAABB.maxZ = Infinity;
-          if (!scratchAABB.containsPoint(p)) {
+          this.scratchAABB.setFromPoints([vertex0, vertex1, vertex2]);
+          this.scratchAABB.minZ = -Infinity;
+          this.scratchAABB.maxZ = Infinity;
+          if (!this.scratchAABB.containsPoint(p)) {
             continue;
           }
 
@@ -777,16 +779,16 @@ export class WmoGroupData {
 
   public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
     // project a line downwards by 10 units for an intersection test
-    const q = vec3.clone(p);
+    const q = vec3.copy(this.scratchVec3a, p);
     q[2] = p[2] - 10;
-    let barycentricCoords = vec3.create();
+    let barycentricCoords = this.scratchVec3b;
     const indices = this.getClosestIntersectedTriangle(barycentricCoords, p, q);
     if (indices !== undefined) {
       const color0 = this.colors.subarray(4 * indices![0], 4 * (indices![0] + 1));
       const color1 = this.colors.subarray(4 * indices![1], 4 * (indices![1] + 1));
       const color2 = this.colors.subarray(4 * indices![2], 4 * (indices![2] + 1));
       const baryColor = barycentricInterp(barycentricCoords, color0, color1, color2);
-      const overrideAmbientColor = vec4.fromValues(baryColor[0], baryColor[1], baryColor[2], baryColor[3]);
+      const overrideAmbientColor = vec4.set(this.scratchVec4, baryColor[0], baryColor[1], baryColor[2], baryColor[3]);
       vec4.scale(overrideAmbientColor, overrideAmbientColor, 1/255);
       return overrideAmbientColor;
     }
@@ -1438,6 +1440,8 @@ export class WmoDefinition {
   public liquidVisibility: boolean[] = [];
   public doodadIndexToGroupIds: MapArray<number, number> = new MapArray();
 
+  private scratchVec3 = vec3.create();
+
   public setVisible(visible: boolean) {
     this.visible = visible;
     for (let groupId of this.groupIdToVisibility.keys()) {
@@ -1531,7 +1535,7 @@ export class WmoDefinition {
         const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
         const modelData = wmo.models.get(doodad.modelId)!;
         doodad.setBoundingBoxFromModel(modelData);
-        const p = vec3.create();
+        const p = this.scratchVec3;
         doodad.worldAABB.centerPoint(p);
         vec3.transformMat4(p, p, this.invModelMatrix);
 

@@ -168,13 +168,11 @@ impl Wmo {
 
     pub fn get_ambient_color(&self, doodad_set_id: u16) -> Bgra {
         if self.global_ambient_volumes.len() > 0 {
-            // return Argb { r: 69, g: 69, b: 69, a: 255 };
             match self.global_ambient_volumes.iter().find(|av| av.doodad_set_id == doodad_set_id) {
                 Some(av) => av.get_color(),
                 None => self.global_ambient_volumes[0].get_color(),
             }
         } else if self.ambient_volumes.len() > 0 {
-            // return Argb { r: 42, g: 42, b: 42, a: 255 };
             self.ambient_volumes[0].get_color()
         } else {
             self.header.ambient_color
