@@ -1,4 +1,3 @@
-import { mat4 } from "gl-matrix";
 import { WowLightResult, WowVec3 } from "../../rust/pkg/index.js";
 import { DeviceProgram } from "../Program.js";
 import { GfxShaderLibrary } from "../gfx/helpers/GfxShaderLibrary.js";
@@ -67,12 +66,7 @@ vec3 calcLight(
     vec3 gammaDiffTerm = diffuseColor * (currentColor + lDiffuse);
     vec3 linearDiffTerm = (diffuseColor * diffuseColor) * localDiffuse;
 
-    //Specular term
-    vec3 specTerm = specular;
-    //Emission term
-    vec3 emTerm = emissive;
-
-    return sqrt(gammaDiffTerm*gammaDiffTerm + linearDiffTerm) + specTerm + emTerm;
+    return sqrt(gammaDiffTerm*gammaDiffTerm + linearDiffTerm) + specular + emissive;
 }
 
 vec3 calcFog(vec3 inColor, vec3 worldPosition) {
@@ -833,12 +827,20 @@ struct DoodadInstance {
     vec4 lightingParams; // [applyInteriorLighting, applyExteriorLighting, interiorExteriorBlend, isSkybox]
 };
 
+struct M2Light {
+  vec4 ambientColor;
+  vec4 diffuseColor;
+  vec4 position; // x, y, z, boneIndex
+  vec4 params; // attenuationStart, attenuationEnd, visible, _
+};
+
 struct BoneParams {
   Mat4x4 transform;
   vec4 params; // isSphericalBillboard, _, _, _
 };
 
 layout(std140) uniform ub_DoodadParams {
+    M2Light modelLights[4];
     DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
     BoneParams bones[${MAX_BONE_TRANSFORMS}];
 };
@@ -998,8 +1000,24 @@ void mainPS() {
     vec4 tex2WithUV0 = texture(SAMPLER_2D(u_Texture2), v_UV0);
     vec4 tex3WithUV1 = texture(SAMPLER_2D(u_Texture3), v_UV1);
 
-    // TODO: iterate through local lights to calculate this
+    vec3 precomputedLight = vec3(0.0);
     vec3 accumLight = vec3(0.0);
+
+    int instanceID = int(v_InstanceID + 0.5);
+    DoodadInstance params = instances[instanceID];
+    for (int i = 0; i < 4; i++) {
+      M2Light light = modelLights[i];
+      int boneIndex = int(light.position.z);
+      float attenuationStart = light.params.x;
+      float attenuationEnd = light.params.y;
+      bool visible = light.params.z > 0.0;
+      vec3 posToLight = v_Position - Mul(params.transform, vec4(light.position.xyz, 1.0)).xyz;
+      float distance = length(posToLight);
+      float diffuse = max(dot(posToLight, v_Normal) / distance, 0.0);
+      float attenuation = 1.0 - clamp((distance - attenuationStart) * (1.0 / (attenuationEnd - attenuationStart)), 0.0, 1.0);
+      vec3 attenuatedColor = attenuation * light.diffuseColor.rgb * light.diffuseColor.a;
+      accumLight = accumLight + vec3(attenuatedColor * attenuatedColor * diffuse) + light.ambientColor.rgb * light.ambientColor.a;
+    }
 
     int pixelShader = int(shaderTypes.r);
     vec4 finalColor = vec4(1.0);
@@ -1157,8 +1175,6 @@ void mainPS() {
       finalOpacity = discardAlpha * v_DiffuseColor.a;
     }
 
-    int instanceID = int(v_InstanceID + 0.5);
-    DoodadInstance params = instances[instanceID];
     bool applyInterior = params.lightingParams.x > 0.0;
     bool applyExterior = params.lightingParams.y > 0.0;
     float interiorExteriorBlend = params.lightingParams.z;
@@ -1169,19 +1185,23 @@ void mainPS() {
       return;
     }
 
-    finalColor = vec4(calcLight(
-      matDiffuse.rgb,
-      v_Normal,
-      params.interiorAmbientColor,
-      params.interiorDirectColor,
-      interiorExteriorBlend,
-      applyInterior,
-      applyExterior,
-      accumLight,
-      vec3(0.0), // precomputedLight
-      specular,
-      vec3(0.0) // emissive
-   ), finalOpacity);
+    if (materialParams.z == 0.0) {
+      finalColor = vec4(calcLight(
+        matDiffuse.rgb,
+        v_Normal,
+        params.interiorAmbientColor,
+        params.interiorDirectColor,
+        interiorExteriorBlend,
+        applyInterior,
+        applyExterior,
+        accumLight,
+        precomputedLight,
+        specular,
+        vec3(0.0) // emissive
+      ), finalOpacity);
+    } else {
+      finalColor = vec4(matDiffuse.rgb, finalOpacity);
+    }
 
    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
     

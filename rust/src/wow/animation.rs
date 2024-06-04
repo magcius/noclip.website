@@ -1,4 +1,5 @@
 use deku::prelude::*;
+use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 use js_sys::Float32Array;
 use crate::wow::m2::*;
@@ -185,6 +186,7 @@ pub struct AnimationManager {
     blend_factor: f32,
     colors: Vec<M2Color>,
     bones: Vec<M2CompBone>,
+    lights: Vec<M2Light>,
 
     calculated_transparencies: Vec<f32>,
     calculated_texture_translations: Vec<Vec3>,
@@ -194,6 +196,13 @@ pub struct AnimationManager {
     calculated_bone_translations: Vec<Vec3>,
     calculated_bone_rotations: Vec<Quat>,
     calculated_bone_scalings: Vec<Vec3>,
+    calculated_light_ambient_colors: Vec<Vec3>,
+    calculated_light_ambient_intensities: Vec<f32>,
+    calculated_light_diffuse_colors: Vec<Vec3>,
+    calculated_light_diffuse_intensities: Vec<f32>,
+    calculated_light_attenuation_starts: Vec<f32>,
+    calculated_light_attenuation_ends: Vec<f32>,
+    calculated_light_visibilities: Vec<u8>,
 }
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
@@ -207,7 +216,12 @@ impl AnimationManager {
         bone_translations: &Float32Array,
         bone_rotations: &Float32Array,
         bone_scalings: &Float32Array,
-        colors: &Float32Array
+        colors: &Float32Array,
+        ambient_light_colors: &Float32Array,
+        diffuse_light_colors: &Float32Array,
+        light_attenuation_starts: &Float32Array,
+        light_attenuation_ends: &Float32Array,
+        light_visibilities: &Uint8Array,
     ) {
         self.update(delta_time);
         transparencies.copy_from(&self.calculated_transparencies);
@@ -259,6 +273,26 @@ impl AnimationManager {
             colors.set_index(color_index + 2, color.z);
             colors.set_index(color_index + 3, color.w);
         }
+        for i in 0..self.lights.len() {
+            let color_index = i as u32 * 4;
+
+            let ambient_color = self.calculated_light_ambient_colors[i];
+            let ambient_intensity = self.calculated_light_ambient_intensities[i];
+            ambient_light_colors.set_index(color_index, ambient_color.x);
+            ambient_light_colors.set_index(color_index + 1, ambient_color.y);
+            ambient_light_colors.set_index(color_index + 2, ambient_color.z);
+            ambient_light_colors.set_index(color_index + 3, ambient_intensity);
+
+            let diffuse_color = self.calculated_light_diffuse_colors[i];
+            let diffuse_intensity = self.calculated_light_diffuse_intensities[i];
+            diffuse_light_colors.set_index(color_index, diffuse_color.x);
+            diffuse_light_colors.set_index(color_index + 1, diffuse_color.y);
+            diffuse_light_colors.set_index(color_index + 2, diffuse_color.z);
+            diffuse_light_colors.set_index(color_index + 3, diffuse_intensity);
+        }
+        light_attenuation_starts.copy_from(&self.calculated_light_attenuation_starts);
+        light_attenuation_ends.copy_from(&self.calculated_light_attenuation_ends);
+        light_visibilities.copy_from(&self.calculated_light_visibilities);
     }
 
     pub fn get_sequence_ids(&self) -> Vec<u16> {
@@ -280,6 +314,24 @@ impl AnimationManager {
 
     pub fn get_num_bones(&self) -> usize {
         self.bones.len()
+    }
+
+    pub fn get_num_lights(&self) -> usize {
+        self.lights.len()
+    }
+
+    pub fn get_light_bones(&self) -> Vec<i16> {
+        self.lights.iter().map(|light| light.bone).collect()
+    }
+
+    pub fn get_light_positions(&self) -> Vec<f32> {
+        let mut result = Vec::with_capacity(self.lights.len() * 3);
+        for light in &self.lights {
+            result.push(light.position.x);
+            result.push(light.position.y);
+            result.push(light.position.z);
+        }
+        result
     }
 
     pub fn get_bone_pivots(&self) -> Vec<Vec3> {
@@ -312,6 +364,7 @@ impl AnimationManager {
         texture_transforms: Vec<M2TextureTransform>,
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,
+        lights: Vec<M2Light>,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
         // pull out the "Stand" animation, which is the resting animation for all models
@@ -333,6 +386,14 @@ impl AnimationManager {
         let calculated_bone_rotations: Vec<Quat> = Vec::with_capacity(bones.len());
         let calculated_bone_scalings: Vec<Vec3> = Vec::with_capacity(bones.len());
 
+        let calculated_light_ambient_colors: Vec<Vec3> = Vec::with_capacity(lights.len());
+        let calculated_light_ambient_intensities: Vec<f32> = Vec::with_capacity(lights.len());
+        let calculated_light_diffuse_colors: Vec<Vec3> = Vec::with_capacity(lights.len());
+        let calculated_light_diffuse_intensities: Vec<f32> = Vec::with_capacity(lights.len());
+        let calculated_light_attenuation_starts: Vec<f32> = Vec::with_capacity(lights.len());
+        let calculated_light_attenuation_ends: Vec<f32> = Vec::with_capacity(lights.len());
+        let calculated_light_visibilities: Vec<u8> = Vec::with_capacity(lights.len());
+
         AnimationManager {
             global_sequence_durations,
             current_animation,
@@ -343,8 +404,10 @@ impl AnimationManager {
             texture_weights,
             colors,
             bones,
+            lights,
             global_sequence_times,
             rng,
+
             calculated_transparencies,
             calculated_texture_translations,
             calculated_texture_rotations,
@@ -353,6 +416,13 @@ impl AnimationManager {
             calculated_bone_translations,
             calculated_bone_rotations,
             calculated_bone_scalings,
+            calculated_light_ambient_colors,
+            calculated_light_ambient_intensities,
+            calculated_light_diffuse_colors,
+            calculated_light_diffuse_intensities,
+            calculated_light_attenuation_starts,
+            calculated_light_attenuation_ends,
+            calculated_light_visibilities,
         }
     }
 
@@ -580,6 +650,25 @@ impl AnimationManager {
             self.calculated_bone_translations.push(self.get_current_value_with_blend(&bone.translation, default_translation));
             self.calculated_bone_rotations.push(self.get_current_value_with_blend(&bone.rotation, default_rotation));
             self.calculated_bone_scalings.push(self.get_current_value_with_blend(&bone.scaling, default_scaling));
+        }
+
+        let default_color = Vec3::new(1.0);
+        let default_intensity = 1.0;
+        self.calculated_light_ambient_colors.clear();
+        self.calculated_light_ambient_intensities.clear();
+        self.calculated_light_diffuse_colors.clear();
+        self.calculated_light_diffuse_intensities.clear();
+        self.calculated_light_attenuation_starts.clear();
+        self.calculated_light_attenuation_ends.clear();
+        self.calculated_light_visibilities.clear();
+        for light in &self.lights {
+            self.calculated_light_ambient_colors.push(self.get_current_value_with_blend(&light.ambient_color, default_color));
+            self.calculated_light_ambient_intensities.push(self.get_current_value_with_blend(&light.ambient_intensity, default_intensity));
+            self.calculated_light_diffuse_colors.push(self.get_current_value_with_blend(&light.diffuse_color, default_color));
+            self.calculated_light_diffuse_intensities.push(self.get_current_value_with_blend(&light.diffuse_intensity, default_intensity));
+            self.calculated_light_attenuation_starts.push(self.get_current_value_with_blend(&light.attenuation_start, 1.0));
+            self.calculated_light_attenuation_ends.push(self.get_current_value_with_blend(&light.attenuation_end, 1.0));
+            self.calculated_light_visibilities.push(self.get_current_value_with_blend(&light.visibility, 0));
         }
     }
 }

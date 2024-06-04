@@ -103,15 +103,58 @@ export class ModelRenderer {
       const numVec4s = 3;
       const instanceParamsSize = (16 * numMat4s + 4 * numVec4s);
       const boneParamsSize = (16 * 1 + 4 * 1);
+      const lightSize = (4 * 4);
       const baseOffs = template.allocateUniformBuffer(ModelProgram.ub_DoodadParams,
-        instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
+        lightSize * 4 + instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
       let offs = baseOffs;
       const mapped = template.mapUniformBufferF32(ModelProgram.ub_DoodadParams);
+      for (let i = 0; i < 4; i++) {
+        if (i < this.model.numLights) {
+          const colorIndex = 4 * i;
+          offs += fillVec4(mapped, offs,
+            this.model.ambientLightColors[colorIndex + 0],
+            this.model.ambientLightColors[colorIndex + 1],
+            this.model.ambientLightColors[colorIndex + 2],
+            this.model.ambientLightColors[colorIndex + 3]);
+          offs += fillVec4(mapped, offs,
+            this.model.diffuseLightColors[colorIndex + 0],
+            this.model.diffuseLightColors[colorIndex + 1],
+            this.model.diffuseLightColors[colorIndex + 2],
+            this.model.diffuseLightColors[colorIndex + 3]);
+          const posIndex = 3 * i;
+          offs += fillVec4(mapped, offs,
+            this.model.lightPositions[posIndex + 0],
+            this.model.lightPositions[posIndex + 1],
+            this.model.lightPositions[posIndex + 2],
+            this.model.lightBones[i]
+          );
+          offs += fillVec4(mapped, offs,
+            this.model.lightAttenuationStarts[i],
+            this.model.lightAttenuationEnds[i],
+            this.model.lightVisibilities[i]
+          );
+        } else {
+          offs += fillVec4(mapped, offs, 0);
+          offs += fillVec4(mapped, offs, 0);
+          offs += fillVec4(mapped, offs, 0);
+          offs += fillVec4(mapped, offs, 0);
+        }
+      }
+      offs = baseOffs + lightSize * 4;
       for (let doodad of doodadChunk) {
         offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
         offs += fillMatrix4x4(mapped, offs, doodad.normalMatrix);
-        offs += fillVec4v(mapped, offs, doodad.ambientColor);
-        offs += fillVec4(mapped, offs, 0);
+        offs += fillVec4v(mapped, offs, doodad.ambientColor); // interiorAmbientColor
+        if (doodad.color !== null) {
+          offs += fillVec4(mapped, offs, // interiorDirectColor
+            doodad.color[0],
+            doodad.color[1],
+            doodad.color[2],
+            doodad.color[3]
+          );
+        } else {
+          offs += fillVec4(mapped, offs, 0);
+        }
         offs += fillVec4(mapped, offs,
           doodad.applyInteriorLighting ? 1.0 : 0.0,
           doodad.applyExteriorLighting ? 1.0 : 0.0,
@@ -119,7 +162,7 @@ export class ModelRenderer {
           doodad.isSkybox ? 1.0 : 0.0
         );
       }
-      offs = baseOffs + instanceParamsSize * MAX_DOODAD_INSTANCES;
+      offs = baseOffs + lightSize * 4 + instanceParamsSize * MAX_DOODAD_INSTANCES;
       assert(this.model.boneTransforms.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneTransforms.length})`);
       mat4.identity(this.scratchMat4);
       for (let i=0; i<MAX_BONE_TRANSFORMS; i++) {

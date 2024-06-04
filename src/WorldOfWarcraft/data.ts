@@ -1,8 +1,8 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowArgb, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, setMatrixTranslation } from "../MathHelpers.js";
+import { MathConstants, barycentricInterp, intersectLineTriangle, setMatrixTranslation } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -306,6 +306,14 @@ export class ModelData {
   public textureTransparencyLookupTable: Uint16Array;
   public textureTransformLookupTable: Uint16Array;
   public modelAABB: AABB;
+  public numLights: number;
+  public ambientLightColors: Float32Array;
+  public diffuseLightColors: Float32Array;
+  public lightAttenuationStarts: Float32Array;
+  public lightAttenuationEnds: Float32Array;
+  public lightVisibilities: Uint8Array;
+  public lightBones: Int16Array;
+  public lightPositions: Float32Array;
 
   constructor(public fileId: number) {
   }
@@ -366,7 +374,16 @@ export class ModelData {
     this.boneRotations = new Float32Array(this.numBones * 4);
     this.boneScalings = new Float32Array(this.numBones * 3);
     this.numColors = this.animationManager.get_num_colors();
+    this.numLights = this.animationManager.get_num_lights();
+    assert(this.numLights <= 4, `model ${this.fileId} has ${this.numLights} lights`);
     this.vertexColors = new Float32Array(this.numColors * 3);
+    this.ambientLightColors = new Float32Array(this.numLights * 4);
+    this.diffuseLightColors = new Float32Array(this.numLights * 4);
+    this.lightAttenuationStarts = new Float32Array(this.numLights);
+    this.lightAttenuationEnds = new Float32Array(this.numLights);
+    this.lightVisibilities = new Uint8Array(this.numLights);
+    this.lightBones = this.animationManager.get_light_bones();
+    this.lightPositions = this.animationManager.get_light_positions();
     for (let i=0; i<this.numTextureTransformations; i++) {
       this.textureTransforms.push(mat4.create());
     }
@@ -393,7 +410,12 @@ export class ModelData {
       this.boneTranslations,
       this.boneRotations,
       this.boneScalings,
-      this.vertexColors
+      this.vertexColors,
+      this.ambientLightColors,
+      this.diffuseLightColors,
+      this.lightAttenuationStarts,
+      this.lightAttenuationEnds,
+      this.lightVisibilities
     );
 
     for (let i = 0; i < this.numTextureTransformations; i++) {
@@ -579,7 +601,7 @@ export class WmoGroupData {
   public portalStart: number;
   public portalCount: number;
   public doodadRefs: Uint16Array;
-  public replacementForHeaderColor: WowArgb | undefined;
+  public replacementForHeaderColor: WowBgra | undefined;
   public numUVBufs: number;
   public numVertices: number;
   public numColorBufs: number;
@@ -590,7 +612,7 @@ export class WmoGroupData {
   public numLiquids = 0;
   public liquidIndex = 0;
   public vertices: Float32Array;
-  public normals: Uint8Array;
+  public normals: Float32Array;
   public indices: Uint16Array;
   public uvs: Uint8Array;
   public colors: Uint8Array;
@@ -684,6 +706,93 @@ export class WmoGroupData {
     return { byteOffset: 0, buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, this.indices.buffer) }
   }
 
+  private getClosestIntersectedTriangle(barycentricOut: vec3, p: vec3, q: vec3): number[] | undefined {
+    const bspNodes: WowWmoBspNode[] = [];
+    const scratchBary = vec3.create();
+    const scratchP = vec3.create();
+    let minDist = Infinity;
+    let resultIndices = undefined;
+    this.bsp.query(p, bspNodes);
+    if (bspNodes.length !== 0) {
+      for (let nodeIndex=0; nodeIndex<bspNodes.length; nodeIndex++) {
+        const node = bspNodes[nodeIndex];
+        for (let i = node.faces_start; i < node.faces_start + node.num_faces; i++) {
+          const index0 = this.indices[3 * this.bspIndices[i] + 0];
+          const vertex0 = vec3.set(vec3.create(),
+              this.vertices[3 * index0 + 0],
+              this.vertices[3 * index0 + 1],
+              this.vertices[3 * index0 + 2],
+          );
+          const index1 = this.indices[3 * this.bspIndices[i] + 1];
+          const vertex1 = vec3.set(vec3.create(),
+              this.vertices[3 * index1 + 0],
+              this.vertices[3 * index1 + 1],
+              this.vertices[3 * index1 + 2],
+          );
+          const index2 = this.indices[3 * this.bspIndices[i] + 2];
+          const vertex2 = vec3.set(vec3.create(),
+              this.vertices[3 * index2 + 0],
+              this.vertices[3 * index2 + 1],
+              this.vertices[3 * index2 + 2],
+          );
+          // check if the tri is above/below our point
+          let scratchAABB = new AABB();
+          scratchAABB.setFromPoints([vertex0, vertex1, vertex2]);
+          scratchAABB.minZ = -Infinity;
+          scratchAABB.maxZ = Infinity;
+          if (!scratchAABB.containsPoint(p)) {
+            continue;
+          }
+
+          // check if the tri is nearly vertical
+          const plane = new Plane();
+          plane.setTri(vertex0, vertex1, vertex2);
+          if (plane.n[2] < 0.0001) {
+            continue;
+          }
+          
+          let verts, indices;
+          if (plane.distanceVec3(p) > 0) {
+            verts = [vertex2, vertex1, vertex0];
+            indices = [index2, index1, index0];
+          } else {
+            verts = [vertex0, vertex1, vertex2];
+            indices = [index0, index1, index2];
+          }
+          if (intersectLineTriangle(scratchBary, q, p, verts[0], verts[1], verts[2])) {
+            let baryCoords = barycentricInterp(scratchBary, verts[0], verts[1], verts[2]);
+            let intersection = vec3.set(scratchP, baryCoords[0], baryCoords[1], baryCoords[2]);
+            let dist = vec3.sqrDist(intersection, p);
+            if (dist < minDist) {
+              minDist = dist;
+              vec3.copy(barycentricOut, scratchBary);
+              resultIndices = indices;
+            }
+          }
+        }
+      }
+    }
+    return resultIndices;
+  }
+
+  public getVertexColorForModelSpacePoint(p: vec3): vec4 | undefined {
+    // project a line downwards by 10 units for an intersection test
+    const q = vec3.clone(p);
+    q[2] = p[2] - 10;
+    let barycentricCoords = vec3.create();
+    const indices = this.getClosestIntersectedTriangle(barycentricCoords, p, q);
+    if (indices !== undefined) {
+      const color0 = this.colors.subarray(4 * indices![0], 4 * (indices![0] + 1));
+      const color1 = this.colors.subarray(4 * indices![1], 4 * (indices![1] + 1));
+      const color2 = this.colors.subarray(4 * indices![2], 4 * (indices![2] + 1));
+      const baryColor = barycentricInterp(barycentricCoords, color0, color1, color2);
+      const overrideAmbientColor = vec4.fromValues(baryColor[0], baryColor[1], baryColor[2], baryColor[3]);
+      vec4.scale(overrideAmbientColor, overrideAmbientColor, 1/255);
+      return overrideAmbientColor;
+    }
+    return undefined;
+  }
+
   public async load(cache: WowCache): Promise<undefined> {
     const group = await cache.fetchFileByID(this.fileId, rust.WowWmoGroup.new);
     this.groupLiquidType = group.header.group_liquid;
@@ -695,7 +804,7 @@ export class WmoGroupData {
     this.numColorBufs = group.num_color_bufs;
     this.innerBatches = group.batches;
     this.vertices = group.take_vertices();
-    this.normals = group.take_normals();
+    this.normals = new Float32Array(group.take_normals().buffer);
     this.colors = group.take_colors();
     this.portalStart = group.header.portal_start;
     this.portalCount = group.header.portal_count;
@@ -1327,6 +1436,7 @@ export class WmoDefinition {
   public groupIdToLiquidIndices: MapArray<number, number> = new MapArray();
   public liquidAABBs: AABB[] = [];
   public liquidVisibility: boolean[] = [];
+  public doodadIndexToGroupIds: MapArray<number, number> = new MapArray();
 
   public setVisible(visible: boolean) {
     this.visible = visible;
@@ -1360,7 +1470,7 @@ export class WmoDefinition {
   }
 
   // `extents` should be in placement space
-  constructor(public wmoId: number, wmo: WmoData, public uniqueId: number, public doodadSet: number, scale: number, position: vec3, rotation: vec3, extents: AABB) {
+  constructor(public wmoId: number, public wmo: WmoData, public uniqueId: number, public doodadSet: number, scale: number, position: vec3, rotation: vec3, extents: AABB) {
     setMatrixTranslation(this.placementMatrix, position);
     mat4.scale(this.placementMatrix, this.placementMatrix, [scale, scale, scale]);
     mat4.rotateZ(this.placementMatrix, this.placementMatrix, MathConstants.DEG_TO_RAD * rotation[2]);
@@ -1395,21 +1505,6 @@ export class WmoDefinition {
       this.liquidVisibility.push(true);
     }
 
-    const doodads = wmo.wmo.get_doodad_set(this.doodadSet);
-    if (doodads) {
-      for (let wmoDoodad of doodads) {
-        if (wmoDoodad.name_index === -1) {
-          console.warn('skipping WMO doodad w/ name_index === -1');
-          this.doodads.push(undefined);
-          continue;
-        }
-        const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
-        const modelData = wmo.models.get(doodad.modelId)!;
-        doodad.setBoundingBoxFromModel(modelData);
-        this.doodads.push(doodad);
-      }
-    }
-
     // keep track of which doodads belong in which group for culling purposes
     const doodadRefs = wmo.wmo.get_doodad_set_refs(this.doodadSet);
     for (let group of wmo.groups) {
@@ -1417,18 +1512,59 @@ export class WmoDefinition {
         const index = doodadRefs.indexOf(ref);
         if (index !== -1) {
           this.groupIdToDoodadIndices.append(group.fileId, index);
+          this.doodadIndexToGroupIds.append(index, group.fileId);
         }
       }
+    }
 
-      for (let index of this.groupIdToDoodadIndices.get(group.fileId)) {
-        const doodad = this.doodads[index];
-        if (doodad === undefined) {
+    const doodads = wmo.wmo.get_doodad_set(this.doodadSet);
+    if (doodads) {
+      for (let i=0; i<doodads.length; i++) {
+        const wmoDoodad = doodads[i];
+        if (wmoDoodad.name_index === -1) {
+          console.warn('skipping WMO doodad w/ name_index === -1');
+          this.doodads.push(undefined);
           continue;
         }
-        doodad.ambientColor = this.groupAmbientColors.get(group.fileId)!;
-        // FIXME this is wrong
-        doodad.applyInteriorLighting = group.flags.interior && !group.flags.exterior_lit;
-        doodad.applyExteriorLighting = true;
+        const groupIds = this.doodadIndexToGroupIds.get(i)!;
+        const group = wmo.getGroup(groupIds[0])!;
+        const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
+        const modelData = wmo.models.get(doodad.modelId)!;
+        doodad.setBoundingBoxFromModel(modelData);
+        const p = vec3.create();
+        doodad.worldAABB.centerPoint(p);
+        vec3.transformMat4(p, p, this.invModelMatrix);
+
+        let overrideAmbientColor = undefined;
+        for (const groupId of groupIds) {
+          const groupCandidate = wmo.getGroup(groupId)!;
+          overrideAmbientColor = groupCandidate.getVertexColorForModelSpacePoint(p);
+          if (overrideAmbientColor !== undefined) {
+            break;
+          }
+        }
+
+        if (group.flags.interior && !group.flags.exterior_lit) {
+          const groupAmbientColor = this.groupAmbientColors.get(group.fileId)!;
+          if (overrideAmbientColor) {
+            doodad.ambientColor = vec4.scaleAndAdd(overrideAmbientColor, groupAmbientColor, overrideAmbientColor, 2.0);
+            const maxComponent = Math.max(doodad.ambientColor[0], doodad.ambientColor[1], doodad.ambientColor[2]);
+            // scale the color down to a range of 0-96
+            const limit = 96 / 255;
+            if (maxComponent > limit) {
+              vec4.scale(doodad.ambientColor, doodad.ambientColor, limit / maxComponent);
+            }
+          } else {
+            doodad.ambientColor = vec4.clone(groupAmbientColor);
+          }
+          doodad.applyInteriorLighting = true;
+          doodad.applyExteriorLighting = false;
+        } else {
+          doodad.applyInteriorLighting = false;
+          doodad.applyExteriorLighting = true;
+        }
+
+        this.doodads.push(doodad);
       }
     }
 
@@ -1758,7 +1894,7 @@ export class DoodadData {
   public interiorExteriorBlend = 0;
   public isSkybox = false;
 
-  constructor(public modelId: number, public modelMatrix: mat4, public color: number[] | null, public uniqueId: number | undefined = undefined) {
+  constructor(public modelId: number, public modelMatrix: mat4, public color: vec4 | null, public uniqueId: number | undefined = undefined) {
     mat4.mul(this.normalMatrix, this.modelMatrix, placementSpaceFromModelSpace);
     mat4.mul(this.normalMatrix, adtSpaceFromPlacementSpace, this.modelMatrix);
     mat4.invert(this.normalMatrix, this.normalMatrix);
@@ -1806,9 +1942,6 @@ export class DoodadData {
     let rotation: quat = [doodadRot.x, doodadRot.y, doodadRot.z, doodadRot.w];
     doodadRot.free();
     let scale = doodad.scale;
-    const doodadColor = doodad.color;
-    let color = [doodadColor.g, doodadColor.b, doodadColor.r, doodadColor.a]; // BRGA
-    doodadColor.free();
     let modelId = modelIds[doodad.name_index];
     if (modelId === undefined) {
       throw new Error(`WMO doodad with invalid name_index ${doodad.name_index} (only ${modelIds.length} models)`);
@@ -1819,6 +1952,12 @@ export class DoodadData {
     mat4.mul(doodadMat, doodadMat, rotMat);
     mat4.scale(doodadMat, doodadMat, [scale, scale, scale]);
     mat4.mul(doodadMat, wmoDefModelMatrix, doodadMat);
+
+    const doodadColor = doodad.color;
+    let color = vec4.fromValues(doodadColor.r, doodadColor.g, doodadColor.b, doodadColor.a);
+    vec4.scale(color, color, 1/255);
+    doodadColor.free();
+
     doodad.free();
     return new DoodadData(modelId, doodadMat, color);
   }

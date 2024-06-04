@@ -56,7 +56,7 @@ pub struct M2Header {
     _attachments: WowArray<()>,
     _attachment_lookup_table: WowArray<u16>,
     _events: WowArray<()>,
-    _lights: WowArray<()>,
+    lights: WowArray<M2LightUnallocated>,
     _cameras: WowArray<()>,
     _camera_lookup_table: WowArray<u16>,
     _ribbon_emitters: WowArray<()>,
@@ -183,6 +183,26 @@ impl M2Header {
         self.transparency_lookup_table.to_vec(m2_data)
             .map_err(|e| format!("{:?}", e))
     }
+
+    fn get_lights(&self, m2_data: &[u8]) -> Result<Vec<M2Light>, String> {
+        let lights_unallocated = self.lights.to_vec(m2_data)
+            .map_err(|e| format!("{:?}", e))?;
+        let mut result = Vec::with_capacity(lights_unallocated.len());
+        for light in lights_unallocated {
+            result.push(M2Light {
+                bone: light.bone,
+                position: light.position,
+                ambient_color: light.ambient_color.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                ambient_intensity: light.ambient_intensity.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                diffuse_color: light.diffuse_color.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                diffuse_intensity: light.diffuse_intensity.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                attenuation_start: light.attenuation_start.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                attenuation_end: light.attenuation_end.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+                visibility: light.visibility.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
+            });
+        }
+        Ok(result)
+    }
 }
 
 #[wasm_bindgen(js_name = "WowM2", getter_with_clone)]
@@ -234,7 +254,8 @@ impl M2 {
             header.get_texture_weights(m2_data)?,
             header.get_texture_transforms(m2_data)?,
             header.get_vertex_colors(m2_data)?,
-            header.get_bones(m2_data)?
+            header.get_bones(m2_data)?,
+            header.get_lights(m2_data)?
         ));
 
         let mut legacy_textures = Vec::new();
@@ -299,6 +320,33 @@ impl M2 {
     pub fn take_vertex_data(&mut self) -> Vec<u8> {
         self.vertex_data.take().expect("M2 vertex data already taken")
     }
+}
+
+#[derive(DekuRead, Debug, Clone)]
+struct M2LightUnallocated {
+    pub _light_type: u16, // should be 1 (point light) in all cases except the login screen
+    pub bone: i16,
+    pub position: Vec3,
+    pub ambient_color: M2TrackUnallocated<Vec3>,
+    pub ambient_intensity: M2TrackUnallocated<f32>,
+    pub diffuse_color: M2TrackUnallocated<Vec3>,
+    pub diffuse_intensity: M2TrackUnallocated<f32>,
+    pub attenuation_start: M2TrackUnallocated<f32>,
+    pub attenuation_end: M2TrackUnallocated<f32>,
+    pub visibility: M2TrackUnallocated<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct M2Light {
+    pub bone: i16,
+    pub position: Vec3,
+    pub ambient_color: M2Track<Vec3>,
+    pub ambient_intensity: M2Track<f32>,
+    pub diffuse_color: M2Track<Vec3>,
+    pub diffuse_intensity: M2Track<f32>,
+    pub attenuation_start: M2Track<f32>,
+    pub attenuation_end: M2Track<f32>,
+    pub visibility: M2Track<u8>,
 }
 
 #[wasm_bindgen(js_name = "WowM2Material")]
