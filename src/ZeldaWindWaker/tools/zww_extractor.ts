@@ -2,9 +2,11 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice.js";
 import * as BYML from "../../byml.js";
 import * as Yaz0 from '../../Common/Compression/Yaz0.js';
+import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
 import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync } from "fs";
 import { assertExists, hexzero, assert, readString } from "../../util.js";
 import { Endianness } from "../../endian.js";
+import { loadRustLib } from "../../rustlib.js";
 
 // Standalone tool designed for node to extract data.
 
@@ -21,8 +23,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer, b.byteOffset, b.byteLength);
 }
 
-const pathBaseIn  = `../../../data/zww_raw`;
-const pathBaseOut = `../../../data/j3d/ww`;
+const pathBaseIn  = `../../../data/ZeldaWindWaker_raw`;
+const pathBaseOut = `../../../data/ZeldaWindWaker`;
 
 interface SymbolMapEntry {
     sectionName: string;
@@ -159,24 +161,21 @@ class DOL {
 
 // We don't do a full relocation, we just hardcode the pointer to the .data section.
 class REL {
-    public name: string;
     public map: SymbolMap;
 
     private buffer: ArrayBufferSlice;
     private offs: number[] = [];
     private size: number[] = [];
 
-    constructor(relFilename: string, mapFilename: string) {
+    constructor(public name: string, relData: ArrayBufferSlice, mapFilename: string) {
         this.map = parseMapFile(mapFilename);
-        this.name = basename(relFilename);
 
-        let buffer = fetchDataSync(relFilename);
-        if (readString(buffer, 0x00, 0x04) === 'Yaz0')
-            buffer = Yaz0.decompressSW(buffer);
+        if (readString(relData, 0x00, 0x04) === 'Yaz0')
+            relData = Yaz0.decompressSW(relData);
 
-        this.buffer = buffer;
+        this.buffer = relData;
 
-        const view = buffer.createDataView();
+        const view = relData.createDataView();
         const sectionTableCount = view.getUint32(0x0C);
         let sectionTableOffs = view.getUint32(0x10);
 
@@ -345,9 +344,22 @@ async function loadBinaries(): Promise<Binary[]> {
     // Parse RELs.
     const rels = readdirSync(`${pathBaseIn}/rels`);
     for (let i = 0; i < rels.length; i++) {
-        const relFilename = `${pathBaseIn}/rels/${rels[i]}`;
-        const mapFilename = `${pathBaseIn}/maps/${rels[i].replace('.rel', '.map')}`;
-        binaries.push(new REL(relFilename, mapFilename));
+        const relName = rels[i];
+        const relFilename = `${pathBaseIn}/rels/${relName}`;
+        const relData = fetchDataSync(relFilename);
+        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
+        binaries.push(new REL(relName, relData, mapFilename));
+    }
+
+    const relsARC = JKRArchive.parse(fetchDataSync(`${pathBaseIn}/RELS.arc`));
+    for (let i = 0; i < relsARC.files.length; i++) {
+        const file = relsARC.files[i];
+        if (!file.name.endsWith('.rel'))
+            continue;
+        const relName = file.name;
+        const relData = file.buffer;
+        const mapFilename = `${pathBaseIn}/maps/${relName.replace('.rel', '.map')}`;
+        binaries.push(new REL(relName, relData, mapFilename));
     }
 
     return binaries;
@@ -385,6 +397,8 @@ function extractProfiles(binaries: Binary[]) {
 }
 
 async function main() {
+    await loadRustLib();
+
     const binaries = await loadBinaries();
     extractExtra(binaries);
     extractProfiles(binaries);

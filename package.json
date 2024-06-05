@@ -38,7 +38,7 @@
   "scripts": {
     "start": "webpack serve --config webpack.dev.cjs",
     "build": "webpack --config webpack.prod.cjs",
-    "build:zww": "cd src/ZeldaWindWaker/tools && tsx zww_extractor.ts",
+    "build:ZeldaWindWaker": "cd src/ZeldaWindWaker/tools && tsx --experimental-wasm-modules zww_extractor.ts",
     "build:ztp": "cd src/ZeldaTwilightPrincess/tools && tsx ztp_extractor.ts",
     "build:dk64": "cd src/DonkeyKong64/tools && tsx extractor.ts",
     "build:KatamariDamacy": "cd src/KatamariDamacy/tools && tsx extractor.ts",
