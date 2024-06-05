@@ -329,10 +329,12 @@ impl Adt {
                 }
             }
             let alpha_texture = mcnk.build_alpha_texture(adt_has_big_alpha, adt_has_height_texturing);
+            let shadow_texture = mcnk.build_shadow_texture();
             descriptors.push(ChunkDescriptor {
                 texture_layers,
                 index_offset,
                 alpha_texture,
+                shadow_texture,
                 index_count,
             });
         }
@@ -387,6 +389,7 @@ impl AdtRenderResult {
 pub struct ChunkDescriptor {
     pub texture_layers: Vec<u32>,
     pub alpha_texture: Option<Vec<u8>>,
+    pub shadow_texture: Option<Vec<u8>>,
     pub index_offset: usize,
     pub index_count: usize,
 }
@@ -493,13 +496,11 @@ impl MapChunk {
 
         let mut mcvt: Option<HeightmapChunk> = None;
         let mut mcnr: Option<NormalChunk> = None;
-        let mut mcsh: Option<ShadowMapChunk> = None;
         let mut chunked_data = ChunkedData::new(&chunk_data[0x80..]);
         for (subchunk, subchunk_data) in &mut chunked_data {
             match &subchunk.magic {
                 b"TVCM" => mcvt = Some(parse(subchunk_data)?),
                 b"RNCM" => mcnr = Some(parse(subchunk_data)?),
-                b"HSMC" => mcsh = Some(parse(subchunk_data)?),
                 //_ => println!("skipping subchunk {}", subchunk.magic_str()),
                 _ => {},
             }
@@ -509,14 +510,31 @@ impl MapChunk {
             header,
             normals: mcnr.ok_or("MapChunk had no MCNR chunk".to_string())?,
             heightmap: mcvt.ok_or("MapChunk had no MCVT chunk".to_string())?,
-            shadows: mcsh,
 
             // these will be appended in separate ADT files
+            shadows: None,
             vertex_colors: None,
             vertex_lighting: None,
             alpha_map: None,
             texture_layers: vec![],
         })
+    }
+
+    pub fn build_shadow_texture(&self) -> Option<Vec<u8>> {
+        let shadow_map = &self.shadows.as_ref()?.shadow_map;
+        let mut result = vec![0; 64 * 64];
+        for i in 0..64 {
+            let row = shadow_map[i];
+            for j in 0..64 {
+                let sample = row & (1 << (j));
+                if sample > 0 {
+                    result[i * 64 + j] = 0xFF;
+                } else {
+                    result[i * 64 + j] = 0;
+                }
+            }
+        }
+        Some(result)
     }
 
     // These two flags come from the WDT definition block flags
@@ -595,6 +613,7 @@ impl MapChunk {
             match &subchunk.magic {
                 b"YLCM" => self.texture_layers = parse_array(subchunk_data, 16)?,
                 b"LACM" => self.alpha_map = parse_with_byte_size(subchunk_data)?,
+                b"HSCM" => self.shadows = Some(parse(subchunk_data)?),
                 _ => {},
             }
         }

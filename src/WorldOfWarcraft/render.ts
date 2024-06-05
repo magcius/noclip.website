@@ -317,6 +317,7 @@ export class TerrainRenderer {
   public indexBuffer: GfxIndexBufferDescriptor;
   public vertexBuffer: GfxVertexBufferDescriptor;
   public alphaTextureMappings: (TextureMapping | null)[] = [];
+  public shadowTextureMappings: (TextureMapping | null)[] = [];
   public chunkTextureMappings: TextureMappingArray[] = [];
 
   constructor(device: GfxDevice, renderHelper: GfxRenderHelper, public adt: AdtData, private textureCache: TextureCache) {
@@ -346,6 +347,15 @@ export class TerrainRenderer {
         this.chunkTextureMappings[i].push(alphaMapping);
       } else {
         this.chunkTextureMappings[i].push(textureCache.getDefaultAlphaTextureMapping());
+      }
+
+      if (chunk.shadowTexture) {
+        const shadowMapping = textureCache.getShadowTextureMapping(device, chunk.shadowTexture);
+        chunk.shadowTexture = undefined;
+        this.shadowTextureMappings.push(shadowMapping);
+        this.chunkTextureMappings[i].push(shadowMapping);
+      } else {
+        this.chunkTextureMappings[i].push(textureCache.getDefaultShadowTextureMapping());
       }
     }
   }
@@ -380,7 +390,8 @@ export class TerrainRenderer {
   public destroy(device: GfxDevice) {
     device.destroyBuffer(this.vertexBuffer.buffer);
     device.destroyBuffer(this.indexBuffer.buffer);
-    for (let mapping of this.alphaTextureMappings) {
+    const textureMappings = this.alphaTextureMappings.concat(this.shadowTextureMappings);
+    for (let mapping of textureMappings) {
       if (mapping) {
         destroyTextureMapping(device, mapping);
       }

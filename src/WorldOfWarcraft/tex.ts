@@ -1,7 +1,7 @@
 import { WowBlp } from "../../rust/pkg/index.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeSolidColorTexture2D } from "../gfx/helpers/TextureHelpers.js";
-import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTextureDescriptor, GfxTextureDimension, GfxTextureUsage, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
@@ -80,6 +80,7 @@ export class TextureCache {
     public default2DTexture: GfxTexture;
     public allZeroTexture: GfxTexture;
     public allWhiteTexture: GfxTexture;
+    public defaultShadowTexture: GfxTexture;
 
     constructor(private renderCache: GfxRenderCache) {
       this.textures = new Map();
@@ -101,6 +102,7 @@ export class TextureCache {
         b: 1.0,
         a: 1.0,
       });
+      this.defaultShadowTexture = this.getDefaultShadowTexture(renderCache.device);
     }
 
     public getDefaultAlphaTextureMapping(): TextureMapping {
@@ -108,6 +110,21 @@ export class TextureCache {
       mapping.gfxTexture = this.allZeroTexture;
       mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
       return mapping;
+    }
+
+    public getDefaultShadowTextureMapping(): TextureMapping {
+      const mapping = new TextureMapping();
+      mapping.gfxTexture = this.defaultShadowTexture;
+      mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
+      return mapping;
+    }
+
+    public getDefaultShadowTexture(device: GfxDevice): GfxTexture {
+      const tex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_R_NORM, 1, 1, 1));
+      const data = new Uint8Array(1);
+      data[0] = 0;
+      device.uploadTextureData(tex, 0, [data]);
+      return tex;
     }
 
     public getAllWhiteTextureMapping(): TextureMapping {
@@ -150,6 +167,24 @@ export class TextureCache {
       return mapping;
     }
 
+    public getShadowTextureMapping(device: GfxDevice, texData: Uint8Array): TextureMapping {
+      const textureDescriptor: GfxTextureDescriptor = {
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.U8_R_NORM,
+        width: 64,
+        height: 64,
+        numLevels: 1,
+        depthOrArrayLayers: 1,
+        usage: GfxTextureUsage.Sampled,
+      };
+      const texture = device.createTexture(textureDescriptor);
+      device.uploadTextureData(texture, 0, [texData]);
+      const mapping = new TextureMapping();
+      mapping.gfxTexture = texture;
+      mapping.gfxSampler = this.getSampler({ wrapS: false, wrapT: false });
+      return mapping;
+    }
+
     public getAlphaTextureMapping(device: GfxDevice, texData: Uint8Array): TextureMapping {
       let w = 64;
       let h = texData.length === 2048 ? 32 : 64;
@@ -174,6 +209,7 @@ export class TextureCache {
       device.destroyTexture(this.default2DTexture);
       device.destroyTexture(this.allZeroTexture);
       device.destroyTexture(this.allWhiteTexture);
+      device.destroyTexture(this.defaultShadowTexture);
       for (let tex of this.textures.values()) {
         if (tex)
           device.destroyTexture(tex);
