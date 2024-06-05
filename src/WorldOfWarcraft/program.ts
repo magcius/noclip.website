@@ -34,33 +34,26 @@ vec3 calcLight(
     vec3 normalizedN = normalize(normal);
 
     if (applyExteriorLight) {
-        float nDotL = clamp(dot(normalizedN, -exteriorDirectColorDir.xyz), 0.0, 1.0);
-        float nDotUp = dot(normalizedN, vec3(0.0, 0.0, 1.0));
-        vec3 adjAmbient = exteriorAmbientColor.rgb + precomputedLight;
-        vec3 adjHorizontal = exteriorAmbientColor.rgb + precomputedLight;
-        vec3 adjGround = exteriorAmbientColor.rgb + precomputedLight;
-        if (nDotUp >= 0.0) {
-          currentColor = mix(adjHorizontal, adjAmbient, vec3(nDotUp));
-        } else {
-          currentColor = mix(adjHorizontal, adjGround, vec3(-nDotUp));
-        }
-        vec3 skyColor = (currentColor * 1.10000002);
-        vec3 groundColor = (currentColor * 0.699999988);
-        lDiffuse = exteriorDirectColor.xyz * nDotL;
-        currentColor = mix(groundColor, skyColor, vec3((0.5 + (0.5 * nDotL))));
+      float nDotL = saturate(dot(normalizedN, -exteriorDirectColorDir.xyz));
+      currentColor = exteriorAmbientColor.rgb + precomputedLight;
+      vec3 skyColor = currentColor * 1.1f;
+      vec3 groundColor = currentColor * 0.7f;
+      lDiffuse = exteriorDirectColor.xyz * nDotL;
+      currentColor = mix(groundColor, skyColor, nDotL * 0.5 + 0.5); // wrapped lighting
     }
-    if (applyInteriorLight) {
-        float nDotL = clamp(dot(normalizedN, -interiorSunDir.xyz), 0.0, 1.0);
-        vec3 lDiffuseInterior = interiorDirectColor.xyz * nDotL;
-        vec3 interiorAmbient = interiorAmbientColor.xyz + precomputedLight;
 
-        if (applyExteriorLight) {
-            lDiffuse = mix(lDiffuseInterior, lDiffuse, interiorExteriorBlend);
-            currentColor = mix(interiorAmbient, currentColor, interiorExteriorBlend);
-        } else {
-            lDiffuse = lDiffuseInterior;
-            currentColor = interiorAmbient;
-        }
+    if (applyInteriorLight) {
+      float nDotL = saturate(dot(normalizedN, -interiorSunDir.xyz));
+      vec3 lDiffuseInterior = interiorDirectColor.xyz * nDotL;
+      vec3 interiorAmbient = interiorAmbientColor.xyz + precomputedLight;
+
+      if (applyExteriorLight) {
+        lDiffuse = mix(lDiffuseInterior, lDiffuse, interiorExteriorBlend);
+        currentColor = mix(interiorAmbient, currentColor, interiorExteriorBlend);
+      } else {
+        lDiffuse = lDiffuseInterior;
+        currentColor = interiorAmbient;
+      }
     }
 
     vec3 gammaDiffTerm = diffuseColor * (currentColor + lDiffuse);
