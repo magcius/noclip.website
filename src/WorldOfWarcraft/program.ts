@@ -257,7 +257,8 @@ layout(std140) uniform ub_ModelParams {
 
 layout(std140) uniform ub_BatchParams {
     vec4 shaderParams; // vertexShader, pixelShader, _, _
-    vec4 materialParams; // blendMode, applyInteriorLight, applyExteriorLight, _
+    vec4 materialParams; // blendMode, applyInteriorLight, applyExteriorLight, unlit
+    vec4 moreMaterialParams; // unfogged, exterior_light, sidn, window
     vec4 interiorAmbientColor; // rgb, _
     vec4 interiorDirectColor; // rgb, _
 };
@@ -508,29 +509,41 @@ void mainPS() {
 
     bool applyInteriorLight = int(materialParams.y) > 0;
     bool applyExteriorLight = int(materialParams.z) > 0;
-    finalColor = vec4(
-        calcLight(
-            matDiffuse,
-            v_Normal,
-            interiorAmbientColor,
-            interiorDirectColor,
+    bool unlit = int(materialParams.w) > 0;
+    bool unfogged = int(moreMaterialParams.r) > 0;
+    bool exteriorLight = int(moreMaterialParams.g) > 0;
+    bool sidn = int(moreMaterialParams.b) > 0;
+    bool window = int(moreMaterialParams.a) > 0;
 
-            // FIXME: this should be v_Color.a, but adding interior/exterior
-            // blending results in too-bright doorways
-            0.0,
+    if (!unlit) {
+      finalColor = vec4(
+          calcLight(
+              matDiffuse,
+              v_Normal,
+              interiorAmbientColor,
+              interiorDirectColor,
 
-            applyInteriorLight,
-            applyExteriorLight,
-            vec3(0.0) /*accumLight*/,
-            v_Color0.rgb,
-            spec,
-            emissive,
-            0.0
-        ),
-        finalOpacity
-    );
+              // FIXME: this should be v_Color.a, but adding interior/exterior
+              // blending results in too-bright doorways
+              0.0,
 
-    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+              applyInteriorLight,
+              applyExteriorLight,
+              vec3(0.0) /*accumLight*/,
+              v_Color0.rgb,
+              spec,
+              emissive,
+              0.0
+          ),
+          finalOpacity
+      );
+    } else {
+      finalColor = vec4(matDiffuse, finalOpacity);
+    }
+
+    if (!unfogged) {
+      finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+    }
 
     gl_FragColor = finalColor;
 }
@@ -1203,7 +1216,9 @@ void mainPS() {
       finalColor = vec4(matDiffuse.rgb, finalOpacity);
     }
 
-   finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+   if (materialParams.g == 0.0) { // unfogged
+    finalColor.rgb = calcFog(finalColor.rgb, v_Position.xyz);
+   }
     
    gl_FragColor = finalColor;
 }
