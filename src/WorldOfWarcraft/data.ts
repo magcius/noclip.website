@@ -567,7 +567,7 @@ export class BspTree {
   }
 
   public query(pos: ReadonlyVec3, nodes: WowWmoBspNode[], i = 0) {
-    if (i < 0) {
+    if (i < 0 || this.nodes.length === 0) {
       return undefined;
     }
     assert(i < this.nodes.length);
