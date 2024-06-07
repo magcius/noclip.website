@@ -765,7 +765,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
+  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number, public adtRadius = 2) {
     this.id = `${name}-${fileId}`;
   }
 
@@ -779,7 +779,7 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], 2, cache, this.lightdbMapId);
+    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], this.adtRadius, cache, this.lightdbMapId);
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
@@ -970,9 +970,9 @@ const wotlkSceneDescs = [
     new WdtSceneDesc("Arena: The Ring of Valor", 789925, 618),
 
     "Northrend",
-    new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571), // ;ShareData=ALNpLUMl[fUmuX3UYqnMW2ql}R4hV7UmmUm90u3nV_bgZ90W0UUS*hxUDU^zWq
-    new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 30, 20, 571), // ;ShareData=ADJ:h9j,(-UK7!XUV_*yW3;vSRc:s=Ud}FF9Vc:JV@ha+96V4q9S9pX91s,6Wq
-    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571), // ;ShareData=AawT/91&Zu8)UL$9xotfW9D7bR4TOAUbA669X9LVVeNR0Uq]M89SvGH9o}m6Wq
+    new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
+    new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 30, 20, 571),
+    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {
