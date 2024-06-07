@@ -765,7 +765,7 @@ class WdtSceneDesc implements Viewer.SceneDesc {
 class ContinentSceneDesc implements Viewer.SceneDesc {
   public id: string;
 
-  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number) {
+  constructor(public name: string, public fileId: number, public startX: number, public startY: number, public lightdbMapId: number, public adtRadius = 2) {
     this.id = `${name}-${fileId}`;
   }
 
@@ -779,7 +779,7 @@ class ContinentSceneDesc implements Viewer.SceneDesc {
     });
     const renderHelper = new GfxRenderHelper(device);
     rust.init_panic_hook();
-    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], 2, cache, this.lightdbMapId);
+    const wdt = new LazyWorldData(this.fileId, [this.startX, this.startY], this.adtRadius, cache, this.lightdbMapId);
     console.time('loading wdt')
     await wdt.load();
     console.timeEnd('loading wdt')
@@ -970,7 +970,9 @@ const wotlkSceneDescs = [
     new WdtSceneDesc("Arena: The Ring of Valor", 789925, 618),
 
     "Northrend",
-    new ContinentSceneDesc("???", 822688, 31, 28, 571),
+    new ContinentSceneDesc("Icecrown Citadel, Icecrown", 822688, 27, 20, 571),
+    new ContinentSceneDesc("Dalaran, Crystalsong Forest", 822688, 30, 20, 571),
+    new ContinentSceneDesc("Wyrmrest Temple, Dragonblight", 822688, 31, 24, 571),
 ];
 
 export const vanillaSceneGroup: Viewer.SceneGroup = {

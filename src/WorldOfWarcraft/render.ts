@@ -278,7 +278,7 @@ export class WmoRenderer {
           const batch = this.batches[i][j];
           if (!batch.visible) continue;
           const renderInst = renderInstManager.newRenderInst();
-          let offset = renderInst.allocateUniformBuffer(WmoProgram.ub_BatchParams, 4 * 4);
+          let offset = renderInst.allocateUniformBuffer(WmoProgram.ub_BatchParams, 5 * 4);
           const uniformBuf = renderInst.mapUniformBufferF32(WmoProgram.ub_BatchParams);
           offset += fillVec4(uniformBuf, offset,
             batch.vertexShader,
@@ -290,7 +290,13 @@ export class WmoRenderer {
             batch.material.blend_mode,
             applyInteriorLight ? 1 : 0,
             applyExteriorLight ? 1 : 0,
-            0
+            batch.materialFlags.unlit ? 1 : 0,
+          );
+          offset += fillVec4(uniformBuf, offset,
+            batch.materialFlags.unfogged ? 1 : 0,
+            batch.materialFlags.exterior_light ? 1 : 0,
+            batch.materialFlags.sidn ? 1 : 0,
+            batch.materialFlags.window ? 1 : 0,
           );
           offset += fillVec4v(uniformBuf, offset, ambientColor);
           offset += fillVec4v(uniformBuf, offset, [0, 0, 0, 0]);

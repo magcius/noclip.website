@@ -192,25 +192,8 @@ impl Wmo {
         refs
     }
 
-    pub fn get_doodad_set(&self, mut doodad_set_id: u16) -> Vec<DoodadDef> {
-        let mut doodads = self.get_default_doodad_set();
-        if doodad_set_id as usize >= self.doodad_sets.len() {
-            doodad_set_id = 0;
-        }
-        if doodad_set_id != 0 {
-            let set = &self.doodad_sets[doodad_set_id as usize];
-            let start = set.start_index as usize;
-            let end = start + set.count as usize;
-            doodads.extend(self.doodad_defs[start..end].to_vec());
-        }
-        doodads
-    }
-
-    pub fn get_default_doodad_set(&self) -> Vec<DoodadDef> {
-        let default_set = &self.doodad_sets[0];
-        let start = default_set.start_index as usize;
-        let end = start + default_set.count as usize;
-        self.doodad_defs[start..end].to_vec()
+    pub fn get_doodad_defs(&self) -> Vec<DoodadDef> {
+        self.doodad_defs.clone()
     }
 }
 
@@ -310,7 +293,6 @@ impl WmoGroup {
             }
         }
 
-        assert!(num_uv_bufs > 0);
         let mut maybe_liquids: Option<Vec<WmoLiquid>> = None;
         if !liquids.is_empty() {
             maybe_liquids = Some(liquids);

@@ -567,7 +567,7 @@ export class BspTree {
   }
 
   public query(pos: ReadonlyVec3, nodes: WowWmoBspNode[], i = 0) {
-    if (i < 0) {
+    if (i < 0 || this.nodes.length === 0) {
       return undefined;
     }
     assert(i < this.nodes.length);
@@ -1505,29 +1505,27 @@ export class WmoDefinition {
       this.liquidVisibility.push(true);
     }
 
-    // keep track of which doodads belong in which group for culling purposes
-    const doodadRefs = wmo.wmo.get_doodad_set_refs(this.doodadSet);
+    // filter out doodads not present in the current doodadSet, and keep track
+    // of which doodads belong in which group
+    const doodadSetRefs = wmo.wmo.get_doodad_set_refs(this.doodadSet);
     for (let group of wmo.groups) {
       for (let ref of group.doodadRefs) {
-        const index = doodadRefs.indexOf(ref);
-        if (index !== -1) {
-          this.groupIdToDoodadIndices.append(group.fileId, index);
-          this.doodadIndexToGroupIds.append(index, group.fileId);
+        if (doodadSetRefs.includes(ref)) {
+          this.groupIdToDoodadIndices.append(group.fileId, ref);
+          this.doodadIndexToGroupIds.append(ref, group.fileId);
         }
       }
     }
 
-    const doodads = wmo.wmo.get_doodad_set(this.doodadSet);
+    const doodads = wmo.wmo.get_doodad_defs();
     if (doodads) {
-      for (let i=0; i<doodads.length; i++) {
-        const wmoDoodad = doodads[i];
+      for (const ref of doodadSetRefs) {
+        const wmoDoodad = doodads[ref];
         if (wmoDoodad.name_index === -1) {
           console.warn('skipping WMO doodad w/ name_index === -1');
           this.doodads.push(undefined);
           continue;
         }
-        const groupIds = this.doodadIndexToGroupIds.get(i)!;
-        const group = wmo.getGroup(groupIds[0])!;
         const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
         const modelData = wmo.models.get(doodad.modelId)!;
         doodad.setBoundingBoxFromModel(modelData);
@@ -1535,14 +1533,29 @@ export class WmoDefinition {
         doodad.worldAABB.centerPoint(p);
         vec3.transformMat4(p, p, this.invModelMatrix);
 
-        let bspAmbientColor: vec4 | undefined = undefined;
-        for (const groupId of groupIds) {
-          const groupCandidate = wmo.getGroup(groupId)!;
-          bspAmbientColor = groupCandidate.getVertexColorForModelSpacePoint(p);
-          if (bspAmbientColor !== undefined) {
-            break;
+        // for some reason, the same doodad can exist in multiple groups. if
+        // that's the case, select the closest group (by AABB centerpoint) for
+        // lighting purposes
+        const groupIds = this.doodadIndexToGroupIds.get(ref)!;
+        let group: WmoGroupData;
+        if (groupIds.length > 1) {
+          let closestGroupId;
+          let closestDist = Infinity;
+          for (let i=0; i<groupIds.length; i++) {
+            const groupId = groupIds[i];
+            const groupAABB = this.wmo.groupDefAABBs.get(groupId)!;
+            const groupDist = groupAABB.distanceVec3(p);
+            if (groupDist < closestDist) {
+              closestDist = groupDist;
+              closestGroupId = groupId;
+            }
           }
+          group = wmo.getGroup(closestGroupId!)!;
+        } else {
+          group = wmo.getGroup(groupIds[0])!;
         }
+
+        let bspAmbientColor = group.getVertexColorForModelSpacePoint(p);
 
         if (group.flags.interior && !group.flags.exterior_lit) {
           const groupAmbientColor = this.groupAmbientColors.get(group.fileId)!;
