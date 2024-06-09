@@ -11,9 +11,9 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
-import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData } from "./data.js";
+import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, getSkyboxDoodad } from "./data.js";
 import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
-import { DebugWmoPortalProgram, LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
+import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
 import { MAP_SIZE, MapArray, View } from "./scenes.js";
 import { TextureCache } from "./tex.js";
 
@@ -155,10 +155,16 @@ export class ModelRenderer {
         } else {
           offs += fillVec4(mapped, offs, 0);
         }
+        let intExtBlendOrSkyboxBlend
+        if (doodad.isSkybox) {
+          intExtBlendOrSkyboxBlend = doodad.skyboxBlend;
+        } else {
+          intExtBlendOrSkyboxBlend = doodad.applyInteriorLighting ? 1.0 : 0.0;
+        }
         offs += fillVec4(mapped, offs,
           doodad.applyInteriorLighting ? 1.0 : 0.0,
           doodad.applyExteriorLighting ? 1.0 : 0.0,
-          doodad.applyInteriorLighting ? 1.0 : 0.0,
+          intExtBlendOrSkyboxBlend,
           doodad.isSkybox ? 1.0 : 0.0
         );
       }
@@ -198,7 +204,10 @@ export class ModelRenderer {
     }
   }
 
-  public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager) {
+  public prepareToRenderSkybox(renderInstManager: GfxRenderInstManager, flags: number, weight: number) {
+    let doodad = getSkyboxDoodad();
+    doodad.skyboxBlend = weight;
+    this.prepareToRenderModel(renderInstManager, [doodad])
   }
   
   public destroy(device: GfxDevice): void {

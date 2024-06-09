@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use deku::prelude::*;
 use super::common::*;
 use deku::bitvec::{BitVec, BitSlice, Msb0};
@@ -456,8 +458,7 @@ pub struct LightResult {
     pub shadow_opacity: Vec3,
     pub fog_end: f32,
     pub fog_scaler: f32,
-    pub skybox_filename: Option<String>,
-    pub skybox_flags: Option<u16>,
+    skyboxes: HashMap<String, (u16, f32)>,
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -503,8 +504,29 @@ fn u32_to_color(color: u32) -> Vec3 {
     }
 }
 
+#[wasm_bindgen(js_class = "WowLightResult")]
+impl LightResult {
+    pub fn get_skyboxes(&self) -> Vec<SkyboxMetadata> {
+        let mut result = Vec::new();
+        for (name, (flags, weight)) in self.skyboxes.iter() {
+            result.push(SkyboxMetadata {
+                name: name.clone(),
+                flags: *flags,
+                weight: *weight,
+            });
+        }
+        // sort lightboxes by weight, highest to lowest
+        result.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        result
+    }
+}
+
 impl LightResult {
     fn new(data: &LightDataRecord, params: &LightParamsRecord, maybe_skybox: Option<&LightSkyboxRecord>) -> Self {
+        let mut skyboxes = HashMap::new();
+        if let Some(skybox) = maybe_skybox {
+            skyboxes.insert(skybox.name.clone(), (skybox.flags, 1.0));
+        }
         LightResult {
             glow: params.glow,
             water_shallow_alpha: params.water_shallow_alpha,
@@ -532,8 +554,7 @@ impl LightResult {
             shadow_opacity: u32_to_color(data.shadow_opacity),
             fog_end: data.fog_end,
             fog_scaler: data.fog_scaler,
-            skybox_filename: maybe_skybox.map(|skybox| skybox.name.clone()),
-            skybox_flags: maybe_skybox.map(|skybox| skybox.flags),
+            skyboxes,
         }
     }
 
@@ -563,11 +584,28 @@ impl LightResult {
         self.shadow_opacity += other.shadow_opacity * t;
         self.fog_end += other.fog_end * t;
         self.fog_scaler += other.fog_scaler * t;
+
+        for (name, (flags, value)) in other.skyboxes.iter() {
+            if let Some(existing_entry) = self.skyboxes.get_mut(name) {
+                existing_entry.1 += value * t;
+            } else {
+                self.skyboxes.insert(name.clone(), (*flags, value * t));
+            }
+        }
     }
 }
 
 impl Lerp for LightResult {
     fn lerp(self, other: Self, t: f32) -> Self {
+        let mut skyboxes = self.skyboxes.clone();
+        for (name, (flags, value)) in other.skyboxes.iter() {
+            if let Some(existing_entry) = skyboxes.get_mut(name) {
+                existing_entry.1.lerp(*value, t);
+            } else {
+                skyboxes.insert(name.clone(), (*flags, value * t));
+            }
+        }
+
         LightResult {
             glow: self.glow.lerp(other.glow, t),
             water_shallow_alpha: self.water_shallow_alpha.lerp(other.water_shallow_alpha, t),
@@ -594,10 +632,8 @@ impl Lerp for LightResult {
             shadow_opacity: self.shadow_opacity.lerp(other.shadow_opacity, t),
             fog_end: self.fog_end.lerp(other.fog_end, t),
             fog_scaler: self.fog_scaler.lerp(other.fog_scaler, t),
-
-            skybox_filename: self.skybox_filename,
-            skybox_flags: self.skybox_flags,
             highlight_sky: self.highlight_sky,
+            skyboxes
         }
     }
 }
@@ -847,6 +883,38 @@ impl Database {
 
         result
     }
+
+    pub fn get_all_skyboxes(&self, map_id: u16) -> Vec<SkyboxMetadata> {
+        let mut names: HashSet<&str> = HashSet::new();
+        let mut result = Vec::new();
+        for light in &self.lights.records {
+            if light.map_id == map_id {
+                let id = light.light_param_ids[0];
+                assert!(id != 0);
+                let Some(light_param) = self.light_params.get_record(id as u32) else {
+                    continue;
+                };
+                if let Some(skybox) = self.light_skyboxes.get_record(light_param.skybox_id) {
+                    if !names.contains(skybox.name.as_str()) {
+                        result.push(SkyboxMetadata {
+                            name: skybox.name.clone(),
+                            flags: skybox.flags,
+                            weight: 1.0,
+                        });
+                        names.insert(&skybox.name);
+                    }
+                }
+            }
+        }
+        result
+    }
+}
+
+#[wasm_bindgen(js_name = "WowSkyboxMetadata", getter_with_clone)]
+pub struct SkyboxMetadata {
+    pub name: String,
+    pub flags: u16,
+    pub weight: f32,
 }
 
 #[cfg(test)]
@@ -910,7 +978,7 @@ mod test {
     }
 
     #[test]
-    fn test_lightbox() {
+    fn test_skybox() {
         let d5 = std::fs::read("../data/wotlk/dbfilesclient/lightskybox.db2").unwrap();
         let db: DatabaseTable<LightSkyboxRecord> = DatabaseTable::new(&d5).unwrap();
         dbg!(&db.records[0..4]);

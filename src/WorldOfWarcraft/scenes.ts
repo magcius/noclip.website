@@ -1,6 +1,5 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { CameraController } from '../Camera.js';
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from '../DebugJunk.js';
 import { AABB, Frustum } from '../Geometry.js';
 import { getMatrixTranslation, lerp, projectionMatrixForFrustum } from "../MathHelpers.js";
 import { SceneContext } from '../SceneBase.js';
@@ -12,11 +11,12 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
-import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
+import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
 import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
 import { drawBspNodes } from './debug.js';
+import { assert } from '../util.js';
 
 export const MAP_SIZE = 17066;
 
@@ -187,7 +187,7 @@ export class WdtScene implements Viewer.SceneGfx {
   private adtWaterRenderers: Map<number, WaterRenderer> = new Map();
   private wmoWaterRenderers: Map<number, WaterRenderer> = new Map();
   private modelRenderers: Map<number, ModelRenderer> = new Map();
-  private skyboxModelRenderers: Map<number, ModelRenderer> = new Map();
+  private skyboxModelRenderers: Map<string, ModelRenderer> = new Map();
   private wmoRenderers: Map<number, WmoRenderer> = new Map();
   private skyboxRenderer: SkyboxRenderer;
   private loadingAdtRenderer: LoadingAdtRenderer;
@@ -210,7 +210,6 @@ export class WdtScene implements Viewer.SceneGfx {
   private textureCache: TextureCache;
   public enableProgressiveLoading = false;
   public currentAdtCoords: [number, number] = [0, 0];
-  public activeSkyboxModelId: number | undefined;
   public loadingAdts: [number, number][] = [];
 
   public debug = false;
@@ -284,16 +283,16 @@ export class WdtScene implements Viewer.SceneGfx {
         this.modelIdToDoodads.append(doodad.modelId, doodad);
       }
     }
-    if (adt.skyboxModelData !== null) {
-      if (!this.skyboxModelRenderers.has(adt.skyboxModelData.fileId)) {
-        const model = adt.skyboxModelData;
-        this.skyboxModelRenderers.set(model.fileId, new ModelRenderer(
+    for (const skybox of adt.skyboxes) {
+      assert(skybox.modelData !== undefined);
+      assert(skybox.modelFileId !== undefined);
+      if (!this.skyboxModelRenderers.has(skybox.filename)) {
+        this.skyboxModelRenderers.set(skybox.filename, new ModelRenderer(
           this.device,
-          model,
+          skybox.modelData,
           this.renderHelper,
           this.textureCache
         ));
-        this.modelIdToDoodads.append(model.fileId, DoodadData.skyboxDoodad());
       }
     }
   }
@@ -370,7 +369,6 @@ export class WdtScene implements Viewer.SceneGfx {
     if (this.world.globalWmo) {
       this.cullWmoDef(this.world.globalWmoDef!, this.world.globalWmo);
     } else {
-      this.activeSkyboxModelId = undefined;
       const [worldCamera, worldFrustum] = this.getCameraAndFrustum();
       // Do a first pass and get candidate WMOs the camera's inside of,
       // disable WMOs not in the frustum, and determine if any ADTs are
@@ -395,14 +393,11 @@ export class WdtScene implements Viewer.SceneGfx {
 
       for (let adt of this.world.adts) {
         if (exteriorVisible) {
-          if (adt.skyboxModelData !== null) {
+          if (adt.skyboxes.length > 0) {
             let originalMinZ = adt.worldSpaceAABB.minZ;
             let originalMaxZ = adt.worldSpaceAABB.maxZ;
             adt.worldSpaceAABB.minZ = -Infinity;
             adt.worldSpaceAABB.maxZ = Infinity;
-            if (adt.worldSpaceAABB.containsPoint(worldCamera)) {
-              this.activeSkyboxModelId = adt.skyboxModelData.fileId;
-            }
             adt.worldSpaceAABB.minZ = originalMinZ;
             adt.worldSpaceAABB.maxZ = originalMaxZ;
           }
@@ -465,7 +460,6 @@ export class WdtScene implements Viewer.SceneGfx {
           }
         }
         if (this.debug) {
-          drawWorldSpaceAABB(getDebugOverlayCanvas2D(), this.mainView.clipFromWorldMatrix, group.scratchAABB, def.modelMatrix);
           drawBspNodes(group, this.modelCamera, def.modelMatrix);
         }
       }
@@ -610,13 +604,21 @@ export class WdtScene implements Viewer.SceneGfx {
     const visibleDoodadUniqueIds = new Set();
     template.setBindingLayouts(ModelProgram.bindingLayouts);
     template.setGfxProgram(this.modelProgram);
-    if (this.activeSkyboxModelId !== undefined) {
-      renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
-      const renderer = this.skyboxModelRenderers.get(this.activeSkyboxModelId)!;
+    renderInstManager.setCurrentRenderInstList(this.renderInstListSky);
+    const skyboxes = lightingData.get_skyboxes();
+    for (let skybox of skyboxes) {
+      const name = skybox.name;
+      const renderer = this.skyboxModelRenderers.get(name);
+      if (!renderer) {
+        console.warn(`couldn't find skybox renderer for "${name}"`);
+        continue;
+      }
       renderer.update(this.mainView);
-      renderer.prepareToRenderModel(renderInstManager, this.modelIdToDoodads.get(this.activeSkyboxModelId));
-      renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+      renderer.prepareToRenderSkybox(renderInstManager, skybox.flags, skybox.weight);
+      skybox.free();
     }
+    renderInstManager.setCurrentRenderInstList(this.renderInstListMain);
+
     for (let [modelId, renderer] of this.modelRenderers.entries()) {
       const doodads = this.modelIdToDoodads.get(modelId)!
         .filter(doodad => doodad.visible)
@@ -638,6 +640,7 @@ export class WdtScene implements Viewer.SceneGfx {
     renderInstManager.popTemplateRenderInst();
     this.renderHelper.prepareToRender();
     this.updateCullingState();
+    lightingData.free();
   }
 
   private updateCurrentAdt() {

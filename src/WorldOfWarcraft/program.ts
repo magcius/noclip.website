@@ -170,7 +170,6 @@ ${BaseProgram.utils}
       0,
       0
     );
-    lightingData.free();
   }
 }
 
@@ -836,7 +835,7 @@ struct DoodadInstance {
     Mat4x4 normalMat;
     vec4 interiorAmbientColor;
     vec4 interiorDirectColor;
-    vec4 lightingParams; // [applyInteriorLighting, applyExteriorLighting, interiorExteriorBlend, isSkybox]
+    vec4 lightingParams; // [applyInteriorLighting, applyExteriorLighting, interiorExteriorBlend/skyboxBlend, isSkybox]
 };
 
 struct M2Light {
@@ -1193,7 +1192,7 @@ void mainPS() {
     bool isSkybox = params.lightingParams.w > 0.0;
 
     if (isSkybox) {
-      gl_FragColor = vec4(matDiffuse.rgb, finalOpacity);
+      gl_FragColor = vec4(matDiffuse.rgb, finalOpacity * interiorExteriorBlend);
       return;
     }
 
