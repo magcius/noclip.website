@@ -246,8 +246,7 @@ export class WdtScene implements Viewer.SceneGfx {
 
   public setupWmoDef(def: WmoDefinition) {
     this.wmoIdToDefs.append(def.wmoId, def);
-    for (let doodad of def.doodads) {
-      if (doodad === undefined) continue;
+    for (let doodad of def.doodadIndexToDoodad.values()) {
       this.modelIdToDoodads.append(doodad.modelId, doodad);
     }
   }

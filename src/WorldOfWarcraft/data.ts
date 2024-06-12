@@ -1452,7 +1452,6 @@ export class WmoDefinition {
   public worldAABB: AABB = new AABB();
 
   public visible = true;
-  public doodads: (DoodadData | undefined)[] = [];
   public groupIdToVisibility: Map<number, boolean> = new Map();
   public groupIdToDoodadIndices: MapArray<number, number> = new MapArray();
   public groupAmbientColors: Map<number, vec4> = new Map();
@@ -1460,6 +1459,7 @@ export class WmoDefinition {
   public liquidAABBs: AABB[] = [];
   public liquidVisibility: boolean[] = [];
   public doodadIndexToGroupIds: MapArray<number, number> = new MapArray();
+  public doodadIndexToDoodad: Map<number, DoodadData> = new Map();
 
   private scratchVec3 = vec3.create();
 
@@ -1548,7 +1548,6 @@ export class WmoDefinition {
         const wmoDoodad = doodads[ref];
         if (wmoDoodad.name_index === -1) {
           console.warn('skipping WMO doodad w/ name_index === -1');
-          this.doodads.push(undefined);
           continue;
         }
         const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
@@ -1602,7 +1601,7 @@ export class WmoDefinition {
           doodad.applyExteriorLighting = true;
         }
 
-        this.doodads.push(doodad);
+        this.doodadIndexToDoodad.set(ref, doodad);
       }
     }
 
@@ -1620,9 +1619,8 @@ export class WmoDefinition {
     this.groupIdToVisibility.set(groupId, visible);
     if (this.groupIdToDoodadIndices.has(groupId)) {
       for (let index of this.groupIdToDoodadIndices.get(groupId)) {
-        const doodad = this.doodads[index];
-        if (doodad !== undefined)
-          doodad.setVisible(visible);
+        const doodad = this.doodadIndexToDoodad.get(index)!;
+        doodad.setVisible(visible);
       }
     }
     if (this.groupIdToLiquidIndices.has(groupId)) {
