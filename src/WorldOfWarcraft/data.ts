@@ -1,5 +1,5 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, Vec3NegZ, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
@@ -41,6 +41,10 @@ export class Database {
       liquidTypes,
       lightSkyboxData
     );
+  }
+
+  public getAllSkyboxes(mapId: number): WowSkyboxMetadata[] {
+    return this.inner.get_all_skyboxes(mapId);
   }
 
   public getGlobalLightingData(lightdbMapId: number, coords: ReadonlyVec3, time: number): WowLightResult {
@@ -276,6 +280,27 @@ function convertWowAABB(aabb: WowAABBox): AABB {
     min.free();
     max.free();
     return result;
+}
+
+export class SkyboxData {
+  public modelKey: string;
+  public modelFileId: number | undefined;
+  public modelData: ModelData | undefined;
+
+  constructor(public filename: string, public flags: number) {
+    this.modelKey = filename;
+    if (this.filename.endsWith('.mdx')) {
+      this.modelKey = this.modelKey.replace('.mdx', '.m2');
+    }
+  }
+
+  public async load(cache: WowCache) {
+    this.modelFileId = cache.getFileDataId(this.modelKey);
+    if (this.modelFileId === undefined) {
+      throw new Error(`couldn't find fileDataId for skybox "${this.modelKey}"`);
+    }
+    this.modelData = await cache.loadModel(this.modelFileId);
+  }
 }
 
 export class ModelData {
@@ -1427,7 +1452,6 @@ export class WmoDefinition {
   public worldAABB: AABB = new AABB();
 
   public visible = true;
-  public doodads: (DoodadData | undefined)[] = [];
   public groupIdToVisibility: Map<number, boolean> = new Map();
   public groupIdToDoodadIndices: MapArray<number, number> = new MapArray();
   public groupAmbientColors: Map<number, vec4> = new Map();
@@ -1435,6 +1459,7 @@ export class WmoDefinition {
   public liquidAABBs: AABB[] = [];
   public liquidVisibility: boolean[] = [];
   public doodadIndexToGroupIds: MapArray<number, number> = new MapArray();
+  public doodadIndexToDoodad: Map<number, DoodadData> = new Map();
 
   private scratchVec3 = vec3.create();
 
@@ -1523,7 +1548,6 @@ export class WmoDefinition {
         const wmoDoodad = doodads[ref];
         if (wmoDoodad.name_index === -1) {
           console.warn('skipping WMO doodad w/ name_index === -1');
-          this.doodads.push(undefined);
           continue;
         }
         const doodad = DoodadData.fromWmoDoodad(wmoDoodad, wmo.modelIds, this.modelMatrix);
@@ -1577,7 +1601,7 @@ export class WmoDefinition {
           doodad.applyExteriorLighting = true;
         }
 
-        this.doodads.push(doodad);
+        this.doodadIndexToDoodad.set(ref, doodad);
       }
     }
 
@@ -1595,9 +1619,8 @@ export class WmoDefinition {
     this.groupIdToVisibility.set(groupId, visible);
     if (this.groupIdToDoodadIndices.has(groupId)) {
       for (let index of this.groupIdToDoodadIndices.get(groupId)) {
-        const doodad = this.doodads[index];
-        if (doodad !== undefined)
-          doodad.setVisible(visible);
+        const doodad = this.doodadIndexToDoodad.get(index)!;
+        doodad.setVisible(visible);
       }
     }
     if (this.groupIdToLiquidIndices.has(groupId)) {
@@ -1717,8 +1740,7 @@ export class AdtData {
   public liquidTypes: Map<number, LiquidType> = new Map();
   public insideWmoCandidates: WmoDefinition[] = [];
   public visibleWmoCandidates: WmoDefinition[] = [];
-  public skyboxModelData: ModelData | null = null;
-  public skyboxFlags: number | undefined;
+  public skyboxes: SkyboxData[] = [];
   private vertexBuffer: Float32Array;
   private indexBuffer: Uint16Array;
   private inner: WowAdt | null = null;
@@ -1826,18 +1848,12 @@ export class AdtData {
 
     let adtCenter = vec3.create();
     this.worldSpaceAABB.centerPoint(adtCenter);
-    const lightingResult = cache.db.getGlobalLightingData(this.lightdbMapId, adtCenter, 0);
-    if (lightingResult.skybox_filename !== undefined) {
-      let filename = lightingResult.skybox_filename;
-      if (filename.endsWith('.mdx')) {
-        filename = filename.replace('.mdx', '.m2');
-      }
-      const modelFileId = cache.getFileDataId(filename);
-      if (modelFileId === undefined) {
-        throw new Error(`couldn't find fileDataId for skybox "${lightingResult.skybox_filename}"`);
-      }
-      this.skyboxModelData = await cache.loadModel(modelFileId);
-      this.skyboxFlags = lightingResult.skybox_flags;
+    
+    for (const metadata of cache.db.getAllSkyboxes(this.lightdbMapId)) {
+      const skybox = new SkyboxData(metadata.name, metadata.flags);
+      await skybox.load(cache)
+      this.skyboxes.push(skybox);
+      metadata.free();
     }
 
     this.inner!.free();
@@ -1906,8 +1922,8 @@ export class DoodadData {
   public ambientColor = vec4.create();
   public applyInteriorLighting = false;
   public applyExteriorLighting = false;
-  public interiorExteriorBlend = 0;
   public isSkybox = false;
+  public skyboxBlend = 0;
 
   constructor(public modelId: number, public modelMatrix: mat4, public color: vec4 | null, public uniqueId: number | undefined = undefined) {
     mat4.mul(this.normalMatrix, this.modelMatrix, placementSpaceFromModelSpace);
@@ -1916,6 +1932,7 @@ export class DoodadData {
     mat4.transpose(this.normalMatrix, this.normalMatrix);
   }
 
+  // Make a fake doodad for skyboxes
   static skyboxDoodad(): DoodadData {
     let modelMatrix = mat4.identity(mat4.create());
     let doodad = new DoodadData(666, modelMatrix, null);
@@ -1980,6 +1997,14 @@ export class DoodadData {
   public setBoundingBoxFromModel(model: ModelData) {
     this.worldAABB.transform(model.modelAABB, this.modelMatrix);
   }
+}
+
+let _SKYBOX_DOODAD: DoodadData | undefined = undefined;
+export function getSkyboxDoodad() {
+  if (_SKYBOX_DOODAD === undefined) {
+    _SKYBOX_DOODAD = DoodadData.skyboxDoodad();
+  }
+  return _SKYBOX_DOODAD;
 }
 
 async function fetchAdt(cache: WowCache, fileIDs: WowMapFileDataIDsLike, lightdbMapId: number): Promise<AdtData> {
