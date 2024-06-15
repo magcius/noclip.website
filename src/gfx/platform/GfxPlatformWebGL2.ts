@@ -501,7 +501,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
-        this._EXT_clip_control = gl.getExtension('EXT_clip_control');
+        // https://github.com/magcius/noclip.website/issues/683
+        // https://issues.chromium.org/issues/347197920
+        // this._EXT_clip_control = gl.getExtension('EXT_clip_control');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
         this._EXT_texture_filter_anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
         this._EXT_texture_norm16 = gl.getExtension('EXT_texture_norm16');
