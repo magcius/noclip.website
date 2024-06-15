@@ -29,10 +29,8 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
 
         const [dBuffer, tBuffer, bgBuffer] = await Promise.all([
-            // The ".blob" names are unfortunate. It's a workaround for Parcel being dumb as a bag of rocks
-            // and not allowing files without extensions to be served... sigh...
-            dataFetcher.fetchData(`${pathBase}/m/${this.id}/d.blob`),
-            dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
+            dataFetcher.fetchData(`${pathBase}/m/${this.id}/d`),
+            dataFetcher.fetchData(`${pathBase}/m/${this.id}/t`),
             dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, { allow404: true }),
         ]);
 
