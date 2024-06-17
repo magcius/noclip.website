@@ -426,16 +426,20 @@ export class ModelData {
   }
 
   public updateAnimation(view: View) {
-    this.animationManager.update_animations(
-      view.deltaTime,
+    this.animationManager.update(view.deltaTime);
+    this.animationManager.update_textures(
       this.textureWeights,
       this.textureTranslations,
       this.textureRotations,
       this.textureScalings,
+    );
+    this.animationManager.update_bones(
       this.boneTranslations,
       this.boneRotations,
       this.boneScalings,
-      this.vertexColors,
+    );
+    this.animationManager.update_vertex_colors(this.vertexColors);
+    this.animationManager.update_lights(
       this.ambientLightColors,
       this.diffuseLightColors,
       this.lightAttenuationStarts,

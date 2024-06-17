@@ -185,75 +185,159 @@ pub struct AnimationManager {
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
 impl AnimationManager {
-    pub fn update_animations(
-        &mut self, delta_time: f64,
-        transparencies: &Float32Array,
-        texture_translations: &Float32Array,
-        texture_rotations: &Float32Array,
-        texture_scalings: &Float32Array,
-        bone_translations: &Float32Array,
-        bone_rotations: &Float32Array,
-        bone_scalings: &Float32Array,
-        colors: &Float32Array,
-        ambient_light_colors: &Float32Array,
-        diffuse_light_colors: &Float32Array,
-        light_attenuation_starts: &Float32Array,
-        light_attenuation_ends: &Float32Array,
-        light_visibilities: &Uint8Array,
-    ) {
-        self.update(delta_time);
-        transparencies.copy_from(&self.calculated_transparencies);
-        for i in 0..self.texture_transforms.len() {
-            let translation_index = i as u32 * 3;
-            let translation = &self.calculated_texture_translations[i];
-            texture_translations.set_index(translation_index, translation.x);
-            texture_translations.set_index(translation_index + 1, translation.y);
-            texture_translations.set_index(translation_index + 2, translation.z);
+    pub fn update(&mut self, delta_time: f64) {
+        self.current_animation.animation_time += delta_time;
 
-            let rotation_index = i as u32 * 4;
-            let rotation = &self.calculated_texture_rotations[i];
-            texture_rotations.set_index(rotation_index, rotation.x);
-            texture_rotations.set_index(rotation_index + 1, rotation.y);
-            texture_rotations.set_index(rotation_index + 2, rotation.z);
-            texture_rotations.set_index(rotation_index + 3, rotation.w);
-
-            let scaling_index = i as u32 * 3;
-            let scaling = &self.calculated_texture_scalings[i];
-            texture_scalings.set_index(scaling_index, scaling.x);
-            texture_scalings.set_index(scaling_index + 1, scaling.y);
-            texture_scalings.set_index(scaling_index + 2, scaling.z);
+        for i in 0..self.global_sequence_times.len() {
+            self.global_sequence_times[i] += delta_time;
+            if self.global_sequence_durations[i] > 0 {
+                self.global_sequence_times[i] %= self.global_sequence_durations[i] as f64;
+            }
         }
-        for i in 0..self.bones.len() {
-            let translation_index = i as u32 * 3;
-            let translation = &self.calculated_bone_translations[i];
-            bone_translations.set_index(translation_index, translation.x);
-            bone_translations.set_index(translation_index + 1, translation.y);
-            bone_translations.set_index(translation_index + 2, translation.z);
 
-            let rotation_index = i as u32 * 4;
-            let rotation = &self.calculated_bone_rotations[i];
-            bone_rotations.set_index(rotation_index, rotation.x);
-            bone_rotations.set_index(rotation_index + 1, rotation.y);
-            bone_rotations.set_index(rotation_index + 2, rotation.z);
-            bone_rotations.set_index(rotation_index + 3, rotation.w);
+        let main_variation_record = &self.sequences[self.current_animation.main_variation_index];
 
-            let scaling_index = i as u32 * 3;
-            let scaling = &self.calculated_bone_scalings[i];
-            bone_scalings.set_index(scaling_index, scaling.x);
-            bone_scalings.set_index(scaling_index + 1, scaling.y);
-            bone_scalings.set_index(scaling_index + 2, scaling.z);
+        // If we don't have a next animation yet, and this animation isn't set
+        // to repeat again, choose the next one
+        let mut sub_anim_record: Option<&M2Sequence> = None;
+        if self.next_animation.animation_index.is_none()
+            && main_variation_record.variation_next > -1
+            && self.current_animation.repeat_times <= 0 {
+
+            let probability = (self.rng.next_f32() * 0x7fff as f32) as u16;
+            let mut calc_prob = 0;
+
+            let mut next_index = self.current_animation.main_variation_index;
+            let mut next_record = &self.sequences[next_index];
+            calc_prob += next_record.frequency;
+            while calc_prob < probability && next_record.variation_next > -1 {
+                next_index = next_record.variation_next as usize;
+                next_record = &self.sequences[next_index];
+
+                if self.current_animation.animation_index != Some(next_index) {
+                    calc_prob += next_record.frequency;
+                }
+            }
+            sub_anim_record = Some(next_record);
+
+            self.next_animation.animation_index = Some(next_index);
+            self.next_animation.animation_time = 0.0;
+            self.next_animation.main_variation_index = self.current_animation.main_variation_index;
+            self.next_animation.repeat_times = self.sequences[next_index].calculate_animation_repeats(&mut self.rng);
+        } else if self.current_animation.repeat_times > 0 {
+            self.next_animation = self.current_animation.clone();
+            self.next_animation.repeat_times -= 1;
         }
-        for i in 0..self.colors.len() {
-            let color_index = i as u32 * 4;
-            let color = &self.calculated_colors[i];
-            colors.set_index(color_index, color.x);
-            colors.set_index(color_index + 1, color.y);
-            colors.set_index(color_index + 2, color.z);
-            colors.set_index(color_index + 3, color.w);
+
+        let current_record = &self.sequences[self.current_animation.animation_index.unwrap()];
+        let current_animation_time_left = current_record.duration as f64 - self.current_animation.animation_time;
+        let mut sub_anim_blend_time = 0.0;
+
+        // if we have a next animation stored, get its blend time
+        if let Some(next_index) = self.next_animation.animation_index {
+            sub_anim_record = Some(&self.sequences[next_index]);
+            sub_anim_blend_time = self.sequences[next_index].blend_time as f64;
         }
+
+        // if it's time to start blending into the next animation, setup an appropriate blend factor
+        if sub_anim_blend_time > 0.0 && current_animation_time_left < sub_anim_blend_time {
+            self.next_animation.animation_time = (sub_anim_blend_time - current_animation_time_left) % sub_anim_record.unwrap().duration as f64;
+            self.blend_factor = (current_animation_time_left / sub_anim_blend_time) as f32;
+        } else {
+            self.blend_factor = 1.0;
+        }
+
+        // if the current animation is done and we have a next animation, swap
+        // them. otherwise, loop the current one
+        if self.current_animation.animation_time >= current_record.duration as f64 {
+            self.current_animation.repeat_times -= 1;
+
+            if let Some(index) = self.next_animation.animation_index {
+                let mut next_index = index;
+                // if the next animation is an alias, look it up
+                while ((self.sequences[next_index].flags & 0x20) == 0) && ((self.sequences[next_index].flags & 0x40) > 0) {
+                    next_index = self.sequences[next_index].alias_next as usize;
+                    if next_index >= self.sequences.len() {
+                        break;
+                    }
+                }
+                self.next_animation.animation_index = Some(next_index);
+
+                self.current_animation = self.next_animation.clone();
+
+                self.next_animation.animation_index = None;
+                self.blend_factor = 1.0;
+            } else if current_record.duration > 0 {
+                self.current_animation.animation_time %= current_record.duration as f64;
+            }
+        }
+
+        let default_color = Vec3::new(1.0);
+        let default_alpha = 0x7fff;
+        self.calculated_colors.clear();
+        for color in &self.colors {
+            let mut rgba = Vec4::new(0.0);
+            let rgb = self.get_current_value_with_blend(&color.color, default_color);
+            rgba.x = rgb.x;
+            rgba.y = rgb.y;
+            rgba.z = rgb.z;
+            rgba.w = self.get_current_value_with_blend(&color.alpha, default_alpha) as f32 / 0x7fff as f32;
+            self.calculated_colors.push(rgba);
+        }
+
+        self.calculated_transparencies.clear();
+        for weight in &self.texture_weights {
+            self.calculated_transparencies.push(self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32);
+        }
+
+        self.calculated_texture_translations.clear();
+        let default_translation = Vec3::new(0.0);
+        self.calculated_texture_rotations.clear();
+        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        self.calculated_texture_scalings.clear();
+        let default_scaling = Vec3::new(1.0);
+        for transform in &self.texture_transforms {
+            self.calculated_texture_translations.push(self.get_current_value_with_blend(&transform.translation, default_translation));
+            self.calculated_texture_rotations.push(self.get_current_value_with_blend(&transform.rotation, default_rotation));
+            self.calculated_texture_scalings.push(self.get_current_value_with_blend(&transform.scaling, default_scaling));
+        }
+
+        self.calculated_bone_translations.clear();
+        let default_translation = Vec3::new(0.0);
+        self.calculated_bone_rotations.clear();
+        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        self.calculated_bone_scalings.clear();
+        let default_scaling = Vec3::new(1.0);
+        for bone in &self.bones {
+            self.calculated_bone_translations.push(self.get_current_value_with_blend(&bone.translation, default_translation));
+            self.calculated_bone_rotations.push(self.get_current_value_with_blend(bone.rotation.as_ref().unwrap(), default_rotation));
+            self.calculated_bone_scalings.push(self.get_current_value_with_blend(&bone.scaling, default_scaling));
+        }
+
+        let default_color = Vec3::new(1.0);
+        let default_intensity = 1.0;
+        self.calculated_light_ambient_colors.clear();
+        self.calculated_light_ambient_intensities.clear();
+        self.calculated_light_diffuse_colors.clear();
+        self.calculated_light_diffuse_intensities.clear();
+        self.calculated_light_attenuation_starts.clear();
+        self.calculated_light_attenuation_ends.clear();
+        self.calculated_light_visibilities.clear();
+        for light in &self.lights {
+            self.calculated_light_ambient_colors.push(self.get_current_value_with_blend(&light.ambient_color, default_color));
+            self.calculated_light_ambient_intensities.push(self.get_current_value_with_blend(&light.ambient_intensity, default_intensity));
+            self.calculated_light_diffuse_colors.push(self.get_current_value_with_blend(&light.diffuse_color, default_color));
+            self.calculated_light_diffuse_intensities.push(self.get_current_value_with_blend(&light.diffuse_intensity, default_intensity));
+            self.calculated_light_attenuation_starts.push(self.get_current_value_with_blend(&light.attenuation_start, 1.0));
+            self.calculated_light_attenuation_ends.push(self.get_current_value_with_blend(&light.attenuation_end, 1.0));
+            self.calculated_light_visibilities.push(self.get_current_value_with_blend(&light.visibility, 0));
+        }
+    }
+
+    pub fn update_lights(&mut self, ambient_light_colors: &Float32Array, diffuse_light_colors: &Float32Array, light_attenuation_starts: &Float32Array, light_attenuation_ends: &Float32Array, light_visibilities: &Uint8Array) {
         for i in 0..self.lights.len() {
             let color_index = i as u32 * 4;
-
+    
             let ambient_color = self.calculated_light_ambient_colors[i];
             let ambient_intensity = self.calculated_light_ambient_intensities[i];
             ambient_light_colors.set_index(color_index, ambient_color.x);
@@ -272,7 +356,65 @@ impl AnimationManager {
         light_attenuation_ends.copy_from(&self.calculated_light_attenuation_ends);
         light_visibilities.copy_from(&self.calculated_light_visibilities);
     }
-
+    
+    pub fn update_vertex_colors(&mut self, colors: &Float32Array) {
+        for i in 0..self.colors.len() {
+            let color_index = i as u32 * 4;
+            let color = &self.calculated_colors[i];
+            colors.set_index(color_index, color.x);
+            colors.set_index(color_index + 1, color.y);
+            colors.set_index(color_index + 2, color.z);
+            colors.set_index(color_index + 3, color.w);
+        }
+    }
+    
+    pub fn update_bones(&mut self, bone_translations: &Float32Array, bone_rotations: &Float32Array, bone_scalings: &Float32Array) {
+        for i in 0..self.bones.len() {
+            let translation_index = i as u32 * 3;
+            let translation = &self.calculated_bone_translations[i];
+            bone_translations.set_index(translation_index, translation.x);
+            bone_translations.set_index(translation_index + 1, translation.y);
+            bone_translations.set_index(translation_index + 2, translation.z);
+    
+            let rotation_index = i as u32 * 4;
+            let rotation = &self.calculated_bone_rotations[i];
+            bone_rotations.set_index(rotation_index, rotation.x);
+            bone_rotations.set_index(rotation_index + 1, rotation.y);
+            bone_rotations.set_index(rotation_index + 2, rotation.z);
+            bone_rotations.set_index(rotation_index + 3, rotation.w);
+    
+            let scaling_index = i as u32 * 3;
+            let scaling = &self.calculated_bone_scalings[i];
+            bone_scalings.set_index(scaling_index, scaling.x);
+            bone_scalings.set_index(scaling_index + 1, scaling.y);
+            bone_scalings.set_index(scaling_index + 2, scaling.z);
+        }
+    }
+    
+    pub fn update_textures(&mut self, transparencies: &Float32Array, texture_translations: &Float32Array, texture_rotations: &Float32Array, texture_scalings: &Float32Array) {
+        transparencies.copy_from(&self.calculated_transparencies);
+        for i in 0..self.texture_transforms.len() {
+            let translation_index = i as u32 * 3;
+            let translation = &self.calculated_texture_translations[i];
+            texture_translations.set_index(translation_index, translation.x);
+            texture_translations.set_index(translation_index + 1, translation.y);
+            texture_translations.set_index(translation_index + 2, translation.z);
+    
+            let rotation_index = i as u32 * 4;
+            let rotation = &self.calculated_texture_rotations[i];
+            texture_rotations.set_index(rotation_index, rotation.x);
+            texture_rotations.set_index(rotation_index + 1, rotation.y);
+            texture_rotations.set_index(rotation_index + 2, rotation.z);
+            texture_rotations.set_index(rotation_index + 3, rotation.w);
+    
+            let scaling_index = i as u32 * 3;
+            let scaling = &self.calculated_texture_scalings[i];
+            texture_scalings.set_index(scaling_index, scaling.x);
+            texture_scalings.set_index(scaling_index + 1, scaling.y);
+            texture_scalings.set_index(scaling_index + 2, scaling.z);
+        }
+    }
+    
     pub fn get_sequence_ids(&self) -> Vec<u16> {
         self.sequences.iter().map(|seq| seq.id).collect()
     }
@@ -499,154 +641,5 @@ impl AnimationManager {
         }
 
         result
-    }
-
-    pub fn update(&mut self, delta_time: f64) {
-        self.current_animation.animation_time += delta_time;
-
-        for i in 0..self.global_sequence_times.len() {
-            self.global_sequence_times[i] += delta_time;
-            if self.global_sequence_durations[i] > 0 {
-                self.global_sequence_times[i] %= self.global_sequence_durations[i] as f64;
-            }
-        }
-
-        let main_variation_record = &self.sequences[self.current_animation.main_variation_index];
-
-        // If we don't have a next animation yet, and this animation isn't set
-        // to repeat again, choose the next one
-        let mut sub_anim_record: Option<&M2Sequence> = None;
-        if self.next_animation.animation_index.is_none()
-            && main_variation_record.variation_next > -1
-            && self.current_animation.repeat_times <= 0 {
-
-            let probability = (self.rng.next_f32() * 0x7fff as f32) as u16;
-            let mut calc_prob = 0;
-
-            let mut next_index = self.current_animation.main_variation_index;
-            let mut next_record = &self.sequences[next_index];
-            calc_prob += next_record.frequency;
-            while calc_prob < probability && next_record.variation_next > -1 {
-                next_index = next_record.variation_next as usize;
-                next_record = &self.sequences[next_index];
-
-                if self.current_animation.animation_index != Some(next_index) {
-                    calc_prob += next_record.frequency;
-                }
-            }
-            sub_anim_record = Some(next_record);
-
-            self.next_animation.animation_index = Some(next_index);
-            self.next_animation.animation_time = 0.0;
-            self.next_animation.main_variation_index = self.current_animation.main_variation_index;
-            self.next_animation.repeat_times = self.sequences[next_index].calculate_animation_repeats(&mut self.rng);
-        } else if self.current_animation.repeat_times > 0 {
-            self.next_animation = self.current_animation.clone();
-            self.next_animation.repeat_times -= 1;
-        }
-
-        let current_record = &self.sequences[self.current_animation.animation_index.unwrap()];
-        let current_animation_time_left = current_record.duration as f64 - self.current_animation.animation_time;
-        let mut sub_anim_blend_time = 0.0;
-
-        // if we have a next animation stored, get its blend time
-        if let Some(next_index) = self.next_animation.animation_index {
-            sub_anim_record = Some(&self.sequences[next_index]);
-            sub_anim_blend_time = self.sequences[next_index].blend_time as f64;
-        }
-
-        // if it's time to start blending into the next animation, setup an appropriate blend factor
-        if sub_anim_blend_time > 0.0 && current_animation_time_left < sub_anim_blend_time {
-            self.next_animation.animation_time = (sub_anim_blend_time - current_animation_time_left) % sub_anim_record.unwrap().duration as f64;
-            self.blend_factor = (current_animation_time_left / sub_anim_blend_time) as f32;
-        } else {
-            self.blend_factor = 1.0;
-        }
-
-        // if the current animation is done and we have a next animation, swap
-        // them. otherwise, loop the current one
-        if self.current_animation.animation_time >= current_record.duration as f64 {
-            self.current_animation.repeat_times -= 1;
-
-            if let Some(index) = self.next_animation.animation_index {
-                let mut next_index = index;
-                // if the next animation is an alias, look it up
-                while ((self.sequences[next_index].flags & 0x20) == 0) && ((self.sequences[next_index].flags & 0x40) > 0) {
-                    next_index = self.sequences[next_index].alias_next as usize;
-                    if next_index >= self.sequences.len() {
-                        break;
-                    }
-                }
-                self.next_animation.animation_index = Some(next_index);
-
-                self.current_animation = self.next_animation.clone();
-
-                self.next_animation.animation_index = None;
-                self.blend_factor = 1.0;
-            } else if current_record.duration > 0 {
-                self.current_animation.animation_time %= current_record.duration as f64;
-            }
-        }
-
-        let default_color = Vec3::new(1.0);
-        let default_alpha = 0x7fff;
-        self.calculated_colors.clear();
-        for color in &self.colors {
-            let mut rgba = Vec4::new(0.0);
-            let rgb = self.get_current_value_with_blend(&color.color, default_color);
-            rgba.x = rgb.x;
-            rgba.y = rgb.y;
-            rgba.z = rgb.z;
-            rgba.w = self.get_current_value_with_blend(&color.alpha, default_alpha) as f32 / 0x7fff as f32;
-            self.calculated_colors.push(rgba);
-        }
-
-        self.calculated_transparencies.clear();
-        for weight in &self.texture_weights {
-            self.calculated_transparencies.push(self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32);
-        }
-
-        self.calculated_texture_translations.clear();
-        let default_translation = Vec3::new(0.0);
-        self.calculated_texture_rotations.clear();
-        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
-        self.calculated_texture_scalings.clear();
-        let default_scaling = Vec3::new(1.0);
-        for transform in &self.texture_transforms {
-            self.calculated_texture_translations.push(self.get_current_value_with_blend(&transform.translation, default_translation));
-            self.calculated_texture_rotations.push(self.get_current_value_with_blend(&transform.rotation, default_rotation));
-            self.calculated_texture_scalings.push(self.get_current_value_with_blend(&transform.scaling, default_scaling));
-        }
-
-        self.calculated_bone_translations.clear();
-        let default_translation = Vec3::new(0.0);
-        self.calculated_bone_rotations.clear();
-        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
-        self.calculated_bone_scalings.clear();
-        let default_scaling = Vec3::new(1.0);
-        for bone in &self.bones {
-            self.calculated_bone_translations.push(self.get_current_value_with_blend(&bone.translation, default_translation));
-            self.calculated_bone_rotations.push(self.get_current_value_with_blend(bone.rotation.as_ref().unwrap(), default_rotation));
-            self.calculated_bone_scalings.push(self.get_current_value_with_blend(&bone.scaling, default_scaling));
-        }
-
-        let default_color = Vec3::new(1.0);
-        let default_intensity = 1.0;
-        self.calculated_light_ambient_colors.clear();
-        self.calculated_light_ambient_intensities.clear();
-        self.calculated_light_diffuse_colors.clear();
-        self.calculated_light_diffuse_intensities.clear();
-        self.calculated_light_attenuation_starts.clear();
-        self.calculated_light_attenuation_ends.clear();
-        self.calculated_light_visibilities.clear();
-        for light in &self.lights {
-            self.calculated_light_ambient_colors.push(self.get_current_value_with_blend(&light.ambient_color, default_color));
-            self.calculated_light_ambient_intensities.push(self.get_current_value_with_blend(&light.ambient_intensity, default_intensity));
-            self.calculated_light_diffuse_colors.push(self.get_current_value_with_blend(&light.diffuse_color, default_color));
-            self.calculated_light_diffuse_intensities.push(self.get_current_value_with_blend(&light.diffuse_intensity, default_intensity));
-            self.calculated_light_attenuation_starts.push(self.get_current_value_with_blend(&light.attenuation_start, 1.0));
-            self.calculated_light_attenuation_ends.push(self.get_current_value_with_blend(&light.attenuation_end, 1.0));
-            self.calculated_light_visibilities.push(self.get_current_value_with_blend(&light.visibility, 0));
-        }
     }
 }
