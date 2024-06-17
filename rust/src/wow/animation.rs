@@ -27,26 +27,15 @@ impl LcgRng {
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct M2CompBoneUnallocated {
-    pub key_bone_id: i32,
-    pub flags: u32,
-    pub parent_bone: i16,
-    pub submesh_id: u16,
-    pub bone_name_crc: u32,
-    pub translation: M2TrackUnallocated<Vec3>,
-    pub rotation: M2TrackUnallocated<Quat16>,
-    pub scaling: M2TrackUnallocated<Vec3>,
-    pub pivot: Vec3,
-}
-
-#[derive(Debug, Clone)]
 pub struct M2CompBone {
     pub key_bone_id: i32,
     pub flags: u32,
     pub parent_bone: i16,
     pub submesh_id: u16,
+    pub bone_name_crc: u32,
     pub translation: M2Track<Vec3>,
-    pub rotation: M2Track<Quat>,
+    pub rotation_quat16: M2Track<Quat16>,
+    #[deku(skip)] pub rotation: Option<M2Track<Quat>>,
     pub scaling: M2Track<Vec3>,
     pub pivot: Vec3,
 }
@@ -77,72 +66,61 @@ impl M2Sequence {
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct M2TrackUnallocated<T> {
-    pub interpolation_type: u16,
-    pub global_sequence: i16,
-    pub timestamps: WowArray<WowArray<u32>>,
-    pub values: WowArray<WowArray<T>>,
+pub struct M2TrackPartial<T> {
+    pub timestamps_unallocated: WowArray<WowArray<u32>>,
+    #[deku(skip)] pub timestamps: Option<Vec<Vec<u32>>>,
+    pub values_unallocated: WowArray<WowArray<T>>,
+    #[deku(skip)] pub values: Option<Vec<Vec<T>>>,
 }
 
-impl<T> M2TrackUnallocated<T> {
-    pub fn to_allocated(&self, data: &[u8]) -> Result<M2Track<T>, DekuError>
+#[derive(DekuRead, Debug, Clone)]
+pub struct M2Track<T> {
+    pub interpolation_type: u16,
+    pub global_sequence: i16,
+    pub timestamps_unallocated: WowArray<WowArray<u32>>,
+    #[deku(skip)] pub timestamps: Option<Vec<Vec<u32>>>,
+    pub values_unallocated: WowArray<WowArray<T>>,
+    #[deku(skip)] pub values: Option<Vec<Vec<T>>>,
+}
+
+impl<T> M2Track<T> {
+    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String>
         where for<'a> T: DekuRead<'a> {
         let mut timestamps = Vec::new();
-        for arr in self.timestamps.to_vec(data)? {
+        for arr in self.timestamps_unallocated.to_vec(data)? {
             timestamps.push(arr.to_vec(data)?);
         }
+        self.timestamps = Some(timestamps);
 
         let mut values = Vec::new();
-        for arr in self.values.to_vec(data)? {
+        for arr in self.values_unallocated.to_vec(data)? {
             values.push(arr.to_vec(data)?);
         }
+        self.values = Some(values);
 
-        Ok(M2Track {
-            interpolation_type: self.interpolation_type,
-            global_sequence: self.global_sequence,
-            timestamps,
-            values,
-        })
+        Ok(())
+    }
+
+    pub fn timestamps(&self) -> &Vec<Vec<u32>> {
+        self.timestamps.as_ref().expect("must call M2Track::allocate() before accessing timestamps")
+    }
+
+    pub fn values(&self) -> &Vec<Vec<T>> {
+        self.values.as_ref().expect("must call M2Track::allocate() before accessing values")
     }
 }
 
 #[derive(DekuRead, Debug, Clone)]
-pub struct M2TextureTransformUnallocated {
-    pub translation: M2TrackUnallocated<Vec3>,
-    pub rotation: M2TrackUnallocated<Quat>,
-    pub scaling: M2TrackUnallocated<Vec3>,
-}
-
-#[derive(DekuRead, Debug, Clone)]
-pub struct M2ColorUnallocated {
-    pub color: M2TrackUnallocated<Vec3>, // rgb
-    pub alpha: M2TrackUnallocated<u16>, // 0 = transparent, 0x7FFF = opaque
-}
-
-#[derive(Debug, Clone)]
-pub struct M2Track<T> {
-    pub interpolation_type: u16,
-    pub global_sequence: i16,
-    pub timestamps: Vec<Vec<u32>>,
-    pub values: Vec<Vec<T>>,
-}
-
-#[derive(Debug, Clone)]
 pub struct M2TextureTransform {
     pub translation: M2Track<Vec3>,
     pub rotation: M2Track<Quat>,
     pub scaling: M2Track<Vec3>,
 }
 
-#[derive(Debug, Clone)]
-pub struct M2TextureWeight {
-    pub weights: M2Track<u16>,
-}
-
-#[derive(Debug, Clone)]
+#[derive(DekuRead, Debug, Clone)]
 pub struct M2Color {
-    pub color: M2Track<Vec3>,
-    pub alpha: M2Track<u16>,
+    pub color: M2Track<Vec3>, // rgb
+    pub alpha: M2Track<u16>, // 0 = transparent, 0x7FFF = opaque
 }
 
 #[derive(Debug, Clone)]
@@ -178,7 +156,7 @@ pub struct AnimationManager {
     global_sequence_durations: Vec<u32>,
     global_sequence_times: Vec<f64>,
     sequences: Vec<M2Sequence>,
-    texture_weights: Vec<M2TextureWeight>,
+    texture_weights: Vec<M2Track<u16>>,
     texture_transforms: Vec<M2TextureTransform>,
     current_animation: AnimationState,
     next_animation: AnimationState,
@@ -360,7 +338,7 @@ impl AnimationManager {
     pub fn new(
         global_sequence_durations: Vec<u32>,
         sequences: Vec<M2Sequence>,
-        texture_weights: Vec<M2TextureWeight>,
+        texture_weights: Vec<M2Track<u16>>,
         texture_transforms: Vec<M2TextureTransform>,
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,
@@ -436,20 +414,20 @@ impl AnimationManager {
             max_time = self.global_sequence_durations[animation.global_sequence as usize];
         }
 
-        if animation.timestamps.len() <= animation_index {
+        if animation.timestamps().len() <= animation_index {
             animation_index = 0;
         }
 
-        if animation.timestamps.is_empty() {
+        if animation.timestamps().is_empty() {
             return default;
         }
 
-        if animation_index <= animation.timestamps.len() && animation.timestamps[animation_index].is_empty() {
+        if animation_index <= animation.timestamps().len() && animation.timestamps()[animation_index].is_empty() {
             return default;
         }
 
-        let times = &animation.timestamps[animation_index];
-        let values = &animation.values[animation_index];
+        let times = &animation.timestamps()[animation_index];
+        let values = &animation.values()[animation_index];
 
         // find the highest timestamp still less than curr_time
         let time_index: i32;
@@ -625,7 +603,7 @@ impl AnimationManager {
 
         self.calculated_transparencies.clear();
         for weight in &self.texture_weights {
-            self.calculated_transparencies.push(self.get_current_value_with_blend(&weight.weights, default_alpha) as f32 / 0x7fff as f32);
+            self.calculated_transparencies.push(self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32);
         }
 
         self.calculated_texture_translations.clear();
@@ -648,7 +626,7 @@ impl AnimationManager {
         let default_scaling = Vec3::new(1.0);
         for bone in &self.bones {
             self.calculated_bone_translations.push(self.get_current_value_with_blend(&bone.translation, default_translation));
-            self.calculated_bone_rotations.push(self.get_current_value_with_blend(&bone.rotation, default_rotation));
+            self.calculated_bone_rotations.push(self.get_current_value_with_blend(bone.rotation.as_ref().unwrap(), default_rotation));
             self.calculated_bone_scalings.push(self.get_current_value_with_blend(&bone.scaling, default_scaling));
         }
 

@@ -1,4 +1,6 @@
 
+use std::marker::PhantomData;
+
 use deku::prelude::*;
 use deku::ctx::ByteSize;
 
@@ -31,14 +33,14 @@ pub struct M2Header {
     global_sequence_durations: WowArray<u32>,
     sequences: WowArray<M2Sequence>,
     _sequence_lookups: WowArray<u16>,
-    bones: WowArray<M2CompBoneUnallocated>,
+    bones: WowArray<M2CompBone>,
     _key_bone_lookup: WowArray<u16>,
     vertices: WowArray<()>,
     pub num_skin_profiles: u32,
-    colors: WowArray<M2ColorUnallocated>,
+    colors: WowArray<M2Color>,
     textures: WowArray<M2Texture>,
-    texture_weights: WowArray<M2TrackUnallocated<u16>>,
-    texture_transforms: WowArray<M2TextureTransformUnallocated>,
+    texture_weights: WowArray<M2Track<u16>>,
+    texture_transforms: WowArray<M2TextureTransform>,
     _replacable_texture_lookup: WowArray<u8>,
     materials: WowArray<M2Material>,
     bone_lookup_table: WowArray<u16>,
@@ -56,105 +58,86 @@ pub struct M2Header {
     _attachments: WowArray<()>,
     _attachment_lookup_table: WowArray<u16>,
     _events: WowArray<()>,
-    lights: WowArray<M2LightUnallocated>,
+    lights: WowArray<M2Light>,
     _cameras: WowArray<()>,
     _camera_lookup_table: WowArray<u16>,
     _ribbon_emitters: WowArray<()>,
-    _particle_emitters: WowArray<()>,
+    particle_emitters: WowArray<ParticleEmitter>,
     _blend_map_overrides: WowArray<u16>,
 }
 
 impl M2Header {
     fn get_name(&self, m2_data: &[u8]) -> Result<String, String> {
         self.name.to_string(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_materials(&self, m2_data: &[u8]) -> Result<Vec<M2Material>, String> {
         self.materials.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_vertex_colors(&self, m2_data: &[u8]) -> Result<Vec<M2Color>, String> {
-        let colors = self.colors.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))?;
-
-        let mut result = Vec::with_capacity(colors.len());
-        for c in colors {
-            result.push(M2Color {
-                color: c.color.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                alpha: c.alpha.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-            });
+        let mut colors: Vec<M2Color> = self.colors.to_vec(m2_data)?;
+        for color in colors.iter_mut() {
+            color.color.allocate(m2_data)?;
+            color.alpha.allocate(m2_data)?;
         }
-        Ok(result)
+        Ok(colors)
     }
 
     fn get_textures(&self, m2_data: &[u8]) -> Result<Vec<M2Texture>, String> {
         self.textures.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_texture_transforms(&self, m2_data: &[u8]) -> Result<Vec<M2TextureTransform>, String> {
-        let texture_transforms = self.texture_transforms.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))?;
-
-        let mut result = Vec::with_capacity(texture_transforms.len());
-        for tex in texture_transforms {
-            result.push(M2TextureTransform {
-                translation: tex.translation.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                rotation: tex.rotation.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                scaling: tex.scaling.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-            });
+        let mut texture_transforms: Vec<M2TextureTransform> = self.texture_transforms.to_vec(m2_data)?;
+        for tex in texture_transforms.iter_mut() {
+            tex.translation.allocate(m2_data)?;
+            tex.rotation.allocate(m2_data)?;
+            tex.scaling.allocate(m2_data)?;
         }
-        Ok(result)
+        Ok(texture_transforms)
     }
 
     fn get_bones(&self, m2_data: &[u8]) -> Result<Vec<M2CompBone>, String> {
-        let bones = self.bones.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))?;
+        let mut bones: Vec<M2CompBone> = self.bones.to_vec(m2_data)?;
+        for bone in bones.iter_mut() {
+            bone.rotation_quat16.allocate(m2_data)?;
+            bone.translation.allocate(m2_data)?;
+            bone.scaling.allocate(m2_data)?;
 
-        let mut result = Vec::with_capacity(bones.len());
-        for bone in bones {
-            let rotation16 = bone.rotation.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?;
+            // but convert the quat16s into quats so we don't have to do the
+            // math countless times per frame
             let mut quat_values = Vec::new();
-            for quats in rotation16.values {
+            for quats in bone.rotation_quat16.values() {
                 let mut values = Vec::new();
                 for quat16 in quats {
-                    values.push(Quat::from(quat16));
+                    values.push(Quat::from(*quat16));
                 }
                 quat_values.push(values);
             }
-            let rotation: M2Track<Quat> = M2Track {
-                interpolation_type: rotation16.interpolation_type,
-                global_sequence: rotation16.global_sequence,
-                timestamps: rotation16.timestamps,
-                values: quat_values,
-            };
-            result.push(M2CompBone {
-                translation: bone.translation.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                rotation,
-                scaling: bone.scaling.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                key_bone_id: bone.key_bone_id,
-                flags: bone.flags,
-                parent_bone: bone.parent_bone,
-                submesh_id: bone.submesh_id,
-                pivot: bone.pivot,
+
+            bone.rotation = Some(M2Track {
+                interpolation_type: bone.rotation_quat16.interpolation_type,
+                global_sequence: bone.rotation_quat16.global_sequence,
+                timestamps: bone.rotation_quat16.timestamps.clone(),
+                values: Some(quat_values),
+
+                // hack: put in some fake pointers
+                timestamps_unallocated: WowArray { count: 0, offset: 0, element_type: PhantomData },
+                values_unallocated: WowArray { count: 0, offset: 0, element_type: PhantomData },
             });
         }
-        Ok(result)
+        Ok(bones)
     }
 
-    fn get_texture_weights(&self, m2_data: &[u8]) -> Result<Vec<M2TextureWeight>, String> {
-        let weights = self.texture_weights.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))?;
+    fn get_texture_weights(&self, m2_data: &[u8]) -> Result<Vec<M2Track<u16>>, String> {
+        let mut weights: Vec<M2Track<u16>> = self.texture_weights.to_vec(m2_data)?;
 
-        let mut result = Vec::with_capacity(weights.len());
-        for weight in weights {
-            result.push(M2TextureWeight {
-                weights: weight.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-            });
+        for weight in weights.iter_mut() {
+            weight.allocate(m2_data)?;
         }
-        Ok(result)
+
+        Ok(weights)
     }
 
     fn get_vertex_data(&self, m2_data: &[u8]) -> Result<Vec<u8>, String> {
@@ -166,40 +149,34 @@ impl M2Header {
 
     fn get_texture_lookup_table(&self, m2_data: &[u8]) -> Result<Vec<u16>, String> {
         self.texture_lookup_table.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_bone_lookup_table(&self, m2_data: &[u8]) -> Result<Vec<u16>, String> {
         self.bone_lookup_table.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_texture_transforms_lookup_table(&self, m2_data: &[u8]) -> Result<Vec<u16>, String> {
         self.texture_transforms_lookup_table.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_transparency_lookup_table(&self, m2_data: &[u8]) -> Result<Vec<u16>, String> {
         self.transparency_lookup_table.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))
     }
 
     fn get_lights(&self, m2_data: &[u8]) -> Result<Vec<M2Light>, String> {
-        let lights_unallocated = self.lights.to_vec(m2_data)
-            .map_err(|e| format!("{:?}", e))?;
-        let mut result = Vec::with_capacity(lights_unallocated.len());
-        for light in lights_unallocated {
-            result.push(M2Light {
-                bone: light.bone,
-                position: light.position,
-                ambient_color: light.ambient_color.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                ambient_intensity: light.ambient_intensity.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                diffuse_color: light.diffuse_color.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                diffuse_intensity: light.diffuse_intensity.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                attenuation_start: light.attenuation_start.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                attenuation_end: light.attenuation_end.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-                visibility: light.visibility.to_allocated(m2_data).map_err(|e| format!("{:?}", e))?,
-            });
+        let mut lights: Vec<M2Light> = self.lights.to_vec(m2_data)?;
+        for light in lights.iter_mut() {
+            light.ambient_color.allocate(m2_data)?;
+            light.ambient_intensity.allocate(m2_data)?;
+            light.diffuse_color.allocate(m2_data)?;
+            light.diffuse_intensity.allocate(m2_data)?;
+            light.attenuation_start.allocate(m2_data)?;
+            light.attenuation_end.allocate(m2_data)?;
+            light.visibility.allocate(m2_data)?;
+        }
+        Ok(lights)
+    }
+
         }
         Ok(result)
     }
@@ -236,10 +213,7 @@ impl M2 {
         let mut sfid: Option<Vec<u32>> = None;
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
-                b"TXID" => {
-                    dbg!(&chunk_data);
-                    txid = Some(parse_array(chunk_data, 4)?);
-                },
+                b"TXID" => txid = Some(parse_array(chunk_data, 4)?),
                 b"SFID" => sfid = Some(parse_array(chunk_data, 4)?),
                 _ => {},
             }
@@ -249,8 +223,8 @@ impl M2 {
         // always be 16 bytes in
         let m2_data = &data[8..];
         let animation_manager = Some(AnimationManager::new(
-            header.global_sequence_durations.to_vec(m2_data).map_err(|e| format!("{:?}", e))?,
-            header.sequences.to_vec(m2_data).map_err(|e| format!("{:?}", e))?,
+            header.global_sequence_durations.to_vec(m2_data)?,
+            header.sequences.to_vec(m2_data)?,
             header.get_texture_weights(m2_data)?,
             header.get_texture_transforms(m2_data)?,
             header.get_vertex_colors(m2_data)?,
@@ -260,8 +234,7 @@ impl M2 {
 
         let mut legacy_textures = Vec::new();
         for tex in header.get_textures(m2_data)? {
-            let filename = tex.filename.to_string(m2_data)
-                .map_err(|e| format!("{:?}", e))?;
+            let filename = tex.filename.to_string(m2_data)?;
             legacy_textures.push(LegacyTexture {
                 filename,
                 flags: tex.flags,
@@ -323,21 +296,8 @@ impl M2 {
 }
 
 #[derive(DekuRead, Debug, Clone)]
-struct M2LightUnallocated {
-    pub _light_type: u16, // should be 1 (point light) in all cases except the login screen
-    pub bone: i16,
-    pub position: Vec3,
-    pub ambient_color: M2TrackUnallocated<Vec3>,
-    pub ambient_intensity: M2TrackUnallocated<f32>,
-    pub diffuse_color: M2TrackUnallocated<Vec3>,
-    pub diffuse_intensity: M2TrackUnallocated<f32>,
-    pub attenuation_start: M2TrackUnallocated<f32>,
-    pub attenuation_end: M2TrackUnallocated<f32>,
-    pub visibility: M2TrackUnallocated<u8>,
-}
-
-#[derive(Debug, Clone)]
 pub struct M2Light {
+    pub _light_type: u16, // should be 1 (point light) in all cases except the login screen
     pub bone: i16,
     pub position: Vec3,
     pub ambient_color: M2Track<Vec3>,
