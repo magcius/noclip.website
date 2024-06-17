@@ -92,7 +92,7 @@ impl<'a> Iterator for ChunkedData<'a> {
 pub type WowCharArray = WowArray<u8>;
 
 impl WowArray<u8> {
-    pub fn to_string(&self, data: &[u8]) -> Result<String, DekuError> {
+    pub fn to_string(&self, data: &[u8]) -> Result<String, String> {
         let mut bytes = self.to_vec(data)?;
         bytes.pop(); // pop the null byte
         Ok(String::from_utf8(bytes).unwrap())
@@ -243,15 +243,16 @@ pub struct WowArray<T> {
     pub count: u32,
     pub offset: u32,
     #[deku(skip)]
-    element_type: std::marker::PhantomData<T>,
+    pub element_type: std::marker::PhantomData<T>,
 }
 
 impl<T> WowArray<T> where for<'a> T: DekuRead<'a> {
-    pub fn to_vec(&self, data: &[u8]) -> Result<Vec<T>, DekuError> {
+    pub fn to_vec(&self, data: &[u8]) -> Result<Vec<T>, String> {
         let mut result = Vec::with_capacity(self.count as usize);
         let mut bitslice = BitSlice::from_slice(&data[self.offset as usize..]);
         for _ in 0..self.count {
-            let (new_bitslice, element) = T::read(bitslice, ())?;
+            let (new_bitslice, element) = T::read(bitslice, ())
+                .map_err(|e| format!("{:?}", e))?;
             bitslice = new_bitslice;
             result.push(element);
         }
