@@ -33,6 +33,113 @@ const enum OptimizeStripFlags {
     IS_TRISTRIP                    = 0x02,
 }
 
+const enum StudioFlexOpType {
+	CONST = 1,           // get float
+	FETCH1,              // get Flexcontroller value
+	FETCH2,              // get flex weight
+	ADD,
+	SUB,
+	MUL,
+	DIV,
+	NEG,                 // not implemented
+	EXP,                 // not implemented
+	OPEN,                // only used in token parsing
+	CLOSE,
+	COMMA,               // only used in token parsing
+	MAX,
+	MIN,
+	_2WAY_0,             // Fetch a value from a 2 Way slider for the 1st value RemapVal( 0.0, 0.5, 0.0, 1.0 )
+	_2WAY_1,             // Fetch a value from a 2 Way slider for the 2nd value RemapVal( 0.5, 1.0, 0.0, 1.0 )
+	NWAY,                // Fetch a value from a 2 Way slider for the 2nd value RemapVal( 0.5, 1.0, 0.0, 1.0 )
+	COMBO,               // Perform a combo operation (essentially multiply the last N values on the stack)
+	DOMINATE,            // Performs a combination domination operation
+	DME_LOWER_EYELID,
+	DME_UPPER_EYELID
+}
+
+interface FlexController {
+	readonly name: string;
+	readonly type: string;
+}
+
+interface FlexRule {
+	readonly flex: string;
+	readonly ops: { type: StudioFlexOpType, index: number, value: number }[];
+}
+
+function remapClamped(v: number, a: number, b: number, c: number, d: number) {
+	v = clamp(v, a, b);
+	return ((v - b) / (b - a)) * (d - c) + c;
+}
+
+function runFlexRule(rule: FlexRule, controllerValues: Float32Array, flexValues: Float32Array) {
+	const ops = rule.ops;
+	const stack = new Float32Array(32);
+	let idx = stack.length;
+	let value = 0.0;
+
+	for (let p = 0; p < ops.length; p++) {
+		const op = ops[p];
+		switch(ops[p].type) {
+			case StudioFlexOpType.ADD:
+				value += stack[idx++];
+				break;
+			case StudioFlexOpType.SUB:
+				value = stack[idx++] - value;
+			case StudioFlexOpType.MUL:
+				value *= stack[idx++];
+			case StudioFlexOpType.DIV:
+				if (value > 0.0001)  value = stack[idx];
+				else                 value = 0.0;
+				idx++;
+				break;
+			case StudioFlexOpType.NEG:
+				value = -value;
+				break;
+			case StudioFlexOpType.MAX:
+				value = Math.max(stack[idx++], value);
+				break;
+			case StudioFlexOpType.MIN:
+				value = Math.min(stack[idx++], value);
+				break;
+			case StudioFlexOpType.CONST:
+				stack[idx--] = value;
+				value = op.value;
+				break;
+			case StudioFlexOpType.FETCH1:
+				stack[idx--] = value;
+				value = controllerValues[op.index];
+				break;
+			case StudioFlexOpType.FETCH2:
+				stack[idx--] = value;
+				value = flexValues[op.index];
+				break;
+			case StudioFlexOpType.COMBO:
+				// multiply by top M elements of the stack
+				let m = op.index;
+				while (m--) value *= stack[idx++];
+				break;
+			case StudioFlexOpType.DOMINATE:
+				// multiply by the 1 - the top N elements of the stack
+				let n = op.index;
+				let product = 0.0;
+				while (n--) product *= stack[idx++];
+				value *= 1.0 - product;
+				break;
+			case StudioFlexOpType._2WAY_0:
+				const v20 = controllerValues[op.index];
+				stack[idx--] = value;
+				value = clamp(v20, -1, 0) + 1.0;
+				break;
+			case StudioFlexOpType._2WAY_1:
+				const v21 = controllerValues[op.index];
+				stack[idx--] = value;
+				value = clamp(v21, 0, 1);
+
+		}
+	}
+}
+
 function computeModelMatrixPosRotInternal(dst: mat4, pitch: number, yaw: number, roll: number, pos: ReadonlyVec3): void {
     // Pitch, Yaw, Roll
     // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/mathlib/mathlib_base.cpp#L1218-L1233
@@ -937,12 +1044,52 @@ export class StudioModelData {
 
         const numflexdesc = mdlView.getUint32(0x104, true);
         const flexdescindex = mdlView.getUint32(0x108, true);
+		let flexdescIdx = flexdescindex;
+		for (let i = 0; i < numflexdesc; i++, flexdescIdx += 0x4) {
+			const szFACSindex = mdlView.getInt32(flexdescIdx, true);
+			const flexdescName = readString(mdlBuffer, flexdescIdx + szFACSindex);
+			console.log('Found flexdesc name', flexdescName);
+		}
 
         const numflexcontrollers = mdlView.getUint32(0x10C, true);
         const flexcontrollerindex = mdlView.getUint32(0x110, true);
+		let flexcontrollerIdx = flexcontrollerindex;
+		for (let i = 0; i < numflexcontrollers; i++, flexcontrollerIdx += 0x14) {
+			const sztypeindex = mdlView.getInt32(flexcontrollerIdx + 0x0, true);
+			const flexcontrollerType = readString(mdlBuffer, flexcontrollerIdx + sztypeindex);
+			const sznameindex = mdlView.getInt32(flexcontrollerIdx + 0x4, true);
+			const flexcontrollerName = readString(mdlBuffer, flexcontrollerIdx + sznameindex);
+			
+			const localToGlobal = mdlView.getInt32(flexcontrollerIdx + 0x8, true);
+			const flexMin = mdlView.getFloat32(flexcontrollerIdx + 0x0C, true);
+			const flexMax = mdlView.getFloat32(flexcontrollerIdx + 0x10, true);
+			console.log(
+				'Found flexcontroller of type',
+				flexcontrollerType,
+				'with name',
+				flexcontrollerName,
+				'and bounds', flexMin, flexMax
+			);
+		}
 
         const numflexrules = mdlView.getUint32(0x114, true);
         const flexruleindex = mdlView.getUint32(0x118, true);
+		let flexruleIdx = flexruleindex;
+		for (let i = 0; i < numflexrules; i++, flexruleIdx += 0xC) {
+			const flexruleFlex = mdlView.getInt32(flexruleIdx + 0x0, true);
+			const flexruleOpCount = mdlView.getInt32(flexruleIdx + 0x4, true);
+			const flexruleOpIndex = mdlView.getInt32(flexruleIdx + 0x8, true);
+
+			const flexOps = new Array(flexruleOpCount);
+			let flexopIdx = flexruleOpIndex;
+			for (let p = 0; p < flexruleOpCount; p++, flexopIdx += 0x8) {
+				const opType = mdlView.getInt32(flexopIdx, true);
+				// These two share the same memory.
+				const opIndex = mdlView.getInt32(flexopIdx + 0x4, true);
+				const opValue = mdlView.getFloat32(flexopIdx + 0x4, true);
+				
+			}
+		}
 
         const numikchains = mdlView.getUint32(0x11C, true);
         const ikchainindex = mdlView.getUint32(0x120, true);
