@@ -1,8 +1,8 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { TextureMapping } from "../TextureHolder.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { GfxTopology, convertToTriangleIndexBuffer, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers.js";
+import { GfxTopology, convertToTriangleIndexBuffer, convertToTrianglesRange, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
 import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxCullMode, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
@@ -11,11 +11,12 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper.js";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
 import { assert } from "../util.js";
-import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, getSkyboxDoodad } from "./data.js";
+import { AdtData, BlpData, ChunkData, DoodadData, LiquidInstance, LiquidType, ModelData, ModelRenderPass, ParticleEmitter, SkinData, WmoBatchData, WmoData, WmoDefinition, WmoGroupData, getSkyboxDoodad } from "./data.js";
 import { loadingAdtIndices, loadingAdtVertices, skyboxIndices, skyboxVertices } from "./mesh.js";
-import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
-import { MAP_SIZE, MapArray, View } from "./scenes.js";
+import { LoadingAdtProgram, MAX_BONE_TRANSFORMS, MAX_DOODAD_INSTANCES, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from "./program.js";
+import { MAP_SIZE, MapArray, View, WdtScene } from "./scenes.js";
 import { TextureCache } from "./tex.js";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 
 type TextureMappingArray = (TextureMapping | null)[];
 
@@ -24,11 +25,14 @@ export class ModelRenderer {
   private vertexBuffer: GfxVertexBufferDescriptor;
   private indexBuffers: GfxIndexBufferDescriptor[] = [];
   private skinPassTextures: TextureMappingArray[][] = [];
+  private emitterTextures: TextureMappingArray[] = [];
+  private particleQuadIndices: GfxIndexBufferDescriptor;
   private inputLayout: GfxInputLayout;
+  private particleInputLayout: GfxInputLayout;
   public visible = true;
   private scratchMat4 = mat4.create();
 
-  constructor(device: GfxDevice, public model: ModelData, renderHelper: GfxRenderHelper, private textureCache: TextureCache) {
+  constructor(private device: GfxDevice, public model: ModelData, renderHelper: GfxRenderHelper, private textureCache: TextureCache) {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
       { location: ModelProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
       { location: ModelProgram.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 12, format: GfxFormat.U8_RGBA_NORM, },
@@ -60,6 +64,20 @@ export class ModelRenderer {
         this.skinPassTextures[i].push(this.getRenderPassTextures(renderPass));
       }
     }
+
+    for (const emitter of this.model.particleEmitters) {
+      this.emitterTextures.push(this.getEmitterTextures(device, emitter));
+    }
+    const particleIndexBuf = makeTriangleIndexBuffer(GfxTopology.Quads, 0, ParticleEmitter.MAX_PARTICLES * 4);
+    this.particleQuadIndices = {
+      buffer: makeStaticDataBuffer(device, GfxBufferUsage.Index, particleIndexBuf.buffer),
+      byteOffset: 0,
+    };
+    this.particleInputLayout = renderHelper.renderCache.createInputLayout({
+      vertexAttributeDescriptors: [],
+      vertexBufferDescriptors: [],
+      indexBufferFormat: GfxFormat.U16_R,
+    });
   }
 
   public update(view: View) {
@@ -72,6 +90,17 @@ export class ModelRenderer {
       nBatches += skinData.batches.length;
     }
     return nBatches > 0 && this.visible;
+  }
+
+  private getEmitterTextures(device: GfxDevice, emitter: ParticleEmitter): TextureMappingArray {
+    const dataMapping = new TextureMapping();
+    dataMapping.gfxTexture = emitter.updateDataTex(device);
+    return [
+      dataMapping,
+      this.getTextureMapping(emitter.textures[0]),
+      this.getTextureMapping(emitter.textures[1]),
+      this.getTextureMapping(emitter.textures[2]),
+    ];
   }
 
   private getTextureMapping(blpData: BlpData | null): TextureMapping | null {
@@ -208,6 +237,68 @@ export class ModelRenderer {
     let doodad = getSkyboxDoodad();
     doodad.skyboxBlend = weight;
     this.prepareToRenderModel(renderInstManager, [doodad])
+  }
+
+  public prepareToRenderParticles(renderInstManager: GfxRenderInstManager, doodads: DoodadData[]): void {
+    if (!this.isDrawable()) return;
+
+    const visibleDoodads = doodads.filter(d => d.visible);
+
+    for (let doodadChunk of chunk(visibleDoodads, MAX_DOODAD_INSTANCES)) {
+      const template = renderInstManager.pushTemplateRenderInst();
+      const instanceParamsSize = 16;
+      const boneParamsSize = 16 + 4;
+      const baseOffs = template.allocateUniformBuffer(ParticleProgram.ub_DoodadParams,
+        instanceParamsSize * MAX_DOODAD_INSTANCES + boneParamsSize * MAX_BONE_TRANSFORMS);
+      let offs = baseOffs;
+      const mapped = template.mapUniformBufferF32(ParticleProgram.ub_DoodadParams);
+      for (let doodad of doodadChunk) {
+        offs += fillMatrix4x4(mapped, offs, doodad.modelMatrix);
+      }
+      offs = baseOffs + instanceParamsSize * MAX_DOODAD_INSTANCES;
+      assert(this.model.boneTransforms.length < MAX_BONE_TRANSFORMS, `model got too many bones (${this.model.boneTransforms.length})`);
+      mat4.identity(this.scratchMat4);
+      for (let i=0; i<MAX_BONE_TRANSFORMS; i++) {
+        if (i < this.model.boneTransforms.length) {
+          offs += fillMatrix4x4(mapped, offs, this.model.boneTransforms[i]);
+          offs += fillVec4(mapped, offs, this.model.boneFlags[i].spherical_billboard ? 1 : 0);
+        } else {
+          offs += fillMatrix4x4(mapped, offs, this.scratchMat4);
+          offs += fillVec4(mapped, offs, 0);
+        }
+      }
+
+      for (let i=0; i<this.model.particleEmitters.length; i++) {
+        const emitter = this.model.particleEmitters[i];
+        if (emitter.particles.length === 0) {
+          continue;
+        }
+        emitter.updateDataTex(this.device);
+
+        let renderInst = renderInstManager.newRenderInst();
+        let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4 * 3);
+        const mapped = renderInst.mapUniformBufferF32(ParticleProgram.ub_EmitterParams);
+        offs += fillVec4(mapped, offs,
+          emitter.emitter.bone,
+          emitter.alphaTest,
+          emitter.fragShaderType,
+          emitter.emitter.translate_particle_with_bone() ? 1 : 0,
+        );
+        offs += fillVec4(mapped, offs, 0);
+        offs += fillVec4(mapped, offs,
+          emitter.texScaleX,
+          emitter.texScaleY,
+        );
+
+        renderInst.setVertexInput(this.particleInputLayout, null, this.particleQuadIndices);
+        renderInst.setDrawCount(emitter.particles.length * 6, 0);
+        emitter.setMegaStateFlags(renderInst);
+        renderInst.setInstanceCount(doodadChunk.length);
+        renderInst.setSamplerBindingsFromTextureMappings(this.emitterTextures[i]);
+        renderInstManager.submitRenderInst(renderInst);
+      }
+      renderInstManager.popTemplateRenderInst();
+    }
   }
   
   public destroy(device: GfxDevice): void {
