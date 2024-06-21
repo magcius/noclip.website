@@ -63,7 +63,7 @@ interface FlexController {
 }
 
 interface FlexRule {
-	readonly flex: string;
+	readonly flex: number;
 	readonly ops: { type: StudioFlexOpType, index: number, value: number }[];
 }
 
@@ -78,6 +78,10 @@ function runFlexRule(rule: FlexRule, controllerValues: Float32Array, flexValues:
 	let idx = stack.length;
 	let value = 0.0;
 
+	// Scratch variable
+	let m: number;
+
+	// Iterate through all ops
 	for (let p = 0; p < ops.length; p++) {
 		const op = ops[p];
 		switch(ops[p].type) {
@@ -116,28 +120,61 @@ function runFlexRule(rule: FlexRule, controllerValues: Float32Array, flexValues:
 				break;
 			case StudioFlexOpType.COMBO:
 				// multiply by top M elements of the stack
-				let m = op.index;
+				m = op.index;
 				while (m--) value *= stack[idx++];
 				break;
 			case StudioFlexOpType.DOMINATE:
 				// multiply by the 1 - the top N elements of the stack
-				let n = op.index;
+				m = op.index;
 				let product = 0.0;
-				while (n--) product *= stack[idx++];
+				while (m--) product *= stack[idx++];
 				value *= 1.0 - product;
 				break;
 			case StudioFlexOpType._2WAY_0:
+				// |<->|---|
 				const v20 = controllerValues[op.index];
 				stack[idx--] = value;
 				value = clamp(v20, -1, 0) + 1.0;
 				break;
 			case StudioFlexOpType._2WAY_1:
+				// |---|<->|
 				const v21 = controllerValues[op.index];
 				stack[idx--] = value;
 				value = clamp(v21, 0, 1);
+				break;
+			case StudioFlexOpType.NWAY:
+				let flexValue = controllerValues[value | 0]; // Coerce value to int as index
+				const rampX = stack[idx+3],
+				      rampY = stack[idx+2],
+				      rampZ = stack[idx+1],
+				      rampW = stack[idx];
+				idx += 4;
 
+				if (flexValue <= rampX || flexValue >= rampW) {
+					flexValue = 0.0;
+				}
+				else if (flexValue < rampY) {
+					flexValue = remapClamped(flexValue, rampX, rampY, 0.0, 1.0);
+				}
+				else if (flexValue > rampZ) {
+					flexValue = remapClamped(flexValue, rampZ, rampW, 1.0, 0.0);
+				}
+				else {
+					flexValue = 1.0;
+				}
+
+				value = flexValue * controllerValues[op.index];
+				break;
+				
+			// DME eyelids not implemented.
+			default:
+				idx += 2;
+				break;
 		}
 	}
+
+	// Set result to ending value
+	flexValues[rule.flex] = value;
 }
 
 function computeModelMatrixPosRotInternal(dst: mat4, pitch: number, yaw: number, roll: number, pos: ReadonlyVec3): void {
