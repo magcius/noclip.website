@@ -67,10 +67,28 @@ impl M2Sequence {
 
 #[derive(DekuRead, Debug, Clone)]
 pub struct M2TrackPartial<T> {
-    pub timestamps_unallocated: WowArray<WowArray<u32>>,
-    #[deku(skip)] pub timestamps: Option<Vec<Vec<u32>>>,
-    pub values_unallocated: WowArray<WowArray<T>>,
-    #[deku(skip)] pub values: Option<Vec<Vec<T>>>,
+    pub timestamps_unallocated: WowArray<u16>,
+    #[deku(skip)] pub timestamps: Option<Vec<u16>>,
+    pub values_unallocated: WowArray<T>,
+    #[deku(skip)] pub values: Option<Vec<T>>,
+}
+
+impl<T> M2TrackPartial<T> {
+    pub fn allocate(&mut self, data: &[u8]) -> Result<(), String>
+        where for<'a> T: DekuRead<'a> {
+        self.timestamps = Some(self.timestamps_unallocated.to_vec(data)?);
+        self.values = Some(self.values_unallocated.to_vec(data)?);
+
+        Ok(())
+    }
+
+    pub fn timestamps(&self) -> &Vec<u16> {
+        self.timestamps.as_ref().expect("must call M2TrackPartial::allocate() before accessing timestamps")
+    }
+
+    pub fn values(&self) -> &Vec<T> {
+        self.values.as_ref().expect("must call M2TrackPartial::allocate() before accessing values")
+    }
 }
 
 #[derive(DekuRead, Debug, Clone)]
@@ -165,22 +183,7 @@ pub struct AnimationManager {
     colors: Vec<M2Color>,
     bones: Vec<M2CompBone>,
     lights: Vec<M2Light>,
-
-    calculated_transparencies: Vec<f32>,
-    calculated_texture_translations: Vec<Vec3>,
-    calculated_texture_rotations: Vec<Quat>,
-    calculated_texture_scalings: Vec<Vec3>,
-    calculated_colors: Vec<Vec4>,
-    calculated_bone_translations: Vec<Vec3>,
-    calculated_bone_rotations: Vec<Quat>,
-    calculated_bone_scalings: Vec<Vec3>,
-    calculated_light_ambient_colors: Vec<Vec3>,
-    calculated_light_ambient_intensities: Vec<f32>,
-    calculated_light_diffuse_colors: Vec<Vec3>,
-    calculated_light_diffuse_intensities: Vec<f32>,
-    calculated_light_attenuation_starts: Vec<f32>,
-    calculated_light_attenuation_ends: Vec<f32>,
-    calculated_light_visibilities: Vec<u8>,
+    particle_emitters: Vec<ParticleEmitter>,
 }
 
 #[wasm_bindgen(js_class = "WowM2AnimationManager")]
@@ -271,147 +274,158 @@ impl AnimationManager {
                 self.current_animation.animation_time %= current_record.duration as f64;
             }
         }
-
-        let default_color = Vec3::new(1.0);
-        let default_alpha = 0x7fff;
-        self.calculated_colors.clear();
-        for color in &self.colors {
-            let mut rgba = Vec4::new(0.0);
-            let rgb = self.get_current_value_with_blend(&color.color, default_color);
-            rgba.x = rgb.x;
-            rgba.y = rgb.y;
-            rgba.z = rgb.z;
-            rgba.w = self.get_current_value_with_blend(&color.alpha, default_alpha) as f32 / 0x7fff as f32;
-            self.calculated_colors.push(rgba);
-        }
-
-        self.calculated_transparencies.clear();
-        for weight in &self.texture_weights {
-            self.calculated_transparencies.push(self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32);
-        }
-
-        self.calculated_texture_translations.clear();
-        let default_translation = Vec3::new(0.0);
-        self.calculated_texture_rotations.clear();
-        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
-        self.calculated_texture_scalings.clear();
-        let default_scaling = Vec3::new(1.0);
-        for transform in &self.texture_transforms {
-            self.calculated_texture_translations.push(self.get_current_value_with_blend(&transform.translation, default_translation));
-            self.calculated_texture_rotations.push(self.get_current_value_with_blend(&transform.rotation, default_rotation));
-            self.calculated_texture_scalings.push(self.get_current_value_with_blend(&transform.scaling, default_scaling));
-        }
-
-        self.calculated_bone_translations.clear();
-        let default_translation = Vec3::new(0.0);
-        self.calculated_bone_rotations.clear();
-        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
-        self.calculated_bone_scalings.clear();
-        let default_scaling = Vec3::new(1.0);
-        for bone in &self.bones {
-            self.calculated_bone_translations.push(self.get_current_value_with_blend(&bone.translation, default_translation));
-            self.calculated_bone_rotations.push(self.get_current_value_with_blend(bone.rotation.as_ref().unwrap(), default_rotation));
-            self.calculated_bone_scalings.push(self.get_current_value_with_blend(&bone.scaling, default_scaling));
-        }
-
-        let default_color = Vec3::new(1.0);
-        let default_intensity = 1.0;
-        self.calculated_light_ambient_colors.clear();
-        self.calculated_light_ambient_intensities.clear();
-        self.calculated_light_diffuse_colors.clear();
-        self.calculated_light_diffuse_intensities.clear();
-        self.calculated_light_attenuation_starts.clear();
-        self.calculated_light_attenuation_ends.clear();
-        self.calculated_light_visibilities.clear();
-        for light in &self.lights {
-            self.calculated_light_ambient_colors.push(self.get_current_value_with_blend(&light.ambient_color, default_color));
-            self.calculated_light_ambient_intensities.push(self.get_current_value_with_blend(&light.ambient_intensity, default_intensity));
-            self.calculated_light_diffuse_colors.push(self.get_current_value_with_blend(&light.diffuse_color, default_color));
-            self.calculated_light_diffuse_intensities.push(self.get_current_value_with_blend(&light.diffuse_intensity, default_intensity));
-            self.calculated_light_attenuation_starts.push(self.get_current_value_with_blend(&light.attenuation_start, 1.0));
-            self.calculated_light_attenuation_ends.push(self.get_current_value_with_blend(&light.attenuation_end, 1.0));
-            self.calculated_light_visibilities.push(self.get_current_value_with_blend(&light.visibility, 0));
-        }
     }
 
-    pub fn update_lights(&mut self, ambient_light_colors: &Float32Array, diffuse_light_colors: &Float32Array, light_attenuation_starts: &Float32Array, light_attenuation_ends: &Float32Array, light_visibilities: &Uint8Array) {
-        for i in 0..self.lights.len() {
+    pub fn update_lights(
+        &self,
+        ambient_light_colors: &Float32Array,
+        diffuse_light_colors: &Float32Array,
+        light_attenuation_starts: &Float32Array,
+        light_attenuation_ends: &Float32Array,
+        light_visibilities: &Uint8Array
+    ) {
+        let default_color = Vec3::new(1.0);
+        let default_intensity = 1.0;
+        for (i, light) in self.lights.iter().enumerate() {
             let color_index = i as u32 * 4;
     
-            let ambient_color = self.calculated_light_ambient_colors[i];
-            let ambient_intensity = self.calculated_light_ambient_intensities[i];
+            let ambient_color = self.get_current_value_with_blend(&light.ambient_color, default_color);
+            let ambient_intensity = self.get_current_value_with_blend(&light.ambient_intensity, default_intensity);
             ambient_light_colors.set_index(color_index, ambient_color.x);
             ambient_light_colors.set_index(color_index + 1, ambient_color.y);
             ambient_light_colors.set_index(color_index + 2, ambient_color.z);
             ambient_light_colors.set_index(color_index + 3, ambient_intensity);
 
-            let diffuse_color = self.calculated_light_diffuse_colors[i];
-            let diffuse_intensity = self.calculated_light_diffuse_intensities[i];
+            let diffuse_color = self.get_current_value_with_blend(&light.diffuse_color, default_color);
+            let diffuse_intensity = self.get_current_value_with_blend(&light.diffuse_intensity, default_intensity);
             diffuse_light_colors.set_index(color_index, diffuse_color.x);
             diffuse_light_colors.set_index(color_index + 1, diffuse_color.y);
             diffuse_light_colors.set_index(color_index + 2, diffuse_color.z);
             diffuse_light_colors.set_index(color_index + 3, diffuse_intensity);
+
+            let attenuation_start = self.get_current_value_with_blend(&light.attenuation_start, 1.0);
+            light_attenuation_starts.set_index(i as u32, attenuation_start);
+            let attenuation_end = self.get_current_value_with_blend(&light.attenuation_end, 1.0);
+            light_attenuation_ends.set_index(i as u32, attenuation_end);
+            let visibility = self.get_current_value_with_blend(&light.visibility, 0);
+            light_visibilities.set_index(i as u32, visibility);
         }
-        light_attenuation_starts.copy_from(&self.calculated_light_attenuation_starts);
-        light_attenuation_ends.copy_from(&self.calculated_light_attenuation_ends);
-        light_visibilities.copy_from(&self.calculated_light_visibilities);
     }
     
-    pub fn update_vertex_colors(&mut self, colors: &Float32Array) {
+    pub fn update_vertex_colors(&self, colors: &Float32Array) {
+        let default_color = Vec3::new(1.0);
+        let default_alpha = 0x7fff;
         for i in 0..self.colors.len() {
+            let color = &self.colors[i];
             let color_index = i as u32 * 4;
-            let color = &self.calculated_colors[i];
-            colors.set_index(color_index, color.x);
-            colors.set_index(color_index + 1, color.y);
-            colors.set_index(color_index + 2, color.z);
-            colors.set_index(color_index + 3, color.w);
+            let rgb = self.get_current_value_with_blend(&color.color, default_color);
+            let alpha = self.get_current_value_with_blend(&color.alpha, default_alpha) as f32 / 0x7fff as f32;
+            colors.set_index(color_index, rgb.x);
+            colors.set_index(color_index + 1, rgb.y);
+            colors.set_index(color_index + 2, rgb.z);
+            colors.set_index(color_index + 3, alpha);
         }
     }
     
-    pub fn update_bones(&mut self, bone_translations: &Float32Array, bone_rotations: &Float32Array, bone_scalings: &Float32Array) {
-        for i in 0..self.bones.len() {
+    pub fn update_bones(&self, bone_translations: &Float32Array, bone_rotations: &Float32Array, bone_scalings: &Float32Array) {
+        let default_translation = Vec3::new(0.0);
+        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        let default_scaling = Vec3::new(1.0);
+        for (i, bone) in self.bones.iter().enumerate() {
             let translation_index = i as u32 * 3;
-            let translation = &self.calculated_bone_translations[i];
+            let translation = self.get_current_value_with_blend(&bone.translation, default_translation);
             bone_translations.set_index(translation_index, translation.x);
             bone_translations.set_index(translation_index + 1, translation.y);
             bone_translations.set_index(translation_index + 2, translation.z);
     
             let rotation_index = i as u32 * 4;
-            let rotation = &self.calculated_bone_rotations[i];
+            let rotation = self.get_current_value_with_blend(bone.rotation.as_ref().unwrap(), default_rotation);
             bone_rotations.set_index(rotation_index, rotation.x);
             bone_rotations.set_index(rotation_index + 1, rotation.y);
             bone_rotations.set_index(rotation_index + 2, rotation.z);
             bone_rotations.set_index(rotation_index + 3, rotation.w);
     
             let scaling_index = i as u32 * 3;
-            let scaling = &self.calculated_bone_scalings[i];
+            let scaling = self.get_current_value_with_blend(&bone.scaling, default_scaling);
             bone_scalings.set_index(scaling_index, scaling.x);
             bone_scalings.set_index(scaling_index + 1, scaling.y);
             bone_scalings.set_index(scaling_index + 2, scaling.z);
         }
     }
     
-    pub fn update_textures(&mut self, transparencies: &Float32Array, texture_translations: &Float32Array, texture_rotations: &Float32Array, texture_scalings: &Float32Array) {
-        transparencies.copy_from(&self.calculated_transparencies);
-        for i in 0..self.texture_transforms.len() {
+    pub fn update_textures(&self, transparencies: &Float32Array, texture_translations: &Float32Array, texture_rotations: &Float32Array, texture_scalings: &Float32Array) {
+        let default_alpha = 0x7fff;
+        for (i, weight) in self.texture_weights.iter().enumerate() {
+            let alpha = self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32;
+            transparencies.set_index(i as u32, alpha);
+        }
+
+        let default_translation = Vec3::new(0.0);
+        let default_rotation = Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+        let default_scaling = Vec3::new(1.0);
+        for (i, transform) in self.texture_transforms.iter().enumerate() {
             let translation_index = i as u32 * 3;
-            let translation = &self.calculated_texture_translations[i];
+            let translation = self.get_current_value_with_blend(&transform.translation, default_translation);
             texture_translations.set_index(translation_index, translation.x);
             texture_translations.set_index(translation_index + 1, translation.y);
             texture_translations.set_index(translation_index + 2, translation.z);
     
             let rotation_index = i as u32 * 4;
-            let rotation = &self.calculated_texture_rotations[i];
+            let rotation = self.get_current_value_with_blend(&transform.rotation, default_rotation);
             texture_rotations.set_index(rotation_index, rotation.x);
             texture_rotations.set_index(rotation_index + 1, rotation.y);
             texture_rotations.set_index(rotation_index + 2, rotation.z);
             texture_rotations.set_index(rotation_index + 3, rotation.w);
     
             let scaling_index = i as u32 * 3;
-            let scaling = &self.calculated_texture_scalings[i];
+            let scaling = self.get_current_value_with_blend(&transform.scaling, default_scaling);
             texture_scalings.set_index(scaling_index, scaling.x);
             texture_scalings.set_index(scaling_index + 1, scaling.y);
             texture_scalings.set_index(scaling_index + 2, scaling.z);
+        }
+    }
+
+    pub fn update_particle(&self, emitter_index: u32, age: f64, update_buffer: &Float32Array) {
+        let emitter = &self.particle_emitters[emitter_index as usize];
+        let default_color = Vec3::default();
+        let default_alpha = 1;
+        let default_scale = Vec2 { x: 1.0, y: 1.0 };
+        let color = self.get_particle_value(age, &emitter.color, default_color);
+        let alpha = self.get_particle_value(age, &emitter.alpha, default_alpha);
+        let scale = self.get_particle_value(age, &emitter.scale, default_scale);
+        update_buffer.set_index(0, color.x);
+        update_buffer.set_index(1, color.y);
+        update_buffer.set_index(2, color.z);
+        update_buffer.set_index(3, alpha as f32);
+        update_buffer.set_index(4, scale.x);
+        update_buffer.set_index(5, scale.y);
+    }
+
+    pub fn update_particle_emitter(&self, emitter_index: u32, update_buffer: &Float32Array) {
+        let emitter = &self.particle_emitters[emitter_index as usize];
+        let mut enabled = 1;
+        if emitter.enabled.timestamps().len() > 0 {
+            enabled = self.get_current_value_with_blend(&emitter.enabled, 0);
+        }
+        update_buffer.set_index(0, enabled as f32);
+
+        if enabled > 0 {
+            update_buffer.set_index(1, self.get_current_value_with_blend(&emitter.emission_speed, 0.0));
+            update_buffer.set_index(2, self.get_current_value_with_blend(&emitter.speed_variation, 0.0));
+            update_buffer.set_index(3, self.get_current_value_with_blend(&emitter.vertical_range, 0.0));
+            update_buffer.set_index(4, self.get_current_value_with_blend(&emitter.horizontal_range, 0.0));
+            if emitter.use_compressed_gravity() {
+                todo!()
+            } else {
+                update_buffer.set_index(5, -self.get_current_value_with_blend(&emitter.gravity, 0.0));
+            }
+            update_buffer.set_index(6, self.get_current_value_with_blend(&emitter.lifespan, 0.0));
+            update_buffer.set_index(7, self.get_current_value_with_blend(&emitter.emission_rate, 0.0));
+            update_buffer.set_index(8, self.get_current_value_with_blend(&emitter.emission_area_length, 0.0));
+            update_buffer.set_index(9, self.get_current_value_with_blend(&emitter.emission_area_width, 0.0));
+
+            // TODO: handle exp2 and set z_sources
+            update_buffer.set_index(10, 0.0);
         }
     }
     
@@ -485,6 +499,7 @@ impl AnimationManager {
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,
         lights: Vec<M2Light>,
+        particle_emitters: Vec<ParticleEmitter>,
     ) -> Self {
         let global_sequence_times = vec![0.0; global_sequence_durations.len()];
         // pull out the "Stand" animation, which is the resting animation for all models
@@ -495,24 +510,6 @@ impl AnimationManager {
         let mut rng = LcgRng::new(1312);
         current_animation.repeat_times = sequences[index].calculate_animation_repeats(&mut rng);
         let next_animation = AnimationState::new(None);
-
-        let calculated_transparencies: Vec<f32> = Vec::with_capacity(texture_weights.len());
-        let calculated_texture_translations: Vec<Vec3> = Vec::with_capacity(texture_transforms.len());
-        let calculated_texture_rotations: Vec<Quat> = Vec::with_capacity(texture_transforms.len());
-        let calculated_texture_scalings: Vec<Vec3> = Vec::with_capacity(texture_transforms.len());
-        let calculated_colors: Vec<Vec4> = Vec::with_capacity(colors.len());
-
-        let calculated_bone_translations: Vec<Vec3> = Vec::with_capacity(bones.len());
-        let calculated_bone_rotations: Vec<Quat> = Vec::with_capacity(bones.len());
-        let calculated_bone_scalings: Vec<Vec3> = Vec::with_capacity(bones.len());
-
-        let calculated_light_ambient_colors: Vec<Vec3> = Vec::with_capacity(lights.len());
-        let calculated_light_ambient_intensities: Vec<f32> = Vec::with_capacity(lights.len());
-        let calculated_light_diffuse_colors: Vec<Vec3> = Vec::with_capacity(lights.len());
-        let calculated_light_diffuse_intensities: Vec<f32> = Vec::with_capacity(lights.len());
-        let calculated_light_attenuation_starts: Vec<f32> = Vec::with_capacity(lights.len());
-        let calculated_light_attenuation_ends: Vec<f32> = Vec::with_capacity(lights.len());
-        let calculated_light_visibilities: Vec<u8> = Vec::with_capacity(lights.len());
 
         AnimationManager {
             global_sequence_durations,
@@ -526,23 +523,8 @@ impl AnimationManager {
             bones,
             lights,
             global_sequence_times,
+            particle_emitters,
             rng,
-
-            calculated_transparencies,
-            calculated_texture_translations,
-            calculated_texture_rotations,
-            calculated_texture_scalings,
-            calculated_colors,
-            calculated_bone_translations,
-            calculated_bone_rotations,
-            calculated_bone_scalings,
-            calculated_light_ambient_colors,
-            calculated_light_ambient_intensities,
-            calculated_light_diffuse_colors,
-            calculated_light_diffuse_intensities,
-            calculated_light_attenuation_starts,
-            calculated_light_attenuation_ends,
-            calculated_light_visibilities,
         }
     }
 
@@ -571,47 +553,23 @@ impl AnimationManager {
         let times = &animation.timestamps()[animation_index];
         let values = &animation.values()[animation_index];
 
-        // find the highest timestamp still less than curr_time
-        let time_index: i32;
-        if max_time != 0 {
-            if times.len() > 1 {
-                let last_index = times.len() - 1;
-                if curr_time > times[last_index] as f64 {
-                    time_index = last_index as i32;
+        if let Some(time_index) = find_timestamp_index(times, curr_time) {
+            if time_index == times.len() - 1 {
+                values[time_index].clone()
+            } else {
+                let value1 = &values[time_index];
+                let value2 = &values[time_index + 1];
+                let time1 = times[time_index];
+                let time2 = times[time_index + 1];
+
+                if animation.interpolation_type == 0 {
+                    return value1.clone();
+                } else if animation.interpolation_type == 1 {
+                    let t = (curr_time - time1 as f64) / (time2 as f64 - time1 as f64);
+                    return value1.clone().lerp(value2.clone(), t as f32);
                 } else {
-                    let next_timestamp_idx = times.iter().position(|time| {
-                        *time as f64 >= curr_time
-                    }).unwrap() as i32;
-                    if next_timestamp_idx != 0 {
-                        time_index = next_timestamp_idx - 1;
-                    } else {
-                        time_index = next_timestamp_idx;
-                    }
+                    unreachable!("unknown interpolation type!")
                 }
-            } else if times.len() == 1 {
-                time_index = 0;
-            } else {
-                time_index = -1;
-            }
-        } else {
-            time_index = 0;
-        }
-
-        if time_index as usize == times.len() - 1 {
-            values[time_index as usize].clone()
-        } else if time_index >= 0 {
-            let value1 = &values[time_index as usize];
-            let value2 = &values[time_index as usize + 1];
-            let time1 = times[time_index as usize];
-            let time2 = times[time_index as usize + 1];
-
-            if animation.interpolation_type == 0 {
-                return value1.clone();
-            } else if animation.interpolation_type == 1 {
-                let t = (curr_time - time1 as f64) / (time2 as f64 - time1 as f64);
-                return value1.clone().lerp(value2.clone(), t as f32);
-            } else {
-                unreachable!("unknown interpolation type!")
             }
         } else {
             return values[0].clone();
@@ -641,5 +599,50 @@ impl AnimationManager {
         }
 
         result
+    }
+
+    fn get_particle_value<T>(&self, age: f64, animation: &M2TrackPartial<T>, default: T) -> T
+        where T: Clone + Lerp {
+            let num_timestamps = animation.timestamps().len();
+            if num_timestamps == 0 {
+                return default;
+            }
+
+            if let Some(time_index) = find_timestamp_index(animation.timestamps(), age) {
+                if time_index == num_timestamps - 1 {
+                    animation.values()[time_index].clone()
+                } else {
+                    let value1 = animation.values()[time_index].clone();
+                    let time1 = animation.timestamps()[time_index];
+                    let value2 = animation.values()[time_index + 1].clone();
+                    let time2 = animation.timestamps()[time_index + 1];
+                    let t = (age - time1 as f64) / (time2 as f64 - time1 as f64);
+                    value1.lerp(value2, t as f32)
+                }
+            } else {
+                animation.values()[0].clone()
+            }
+        }
+}
+
+fn find_timestamp_index<T: Into<f64> + Clone>(timestamps: &Vec<T>, curr_time: f64) -> Option<usize> {
+    if timestamps.len() > 1 {
+        let last_index = timestamps.len() - 1;
+        if curr_time > timestamps[last_index].clone().into() {
+            Some(last_index)
+        } else {
+            let next_timestamp_idx = timestamps.iter().position(|time| {
+                time.clone().into() >= curr_time
+            }).unwrap();
+            if next_timestamp_idx != 0 {
+                Some(next_timestamp_idx - 1)
+            } else {
+                Some(next_timestamp_idx)
+            }
+        }
+    } else if timestamps.len() == 1 {
+        Some(0)
+    } else {
+        None
     }
 }

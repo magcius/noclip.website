@@ -1,5 +1,5 @@
-import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
 import { MathConstants, Vec3NegZ, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
@@ -303,6 +303,181 @@ export class SkyboxData {
   }
 }
 
+class Particle {
+  public age = 0;
+  public alive = true;
+  public color = vec4.create();
+  public scale = vec2.create();
+
+  public update(dt: number, emitter: ParticleEmitter) {
+  }
+
+  static createSpline(emitter: ParticleEmitter, dt: number): Particle {
+    throw new Error("Method not implemented.");
+  }
+
+  static createSpherical(emitter: ParticleEmitter, dt: number): Particle {
+    const emissionArea = emitter.emissionAreaWidth - emitter.emissionAreaLength;
+    const radius = emitter.emissionAreaLength + Math.random() * emissionArea;
+    const polar = Math.random() * emitter.verticalRange;
+    const azimuth = Math.random() * emitter.horizontalRange;
+    const cosPolar = Math.cos(polar);
+    const emissionDir = vec3.fromValues(
+      cosPolar * Math.cos(azimuth),
+      cosPolar * Math.sin(azimuth),
+      Math.sin(polar),
+    );
+    const position = vec3.scale(emissionDir, emissionDir, radius);
+
+    let velocity: vec3;
+    if (emitter.zSource < 0.001) {
+      const particlesGoUp = (emitter.emitter.flags & 0x100) > 0;
+      if (particlesGoUp) {
+        velocity = vec3.fromValues(0, 0, 1);
+      } else {
+        velocity = vec3.fromValues(
+          cosPolar * Math.cos(azimuth),
+          cosPolar * Math.sin(azimuth),
+          Math.sin(polar)
+        );
+      }
+    } else {
+      velocity = vec3.fromValues(0, 0, emitter.zSource);
+      vec3.sub(velocity, position, velocity);
+      if (vec3.len(velocity) > 0.0001) {
+        vec3.normalize(velocity, velocity);
+      }
+    }
+    vec3.scale(velocity, velocity, emitter.emissionSpeed);
+
+    return new Particle(position, velocity, emitter.lifespan);
+  }
+
+  static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
+    const position = vec3.fromValues(
+      Math.random() * emitter.emissionAreaLength * 0.5,
+      Math.random() * emitter.emissionAreaWidth * 0.5,
+      0,
+    );
+    let velocity: vec3;
+    if (emitter.zSource < 0.001) {
+      const polar = emitter.verticalRange * Math.random();
+      const azimuth = emitter.horizontalRange * Math.random();
+      const sinPolar = Math.sin(polar);
+      const sinAzimuth = Math.sin(azimuth);
+      const cosPolar = Math.cos(polar);
+      const cosAzimuth = Math.cos(azimuth);
+      velocity = vec3.fromValues(
+        cosAzimuth * sinPolar * emitter.emissionSpeed,
+        sinAzimuth * sinPolar * emitter.emissionSpeed,
+        cosPolar * emitter.emissionSpeed,
+      );
+    } else {
+      velocity = vec3.fromValues(0, 0, emitter.zSource);
+      vec3.sub(velocity, position, velocity);
+      if (vec3.len(velocity) > 0.0001) {
+        vec3.normalize(velocity, velocity);
+        vec3.scale(velocity, velocity, emitter.emissionSpeed)
+      }
+    }
+
+    return new Particle(position, velocity, emitter.lifespan);
+  }
+
+  constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
+  }
+}
+
+export class ParticleEmitter {
+  static MAX_PARTICLES = 2000;
+
+  public enabled = 0;
+  public emissionSpeed = 0;
+  public speedVariation = 0;
+  public verticalRange = 0;
+  public horizontalRange = 0;
+  public gravity = 0;
+  public lifespan = 0;
+  public emissionRate = 0;
+  public emissionAreaLength = 0;
+  public emissionAreaWidth = 0;
+  public zSource = 0;
+  public particles: Particle[] = [];
+  public baseSpin = 0;
+  public spin = 0;
+  private updateBuffer: Float32Array;
+  private particlesToEmit = 0.0;
+
+  constructor(public index: number, public emitter: WowM2ParticleEmitter) {
+    this.updateBuffer = new Float32Array(11);
+  }
+
+  private updateAndPerturbParams(dt: number, animationManager: WowM2AnimationManager) {
+    animationManager.update_particle_emitter(this.index, this.updateBuffer);
+    [
+      this.enabled,
+      this.emissionSpeed,
+      this.speedVariation,
+      this.verticalRange,
+      this.horizontalRange,
+      this.gravity,
+      this.lifespan,
+      this.emissionRate,
+      this.emissionAreaLength,
+      this.emissionAreaWidth,
+      this.zSource,
+    ] = this.updateBuffer;
+
+    this.emissionRate += Math.random() * this.emitter.emission_rate_variance;
+    this.emissionSpeed += Math.random() * this.speedVariation;
+    this.lifespan += Math.random() * this.emitter.lifespan_variance;
+    this.baseSpin = this.emitter.base_spin + Math.random() * this.emitter.base_spin_variance;
+    this.spin = this.emitter.spin + Math.random() * this.emitter.spin_variance;
+  }
+
+  private createParticle(dt: number) {
+    if (this.emitter.emitter_type === 1) { // Plane
+      this.particles.push(Particle.createPlanar(this, dt));
+    } else if (this.emitter.emitter_type === 2) { // Sphere
+      this.particles.push(Particle.createSpherical(this, dt));
+    } else if (this.emitter.emitter_type === 3) { // Spline
+      this.particles.push(Particle.createSpline(this, dt));
+    } else {
+      throw new Error(`unknown particle emitter type ${this.emitter.emitter_type}`);
+    }
+  }
+
+  public update(dt: number, animationManager: WowM2AnimationManager) {
+    this.updateAndPerturbParams(dt, animationManager);
+
+    if (this.enabled > 0.0) {
+      this.particlesToEmit += this.emissionRate * dt;
+      while (this.particlesToEmit > 1.0) {
+        if (this.particles.length < ParticleEmitter.MAX_PARTICLES) {
+          this.createParticle(dt);
+        }
+        this.particlesToEmit -= 1.0;
+      }
+    }
+
+    for (let i=this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i];
+      particle.age += dt;
+      if (particle.age > this.lifespan) {
+        this.particles.splice(i, 1);
+      } else {
+        animationManager.update_particle(this.index, particle.age, this.updateBuffer);
+        particle.color[0] = this.updateBuffer[0];
+        particle.color[1] = this.updateBuffer[1];
+        particle.color[2] = this.updateBuffer[2];
+        particle.color[3] = this.updateBuffer[3];
+        particle.scale[0] = this.updateBuffer[4];
+        particle.scale[1] = this.updateBuffer[5];
+      }
+    }
+  }
+}
+
 export class ModelData {
   public skins: SkinData[] = [];
   public blps: BlpData[] = [];
@@ -339,6 +514,7 @@ export class ModelData {
   public lightVisibilities: Uint8Array;
   public lightBones: Int16Array;
   public lightPositions: Float32Array;
+  public particleEmitters: ParticleEmitter[] = [];
 
   constructor(public fileId: number) {
   }
@@ -378,6 +554,10 @@ export class ModelData {
     this.boneLookupTable = m2.take_bone_lookup();
     this.textureTransformLookupTable = m2.take_texture_transform_lookup();
     this.textureTransparencyLookupTable = m2.take_texture_transparency_lookup();
+
+    this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
+      return new ParticleEmitter(i, emitter);
+    });
 
     const m2Materials = m2.materials;
     this.materials = m2Materials.map(mat => {
@@ -469,6 +649,10 @@ export class ModelData {
         mat4.mul(this.boneTransforms[i], this.boneTransforms[parentId], this.boneTransforms[i]);
       }
     }
+
+    this.particleEmitters.forEach(emitter => {
+      emitter.update(view.deltaTime, this.animationManager);
+    });
   }
 
   public getVertexColor(index: number): vec4 {

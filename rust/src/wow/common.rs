@@ -240,8 +240,8 @@ impl AABBox {
 
 #[derive(Debug, DekuRead, Clone, Copy)]
 pub struct WowArray<T> {
-    pub count: u32,
-    pub offset: u32,
+    pub count: i32,
+    pub offset: i32,
     #[deku(skip)]
     pub element_type: std::marker::PhantomData<T>,
 }
@@ -307,9 +307,24 @@ impl Lerp for u8 {
     }
 }
 
+impl Lerp for i16 {
+    fn lerp(self, other: Self, t: f32) -> Self {
+        ((self as f32) * (1.0 - t) + (other as f32) * t) as i16
+    }
+}
+
 impl Lerp for u16 {
     fn lerp(self, other: Self, t: f32) -> Self {
         ((self as f32) * (1.0 - t) + (other as f32) * t) as u16
+    }
+}
+
+impl Lerp for Vec2 {
+    fn lerp(self, other: Self, t: f32) -> Self {
+        Vec2 {
+            x: self.x * (1.0 - t) + other.x * t,
+            y: self.y * (1.0 - t) + other.y * t,
+        }
     }
 }
 
