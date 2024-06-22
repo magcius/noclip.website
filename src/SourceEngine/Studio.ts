@@ -57,14 +57,46 @@ const enum StudioFlexOpType {
 	DME_UPPER_EYELID
 }
 
-interface FlexController {
-	readonly name: string;
-	readonly type: string;
+const enum StudioFlexType {
+	NORMAL,
+	WRINKLE
 }
 
-interface FlexRule {
+// const enum StudioFlexControllerRemapType {
+// 	REMAP_NONE,
+// 	REMAP_2WAY,     // Control 0 -> ramps from 1-0 from 0->0.5. Control 1 -> ramps from 0-1 from 0.5->1
+// 	REMAP_NWAY,     // StepSize = 1 / (control count-1) Control n -> ramps from 0-1-0 from (n-1)*StepSize to n*StepSize to (n+1)*StepSize. A second control is needed to specify amount to use 
+// 	REMAP_EYELID
+// }
+
+interface StudioFlexDesc {
+	name: string;
+}
+
+interface StudioFlex {
+	desc: number;
+	descpair: number;
+	type: StudioFlexType;
+	verts: Float32Array;
+	indices: Uint16Array;
+}
+
+interface StudioFlexController {
+	readonly name: string;
+	readonly type: string;
+	readonly min: number;
+	readonly max: number;
+}
+
+interface StudioFlexOp {
+	type: StudioFlexOpType;
+	index: number;
+	value: number;
+}
+
+interface StudioFlexRule {
 	readonly flex: number;
-	readonly ops: { type: StudioFlexOpType, index: number, value: number }[];
+	readonly ops: StudioFlexOp[];
 }
 
 function remapClamped(v: number, a: number, b: number, c: number, d: number) {
@@ -73,7 +105,8 @@ function remapClamped(v: number, a: number, b: number, c: number, d: number) {
 }
 
 let didWeWarnTheDeveloperAboutDmeEyelidsYet = false;
-function runFlexRules(rules: FlexRule[], controllerValues: Float32Array, flexValues: Float32Array) {
+// Adapted from https://github.com/NicolasDe/AlienSwarm/blob/master/src/public/studio.cpp#L1568
+function runFlexRules(rules: StudioFlexRule[], controllerValues: Float32Array, flexValues: Float32Array) {
 	for (let r = 0; r < rules.length; r++) {
 		const rule = rules[r];
 		const ops = rule.ops;
@@ -196,7 +229,7 @@ function runFlexRules(rules: FlexRule[], controllerValues: Float32Array, flexVal
 					break ops;
 
 					// value = 0;
-					// idx += 2;z
+					// idx += 2;
 					// break;
 			}
 		}
@@ -762,6 +795,8 @@ export class StudioModelData {
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
     public seq: SeqDesc[] = [];
+	public flexrules: StudioFlexRule[] = [];
+	public flexcontrollers: StudioFlexController[] = [];
     public attachment: AttachmentDesc[] = [];
     public includemodel: string[] = [];
     public animBlockName: string | null = null;
@@ -1108,6 +1143,8 @@ export class StudioModelData {
         const localnodeindex = mdlView.getUint32(0xFC, true);
         const localnodenameindex = mdlView.getUint32(0x100, true);
 
+		// The below code parses and stores the flex information of the model
+
         const numflexdesc = mdlView.getUint32(0x104, true);
         const flexdescindex = mdlView.getUint32(0x108, true);
 		let flexdescIdx = flexdescindex;
@@ -1119,6 +1156,8 @@ export class StudioModelData {
 
         const numflexcontrollers = mdlView.getUint32(0x10C, true);
         const flexcontrollerindex = mdlView.getUint32(0x110, true);
+		const flexControllers = this.flexcontrollers = new Array<StudioFlexController>(numflexcontrollers);
+
 		let flexcontrollerIdx = flexcontrollerindex;
 		for (let i = 0; i < numflexcontrollers; i++, flexcontrollerIdx += 0x14) {
 			const sztypeindex = mdlView.getInt32(flexcontrollerIdx + 0x0, true);
@@ -1126,36 +1165,43 @@ export class StudioModelData {
 			const sznameindex = mdlView.getInt32(flexcontrollerIdx + 0x4, true);
 			const flexcontrollerName = readString(mdlBuffer, flexcontrollerIdx + sznameindex);
 			
+			// TODO(koerismo): Why does this even exist?
 			const localToGlobal = mdlView.getInt32(flexcontrollerIdx + 0x8, true);
 			const flexMin = mdlView.getFloat32(flexcontrollerIdx + 0x0C, true);
 			const flexMax = mdlView.getFloat32(flexcontrollerIdx + 0x10, true);
+			flexControllers[i] = { name: flexcontrollerName, type: flexcontrollerType, min: flexMin, max: flexMax };
 			console.log(
 				'Found flexcontroller of type',
 				flexcontrollerType,
 				'with name',
 				flexcontrollerName,
-				'and bounds', flexMin, flexMax
+				'and bounds [', flexMin+', '+flexMax, ']',
+				'id =', localToGlobal
 			);
 		}
 
         const numflexrules = mdlView.getUint32(0x114, true);
         const flexruleindex = mdlView.getUint32(0x118, true);
+		const flexRules = this.flexrules = new Array<StudioFlexRule>(numflexrules);
+
 		let flexruleIdx = flexruleindex;
 		for (let i = 0; i < numflexrules; i++, flexruleIdx += 0xC) {
 			const flexruleFlex = mdlView.getInt32(flexruleIdx + 0x0, true);
 			const flexruleOpCount = mdlView.getInt32(flexruleIdx + 0x4, true);
 			const flexruleOpIndex = mdlView.getInt32(flexruleIdx + 0x8, true);
-
-			const flexOps = new Array(flexruleOpCount);
+			const flexOps = new Array<StudioFlexOp>(flexruleOpCount);
+			
 			let flexopIdx = flexruleOpIndex;
 			for (let p = 0; p < flexruleOpCount; p++, flexopIdx += 0x8) {
 				const opType = mdlView.getInt32(flexopIdx, true);
-				// These two share the same memory.
-				const opIndex = mdlView.getInt32(flexopIdx + 0x4, true);
+				const opIndex = mdlView.getInt32(flexopIdx + 0x4, true); // These two share the same memory.
 				const opValue = mdlView.getFloat32(flexopIdx + 0x4, true);
-				
+				flexOps[p] = { type: opType, index: opIndex, value: opValue };
 			}
+			flexRules[i] = { flex: flexruleFlex, ops: flexOps };
 		}
+
+		// Rest of body
 
         const numikchains = mdlView.getUint32(0x11C, true);
         const ikchainindex = mdlView.getUint32(0x120, true);
@@ -1432,6 +1478,47 @@ export class StudioModelData {
 
                         const numflexes = mdlView.getUint32(mdlMeshIdx + 0x10, true);
                         const flexindex = mdlView.getUint32(mdlMeshIdx + 0x14, true);
+
+						const meshFlexes = new Array<StudioFlex>(numflexes);
+						let flexIdx = mdlMeshIdx + flexindex;
+						for (let i = 0; i < numflexes; i++, flexIdx += 0x26) {
+							const flexdesc = mdlView.getInt32(flexIdx + 0x00, true);
+							const target0 = mdlView.getFloat32(flexIdx + 0x04, true);
+							const target1 = mdlView.getFloat32(flexIdx + 0x08, true);
+							const target2 = mdlView.getFloat32(flexIdx + 0x0C, true);
+							const target3 = mdlView.getFloat32(flexIdx + 0x10, true);
+							const flexnumverts = mdlView.getFloat32(flexIdx + 0x14, true);
+							const flexvertindex = mdlView.getFloat32(flexIdx + 0x18, true);
+
+							let flexVertexSize = (3 + 3);
+							const flexVtxData = new Float32Array(flexnumverts * flexVertexSize);
+							const flexIdxData = new Uint16Array(flexnumverts);
+
+							let flexVertIdx = flexIdx, dataOffs = 0;
+							for (let v = 0; v < flexnumverts; v++, flexVertIdx += 0x10) {
+								// TODO(koerismo): How do we detect if it's using f16 or not?
+								const flexVertIndex = mdlView.getUint16(flexVertIdx + 0x00, true);
+								flexIdxData[v] = flexVertIndex;
+
+								// TODO(koerismo): Both of these seem to always be set to -1
+								const flexVertSpeed = mdlView.getInt8(flexVertIdx + 0x02);
+								const flexVertSide = mdlView.getInt8(flexVertIdx + 0x03);
+								
+								// Position offset
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x04, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x08, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0C, true));
+								// Normal offset
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x10, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x14, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x18, true));
+							}
+
+							const flexpair = mdlView.getInt32(flexIdx + 0x1C, true);
+							const flexvertanimtype = mdlView.getUint8(flexIdx + 0x1D);
+							meshFlexes[i] = { desc: flexdesc, descpair: flexpair, type: flexvertanimtype, verts: flexVtxData, indices: flexIdxData };
+						}
+
 
                         const materialtype = mdlView.getUint32(mdlMeshIdx + 0x18, true);
                         // assert(materialtype === 0); // not eyeballs
