@@ -11,10 +11,9 @@ import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, Stat
 import BitMap from "../BitMap.js";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA.js';
 import { Color, colorNewFromRGBA } from "../Color.js";
-import { unpackColorRGBExp32 } from "./Materials.js";
+import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
 import { lerp, saturate } from "../MathHelpers.js";
 import { pairs2obj, ValveKeyValueParser, VKFPair } from "./VMT.js";
-import { downloadBuffer, downloadBufferSlice } from "../DownloadUtils.js";
 
 const enum LumpType {
     ENTITIES                  = 0,

@@ -9,11 +9,11 @@ import { SourceFileSystem, SourceRenderContext } from "./Main.js";
 import { AABB } from "../Geometry.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { StaticLightingMode, MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, SkinningMode } from "./Materials/MaterialBase.js";
 
 // Encompasses the MDL, VVD & VTX formats.
 

@@ -3,7 +3,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { assert, readString } from "../util.js";
 import { vec4, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { Color, colorClampLDR, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../Color.js";
-import { unpackColorRGBExp32, BaseMaterial, MaterialShaderTemplateBase, LightCache, EntityMaterialParameters } from "./Materials.js";
 import { SourceRenderContext, BSPRenderer } from "./Main.js";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation, scaleMatrix } from "../MathHelpers.js";
@@ -17,6 +16,9 @@ import { BSPFile } from "./BSPFile.js";
 import { AABB } from "../Geometry.js";
 import { GfxTopology, makeTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { unpackColorRGBExp32 } from "./Materials/Lightmap.js";
+import { BaseMaterial, MaterialShaderTemplateBase, EntityMaterialParameters } from "./Materials/MaterialBase.js";
+import { LightCache } from "./Materials/WorldLight.js";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }

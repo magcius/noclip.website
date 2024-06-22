@@ -22,7 +22,6 @@ import { SceneGfx, ViewerRenderInput } from "../viewer.js";
 import { ZipFile, decompressZipFileEntry, parseZipFile } from "../ZipFile.js";
 import { BSPFile, BSPFileVariant, Model, Surface } from "./BSPFile.js";
 import { BaseEntity, calcFrustumViewProjection, EntityFactoryRegistry, EntitySystem, env_projectedtexture, env_shake, point_camera, sky_camera, worldspawn } from "./EntitySystem.js";
-import { BaseMaterial, fillSceneParamsOnRenderInst, FogParams, LateBindingTexture, LightmapManager, MaterialCache, MaterialShaderTemplateBase, MaterialProxySystem, SurfaceLightmap, ToneMapParams, WorldLightingState, ProjectedLight } from "./Materials.js";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject.js";
 import { StudioModelCache } from "./Studio.js";
 import { createVPKMount, VPKMount } from "./VPK.js";
@@ -32,9 +31,13 @@ import { projectionMatrixConvertClipSpaceNearZ } from "../gfx/helpers/Projection
 import { projectionMatrixReverseDepth } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { LuminanceHistogram } from "./LuminanceHistogram.js";
 import { fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers.js";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { dfRange, dfShow } from "../DebugFloaters.js";
 import { GMA } from "./GMA.js";
+import { LightmapManager, SurfaceLightmap } from "./Materials/Lightmap.js";
+import { BaseMaterial, MaterialShaderTemplateBase, fillSceneParamsOnRenderInst, FogParams, ToneMapParams, LateBindingTexture } from "./Materials/MaterialBase.js";
+import { MaterialCache } from "./Materials/MaterialCache.js";
+import { MaterialProxySystem } from "./Materials/MaterialParameters.js";
+import { ProjectedLight, WorldLightingState } from "./Materials/WorldLight.js";
 
 export class LooseMount {
     private normalizedFiles: string[];

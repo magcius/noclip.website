@@ -15,12 +15,14 @@ import { getRandomInt, getRandomVector } from '../SuperMarioGalaxy/ActorUtil.js'
 import { arrayRemove, assert, assertExists, fallbackUndefined, leftPad, nArray, nullify } from '../util.js';
 import { BSPEntity } from './BSPFile.js';
 import { BSPModelRenderer, BSPRenderer, BSPSurfaceRenderer, ProjectedLightRenderer, RenderObjectKind, SourceEngineView, SourceEngineViewType, SourceRenderContext, SourceRenderer, SourceWorldViewRenderer } from './Main.js';
-import { BaseMaterial, EntityMaterialParameters, FogParams, LightCache, ParameterReference, paramSetNum, worldLightingCalcColorForPoint } from './Materials.js';
 import { ParticleControlPoint, ParticleSystemInstance } from './ParticleSystem.js';
 import { SpriteInstance } from './Sprite.js';
 import { computeMatrixForForwardDir } from './StaticDetailObject.js';
 import { computeModelMatrixPosQAngle, computePosQAngleModelMatrix, StudioModelInstance } from "./Studio.js";
 import { vmtParseColor, vmtParseNumber, vmtParseVector } from './VMT.js';
+import { EntityMaterialParameters, FogParams, BaseMaterial } from './Materials/MaterialBase.js';
+import { ParameterReference, paramSetNum } from './Materials/MaterialParameters.js';
+import { LightCache, worldLightingCalcColorForPoint } from './Materials/WorldLight.js';
 
 type EntityMessageValue = string;
 
