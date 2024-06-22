@@ -11,7 +11,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
+import { bitsAsFloat32, clamp, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { StaticLightingMode, MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, SkinningMode } from "./Materials/MaterialBase.js";
 
@@ -72,109 +72,138 @@ function remapClamped(v: number, a: number, b: number, c: number, d: number) {
 	return ((v - b) / (b - a)) * (d - c) + c;
 }
 
-function runFlexRule(rule: FlexRule, controllerValues: Float32Array, flexValues: Float32Array) {
-	const ops = rule.ops;
-	const stack = new Float32Array(32);
-	let idx = stack.length;
-	let value = 0.0;
+let didWeWarnTheDeveloperAboutDmeEyelidsYet = false;
+function runFlexRules(rules: FlexRule[], controllerValues: Float32Array, flexValues: Float32Array) {
+	for (let r = 0; r < rules.length; r++) {
+		const rule = rules[r];
+		const ops = rule.ops;
+		const stack = new Float32Array(32 + 1); // The stack can have an extra byte, as a treat.
+		let idx = stack.length - 1;
+		let value = 0.0;
 
-	// Scratch variable
-	let m: number;
+		// Scratch variable
+		let m: number;
 
-	// Iterate through all ops
-	for (let p = 0; p < ops.length; p++) {
-		const op = ops[p];
-		switch(ops[p].type) {
-			case StudioFlexOpType.ADD:
-				value += stack[idx++];
-				break;
-			case StudioFlexOpType.SUB:
-				value = stack[idx++] - value;
-			case StudioFlexOpType.MUL:
-				value *= stack[idx++];
-			case StudioFlexOpType.DIV:
-				if (value > 0.0001)  value = stack[idx];
-				else                 value = 0.0;
-				idx++;
-				break;
-			case StudioFlexOpType.NEG:
-				value = -value;
-				break;
-			case StudioFlexOpType.MAX:
-				value = Math.max(stack[idx++], value);
-				break;
-			case StudioFlexOpType.MIN:
-				value = Math.min(stack[idx++], value);
-				break;
-			case StudioFlexOpType.CONST:
-				stack[idx--] = value;
-				value = op.value;
-				break;
-			case StudioFlexOpType.FETCH1:
-				stack[idx--] = value;
-				value = controllerValues[op.index];
-				break;
-			case StudioFlexOpType.FETCH2:
-				stack[idx--] = value;
-				value = flexValues[op.index];
-				break;
-			case StudioFlexOpType.COMBO:
-				// multiply by top M elements of the stack
-				m = op.index;
-				while (m--) value *= stack[idx++];
-				break;
-			case StudioFlexOpType.DOMINATE:
-				// multiply by the 1 - the top N elements of the stack
-				m = op.index;
-				let product = 0.0;
-				while (m--) product *= stack[idx++];
-				value *= 1.0 - product;
-				break;
-			case StudioFlexOpType._2WAY_0:
-				// |<->|---|
-				const v20 = controllerValues[op.index];
-				stack[idx--] = value;
-				value = clamp(v20, -1, 0) + 1.0;
-				break;
-			case StudioFlexOpType._2WAY_1:
-				// |---|<->|
-				const v21 = controllerValues[op.index];
-				stack[idx--] = value;
-				value = clamp(v21, 0, 1);
-				break;
-			case StudioFlexOpType.NWAY:
-				let flexValue = controllerValues[value | 0]; // Coerce value to int as index
-				const rampX = stack[idx+3],
-				      rampY = stack[idx+2],
-				      rampZ = stack[idx+1],
-				      rampW = stack[idx];
-				idx += 4;
-
-				if (flexValue <= rampX || flexValue >= rampW) {
-					flexValue = 0.0;
-				}
-				else if (flexValue < rampY) {
-					flexValue = remapClamped(flexValue, rampX, rampY, 0.0, 1.0);
-				}
-				else if (flexValue > rampZ) {
-					flexValue = remapClamped(flexValue, rampZ, rampW, 1.0, 0.0);
-				}
-				else {
-					flexValue = 1.0;
-				}
-
-				value = flexValue * controllerValues[op.index];
-				break;
+		// Iterate through all ops
+		ops: for (let p = 0; p < ops.length; p++) {
+			const op = ops[p];
+			switch(ops[p].type) {
+				case StudioFlexOpType.ADD:
+					value += stack[idx++];
+					break;
 				
-			// DME eyelids not implemented.
-			default:
-				idx += 2;
-				break;
-		}
-	}
+				case StudioFlexOpType.SUB:
+					value = stack[idx++] - value;
+					break;
+				
+				case StudioFlexOpType.MUL:
+					value *= stack[idx++];
+					break;
+				
+				case StudioFlexOpType.DIV:
+					if (value > 0.0001)  value = stack[idx];
+					else                 value = 0.0;
+					idx++;
+					break;
+				
+				case StudioFlexOpType.NEG:
+					value = -value;
+					break;
+				
+				case StudioFlexOpType.MAX:
+					value = Math.max(stack[idx++], value);
+					break;
+				
+				case StudioFlexOpType.MIN:
+					value = Math.min(stack[idx++], value);
+					break;
+				
+				case StudioFlexOpType.CONST:
+					stack[idx--] = value;
+					value = op.value;
+					break;
+				
+				case StudioFlexOpType.FETCH1:
+					stack[idx--] = value;
+					value = controllerValues[op.index];
+					break;
+				
+				case StudioFlexOpType.FETCH2:
+					stack[idx--] = value;
+					value = flexValues[op.index];
+					break;
+				
+				case StudioFlexOpType.COMBO:
+					// multiply by top M elements of the stack
+					m = op.index;
+					while (m--) value *= stack[idx++];
+					break;
+				
+				case StudioFlexOpType.DOMINATE:
+					// multiply by 1 - the top N elements of the stack
+					m = op.index;
+					let product = 0.0;
+					while (m--) product *= stack[idx++];
+					value *= 1.0 - product;
+					break;
+				
+				case StudioFlexOpType._2WAY_0:
+					// |<->|---|
+					const v20 = controllerValues[op.index];
+					stack[idx--] = value;
+					value = clamp(v20, -1, 0) + 1.0;
+					break;
+				
+				case StudioFlexOpType._2WAY_1:
+					// |---|<->|
+					const v21 = controllerValues[op.index];
+					stack[idx--] = value;
+					value = clamp(v21, 0, 1);
+					break;
+				
+				case StudioFlexOpType.NWAY:
+					let flexValue = controllerValues[value | 0]; // Coerce value to int as index
+					const ramp0 = stack[idx+3],
+					      ramp1 = stack[idx+2],
+					      ramp2 = stack[idx+1],
+					      ramp3 = stack[idx];
+					idx += 4;
 
-	// Set result to ending value
-	flexValues[rule.flex] = value;
+					if (flexValue <= ramp0 || flexValue >= ramp3) {
+						flexValue = 0.0;
+					}
+					else if (flexValue < ramp1) {
+						flexValue = remapClamped(flexValue, ramp0, ramp1, 0.0, 1.0);
+					}
+					else if (flexValue > ramp2) {
+						flexValue = remapClamped(flexValue, ramp2, ramp3, 1.0, 0.0);
+					}
+					else {
+						flexValue = 1.0;
+					}
+
+					value = flexValue * controllerValues[op.index];
+					break;
+				
+				// TODO(koerismo): DME eyelids are not implemented at the moment. Pretend that we did the operation and shout a warning.
+				default:
+					if (!didWeWarnTheDeveloperAboutDmeEyelidsYet) {
+						console.warn('A model in the scene is using DME eyelids, which are not implemented. Ignoring remaining operations to avoid crashes!');
+						didWeWarnTheDeveloperAboutDmeEyelidsYet = true;
+					}
+
+					// TODO(koerismo): This can be removed at the risk of causing stack overruns when a model relies this feature.
+					break ops;
+
+					// value = 0;
+					// idx += 2;z
+					// break;
+			}
+		}
+
+		// Set result to ending value
+		flexValues[rule.flex] = value;
+	}
 }
 
 function computeModelMatrixPosRotInternal(dst: mat4, pitch: number, yaw: number, roll: number, pos: ReadonlyVec3): void {
