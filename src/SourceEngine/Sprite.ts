@@ -4,8 +4,8 @@ import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { getMatrixAxisZ, saturate, scaleMatrix, setMatrixTranslation, Vec3Zero } from "../MathHelpers.js";
 import { SourceEngineView, SourceRenderContext } from "./Main.js";
-import { BaseMaterial, RenderMode } from "./Materials.js";
 import { computeMatrixForForwardDir } from "./StaticDetailObject.js";
+import { BaseMaterial, RenderMode } from "./Materials/MaterialBase.js";
 
 const scratchVec3a = vec3.create();
 const scratchMat4a = mat4.create();

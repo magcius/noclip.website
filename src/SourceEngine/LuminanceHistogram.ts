@@ -16,7 +16,7 @@ import { DeviceProgram } from "../Program.js";
 import { TextureMapping } from "../TextureHolder.js";
 import { align, nArray } from "../util.js";
 import { SourceRenderContext } from "./Main.js";
-import { ToneMapParams } from "./Materials.js";
+import { ToneMapParams } from "./Materials/MaterialBase.js";
 
 const scratchVec4 = vec4.create();
 

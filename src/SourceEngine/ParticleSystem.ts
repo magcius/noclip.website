@@ -4,7 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice.js";
 import { IS_DEVELOPMENT } from "../BuildVersion.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { Color, colorNewCopy, Magenta, White } from "../Color.js";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk.js";
+import { getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB } from "../Geometry.js";
 import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
@@ -12,9 +12,9 @@ import { computeModelMatrixR, getMatrixAxisZ, invlerp, lerp, MathConstants, satu
 import { assert, assertExists } from "../util.js";
 import * as DMX from "./DMX.js";
 import { SourceEngineViewType, SourceFileSystem, SourceRenderContext } from "./Main.js";
-import { BaseMaterial } from "./Materials.js";
 import { computeMatrixForForwardDir } from "./StaticDetailObject.js";
 import { ValveKeyValueParser, VKFPair } from "./VMT.js";
+import { BaseMaterial } from "./Materials/MaterialBase.js";
 
 class SeededRNG {
     public state: number;
