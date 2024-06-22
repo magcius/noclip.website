@@ -8,7 +8,7 @@ import { assert, readString, nArray, assertExists, align } from "../util.js";
 import { SourceFileSystem, SourceRenderContext } from "./Main.js";
 import { AABB } from "../Geometry.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, clamp, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
@@ -362,7 +362,7 @@ class StudioModelMeshData {
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, staticVertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number, public flexes: StudioFlex[]) {
+    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, staticVertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number, public flexes: StudioFlex[], public indexRemap: Uint16Array) {
         const device = cache.device;
 
         // Store positions and normals in the dynamic buffer for flex animations (if wanted)
@@ -475,10 +475,11 @@ class StudioModelMeshData {
 			const flexVtxData = this.flexes[f].vertexData;
 			const flexIdxData = this.flexes[f].indexData;
 
-			let vertexIdx = 0, normalIdx = 0, flexIdx = 0;
+			let flexIdx = 0;
 			for (let i = 0; i < flexVtxCount; i++, flexIdx += 6) {
-				vertexIdx = flexIdxData[i] * 3;
-				normalIdx = flexIdxData[i] * 4 + this.vertexCount * 3;
+                const index = this.indexRemap[flexIdxData[i]];
+				const vertexIdx = index * 3;
+				const normalIdx = index * 4 + this.vertexCount * 3;
 				flexedVertexData[vertexIdx + 0] += flexVtxData[flexIdx + 0] * multiply;
 				flexedVertexData[vertexIdx + 1] += flexVtxData[flexIdx + 1] * multiply;
 				flexedVertexData[vertexIdx + 2] += flexVtxData[flexIdx + 2] * multiply;
@@ -1690,6 +1691,7 @@ export class StudioModelData {
                         let meshFirstIdx = 0;
 
                         const stripGroupDatas: StudioModelStripGroupData[] = [];
+                        const indexRemap = new Uint16Array(meshNumVertices);
 
                         vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
                         for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
@@ -1711,24 +1713,24 @@ export class StudioModelData {
                             }
 
                             // Build the vertex data for our strip group.
-                            let vertIdx = vtxStripGroupIdx + vertOffset;
+                            let vtxVertIdx = vtxStripGroupIdx + vertOffset;
                             for (let v = 0; v < numVerts; v++) {
                                 // VTX Bone weight data.
                                 const vtxBoneWeightIdx = [
-                                    vtxView.getUint8(vertIdx + 0x00),
-                                    vtxView.getUint8(vertIdx + 0x01),
-                                    vtxView.getUint8(vertIdx + 0x02),
+                                    vtxView.getUint8(vtxVertIdx + 0x00),
+                                    vtxView.getUint8(vtxVertIdx + 0x01),
+                                    vtxView.getUint8(vtxVertIdx + 0x02),
                                 ];
-                                const vtxNumBones = vtxView.getUint8(vertIdx + 0x03);
+                                const vtxNumBones = vtxView.getUint8(vtxVertIdx + 0x03);
 
-                                const vtxOrigMeshVertID = vtxView.getUint16(vertIdx + 0x04, true);
+                                const vtxOrigMeshVertID = vtxView.getUint16(vtxVertIdx + 0x04, true);
                                 const vtxBoneID = [
-                                    vtxView.getUint8(vertIdx + 0x06),
-                                    vtxView.getUint8(vertIdx + 0x07),
-                                    vtxView.getUint8(vertIdx + 0x08),
+                                    vtxView.getUint8(vtxVertIdx + 0x06),
+                                    vtxView.getUint8(vtxVertIdx + 0x07),
+                                    vtxView.getUint8(vtxVertIdx + 0x08),
                                 ];
 
-                                vertIdx += 0x09;
+                                vtxVertIdx += 0x09;
 
                                 // Pull out VVD vertex data.
                                 const modelVertIndex = (mdlMeshVertexoffset + vtxOrigMeshVertID);
@@ -1736,6 +1738,8 @@ export class StudioModelData {
                                 const vvdTangentIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstTangent + modelVertIndex);
                                 const vvdVertexOffs = vvdVertexDataStart + 0x30 * vvdVertIndex;
                                 const vvdTangentOffs = vvdTangentDataStart + 0x10 * vvdTangentIndex;
+
+                                indexRemap[vtxOrigMeshVertID] = vtxIndex;
 
                                 const vvdBoneWeight = [
                                     vvdView.getFloat32(vvdVertexOffs + 0x00, true),
@@ -1911,7 +1915,7 @@ export class StudioModelData {
                         }
 
                         const cache = renderContext.renderCache;
-                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices, meshFlexes);
+                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices, meshFlexes, indexRemap);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);
                         lodData.meshData.push(meshData);
