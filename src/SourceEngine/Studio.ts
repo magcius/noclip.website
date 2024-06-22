@@ -458,9 +458,10 @@ class StudioModelMeshData {
 			const flexVtxData = this.flexes[f].vertexData;
 			const flexIdxData = this.flexes[f].indexData;
 
-			let vertexIdx = 0, normalIdx = this.vertexCount*3, flexIdx = 0;
-			for (let i = 0; i < flexVtxCount; i++, vertexIdx += 3, normalIdx += 4, flexIdx += 6) {
-				// vertexIdx = flexIdxData[i] * 21;
+			let vertexIdx = 0, normalIdx = 0, flexIdx = 0;
+			for (let i = 0; i < flexVtxCount; i++, flexIdx += 6) {
+				vertexIdx = flexIdxData[i] * 3;
+				normalIdx = flexIdxData[i] * 4 + this.vertexCount * 3;
 				flexedVertexData[vertexIdx + 0] += flexVtxData[flexIdx + 0] * multiply;
 				flexedVertexData[vertexIdx + 1] += flexVtxData[flexIdx + 1] * multiply;
 				flexedVertexData[vertexIdx + 2] += flexVtxData[flexIdx + 2] * multiply;
