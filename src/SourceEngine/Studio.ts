@@ -3,12 +3,12 @@
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { assert, readString, nArray, assertExists, align } from "../util.js";
 import { SourceFileSystem, SourceRenderContext } from "./Main.js";
 import { AABB } from "../Geometry.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers.js";
 import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
@@ -112,11 +112,13 @@ class StudioModelStripGroupData {
 const enum StudioModelMeshDataFlags {
     None = 0,
     HasTexCoord1 = 1 << 0,
+    HasDynamicPositionsNormals = 1 << 1,
 }
 
 // TODO(jstpierre): Coalesce all buffers for a studio model?
 class StudioModelMeshData {
-    public vertexBuffer: GfxBuffer;
+    public staticVertexBuffer: GfxBuffer;
+    public dynamicVertexBuffer: GfxBuffer | null = null;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
@@ -124,9 +126,19 @@ class StudioModelMeshData {
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
+    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, staticVertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
+
+        // Store positions and normals in the dynamic buffer for flex animations (if wanted)
+        if (this.flags & StudioModelMeshDataFlags.HasDynamicPositionsNormals) {
+            const dynamicWordCount = this.vertexCount * (3+4);
+            const staticWordCount = (staticVertexData.byteLength / 4) - dynamicWordCount;
+            this.dynamicVertexBuffer = device.createBuffer(dynamicWordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic, new Uint8Array(staticVertexData, 0, dynamicWordCount * 4));
+            this.staticVertexBuffer = device.createBuffer(staticWordCount, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Static, new Uint8Array(staticVertexData, dynamicWordCount * 4));
+        } else {
+            this.staticVertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, staticVertexData);
+        }
+
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
         // Create our base input state.
@@ -135,16 +147,22 @@ class StudioModelMeshData {
 
     public createVertexInput(cache: GfxRenderCache, staticLightingMode: StaticLightingMode, colorBufferDescriptor: GfxVertexBufferDescriptor | null = null): [GfxInputLayout, GfxVertexBufferDescriptor[], GfxIndexBufferDescriptor] {
         // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: MaterialShaderTemplateBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_TangentS,    bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_BoneWeights, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_BoneIDs,     bufferIndex: 0, bufferByteOffset: 15*0x04, format: GfxFormat.F32_RGBA, },
-            { location: MaterialShaderTemplateBase.a_TexCoord01,  bufferIndex: 0, bufferByteOffset: 19*0x04, format: GfxFormat.F32_RG, },
-        ];
+
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+4+4+4+4+2)*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 4*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+            { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
+        ];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialShaderTemplateBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
+            { location: MaterialShaderTemplateBase.a_Normal,      bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TangentS,    bufferIndex: 2, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_BoneWeights, bufferIndex: 3, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_BoneIDs,     bufferIndex: 4, bufferByteOffset: 0, format: GfxFormat.F32_RGBA, },
+            { location: MaterialShaderTemplateBase.a_TexCoord01,  bufferIndex: 5, bufferByteOffset: 0, format: GfxFormat.F32_RG, },
         ];
 
         if (!!(this.flags & StudioModelMeshDataFlags.HasTexCoord1)) {
@@ -153,14 +171,30 @@ class StudioModelMeshData {
             vertexBufferDescriptors[0].byteStride += 2*0x04;
         }
 
-        const bufferDescriptors: GfxVertexBufferDescriptor[] = [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ];
+        let bufferDescriptors: GfxVertexBufferDescriptor[] = [];
+        let byteOffset = 0;
+        let lastBuffer: GfxBuffer | null = null;
+        for (let i = 0; i < vertexBufferDescriptors.length; i++) {
+            let buffer: GfxBuffer;
+            if ((this.flags & StudioModelMeshDataFlags.HasDynamicPositionsNormals) && (i === 0 || i === 1)) { // positions and normals
+                buffer = assertExists(this.dynamicVertexBuffer);
+            } else {
+                buffer = this.staticVertexBuffer;
+            }
+
+            if (buffer !== lastBuffer) {
+                byteOffset = 0;
+                lastBuffer = buffer;
+            }
+
+            bufferDescriptors.push({ buffer, byteOffset });
+            byteOffset += vertexBufferDescriptors[i].byteStride * this.vertexCount;
+        }
 
         if (staticLightingMode === StaticLightingMode.StudioVertexLighting) {
             assert(colorBufferDescriptor !== null);
             vertexAttributeDescriptors.push(
-                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 6, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
             );
             vertexBufferDescriptors.push(
                 { byteStride: 1*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -169,9 +203,9 @@ class StudioModelMeshData {
         } else if (staticLightingMode === StaticLightingMode.StudioVertexLighting3) {
             assert(colorBufferDescriptor !== null);
             vertexAttributeDescriptors.push(
-                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
-                { location: MaterialShaderTemplateBase.a_StaticVertexLighting1, bufferIndex: 1, bufferByteOffset: 1*0x04, format: GfxFormat.U8_RGBA_NORM, },
-                { location: MaterialShaderTemplateBase.a_StaticVertexLighting2, bufferIndex: 1, bufferByteOffset: 2*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting0, bufferIndex: 6, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting1, bufferIndex: 6, bufferByteOffset: 1*0x04, format: GfxFormat.U8_RGBA_NORM, },
+                { location: MaterialShaderTemplateBase.a_StaticVertexLighting2, bufferIndex: 6, bufferByteOffset: 2*0x04, format: GfxFormat.U8_RGBA_NORM, },
             );
             vertexBufferDescriptors.push(
                 { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PerVertex, },
@@ -188,7 +222,7 @@ class StudioModelMeshData {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.staticVertexBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
 }
@@ -1272,14 +1306,21 @@ export class StudioModelData {
                         if (meshNumVertices === 0)
                             continue;
 
+                        if (numflexes > 0)
+                            meshDataFlags |= StudioModelMeshDataFlags.HasDynamicPositionsNormals;
+
+                        const meshVtxOffs = nArray(8, () => 0);
+                        const meshVtxStride = [3, 4, 4, 4, 4, 2, (meshDataFlags & StudioModelMeshDataFlags.HasTexCoord1) ? 2 : 0];
+
                         // 3 pos, 4 normal, 4 tangent, 4 bone weight, 4 bone id, 2 uv
-                        let vertexSize = (3+4+4+4+4+2);
-                        if (meshDataFlags & StudioModelMeshDataFlags.HasTexCoord1)
-                            vertexSize += 2;
-                        const meshVtxData = new Float32Array(meshNumVertices * vertexSize);
+                        for (let i = 0; i < meshVtxStride.length; i++)
+                            meshVtxOffs[i+1] = meshVtxOffs[i] + meshNumVertices * meshVtxStride[i];
+
+                        const meshVtxSize = meshVtxOffs[meshVtxOffs.length - 1];
+                        const meshVtxData = new Float32Array(meshVtxSize);
                         const meshIdxData = new Uint16Array(align(meshNumIndices, 2));
 
-                        let dataOffs = 0x00;
+                        let vtxIndex = 0;
                         let meshIdxBase = 0;
                         let idxOffs = 0x00;
                         let meshFirstIdx = 0;
@@ -1322,6 +1363,8 @@ export class StudioModelData {
                                     vtxView.getUint8(vertIdx + 0x07),
                                     vtxView.getUint8(vertIdx + 0x08),
                                 ];
+
+                                vertIdx += 0x09;
 
                                 // Pull out VVD vertex data.
                                 const modelVertIndex = (mdlMeshVertexoffset + vtxOrigMeshVertID);
@@ -1387,45 +1430,52 @@ export class StudioModelData {
                                 assert(vvdTangentSW === 0.0 || vvdTangentSW === 1.0 || vvdTangentSW === -1.0);
 
                                 // Position
-                                meshVtxData[dataOffs++] = vvdPositionX;
-                                meshVtxData[dataOffs++] = vvdPositionY;
-                                meshVtxData[dataOffs++] = vvdPositionZ;
+                                let positionOffs = meshVtxOffs[0] + vtxIndex * 3;
+                                meshVtxData[positionOffs++] = vvdPositionX;
+                                meshVtxData[positionOffs++] = vvdPositionY;
+                                meshVtxData[positionOffs++] = vvdPositionZ;
 
                                 // Normal
-                                meshVtxData[dataOffs++] = vvdNormalX;
-                                meshVtxData[dataOffs++] = vvdNormalY;
-                                meshVtxData[dataOffs++] = vvdNormalZ;
-                                meshVtxData[dataOffs++] = 1.0; // vertex alpha
+                                let normalOffs = meshVtxOffs[1] + vtxIndex * 4;
+                                meshVtxData[normalOffs++] = vvdNormalX;
+                                meshVtxData[normalOffs++] = vvdNormalY;
+                                meshVtxData[normalOffs++] = vvdNormalZ;
+                                meshVtxData[normalOffs++] = 1.0; // vertex alpha
 
                                 // Tangent
-                                meshVtxData[dataOffs++] = vvdTangentSX;
-                                meshVtxData[dataOffs++] = vvdTangentSY;
-                                meshVtxData[dataOffs++] = vvdTangentSZ;
-                                meshVtxData[dataOffs++] = vvdTangentSW;
+                                let tangentOffs = meshVtxOffs[2] + vtxIndex * 4;
+                                meshVtxData[tangentOffs++] = vvdTangentSX;
+                                meshVtxData[tangentOffs++] = vvdTangentSY;
+                                meshVtxData[tangentOffs++] = vvdTangentSZ;
+                                meshVtxData[tangentOffs++] = vvdTangentSW;
 
                                 // Bone weights
-                                meshVtxData[dataOffs++] = boneWeights[0];
-                                meshVtxData[dataOffs++] = boneWeights[1];
-                                meshVtxData[dataOffs++] = boneWeights[2];
-                                meshVtxData[dataOffs++] = boneWeights[3];
+                                let boneWeightOffs = meshVtxOffs[3] + vtxIndex * 4;
+                                meshVtxData[boneWeightOffs++] = boneWeights[0];
+                                meshVtxData[boneWeightOffs++] = boneWeights[1];
+                                meshVtxData[boneWeightOffs++] = boneWeights[2];
+                                meshVtxData[boneWeightOffs++] = boneWeights[3];
 
                                 // Bone IDs
-                                meshVtxData[dataOffs++] = vtxBoneID[0];
-                                meshVtxData[dataOffs++] = vtxBoneID[1];
-                                meshVtxData[dataOffs++] = vtxBoneID[2];
-                                meshVtxData[dataOffs++] = 0;
+                                let boneIDOffs = meshVtxOffs[4] + vtxIndex * 4;
+                                meshVtxData[boneIDOffs++] = vtxBoneID[0];
+                                meshVtxData[boneIDOffs++] = vtxBoneID[1];
+                                meshVtxData[boneIDOffs++] = vtxBoneID[2];
+                                meshVtxData[boneIDOffs++] = 0;
 
                                 // Texcoord
-                                meshVtxData[dataOffs++] = vvdTexCoordS;
-                                meshVtxData[dataOffs++] = vvdTexCoordT;
+                                let texcoord0Offs = meshVtxOffs[5] + vtxIndex * 2;
+                                meshVtxData[texcoord0Offs++] = vvdTexCoordS;
+                                meshVtxData[texcoord0Offs++] = vvdTexCoordT;
 
                                 if (!!(meshDataFlags & StudioModelMeshDataFlags.HasTexCoord1)) {
                                     const vvdExtraTexCoordOffs = vvdTexCoord1DataStart + vvdVertIndex * 2*0x04;
-                                    meshVtxData[dataOffs++] = vvdView.getFloat32(vvdExtraTexCoordOffs + 0x00, true);
-                                    meshVtxData[dataOffs++] = vvdView.getFloat32(vvdExtraTexCoordOffs + 0x04, true);
+                                    let texcoord1Offs = meshVtxOffs[6] + vtxIndex * 2;
+                                    meshVtxData[texcoord1Offs++] = vvdView.getFloat32(vvdExtraTexCoordOffs + 0x00, true);
+                                    meshVtxData[texcoord1Offs++] = vvdView.getFloat32(vvdExtraTexCoordOffs + 0x04, true);
                                 }
 
-                                vertIdx += 0x09;
+                                vtxIndex++;
                             }
 
                             let indexIdx = vtxStripGroupIdx + indexOffset;
