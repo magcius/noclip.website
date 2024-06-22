@@ -69,23 +69,27 @@ const enum StudioFlexType {
 // 	REMAP_EYELID
 // }
 
-interface StudioFlexDesc {
-	name: string;
+// interface StudioFlexDesc {
+// 	name: string;
+// }
+
+class StudioFlex {
+	constructor(
+		public desc: number,
+		public descpair: number,
+		public flexType: StudioFlexType,
+		public vertexData: Float32Array,
+		public indexData: Uint16Array,
+	) {}
 }
 
-interface StudioFlex {
-	desc: number;
-	descpair: number;
-	type: StudioFlexType;
-	verts: Float32Array;
-	indices: Uint16Array;
-}
-
-interface StudioFlexController {
-	readonly name: string;
-	readonly type: string;
-	readonly min: number;
-	readonly max: number;
+class StudioFlexController {
+	constructor(
+		public name: string,    // left_cheek_raiser, dilator, etc.
+		public type: string,    // eyelid, brow, nose, mouth, etc.
+		public min: number = 0, // usually 0
+		public max: number = 1, // usually 1
+	) {}
 }
 
 interface StudioFlexOp {
@@ -94,9 +98,11 @@ interface StudioFlexOp {
 	value: number;
 }
 
-interface StudioFlexRule {
-	readonly flex: number;
-	readonly ops: StudioFlexOp[];
+class StudioFlexRule {
+	constructor(
+		public flex: number,
+		public ops: StudioFlexOp[]
+	) {}
 }
 
 function remapClamped(v: number, a: number, b: number, c: number, d: number) {
@@ -1147,11 +1153,13 @@ export class StudioModelData {
 
         const numflexdesc = mdlView.getUint32(0x104, true);
         const flexdescindex = mdlView.getUint32(0x108, true);
+		const flexDescs = new Array<string>(numflexdesc);
+
 		let flexdescIdx = flexdescindex;
 		for (let i = 0; i < numflexdesc; i++, flexdescIdx += 0x4) {
 			const szFACSindex = mdlView.getInt32(flexdescIdx, true);
 			const flexdescName = readString(mdlBuffer, flexdescIdx + szFACSindex);
-			console.log('Found flexdesc name', flexdescName);
+			flexDescs[i] = flexdescName;
 		}
 
         const numflexcontrollers = mdlView.getUint32(0x10C, true);
@@ -1164,20 +1172,13 @@ export class StudioModelData {
 			const flexcontrollerType = readString(mdlBuffer, flexcontrollerIdx + sztypeindex);
 			const sznameindex = mdlView.getInt32(flexcontrollerIdx + 0x4, true);
 			const flexcontrollerName = readString(mdlBuffer, flexcontrollerIdx + sznameindex);
-			
+
 			// TODO(koerismo): Why does this even exist?
 			const localToGlobal = mdlView.getInt32(flexcontrollerIdx + 0x8, true);
+			
 			const flexMin = mdlView.getFloat32(flexcontrollerIdx + 0x0C, true);
 			const flexMax = mdlView.getFloat32(flexcontrollerIdx + 0x10, true);
-			flexControllers[i] = { name: flexcontrollerName, type: flexcontrollerType, min: flexMin, max: flexMax };
-			console.log(
-				'Found flexcontroller of type',
-				flexcontrollerType,
-				'with name',
-				flexcontrollerName,
-				'and bounds [', flexMin+', '+flexMax, ']',
-				'id =', localToGlobal
-			);
+			flexControllers[i] = new StudioFlexController(flexcontrollerName, flexcontrollerType, flexMin, flexMax);
 		}
 
         const numflexrules = mdlView.getUint32(0x114, true);
@@ -1198,8 +1199,10 @@ export class StudioModelData {
 				const opValue = mdlView.getFloat32(flexopIdx + 0x4, true);
 				flexOps[p] = { type: opType, index: opIndex, value: opValue };
 			}
-			flexRules[i] = { flex: flexruleFlex, ops: flexOps };
+			flexRules[i] = new StudioFlexRule(flexruleFlex, flexOps);
 		}
+
+		// TODO(koerismo): Find use for flexDescs, flexControllers, flexRules vars
 
 		// Rest of body
 
@@ -1481,20 +1484,20 @@ export class StudioModelData {
 
 						const meshFlexes = new Array<StudioFlex>(numflexes);
 						let flexIdx = mdlMeshIdx + flexindex;
-						for (let i = 0; i < numflexes; i++, flexIdx += 0x26) {
+						for (let i = 0; i < numflexes; i++, flexIdx += 0x3C) {
 							const flexdesc = mdlView.getInt32(flexIdx + 0x00, true);
 							const target0 = mdlView.getFloat32(flexIdx + 0x04, true);
 							const target1 = mdlView.getFloat32(flexIdx + 0x08, true);
 							const target2 = mdlView.getFloat32(flexIdx + 0x0C, true);
 							const target3 = mdlView.getFloat32(flexIdx + 0x10, true);
-							const flexnumverts = mdlView.getFloat32(flexIdx + 0x14, true);
-							const flexvertindex = mdlView.getFloat32(flexIdx + 0x18, true);
+							const flexnumverts = mdlView.getInt32(flexIdx + 0x14, true);
+							const flexvertindex = mdlView.getInt32(flexIdx + 0x18, true);
 
 							let flexVertexSize = (3 + 3);
 							const flexVtxData = new Float32Array(flexnumverts * flexVertexSize);
 							const flexIdxData = new Uint16Array(flexnumverts);
 
-							let flexVertIdx = flexIdx, dataOffs = 0;
+							let flexVertIdx = flexIdx + flexvertindex, dataOffs = 0;
 							for (let v = 0; v < flexnumverts; v++, flexVertIdx += 0x10) {
 								// TODO(koerismo): How do we detect if it's using f16 or not?
 								const flexVertIndex = mdlView.getUint16(flexVertIdx + 0x00, true);
@@ -1506,17 +1509,17 @@ export class StudioModelData {
 								
 								// Position offset
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x04, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x06, true));
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x08, true));
-								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0C, true));
 								// Normal offset
-								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x10, true));
-								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x14, true));
-								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x18, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0A, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0C, true));
+								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0E, true));
 							}
 
 							const flexpair = mdlView.getInt32(flexIdx + 0x1C, true);
 							const flexvertanimtype = mdlView.getUint8(flexIdx + 0x1D);
-							meshFlexes[i] = { desc: flexdesc, descpair: flexpair, type: flexvertanimtype, verts: flexVtxData, indices: flexIdxData };
+							meshFlexes[i] = new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData, flexIdxData);
 						}
 
 
