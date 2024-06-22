@@ -3,7 +3,7 @@
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform.js";
 import { assert, readString, nArray, assertExists, align } from "../util.js";
 import { SourceFileSystem, SourceRenderContext } from "./Main.js";
 import { AABB } from "../Geometry.js";
@@ -342,7 +342,8 @@ class StudioModelMeshData {
     constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: Float32Array, indexData: ArrayBufferLike, public vertexCount: number, public flexes: StudioFlex[]) {
         const device = cache.device;
 		this.originalVertexData = vertexData;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.originalVertexData.slice().buffer);
+		const finalVertexData = this.originalVertexData.slice().buffer;
+        this.vertexBuffer = device.createBuffer(finalVertexData.byteLength / 4, GfxBufferUsage.Vertex, GfxBufferFrequencyHint.Dynamic, new Uint8Array(finalVertexData));
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
         // Create our base input state.
