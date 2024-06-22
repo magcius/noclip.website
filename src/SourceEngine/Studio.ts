@@ -14,7 +14,7 @@ import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, clamp, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { StaticLightingMode, MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, SkinningMode } from "./Materials/MaterialBase.js";
-import { getRandomInt } from "../SuperMarioGalaxy/ActorUtil.js";
+import { createDOMFromString } from "../ui.js";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -111,6 +111,26 @@ function remapClamped(v: number, a: number, b: number, c: number, d: number) {
 	v = clamp(v, a, b);
 	return ((v - b) / (b - a)) * (d - c) + c;
 }
+
+window.flexDebug = new Float32Array(64);
+function makeShittyGUI() {
+	const shit = createDOMFromString(`
+		<div id="shit" style="display: flex; flex-direction: column; position: absolute; z-index: 10; top: 10px; right: 10px; background: #0005; padding:10px;">
+		${"<input type=\"range\" min=\"-1\" max=\"2\" step=\"0.05\"/>".repeat(32)}
+		</div>
+	`);
+
+	document.body.appendChild(shit);
+	setTimeout(() => {
+		Array.from(document.querySelector('#shit')!.querySelectorAll('input')).map((x,i) => {
+			x.oninput = () => {
+				window.flexDebug[i] = +x.value;
+				console.log(window.flexDebug[i]);
+			}
+		});
+	}, 1000);
+}
+makeShittyGUI();
 
 // TODO(koerismo): This is a really dumb var, but I wanted to leave a warning to prevent debugging confusion.
 let didWeWarnTheDeveloperAboutDmeEyelidsYet = false;
@@ -447,10 +467,7 @@ class StudioModelMeshData {
 		assert(this.dynamicVertexBuffer != null);
 
 		const flexedVertexData = new Float32Array(this.cleanVertexData);
-
-		let rand_choice = getRandomInt(0, 64);
-		flexWeights ??= new Float32Array(64);
-		flexWeights[rand_choice] = 1.0;
+		flexWeights = window.flexDebug as Float32Array;
 
 		for (let f = 0; f < this.flexes.length; f++) {
 			const multiply = flexWeights[this.flexes[f].desc];
@@ -1580,8 +1597,8 @@ export class StudioModelData {
 							let flexVertIdx = flexIdx + flexvertindex, dataOffs = 0;
 							for (let v = 0; v < flexnumverts; v++, flexVertIdx += flexVertexSize) {
 								// TODO(koerismo): How do we detect if it's using f16 or not?
-								const flexVertIndex = mdlView.getUint16(flexVertIdx + 0x00, true);
-								flexIdxData[v] = flexVertIndex;
+								const flexVertID = mdlView.getUint16(flexVertIdx + 0x00, true);
+								flexIdxData[v] = flexVertID;
 
 								// TODO(koerismo): Both of these seem to always be set to -1
 								const flexVertSpeed = mdlView.getInt8(flexVertIdx + 0x02);

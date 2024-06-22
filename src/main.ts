@@ -873,6 +873,7 @@ window.main = new Main();
 // Debug utilities.
 declare global {
     interface Window {
+		flexDebug: any;
         debug: any;
         debugObj: any;
         gl: any;
