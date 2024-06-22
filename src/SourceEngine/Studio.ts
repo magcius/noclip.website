@@ -14,6 +14,7 @@ import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { bitsAsFloat32, clamp, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
 import { StaticLightingMode, MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, SkinningMode } from "./Materials/MaterialBase.js";
+import { getRandomInt } from "../SuperMarioGalaxy/ActorUtil.js";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -80,6 +81,7 @@ class StudioFlex {
 		public flexType: StudioFlexType,
 		public vertexData: Float32Array,
 		public indexData: Uint16Array,
+		public vertexCount: number,
 	) {}
 }
 
@@ -408,12 +410,19 @@ class StudioModelMeshData {
 	public updateVertexData(device: GfxDevice, flexWeights?: Float32Array) {
 		const flexedVertexData = new Float32Array(this.originalVertexData);
 
+		let rand_choice = getRandomInt(0, 64);
+		flexWeights ??= new Float32Array(64);
+		flexWeights[rand_choice] = 1.0;
+
 		for (let f = 0; f < this.flexes.length; f++) {
-			let vertexIdx = 0, flexIdx = 0;
-			// const multiply = flexWeights[this.flexes[f].desc];
-			const multiply = Math.random();
+			const multiply = flexWeights[this.flexes[f].desc];
+			const flexVtxCount = this.flexes[f].vertexCount;
 			const flexVtxData = this.flexes[f].vertexData;
-			for (let i = 0; i < this.vertexCount; i++, vertexIdx += 21, flexIdx += 6) {
+			const flexIdxData = this.flexes[f].indexData;
+
+			let vertexIdx = 0, flexIdx = 0;
+			for (let i = 0; i < flexVtxCount; i++, vertexIdx += 21, flexIdx += 6) {
+				// vertexIdx = flexIdxData[i] * 21;
 				flexedVertexData[vertexIdx + 0] += flexVtxData[flexIdx + 0] * multiply;
 				flexedVertexData[vertexIdx + 1] += flexVtxData[flexIdx + 1] * multiply;
 				flexedVertexData[vertexIdx + 2] += flexVtxData[flexIdx + 2] * multiply;
@@ -1549,7 +1558,7 @@ export class StudioModelData {
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0E, true));
 							}
 
-							meshFlexes[i] = new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData, flexIdxData);
+							meshFlexes[i] = new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData, flexIdxData, flexnumverts);
 						}
 
 
