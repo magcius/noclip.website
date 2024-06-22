@@ -110,6 +110,7 @@ function remapClamped(v: number, a: number, b: number, c: number, d: number) {
 	return ((v - b) / (b - a)) * (d - c) + c;
 }
 
+// TODO(koerismo): This is a really dumb var, but I wanted to leave a warning to prevent debugging confusion.
 let didWeWarnTheDeveloperAboutDmeEyelidsYet = false;
 // Adapted from https://github.com/NicolasDe/AlienSwarm/blob/master/src/public/studio.cpp#L1568
 function runFlexRules(rules: StudioFlexRule[], controllerValues: Float32Array, flexValues: Float32Array) {
@@ -179,7 +180,7 @@ function runFlexRules(rules: StudioFlexRule[], controllerValues: Float32Array, f
 					break;
 				
 				case StudioFlexOpType.DOMINATE:
-					// multiply by 1 - the top N elements of the stack
+					// multiply by 1 - the top M elements of the stack
 					m = op.index;
 					let product = 0.0;
 					while (m--) product *= stack[idx++];
@@ -188,16 +189,16 @@ function runFlexRules(rules: StudioFlexRule[], controllerValues: Float32Array, f
 				
 				case StudioFlexOpType._2WAY_0:
 					// |<->|---|
-					const v20 = controllerValues[op.index];
+					const twoWay_0 = controllerValues[op.index];
 					stack[idx--] = value;
-					value = clamp(v20, -1, 0) + 1.0;
+					value = clamp(twoWay_0, -1, 0) + 1.0;
 					break;
 				
 				case StudioFlexOpType._2WAY_1:
 					// |---|<->|
-					const v21 = controllerValues[op.index];
+					const twoWay_1 = controllerValues[op.index];
 					stack[idx--] = value;
-					value = clamp(v21, 0, 1);
+					value = clamp(twoWay_1, 0, 1);
 					break;
 				
 				case StudioFlexOpType.NWAY:
