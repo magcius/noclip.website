@@ -328,6 +328,9 @@ const enum StudioModelMeshDataFlags {
 
 // TODO(jstpierre): Coalesce all buffers for a studio model?
 class StudioModelMeshData {
+	// Pre-flex vertex data
+	public originalVertexData: Float32Array;
+
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
@@ -336,9 +339,10 @@ class StudioModelMeshData {
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
+    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: Float32Array, indexData: ArrayBufferLike, public vertexCount: number, public flexes: StudioFlex[]) {
         const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
+		this.originalVertexData = vertexData;
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, this.originalVertexData.slice().buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
 
         // Create our base input state.
@@ -398,6 +402,27 @@ class StudioModelMeshData {
         const indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, };
         return [inputLayout, bufferDescriptors, indexBufferDescriptor];
     }
+
+	public updateVertexData(device: GfxDevice, flexWeights?: Float32Array) {
+		const flexedVertexData = new Float32Array(this.originalVertexData);
+
+		for (let f = 0; f < this.flexes.length; f++) {
+			let vertexIdx = 0, flexIdx = 0;
+			// const multiply = flexWeights[this.flexes[f].desc];
+			const multiply = Math.random();
+			const flexVtxData = this.flexes[f].vertexData;
+			for (let i = 0; i < this.vertexCount; i++, vertexIdx += 21, flexIdx += 6) {
+				flexedVertexData[vertexIdx + 0] += flexVtxData[flexIdx + 0] * multiply;
+				flexedVertexData[vertexIdx + 1] += flexVtxData[flexIdx + 1] * multiply;
+				flexedVertexData[vertexIdx + 2] += flexVtxData[flexIdx + 2] * multiply;
+				flexedVertexData[vertexIdx + 3] += flexVtxData[flexIdx + 3] * multiply;
+				flexedVertexData[vertexIdx + 4] += flexVtxData[flexIdx + 4] * multiply;
+				flexedVertexData[vertexIdx + 5] += flexVtxData[flexIdx + 5] * multiply;
+			}
+		}
+
+		device.uploadBufferData(this.vertexBuffer, 0x00, new Uint8Array(flexedVertexData.buffer));
+	}
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
@@ -801,6 +826,7 @@ export class StudioModelData {
     public illumPosition = vec3.create();
     public anim: AnimDesc[] = [];
     public seq: SeqDesc[] = [];
+	public flexdescs: string[] = [];
 	public flexrules: StudioFlexRule[] = [];
 	public flexcontrollers: StudioFlexController[] = [];
     public attachment: AttachmentDesc[] = [];
@@ -1153,7 +1179,7 @@ export class StudioModelData {
 
         const numflexdesc = mdlView.getUint32(0x104, true);
         const flexdescindex = mdlView.getUint32(0x108, true);
-		const flexDescs = new Array<string>(numflexdesc);
+		const flexDescs = this.flexdescs = new Array<string>(numflexdesc);
 
 		let flexdescIdx = flexdescindex;
 		for (let i = 0; i < numflexdesc; i++, flexdescIdx += 0x4) {
@@ -1201,8 +1227,6 @@ export class StudioModelData {
 			}
 			flexRules[i] = new StudioFlexRule(flexruleFlex, flexOps);
 		}
-
-		// TODO(koerismo): Find use for flexDescs, flexControllers, flexRules vars
 
 		// Rest of body
 
@@ -1493,12 +1517,18 @@ export class StudioModelData {
 							const flexnumverts = mdlView.getInt32(flexIdx + 0x14, true);
 							const flexvertindex = mdlView.getInt32(flexIdx + 0x18, true);
 
-							let flexVertexSize = (3 + 3);
-							const flexVtxData = new Float32Array(flexnumverts * flexVertexSize);
+							const flexVtxData = new Float32Array(flexnumverts * (3 + 3));
 							const flexIdxData = new Uint16Array(flexnumverts);
 
+							const flexpair = mdlView.getInt32(flexIdx + 0x1C, true);
+							const flexvertanimtype = mdlView.getUint8(flexIdx + 0x1D);
+
+							// TODO(koerismo): Maybe sometime in the future we can support wrinkles? Not a priority right now.
+							const is_wrinkle = flexvertanimtype == StudioFlexType.WRINKLE;
+							let flexVertexSize = is_wrinkle ? 0x14 : 0x10;
+							
 							let flexVertIdx = flexIdx + flexvertindex, dataOffs = 0;
-							for (let v = 0; v < flexnumverts; v++, flexVertIdx += 0x10) {
+							for (let v = 0; v < flexnumverts; v++, flexVertIdx += flexVertexSize) {
 								// TODO(koerismo): How do we detect if it's using f16 or not?
 								const flexVertIndex = mdlView.getUint16(flexVertIdx + 0x00, true);
 								flexIdxData[v] = flexVertIndex;
@@ -1506,7 +1536,7 @@ export class StudioModelData {
 								// TODO(koerismo): Both of these seem to always be set to -1
 								const flexVertSpeed = mdlView.getInt8(flexVertIdx + 0x02);
 								const flexVertSide = mdlView.getInt8(flexVertIdx + 0x03);
-								
+
 								// Position offset
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x04, true));
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x06, true));
@@ -1517,8 +1547,6 @@ export class StudioModelData {
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0E, true));
 							}
 
-							const flexpair = mdlView.getInt32(flexIdx + 0x1C, true);
-							const flexvertanimtype = mdlView.getUint8(flexIdx + 0x1D);
 							meshFlexes[i] = new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData, flexIdxData);
 						}
 
@@ -1800,7 +1828,7 @@ export class StudioModelData {
                         }
 
                         const cache = renderContext.renderCache;
-                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
+                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData, meshIdxData.buffer, meshNumVertices, meshFlexes);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);
                         lodData.meshData.push(meshData);
@@ -1822,6 +1850,12 @@ export class StudioModelData {
         for (let i = 0; i < this.bodyPartData.length; i++)
             this.bodyPartData[i].destroy(device);
     }
+
+	public calcFlexWeights(controllerInputs: Float32Array) {
+		const flexValues = new Float32Array(this.flexdescs.length);
+		runFlexRules(this.flexrules, controllerInputs, flexValues);
+		return flexValues;
+	}
 }
 
 // Hardware verts, used for static color data
@@ -2092,6 +2126,8 @@ class StudioModelMeshInstance {
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], bbox: AABB, depth: number) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
+
+		this.meshData.updateVertexData(renderContext.device);
 
         this.materialInstance.calcProjectedLight(renderContext, bbox);
 
