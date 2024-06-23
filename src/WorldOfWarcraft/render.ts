@@ -93,13 +93,14 @@ export class ModelRenderer {
   }
 
   private getEmitterTextures(device: GfxDevice, emitter: ParticleEmitter): TextureMappingArray {
-    const posMapping = new TextureMapping();
-    posMapping.gfxTexture = emitter.updatePositionTex(device);
-    const colorMapping = new TextureMapping();
-    colorMapping.gfxTexture = emitter.updateColorTex(device);
-    const scaleMapping = new TextureMapping();
-    scaleMapping.gfxTexture = emitter.updateScaleTex(device);
-    return [posMapping, colorMapping, scaleMapping];
+    const dataMapping = new TextureMapping();
+    dataMapping.gfxTexture = emitter.updateDataTex(device);
+    return [
+      dataMapping,
+      this.getTextureMapping(emitter.textures[0]),
+      this.getTextureMapping(emitter.textures[1]),
+      this.getTextureMapping(emitter.textures[2]),
+    ];
   }
 
   private getTextureMapping(blpData: BlpData | null): TextureMapping | null {
@@ -272,9 +273,7 @@ export class ModelRenderer {
         if (emitter.particles.length === 0) {
           continue;
         }
-        emitter.updateColorTex(this.device);
-        emitter.updatePositionTex(this.device);
-        emitter.updateScaleTex(this.device);
+        emitter.updateDataTex(this.device);
 
         let renderInst = renderInstManager.newRenderInst();
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4);

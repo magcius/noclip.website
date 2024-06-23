@@ -501,9 +501,14 @@ pub struct ParticleEmitter {
     _multi_texture_param1: [u16; 4],
 }
 
+#[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
 impl ParticleEmitter {
     pub fn use_compressed_gravity(&self) -> bool {
         (self.flags & 0x800000) > 0
+    }
+
+    pub fn has_multiple_textures(&self) -> bool {
+        (self.flags & 0x10000000) > 0
     }
 }
 

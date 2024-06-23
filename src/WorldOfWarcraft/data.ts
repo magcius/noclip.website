@@ -387,6 +387,7 @@ class Particle {
 
 export class ParticleEmitter {
   static MAX_PARTICLES = 2000;
+  static TEXELS_PER_PARTICLE = 3; // pos, color, scale
 
   public enabled = 0;
   public emissionSpeed = 0;
@@ -403,16 +404,24 @@ export class ParticleEmitter {
   public baseSpin = 0;
   public spin = 0;
   public wind: vec3;
+  public textures: (BlpData | null)[] = [];
   private force = vec3.create();
   private updateBuffer: Float32Array;
   private particlesToEmit = 0.0;
-  private positionTexture: GfxTexture | undefined;
-  private scaleTexture: GfxTexture | undefined;
-  private colorTexture: GfxTexture | undefined;
+  private dataTexture: GfxTexture | undefined;
 
-  constructor(public index: number, public emitter: WowM2ParticleEmitter) {
+  constructor(public index: number, public emitter: WowM2ParticleEmitter, model: ModelData) {
     this.updateBuffer = new Float32Array(11);
     this.wind = convertWowVec3(emitter.wind_vector);
+    if (emitter.has_multiple_textures()) {
+      this.textures.push(model.lookupTexture(emitter.texture_id & 0x1F));
+      this.textures.push(model.lookupTexture((emitter.texture_id >> 5) & 0x1F));
+      this.textures.push(model.lookupTexture((emitter.texture_id >> 10) & 0x1F));
+    } else {
+      this.textures.push(model.lookupTexture(emitter.texture_id));
+      this.textures.push(null);
+      this.textures.push(null);
+    }
   }
 
   private updateAndPerturbParams(dt: number, animationManager: WowM2AnimationManager) {
@@ -450,35 +459,13 @@ export class ParticleEmitter {
     }
   }
 
-  private ensureTextures(device: GfxDevice) {
-    if (this.positionTexture === undefined) {
-      this.positionTexture = device.createTexture({
-        dimension: GfxTextureDimension.n2D,
-        pixelFormat: GfxFormat.F32_RGB,
-        width: ParticleEmitter.MAX_PARTICLES,
-        height: 1,
-        numLevels: 1,
-        depthOrArrayLayers: 1,
-        usage: GfxTextureUsage.Sampled,
-      });
-    }
-    if (this.colorTexture === undefined) {
-      this.colorTexture = device.createTexture({
+  private ensureTexture(device: GfxDevice) {
+    if (this.dataTexture === undefined) {
+      this.dataTexture = device.createTexture({
         dimension: GfxTextureDimension.n2D,
         pixelFormat: GfxFormat.F32_RGBA,
-        width: ParticleEmitter.MAX_PARTICLES,
-        height: 1,
-        numLevels: 1,
-        depthOrArrayLayers: 1,
-        usage: GfxTextureUsage.Sampled,
-      });
-    }
-    if (this.scaleTexture === undefined) {
-      this.scaleTexture = device.createTexture({
-        dimension: GfxTextureDimension.n2D,
-        pixelFormat: GfxFormat.F32_RG,
-        width: ParticleEmitter.MAX_PARTICLES,
-        height: 1,
+        width: ParticleEmitter.TEXELS_PER_PARTICLE,
+        height: ParticleEmitter.MAX_PARTICLES,
         numLevels: 1,
         depthOrArrayLayers: 1,
         usage: GfxTextureUsage.Sampled,
@@ -525,40 +512,18 @@ export class ParticleEmitter {
     }
   }
 
-  public updateColorTex(device: GfxDevice): GfxTexture {
-    this.ensureTextures(device);
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 4);
+  public updateDataTex(device: GfxDevice): GfxTexture {
+    this.ensureTexture(device);
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * ParticleEmitter.TEXELS_PER_PARTICLE * 4);
     for (let i=0; i<this.particles.length; i++) {
-      pixels[4*i] = this.particles[i].color[0];
-      pixels[4*i + 1] = this.particles[i].color[1];
-      pixels[4*i + 2] = this.particles[i].color[2];
-      pixels[4*i + 3] = this.particles[i].color[3];
+      const particle = this.particles[i];
+      let offs = ParticleEmitter.TEXELS_PER_PARTICLE * i * 4;
+      offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
+      offs += fillVec4v(pixels, offs, particle.color);
+      offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
     }
-    device.uploadTextureData(this.colorTexture!, 0, [pixels]);
-    return this.colorTexture!;
-  }
-
-  public updatePositionTex(device: GfxDevice): GfxTexture {
-    this.ensureTextures(device);
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 3);
-    for (let i=0; i<this.particles.length; i++) {
-      pixels[3*i] = this.particles[i].position[0];
-      pixels[3*i + 1] = this.particles[i].position[1];
-      pixels[3*i + 2] = this.particles[i].position[2];
-    }
-    device.uploadTextureData(this.positionTexture!, 0, [pixels]);
-    return this.positionTexture!;
-  }
-
-  public updateScaleTex(device: GfxDevice): GfxTexture {
-    this.ensureTextures(device);
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 2);
-    for (let i=0; i<this.particles.length; i++) {
-      pixels[2*i] = this.particles[i].scale[0];
-      pixels[2*i + 1] = this.particles[i].scale[1];
-    }
-    device.uploadTextureData(this.scaleTexture!, 0, [pixels]);
-    return this.scaleTexture!;
+    device.uploadTextureData(this.dataTexture!, 0, [pixels]);
+    return this.dataTexture!;
   }
 }
 
@@ -620,6 +585,15 @@ export class ModelData {
     }));
   }
 
+  public lookupTexture(n: number): BlpData | null {
+    if (this.textureLookupTable[n] !== undefined) {
+      if (this.blps[this.textureLookupTable[n]] !== undefined) {
+        return this.blps[this.textureLookupTable[n]];
+      }
+    }
+    return null;
+  }
+
   private loadSkins(cache: WowCache, m2: WowM2): Promise<SkinData[]> {
     return Promise.all(Array.from(m2.skin_ids).map(async (fileId) => {
       const skin = await cache.fetchFileByID(fileId, rust.WowSkin.new);
@@ -640,7 +614,7 @@ export class ModelData {
     this.textureTransparencyLookupTable = m2.take_texture_transparency_lookup();
 
     this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
-      return new ParticleEmitter(i, emitter);
+      return new ParticleEmitter(i, emitter, this);
     });
 
     const m2Materials = m2.materials;
@@ -1493,10 +1467,7 @@ export class ModelRenderPass {
 
   private getBlp(n: number): BlpData | null {
     if (n < this.batch.texture_count) {
-      const i = this.model.textureLookupTable[this.batch.texture_combo_index + n]!;
-      if (this.model.blps[i]) {
-        return this.model.blps[i];
-      }
+      return this.model.lookupTexture(this.batch.texture_combo_index + n);
     }
     return null;
   }
