@@ -2,20 +2,26 @@
 // Source "Studio" models, which seem to be named because of their original ties to 3D Studio Max
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
+import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
-import { assert, readString, nArray, assertExists, align } from "../util.js";
-import { SourceFileSystem, SourceRenderContext } from "./Main.js";
-import { AABB } from "../Geometry.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { bitsAsFloat32, getMatrixTranslation, lerp, MathConstants, setMatrixTranslation } from "../MathHelpers.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
-import { StaticLightingMode, MaterialShaderTemplateBase, BaseMaterial, EntityMaterialParameters, SkinningMode } from "./Materials/MaterialBase.js";
+import { AABB } from "../Geometry.js";
+import { MathConstants, bitsAsFloat32, getMatrixTranslation, lerp, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers.js";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { align, assert, assertExists, nArray, readString } from "../util.js";
+import { SourceFileSystem, SourceRenderContext } from "./Main.js";
+import { BaseMaterial, EntityMaterialParameters, MaterialShaderTemplateBase, SkinningMode, StaticLightingMode } from "./Materials/MaterialBase.js";
 
 // Encompasses the MDL, VVD & VTX formats.
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchQuatb = quat.create();
 
 const enum StudioModelFlags {
     STATIC_PROP       = 1 << 4,
@@ -121,10 +127,9 @@ class StudioModelMeshData {
     public inputLayout: GfxInputLayout;
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
     public indexBufferDescriptor: GfxIndexBufferDescriptor;
+    public eyeballIndex: number | null = null;
 
-    public stripGroupData: StudioModelStripGroupData[] = [];
-
-    constructor(cache: GfxRenderCache, public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
+    constructor(cache: GfxRenderCache, public stripGroupData: StudioModelStripGroupData[], public materialNames: string[], private flags: StudioModelMeshDataFlags, vertexData: ArrayBufferLike, indexData: ArrayBufferLike, public vertexCount: number) {
         const device = cache.device;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indexData);
@@ -202,8 +207,22 @@ class StudioModelLODData {
     }
 }
 
+class StudioModelEyeballData {
+    public bone = -1;
+    public origin = vec3.create();
+    public zOffset = 0;
+    public radius = 0;
+    public up = vec3.create();
+    public forward = vec3.create();
+    public irisScale = 1;
+
+    constructor(private name: string) {
+    }
+}
+
 class StudioModelSubmodelData {
     public lodData: StudioModelLODData[] = [];
+    public eyeball: StudioModelEyeballData[] = [];
 
     constructor(public name: string) {
     }
@@ -596,6 +615,7 @@ export class StudioModelData {
     public numLOD: number;
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice | null, vtxBuffer: ArrayBufferSlice | null) {
+        const cache = renderContext.renderCache;
         const mdlView = mdlBuffer.createDataView();
 
         // We have three separate files of data (MDL, VVD, VTX) to chew through.
@@ -1221,7 +1241,6 @@ export class StudioModelData {
                         const flexindex = mdlView.getUint32(mdlMeshIdx + 0x14, true);
 
                         const materialtype = mdlView.getUint32(mdlMeshIdx + 0x18, true);
-                        // assert(materialtype === 0); // not eyeballs
                         const materialparam = mdlView.getUint32(mdlMeshIdx + 0x1C, true);
 
                         const meshid = mdlView.getUint32(mdlMeshIdx + 0x20, true);
@@ -1496,14 +1515,63 @@ export class StudioModelData {
                             meshFirstIdx += numIndices;
                         }
 
-                        const cache = renderContext.renderCache;
-                        const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
-                        for (let i = 0; i < stripGroupDatas.length; i++)
-                            meshData.stripGroupData.push(stripGroupDatas[i]);
+                        const meshData = new StudioModelMeshData(cache, stripGroupDatas, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices);
+                        if (materialtype === 1)
+                            meshData.eyeballIndex = materialparam;
                         lodData.meshData.push(meshData);
                     }
 
                     vtxLODIdx += 0x0C;
+                }
+
+                let mdlEyeballIndex = mdlSubmodelIdx + mdlSubmodelEyeballindex;
+                for (let eye = 0; eye < mdlSubmodelNumeyeballs; eye++, mdlEyeballIndex += 0xAC) {
+                    const eyeballName = readString(mdlBuffer, mdlEyeballIndex + mdlView.getUint32(mdlEyeballIndex + 0x00, true));
+
+                    const eyeball = new StudioModelEyeballData(eyeballName);
+                    eyeball.bone = mdlView.getUint32(mdlEyeballIndex + 0x04, true);
+
+                    eyeball.origin[0] = mdlView.getFloat32(mdlEyeballIndex + 0x08, true);
+                    eyeball.origin[1] = mdlView.getFloat32(mdlEyeballIndex + 0x0C, true);
+                    eyeball.origin[2] = mdlView.getFloat32(mdlEyeballIndex + 0x10, true);
+
+                    eyeball.zOffset = mdlView.getFloat32(mdlEyeballIndex + 0x14, true);
+                    eyeball.radius = mdlView.getFloat32(mdlEyeballIndex + 0x18, true);
+
+                    eyeball.up[0] = mdlView.getFloat32(mdlEyeballIndex + 0x1C, true);
+                    eyeball.up[1] = mdlView.getFloat32(mdlEyeballIndex + 0x20, true);
+                    eyeball.up[2] = mdlView.getFloat32(mdlEyeballIndex + 0x24, true);
+
+                    eyeball.forward[0] = mdlView.getFloat32(mdlEyeballIndex + 0x28, true);
+                    eyeball.forward[1] = mdlView.getFloat32(mdlEyeballIndex + 0x2C, true);
+                    eyeball.forward[2] = mdlView.getFloat32(mdlEyeballIndex + 0x30, true);
+
+                    // const texture = mdlView.getUint32(mdlEyeballIndex + 0x34, true); // unused?
+                    // const unused1 = mdlView.getUint32(mdlEyeballIndex + 0x38, true);
+                    eyeball.irisScale = mdlView.getFloat32(mdlEyeballIndex + 0x3C, true);
+                    // const unused1 = mdlView.getUint32(mdlEyeballIndex + 0x40, true);
+
+                    // FACS stuff
+                    // const upperflexdesc0 = mdlView.getInt32(mdlEyeballIndex + 0x44, true); // raised
+                    // const upperflexdesc1 = mdlView.getInt32(mdlEyeballIndex + 0x48, true); // neutral
+                    // const upperflexdesc2 = mdlView.getInt32(mdlEyeballIndex + 0x4C, true); // lowered
+                    // const lowerflexdesc0 = mdlView.getInt32(mdlEyeballIndex + 0x50, true); // raised
+                    // const lowerflexdesc1 = mdlView.getInt32(mdlEyeballIndex + 0x54, true); // neutral
+                    // const lowerflexdesc2 = mdlView.getInt32(mdlEyeballIndex + 0x58, true); // lowered
+                    // const uppertarget0 = mdlView.getFloat32(mdlEyeballIndex + 0x5C, true); // raised
+                    // const uppertarget1 = mdlView.getFloat32(mdlEyeballIndex + 0x60, true); // neutral
+                    // const uppertarget2 = mdlView.getFloat32(mdlEyeballIndex + 0x64, true); // lowered
+                    // const lowertarget0 = mdlView.getFloat32(mdlEyeballIndex + 0x68, true); // raised
+                    // const lowertarget1 = mdlView.getFloat32(mdlEyeballIndex + 0x6C, true); // neutral
+                    // const lowertarget2 = mdlView.getFloat32(mdlEyeballIndex + 0x70, true); // lowered
+                    // const upperlidflexdesc = mdlView.getInt32(mdlEyeballIndex + 0x74, true);
+                    // const lowerlidflexdesc = mdlView.getInt32(mdlEyeballIndex + 0x78, true);
+                    // int unused[4];
+                    // const m_bNonFACS = mdlView.getUint8(mdlEyeballIndex + 0x8C, true);
+                    // char unused3[3]; // pad
+                    // int unused4[7];
+
+                    submodelData.eyeball.push(eyeball);
                 }
 
                 mdlSubmodelIdx += 0x94;
@@ -1709,7 +1777,7 @@ class StudioModelMeshInstance {
     private skinningMode: SkinningMode;
     private currentSkin: number;
 
-    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
+    constructor(renderContext: SourceRenderContext, private submodelData: StudioModelSubmodelData, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
         this.skinningMode = this.calcSkinningMode();
         this.inputLayout = this.meshData.inputLayout;
         this.vertexBufferDescriptors = this.meshData.vertexBufferDescriptors;
@@ -1779,10 +1847,54 @@ class StudioModelMeshInstance {
         this.currentSkin = skin;
     }
 
-    public movement(renderContext: SourceRenderContext): void {
+    private updateEyeball(modelInstance: StudioModelInstance, renderContext: SourceRenderContext): void {
+        if (this.meshData.eyeballIndex === null || this.materialInstance === null)
+            return;
+
+        const irisTransform = assertExists(this.materialInstance.paramGetMatrix('$iristransform'));
+
+        const eyeball = assertExists(this.submodelData.eyeball[this.meshData.eyeballIndex]);
+        transformVec3Mat4w1(scratchVec3a, modelInstance.worldFromBoneMatrix[eyeball.bone], eyeball.origin);
+        transformVec3Mat4w0(scratchVec3b, modelInstance.worldFromBoneMatrix[eyeball.bone], eyeball.up);
+
+        // Look directly at target
+        vec3.sub(scratchVec3c, modelInstance.viewTarget, scratchVec3a);
+        vec3.normalize(scratchVec3c, scratchVec3c);
+
+        // Calc right vector
+        vec3.cross(scratchVec3d, scratchVec3c, scratchVec3b);
+        vec3.normalize(scratchVec3d, scratchVec3d);
+
+        // Shift N degrees off the target
+        vec3.scaleAndAdd(scratchVec3c, scratchVec3c, scratchVec3d, eyeball.zOffset * 2);
+        vec3.normalize(scratchVec3c, scratchVec3c);
+
+        // Calc right/up vectors again
+        vec3.cross(scratchVec3d, scratchVec3c, scratchVec3b);
+        vec3.normalize(scratchVec3d, scratchVec3d);
+        vec3.cross(scratchVec3b, scratchVec3d, scratchVec3c);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        const scale = eyeball.irisScale;
+        vec3.scale(scratchVec3d, scratchVec3d, -scale);
+        vec3.scale(scratchVec3b, scratchVec3b, -scale);
+
+        irisTransform[0] = scratchVec3d[0];
+        irisTransform[4] = scratchVec3d[1];
+        irisTransform[8] = scratchVec3d[2];
+        irisTransform[12] = -vec3.dot(scratchVec3a, scratchVec3d) + 0.5;
+
+        irisTransform[1] = scratchVec3b[0];
+        irisTransform[5] = scratchVec3b[1];
+        irisTransform[9] = scratchVec3b[2];
+        irisTransform[13] = -vec3.dot(scratchVec3a, scratchVec3b) + 0.5;
+    }
+
+    public movement(modelInstance: StudioModelInstance, renderContext: SourceRenderContext): void {
         if (!this.visible || this.materialInstance === null)
             return;
 
+        this.updateEyeball(modelInstance, renderContext);
         this.materialInstance.movement(renderContext);
     }
 
@@ -1822,14 +1934,14 @@ class StudioModelMeshInstance {
 class StudioModelLODInstance {
     public meshInstance: StudioModelMeshInstance[] = [];
 
-    constructor(renderContext: SourceRenderContext, private lodData: StudioModelLODData, entityParams: EntityMaterialParameters) {
+    constructor(renderContext: SourceRenderContext, private submodelData: StudioModelSubmodelData, private lodData: StudioModelLODData, entityParams: EntityMaterialParameters) {
         for (let i = 0; i < this.lodData.meshData.length; i++)
-            this.meshInstance.push(new StudioModelMeshInstance(renderContext, this.lodData.meshData[i], entityParams));
+            this.meshInstance.push(new StudioModelMeshInstance(renderContext, this.submodelData, this.lodData.meshData[i], entityParams));
     }
 
-    public movement(renderContext: SourceRenderContext): void {
+    public movement(modelInstance: StudioModelInstance, renderContext: SourceRenderContext): void {
         for (let i = 0; i < this.meshInstance.length; i++)
-            this.meshInstance[i].movement(renderContext);
+            this.meshInstance[i].movement(modelInstance, renderContext);
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[], bbox: AABB, depth: number) {
@@ -1855,7 +1967,6 @@ function findAnimationSection(anim: AnimDesc, frame: number): AnimSection | null
     return null;
 }
 
-const scratchVec3 = vec3.create(), scratchQuatb = quat.create();
 function calcPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: number, modelData: StudioModelData): void {
     // First, find the relevant section / anim.
     const section = findAnimationSection(anim, frame);
@@ -1877,9 +1988,9 @@ function calcPoseFromAnimation(dstBoneMatrix: mat4[], anim: AnimDesc, frame: num
         if (track !== null) {
             const trackBone = track.bone;
             assert(trackBone.name === modelBone.name);
-            track.getPosRot(scratchVec3, scratchQuatb, trackBone, frame);
+            track.getPosRot(scratchVec3a, scratchQuatb, trackBone, frame);
             mat4.fromQuat(dst, scratchQuatb);
-            setMatrixTranslation(dst, scratchVec3);
+            setMatrixTranslation(dst, scratchVec3a);
         } else {
             computeModelMatrixPosRadianEuler(dst, modelBone.pos, modelBone.rot);
         }
@@ -1922,7 +2033,7 @@ class StudioModelBodyPartInstance {
 
         for (let k = 0; k < submodelData.lodData.length; k++) {
             const lodData = submodelData.lodData[k];
-            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, materialParams));
+            this.lodInstance.push(new StudioModelLODInstance(renderContext, submodelData, lodData, materialParams));
         }
     }
 
@@ -1951,8 +2062,10 @@ export class StudioModelInstance {
     public visible: boolean = true;
     // Pose data
     public modelMatrix = mat4.create();
+    public worldFromBoneMatrix: mat4[];
     public worldFromPoseMatrix: mat4[];
     public attachmentMatrix: mat4[];
+    public viewTarget = vec3.create();
 
     private bodyPartInstance: StudioModelBodyPartInstance[] = [];
     private viewBB: AABB;
@@ -1963,12 +2076,13 @@ export class StudioModelInstance {
             this.bodyPartInstance.push(new StudioModelBodyPartInstance(renderContext, bodyPartData, materialParams));
         }
 
+        this.worldFromBoneMatrix = nArray(this.modelData.bone.length, () => mat4.create());
         this.worldFromPoseMatrix = nArray(this.modelData.bone.length, () => mat4.create());
         this.attachmentMatrix = nArray(this.modelData.attachment.length, () => mat4.create());
-        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
-        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
-        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
-        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcBoneMatrix(this.worldFromBoneMatrix, this.modelData);
+        calcWorldFromBone(this.worldFromBoneMatrix, this.worldFromBoneMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromBoneMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromBoneMatrix, this.modelData);
         this.viewBB = this.modelData.viewBB;
     }
 
@@ -2012,9 +2126,12 @@ export class StudioModelInstance {
     }
 
     public movement(renderContext: SourceRenderContext): void {
+        // XXX(jstpierre): Move this to entity, max eye deflection.
+        vec3.copy(this.viewTarget, renderContext.currentView.cameraPos);
+
         const lodIndex = this.getLODModelIndex(renderContext);
         for (let i = 0; i < this.bodyPartInstance.length; i++)
-            this.bodyPartInstance[i].getLODInstance(lodIndex).movement(renderContext);
+            this.bodyPartInstance[i].getLODInstance(lodIndex).movement(this, renderContext);
     }
 
     public sequenceIsFinished(seqindex: number, time: number): boolean {
@@ -2032,7 +2149,7 @@ export class StudioModelInstance {
         const seq = this.modelData.seq[seqindex];
         const anim = this.modelData.anim[seq.anim[0]];
         this.viewBB = seq.viewBB;
-        calcBoneMatrix(this.worldFromPoseMatrix, this.modelData);
+        calcBoneMatrix(this.worldFromBoneMatrix, this.modelData);
         if (anim !== undefined) {
             let frame = time * anim.fps;
 
@@ -2041,11 +2158,11 @@ export class StudioModelInstance {
             else
                 frame = Math.min(frame, anim.numframes - 1);
 
-            calcPoseFromAnimation(this.worldFromPoseMatrix, anim, frame, this.modelData);
+            calcPoseFromAnimation(this.worldFromBoneMatrix, anim, frame, this.modelData);
         }
-        calcWorldFromBone(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelMatrix, this.modelData);
-        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromPoseMatrix, this.modelData);
-        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromPoseMatrix, this.modelData);
+        calcWorldFromBone(this.worldFromBoneMatrix, this.worldFromBoneMatrix, this.modelMatrix, this.modelData);
+        calcAttachmentMatrix(this.attachmentMatrix, this.worldFromBoneMatrix, this.modelData);
+        calcWorldFromPose(this.worldFromPoseMatrix, this.worldFromBoneMatrix, this.modelData);
     }
 
     public checkFrustum(renderContext: SourceRenderContext): boolean {
@@ -2063,8 +2180,8 @@ export class StudioModelInstance {
         if (!this.checkFrustum(renderContext))
             return;
 
-        scratchAABB.centerPoint(scratchVec3);
-        const depth = computeViewSpaceDepthFromWorldSpacePoint(renderContext.currentView.viewFromWorldMatrix, scratchVec3);
+        scratchAABB.centerPoint(scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(renderContext.currentView.viewFromWorldMatrix, scratchVec3a);
 
         const lodIndex = this.getLODModelIndex(renderContext);
         for (let i = 0; i < this.bodyPartInstance.length; i++)

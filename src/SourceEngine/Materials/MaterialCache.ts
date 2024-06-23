@@ -14,6 +14,7 @@ import { ParticleSystemCache } from "../ParticleSystem.js";
 import { VMT, parseVMT } from "../VMT.js";
 import { VTF } from "../VTF.js";
 import { MaterialShaderTemplateBase, LateBindingTexture, BaseMaterial } from "./MaterialBase.js";
+import { Material_Eyes, ShaderTemplate_Eyes } from "./Material_Eyes.js";
 import { Material_Generic, ShaderTemplate_Generic } from "./Material_Generic.js";
 import { Material_Modulate, ShaderTemplate_Modulate } from "./Material_Modulate.js";
 import { Material_Refract, ShaderTemplate_Refract } from "./Material_Refract.js";
@@ -151,6 +152,7 @@ class ShaderTemplates {
     public Sky = new ShaderTemplate_Sky();
     public SkyHDRCompressed = new ShaderTemplate_SkyHDRCompressed();
     public SpriteCard = new ShaderTemplate_SpriteCard();
+    public Eyes = new ShaderTemplate_Eyes();
 
     public destroy(device: GfxDevice): void {
         this.Generic.destroy(device);
@@ -162,6 +164,7 @@ class ShaderTemplates {
         this.Sky.destroy(device);
         this.SkyHDRCompressed.destroy(device);
         this.SpriteCard.destroy(device);
+        this.Eyes.destroy(device);
     }
 }
 
@@ -257,6 +260,8 @@ export class MaterialCache {
             return new Material_Sky(vmt);
         else if (shaderType === 'spritecard')
             return new Material_SpriteCard(vmt);
+        else if (shaderType === 'eyes')
+            return new Material_Eyes(vmt);
         else
             return new Material_Generic(vmt);
     }
