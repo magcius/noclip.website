@@ -80,7 +80,7 @@ class StudioFlex {
 		public descpair: number,
 		public flexType: StudioFlexType,
 		public vertexData: Float32Array,
-		public indexData: Uint16Array,
+		public indexData: number[],
 		public vertexCount: number,
 	) {}
 }
@@ -116,7 +116,7 @@ window.flexDebug = new Float32Array(64);
 function makeShittyGUI() {
 	const shit = createDOMFromString(`
 		<div id="shit" style="display: flex; flex-direction: column; position: absolute; z-index: 10; top: 10px; right: 10px; background: #0005; padding:10px;">
-		${"<input type=\"range\" min=\"-1\" max=\"2\" step=\"0.05\"/>".repeat(32)}
+		${"<input type=\"range\" min=\"-1\" max=\"1\" step=\"0.05\"/>".repeat(32)}
 		</div>
 	`);
 
@@ -470,22 +470,24 @@ class StudioModelMeshData {
 		flexWeights = window.flexDebug as Float32Array;
 
 		for (let f = 0; f < this.flexes.length; f++) {
-			const multiply = flexWeights[this.flexes[f].desc];
-			const flexVtxCount = this.flexes[f].vertexCount;
-			const flexVtxData = this.flexes[f].vertexData;
-			const flexIdxData = this.flexes[f].indexData;
+            const flex = this.flexes[f];
+			const multiply = flexWeights[flex.desc];
+			const flexVtxData = flex.vertexData;
+			const flexIdxData = flex.indexData;
 
 			let flexIdx = 0;
-			for (let i = 0; i < flexVtxCount; i++, flexIdx += 6) {
-                const index = flexIdxData[i];
-				const vertexIdx = index * 3;
-				const normalIdx = index * 4 + this.vertexCount * 3;
+			for (let i = 0; i < flexIdxData.length; i++, flexIdx += 6) {
+                const indexes = flexIdxData[i];
+                for (let j = 0; j < indexes.length; j++) {
+                    const vertexIdx = indexes[j] * 3;
+                    const normalIdx = indexes[j] * 4 + this.vertexCount * 3;
 				flexedVertexData[vertexIdx + 0] += flexVtxData[flexIdx + 0] * multiply;
 				flexedVertexData[vertexIdx + 1] += flexVtxData[flexIdx + 1] * multiply;
 				flexedVertexData[vertexIdx + 2] += flexVtxData[flexIdx + 2] * multiply;
 				flexedVertexData[normalIdx + 0] += flexVtxData[flexIdx + 3] * multiply;
 				flexedVertexData[normalIdx + 1] += flexVtxData[flexIdx + 4] * multiply;
 				flexedVertexData[normalIdx + 2] += flexVtxData[flexIdx + 5] * multiply;
+                }
 			}
 		}
 
@@ -1647,8 +1649,9 @@ export class StudioModelData {
 
                         const stripGroupDatas: StudioModelStripGroupData[] = [];
 
-                        // Flex animations store their indices as mdl indices, so we need to remap them to our .
-                        const remapMdlIndexToVtxIndex = [];
+                        // Flex animations store their indices as mdl indices, so we need to remap them to our vertex buffer indices.
+                        // Note that multiple vtx indexes can use the same vvd index (sigh); we support up to four vertices per original index.
+                        const remapMdlIndexToVtxIndex: number[][] = [];
 
                         vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
                         for (let g = 0; g < vtxNumStripGroups; g++, vtxStripGroupIdx += vtxStripGroupStride) {
@@ -1695,8 +1698,6 @@ export class StudioModelData {
                                 const vvdTangentIndex = fixupRemappingSearch(fixupRemappings, mdlSubmodelFirstTangent + modelVertIndex);
                                 const vvdVertexOffs = vvdVertexDataStart + 0x30 * vvdVertIndex;
                                 const vvdTangentOffs = vvdTangentDataStart + 0x10 * vvdTangentIndex;
-
-                                remapMdlIndexToVtxIndex[vtxOrigMeshVertID] = vtxIndex;
 
                                 const vvdBoneWeight = [
                                     vvdView.getFloat32(vvdVertexOffs + 0x00, true),
@@ -1749,6 +1750,11 @@ export class StudioModelData {
                                 const vvdTangentSY = vvdView.getFloat32(vvdTangentOffs + 0x04, true);
                                 const vvdTangentSZ = vvdView.getFloat32(vvdTangentOffs + 0x08, true);
                                 const vvdTangentSW = vvdView.getFloat32(vvdTangentOffs + 0x0C, true);
+
+                                if (stripGroupFlags & OptimizeStripGroupFlags.IS_FLEXED) {
+                                    remapMdlIndexToVtxIndex[vtxOrigMeshVertID] ??= [];
+                                    remapMdlIndexToVtxIndex[vtxOrigMeshVertID].push(vtxIndex);
+                                }
 
                                 // Sanity check our tangent sign data.
                                 // TODO(jstpierre): Check the tangent data validity against our material.
@@ -1883,18 +1889,24 @@ export class StudioModelData {
 							const flexvertindex = mdlView.getInt32(flexIdx + 0x18, true);
 
 							const flexVtxData = new Float32Array(flexnumverts * (3 + 3));
-							const flexIdxData = new Uint16Array(flexnumverts);
+							const flexIdxData: number[][] = [];
 
 							const flexpair = mdlView.getInt32(flexIdx + 0x1C, true);
 							const flexvertanimtype = mdlView.getUint8(flexIdx + 0x1D);
 
 							// TODO(koerismo): Maybe sometime in the future we can support wrinkles? Not a priority right now.
 							const is_wrinkle = flexvertanimtype == StudioFlexType.WRINKLE;
-							let flexVertexSize = is_wrinkle ? 0x14 : 0x10;
+							const flexVertexSize = is_wrinkle ? 0x14 : 0x10;
 
 							let flexVertIdx = flexIdx + flexvertindex, dataOffs = 0;
 							for (let v = 0; v < flexnumverts; v++, flexVertIdx += flexVertexSize) {
-								flexIdxData[v] = remapMdlIndexToVtxIndex[mdlView.getUint16(flexVertIdx + 0x00, true)];
+                                const idx = mdlView.getUint16(flexVertIdx + 0x00, true);
+								const remappedIdx = remapMdlIndexToVtxIndex[idx];
+                                // XXX(jstpierre): The vertex was unused? Something to do with LODs?
+                                if (remappedIdx === undefined)
+                                    continue;
+
+                                flexIdxData.push(remappedIdx);
 
 								// TODO(koerismo): Both of these seem to always be set to -1
 								const flexVertSpeed = mdlView.getInt8(flexVertIdx + 0x02);
@@ -1910,10 +1922,13 @@ export class StudioModelData {
 								flexVtxData[dataOffs++] = decodeFloat16(mdlView.getUint16(flexVertIdx + 0x0E, true));
 							}
 
-							meshFlexes.push(new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData, flexIdxData, flexnumverts));
+                            // Something went wrong?
+                            if (flexIdxData.length === 0)
+                                continue;
+
+							meshFlexes.push(new StudioFlex(flexdesc, flexpair, flexvertanimtype, flexVtxData.slice(0, dataOffs), flexIdxData));
 						}
 
-                        const cache = renderContext.renderCache;
                         const meshData = new StudioModelMeshData(cache, materialNames, meshDataFlags, meshVtxData.buffer, meshIdxData.buffer, meshNumVertices, meshFlexes);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);
