@@ -493,7 +493,7 @@ export abstract class BaseMaterial {
         return (this.param[name] as P.ParameterVector);
     }
 
-    protected paramGetMatrix(name: string): ReadonlyMat4 {
+    public paramGetMatrix(name: string): mat4 {
         return (this.param[name] as P.ParameterMatrix).matrix;
     }
 
