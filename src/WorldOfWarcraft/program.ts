@@ -1224,3 +1224,88 @@ void mainPS() {
 #endif
 `;
 }
+
+export class ParticleProgram extends BaseProgram {
+  public static ub_EmitterParams = 1;
+  public static ub_DoodadParams = 2;
+
+  public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
+      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 3 },
+  ];
+
+  public override both = `
+${BaseProgram.commonDeclarations}
+
+struct DoodadInstance {
+    Mat4x4 transform;
+};
+
+struct BoneParams {
+  Mat4x4 transform;
+  vec4 params; // isSphericalBillboard, _, _, _
+};
+
+layout(std140) uniform ub_EmitterParams {
+    vec4 params; // boneIndex, _, _, _
+};
+
+layout(std140) uniform ub_DoodadParams {
+    DoodadInstance instances[${MAX_DOODAD_INSTANCES}];
+    BoneParams bones[${MAX_BONE_TRANSFORMS}];
+};
+
+layout(binding = 0) uniform sampler2D u_PositionTex;
+layout(binding = 1) uniform sampler2D u_ColorTex;
+layout(binding = 2) uniform sampler2D u_ScaleTex;
+
+varying float v_InstanceID;
+varying vec4 v_Color;
+
+#ifdef VERT
+void ScaledAddMat(inout Mat4x4 self, float t, Mat4x4 other) {
+    self.mx += t * other.mx;
+    self.my += t * other.my;
+    self.mz += t * other.mz;
+    self.mw += t * other.mw;
+}
+
+mat4 convertMat4x4(Mat4x4 m) {
+  return transpose(mat4(m.mx, m.my, m.mz, m.mw));
+}
+
+void mainVS() {
+    DoodadInstance doodad = instances[gl_InstanceID];
+    int vertNum = gl_VertexID % 4;
+    vec3 pos = texelFetch(SAMPLER_2D(u_PositionTex), ivec2(gl_VertexID / 4, 0), 0).xyz;
+    // if (params.x >= 0.0) {
+    //   BoneParams bone = bones[int(params.x)];
+    //   pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
+    // }
+    v_Color = texelFetch(SAMPLER_2D(u_ColorTex), ivec2(gl_VertexID / 4, 0), 0);
+    vec2 scale = texelFetch(SAMPLER_2D(u_ScaleTex), ivec2(gl_VertexID / 4, 0), 0).xy;
+    vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
+    float offset = 0.1;
+    if (vertNum == 0) {
+      viewSpacePos.x -= scale.x;
+      viewSpacePos.y += scale.y;
+    } else if (vertNum == 1) {
+      viewSpacePos.x += scale.x;
+      viewSpacePos.y += scale.y;
+    } else if (vertNum == 2) {
+      viewSpacePos.x += scale.x;
+      viewSpacePos.y -= scale.y;
+    } else if (vertNum == 3) {
+      viewSpacePos.x -= scale.x;
+      viewSpacePos.y -= scale.y;
+    }
+    gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+  gl_FragColor = v_Color;
+}
+#endif
+`;
+}

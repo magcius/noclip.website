@@ -7,7 +7,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
 import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
+import { GfxBlendFactor, GfxBlendMode, GfxBufferUsage, GfxChannelWriteMask, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
 import { GfxRenderInst, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
@@ -309,9 +309,6 @@ class Particle {
   public color = vec4.create();
   public scale = vec2.create();
 
-  public update(dt: number, emitter: ParticleEmitter) {
-  }
-
   static createSpline(emitter: ParticleEmitter, dt: number): Particle {
     throw new Error("Method not implemented.");
   }
@@ -405,11 +402,17 @@ export class ParticleEmitter {
   public particles: Particle[] = [];
   public baseSpin = 0;
   public spin = 0;
+  public wind: vec3;
+  private force = vec3.create();
   private updateBuffer: Float32Array;
   private particlesToEmit = 0.0;
+  private positionTexture: GfxTexture | undefined;
+  private scaleTexture: GfxTexture | undefined;
+  private colorTexture: GfxTexture | undefined;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter) {
     this.updateBuffer = new Float32Array(11);
+    this.wind = convertWowVec3(emitter.wind_vector);
   }
 
   private updateAndPerturbParams(dt: number, animationManager: WowM2AnimationManager) {
@@ -447,7 +450,44 @@ export class ParticleEmitter {
     }
   }
 
+  private ensureTextures(device: GfxDevice) {
+    if (this.positionTexture === undefined) {
+      this.positionTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.F32_RGB,
+        width: ParticleEmitter.MAX_PARTICLES,
+        height: 1,
+        numLevels: 1,
+        depthOrArrayLayers: 1,
+        usage: GfxTextureUsage.Sampled,
+      });
+    }
+    if (this.colorTexture === undefined) {
+      this.colorTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.F32_RGBA,
+        width: ParticleEmitter.MAX_PARTICLES,
+        height: 1,
+        numLevels: 1,
+        depthOrArrayLayers: 1,
+        usage: GfxTextureUsage.Sampled,
+      });
+    }
+    if (this.scaleTexture === undefined) {
+      this.scaleTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D,
+        pixelFormat: GfxFormat.F32_RG,
+        width: ParticleEmitter.MAX_PARTICLES,
+        height: 1,
+        numLevels: 1,
+        depthOrArrayLayers: 1,
+        usage: GfxTextureUsage.Sampled,
+      });
+    }
+  }
+
   public update(dt: number, animationManager: WowM2AnimationManager) {
+    dt /= 1000;
     this.updateAndPerturbParams(dt, animationManager);
 
     if (this.enabled > 0.0) {
@@ -459,6 +499,11 @@ export class ParticleEmitter {
         this.particlesToEmit -= 1.0;
       }
     }
+
+    // vec3.copy(this.force, this.wind);
+    vec3.set(this.force, 0, 0, 0);
+    this.force[1] -= this.gravity;
+    vec3.scale(this.force, this.force, dt);
 
     for (let i=this.particles.length - 1; i >= 0; i--) {
       const particle = this.particles[i];
@@ -473,8 +518,47 @@ export class ParticleEmitter {
         particle.color[3] = this.updateBuffer[3];
         particle.scale[0] = this.updateBuffer[4];
         particle.scale[1] = this.updateBuffer[5];
+
+        vec3.add(particle.velocity, particle.velocity, this.force);
+        vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dt);
       }
     }
+  }
+
+  public updateColorTex(device: GfxDevice): GfxTexture {
+    this.ensureTextures(device);
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 4);
+    for (let i=0; i<this.particles.length; i++) {
+      pixels[4*i] = this.particles[i].color[0];
+      pixels[4*i + 1] = this.particles[i].color[1];
+      pixels[4*i + 2] = this.particles[i].color[2];
+      pixels[4*i + 3] = this.particles[i].color[3];
+    }
+    device.uploadTextureData(this.colorTexture!, 0, [pixels]);
+    return this.colorTexture!;
+  }
+
+  public updatePositionTex(device: GfxDevice): GfxTexture {
+    this.ensureTextures(device);
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 3);
+    for (let i=0; i<this.particles.length; i++) {
+      pixels[3*i] = this.particles[i].position[0];
+      pixels[3*i + 1] = this.particles[i].position[1];
+      pixels[3*i + 2] = this.particles[i].position[2];
+    }
+    device.uploadTextureData(this.positionTexture!, 0, [pixels]);
+    return this.positionTexture!;
+  }
+
+  public updateScaleTex(device: GfxDevice): GfxTexture {
+    this.ensureTextures(device);
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * 2);
+    for (let i=0; i<this.particles.length; i++) {
+      pixels[2*i] = this.particles[i].scale[0];
+      pixels[2*i + 1] = this.particles[i].scale[1];
+    }
+    device.uploadTextureData(this.scaleTexture!, 0, [pixels]);
+    return this.scaleTexture!;
   }
 }
 

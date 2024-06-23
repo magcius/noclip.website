@@ -12,7 +12,7 @@ import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { rust } from '../rustlib.js';
 import * as Viewer from '../viewer.js';
 import { AdtCoord, AdtData, Database, DoodadData, LazyWorldData, ModelData, SkyboxData, WmoData, WmoDefinition, WorldData, WowCache } from './data.js';
-import { BaseProgram, LoadingAdtProgram, ModelProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
+import { BaseProgram, LoadingAdtProgram, ModelProgram, ParticleProgram, SkyboxProgram, TerrainProgram, WaterProgram, WmoProgram } from './program.js';
 import { LoadingAdtRenderer, ModelRenderer, SkyboxRenderer, TerrainRenderer, WaterRenderer, WmoRenderer } from './render.js';
 import { TextureCache } from './tex.js';
 import { drawBspNodes } from './debug.js';
@@ -202,6 +202,7 @@ export class WdtScene implements Viewer.SceneGfx {
   private wmoProgram: GfxProgram;
   private skyboxProgram: GfxProgram;
   private loadingAdtProgram: GfxProgram;
+  private particleProgram: GfxProgram;
 
   private modelIdToDoodads: MapArray<number, DoodadData> = new MapArray();
   private wmoIdToDefs: MapArray<number, WmoDefinition> = new MapArray();
@@ -226,6 +227,7 @@ export class WdtScene implements Viewer.SceneGfx {
     this.terrainProgram = this.renderHelper.renderCache.createProgram(new TerrainProgram());
     this.waterProgram = this.renderHelper.renderCache.createProgram(new WaterProgram());
     this.modelProgram = this.renderHelper.renderCache.createProgram(new ModelProgram());
+    this.particleProgram = this.renderHelper.renderCache.createProgram(new ParticleProgram());
     this.wmoProgram = this.renderHelper.renderCache.createProgram(new WmoProgram());
     this.skyboxProgram = this.renderHelper.renderCache.createProgram(new SkyboxProgram());
     this.loadingAdtProgram = this.renderHelper.renderCache.createProgram(new LoadingAdtProgram());
@@ -632,8 +634,15 @@ export class WdtScene implements Viewer.SceneGfx {
           return true;
         })
       if (doodads.length === 0) continue;
+
+      template.setBindingLayouts(ModelProgram.bindingLayouts);
+      template.setGfxProgram(this.modelProgram);
       renderer.update(this.mainView);
       renderer.prepareToRenderModel(renderInstManager, doodads);
+
+      template.setBindingLayouts(ParticleProgram.bindingLayouts);
+      template.setGfxProgram(this.particleProgram);
+      renderer.prepareToRenderParticles(renderInstManager, doodads);
     }
 
     renderInstManager.popTemplateRenderInst();
@@ -934,6 +943,8 @@ const bcSceneDescs = [
     "Outland",
     new ContinentSceneDesc("The Dark Portal", 828395, 29, 32, 530),
     new ContinentSceneDesc("Shattrath", 828395, 22, 35, 530),
+    new ContinentSceneDesc("Silvermoon City, Eversong Woods", 828395, 45, 14, 530),
+    new ContinentSceneDesc("Exodar, Azuremist Isle", 828395, 54, 39, 530),
 ];
 
 const wotlkSceneDescs = [

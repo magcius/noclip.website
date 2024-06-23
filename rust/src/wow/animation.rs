@@ -417,7 +417,7 @@ impl AnimationManager {
             if emitter.use_compressed_gravity() {
                 todo!()
             } else {
-                update_buffer.set_index(5, -self.get_current_value_with_blend(&emitter.gravity, 0.0));
+                update_buffer.set_index(5, self.get_current_value_with_blend(&emitter.gravity, 0.0));
             }
             update_buffer.set_index(6, self.get_current_value_with_blend(&emitter.lifespan, 0.0));
             update_buffer.set_index(7, self.get_current_value_with_blend(&emitter.emission_rate, 0.0));
