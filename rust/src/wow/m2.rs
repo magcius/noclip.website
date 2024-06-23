@@ -8,14 +8,7 @@ use wasm_bindgen::prelude::*;
 use crate::wow::animation::*;
 
 use super::common::{
-    parse_array,
-    ChunkedData,
-    WowArray,
-    WowCharArray,
-    AABBox,
-    Vec3,
-    Vec2,
-    Quat,
+    fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Quat, Vec2, Vec3, WowArray, WowCharArray
 };
 
 // if it's an MD21 chunk, all pointers are relative to the end of that chunk
@@ -497,8 +490,11 @@ pub struct ParticleEmitter {
     spline_points_unallocated: WowArray<Vec3>,
     #[deku(skip)] pub spline_points: Option<Vec<Vec3>>,
     pub(crate) enabled: M2Track<u8>,
-    _multi_texture_param0: [u16; 4],
-    _multi_texture_param1: [u16; 4],
+
+    texture_velocity0: [u16; 2],
+    texture_velocity1: [u16; 2],
+    texture_velocity_variance0: [u16; 2],
+    texture_velocity_variance1: [u16; 2],
 }
 
 #[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
@@ -509,6 +505,30 @@ impl ParticleEmitter {
 
     pub fn has_multiple_textures(&self) -> bool {
         (self.flags & 0x10000000) > 0
+    }
+
+    pub fn get_texture_velocity(&self, i: u8) -> Vec2 {
+        let packed = if i == 0 { self.texture_velocity0 } else { self.texture_velocity1 };
+        Vec2 {
+            x: fixed_precision_6_9_to_f32(packed[0]),
+            y: fixed_precision_6_9_to_f32(packed[1]),
+        }
+    }
+
+    pub fn get_texture_velocity_variance(&self, i: u8) -> Vec2 {
+        let packed = if i == 0 { self.texture_velocity_variance0 } else { self.texture_velocity_variance1 };
+        Vec2 {
+            x: fixed_precision_6_9_to_f32(packed[0]),
+            y: fixed_precision_6_9_to_f32(packed[1]),
+        }
+    }
+
+    pub fn emits_head_particles(&self) -> bool {
+        (self.flags & 0x20000) > 0
+    }
+
+    pub fn emits_tail_particles(&self) -> bool {
+        (self.flags & 0x40000) > 0
     }
 }
 

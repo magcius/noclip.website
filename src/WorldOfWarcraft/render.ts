@@ -278,7 +278,12 @@ export class ModelRenderer {
         let renderInst = renderInstManager.newRenderInst();
         let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4);
         const mapped = renderInst.mapUniformBufferF32(ParticleProgram.ub_EmitterParams);
-        offs += fillVec4(mapped, offs, emitter.emitter.bone);
+        offs += fillVec4(mapped, offs,
+          emitter.emitter.bone,
+          emitter.texScaleX,
+          emitter.texScaleY,
+          emitter.alphaTest,
+        );
 
         renderInst.setVertexInput(this.particleInputLayout, null, this.particleQuadIndices);
         renderInst.setDrawCount(emitter.particles.length * 4, 0);
@@ -297,12 +302,6 @@ export class ModelRenderer {
     device.destroyBuffer(this.vertexBuffer.buffer);
     for (let indexBuffer of this.indexBuffers) {
       device.destroyBuffer(indexBuffer.buffer);
-    }
-
-    for (const mapping of this.emitterTextures) {
-      device.destroyTexture(mapping[0]?.gfxTexture!);
-      device.destroyTexture(mapping[1]?.gfxTexture!);
-      device.destroyTexture(mapping[2]?.gfxTexture!);
     }
   }
 }

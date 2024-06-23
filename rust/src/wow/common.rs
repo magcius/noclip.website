@@ -99,6 +99,14 @@ impl WowArray<u8> {
     }
 }
 
+pub fn fixed_precision_6_9_to_f32(x: u16) -> f32 {
+    let mut result = (x & 0x1ff) as f32 * (1.0 / 512.0) + (x >> 9) as f32;
+    if x & 0x8000 > 0 {
+        result *= -1.0;
+    }
+    result
+}
+
 #[wasm_bindgen(js_name = "WowQuat")]
 #[derive(DekuRead, Debug, Clone, Copy)]
 pub struct Quat {

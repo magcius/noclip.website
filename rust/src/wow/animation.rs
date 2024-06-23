@@ -390,15 +390,21 @@ impl AnimationManager {
         let default_color = Vec3::default();
         let default_alpha = 1;
         let default_scale = Vec2 { x: 1.0, y: 1.0 };
+        let default_head_cell = 0;
+        let default_tail_cell = 0;
         let color = self.get_particle_value(age, &emitter.color, default_color);
         let alpha = self.get_particle_value(age, &emitter.alpha, default_alpha);
         let scale = self.get_particle_value(age, &emitter.scale, default_scale);
+        let head_cell = self.get_particle_value(age, &emitter.head_cell, default_head_cell);
+        let tail_cell = self.get_particle_value(age, &emitter.tail_cell, default_tail_cell);
         update_buffer.set_index(0, color.x);
         update_buffer.set_index(1, color.y);
         update_buffer.set_index(2, color.z);
         update_buffer.set_index(3, alpha as f32);
         update_buffer.set_index(4, scale.x);
         update_buffer.set_index(5, scale.y);
+        update_buffer.set_index(6, head_cell as f32);
+        update_buffer.set_index(7, tail_cell as f32);
     }
 
     pub fn update_particle_emitter(&self, emitter_index: u32, update_buffer: &Float32Array) {

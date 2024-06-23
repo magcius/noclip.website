@@ -308,6 +308,8 @@ class Particle {
   public alive = true;
   public color = vec4.create();
   public scale = vec2.create();
+  public texCoordHead = vec2.create();
+  public texCoordTail = vec2.create();
 
   static createSpline(emitter: ParticleEmitter, dt: number): Particle {
     throw new Error("Method not implemented.");
@@ -387,7 +389,7 @@ class Particle {
 
 export class ParticleEmitter {
   static MAX_PARTICLES = 2000;
-  static TEXELS_PER_PARTICLE = 3; // pos, color, scale
+  static TEXELS_PER_PARTICLE = 4; // pos, color, scale, texCoord
 
   public enabled = 0;
   public emissionSpeed = 0;
@@ -405,22 +407,38 @@ export class ParticleEmitter {
   public spin = 0;
   public wind: vec3;
   public textures: (BlpData | null)[] = [];
+  public texScaleX: number;
+  public texScaleY: number;
+  public alphaTest: number;
   private force = vec3.create();
   private updateBuffer: Float32Array;
   private particlesToEmit = 0.0;
   private dataTexture: GfxTexture | undefined;
+  private textureColMask: number;
+  private textureColBits: number;
 
   constructor(public index: number, public emitter: WowM2ParticleEmitter, model: ModelData) {
     this.updateBuffer = new Float32Array(11);
     this.wind = convertWowVec3(emitter.wind_vector);
     if (emitter.has_multiple_textures()) {
-      this.textures.push(model.lookupTexture(emitter.texture_id & 0x1F));
-      this.textures.push(model.lookupTexture((emitter.texture_id >> 5) & 0x1F));
-      this.textures.push(model.lookupTexture((emitter.texture_id >> 10) & 0x1F));
+      this.textures.push(model.blps[emitter.texture_id & 0x1F]);
+      this.textures.push(model.blps[(emitter.texture_id >> 5) & 0x1F]);
+      this.textures.push(model.blps[(emitter.texture_id >> 10) & 0x1F]);
     } else {
-      this.textures.push(model.lookupTexture(emitter.texture_id));
+      this.textures.push(model.blps[emitter.texture_id]);
       this.textures.push(null);
       this.textures.push(null);
+    }
+    this.textureColBits = Math.ceil(Math.log2(emitter.texture_dimensions_cols));
+    this.textureColMask = (1 << this.textureColBits) - 1;
+    this.texScaleX = 1.0 / emitter.texture_dimension_rows;
+    this.texScaleY = 1.0 / emitter.texture_dimensions_cols;
+    if (emitter.blending_type === 0) {
+      this.alphaTest = -1;
+    } else if (emitter.blending_type === 1) {
+      this.alphaTest = 0.501960814;
+    } else {
+      this.alphaTest = 0.0039215689;
     }
   }
 
@@ -498,18 +516,28 @@ export class ParticleEmitter {
       if (particle.age > this.lifespan) {
         this.particles.splice(i, 1);
       } else {
-        animationManager.update_particle(this.index, particle.age, this.updateBuffer);
+        animationManager.update_particle(this.index, particle.age * 5000, this.updateBuffer);
         particle.color[0] = this.updateBuffer[0];
         particle.color[1] = this.updateBuffer[1];
         particle.color[2] = this.updateBuffer[2];
         particle.color[3] = this.updateBuffer[3];
         particle.scale[0] = this.updateBuffer[4];
         particle.scale[1] = this.updateBuffer[5];
+        const cellHead = this.updateBuffer[6];
+        this.extractTexCoords(particle.texCoordHead, cellHead);
+        const cellTail = this.updateBuffer[6];
+        this.extractTexCoords(particle.texCoordTail, cellTail);
 
         vec3.add(particle.velocity, particle.velocity, this.force);
         vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dt);
       }
     }
+  }
+
+  public extractTexCoords(out: vec2, cell: number) {
+    const xInt = cell & this.textureColMask;
+    const yInt = cell >> this.textureColBits;
+    vec2.set(out, xInt * this.texScaleX, yInt * this.texScaleY);
   }
 
   public updateDataTex(device: GfxDevice): GfxTexture {
@@ -521,6 +549,7 @@ export class ParticleEmitter {
       offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
       offs += fillVec4v(pixels, offs, particle.color);
       offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
+      offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
     }
     device.uploadTextureData(this.dataTexture!, 0, [pixels]);
     return this.dataTexture!;
@@ -613,10 +642,6 @@ export class ModelData {
     this.textureTransformLookupTable = m2.take_texture_transform_lookup();
     this.textureTransparencyLookupTable = m2.take_texture_transparency_lookup();
 
-    this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
-      return new ParticleEmitter(i, emitter, this);
-    });
-
     const m2Materials = m2.materials;
     this.materials = m2Materials.map(mat => {
       return [mat.blending_mode, rust.WowM2MaterialFlags.new(mat.flags)];
@@ -625,6 +650,10 @@ export class ModelData {
 
     this.blps = await this.loadTextures(cache, m2);
     this.skins = await this.loadSkins(cache, m2);
+
+    this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
+      return new ParticleEmitter(i, emitter, this);
+    });
 
     this.animationManager = m2.take_animation_manager();
     this.textureWeights = new Float32Array(this.animationManager.get_num_texture_weights());

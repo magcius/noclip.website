@@ -1230,7 +1230,7 @@ export class ParticleProgram extends BaseProgram {
   public static ub_DoodadParams = 2;
 
   public static bindingLayouts: GfxBindingLayoutDescriptor[] = [
-      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 6 },
+      { numUniformBuffers: super.numUniformBuffers + 2, numSamplers: super.numSamplers + 4 },
   ];
 
   public override both = `
@@ -1246,7 +1246,7 @@ struct BoneParams {
 };
 
 layout(std140) uniform ub_EmitterParams {
-    vec4 params; // boneIndex, _, _, _
+    vec4 params; // boneIndex, texScaleX, texScaleY, alphaTest
 };
 
 layout(std140) uniform ub_DoodadParams {
@@ -1255,9 +1255,9 @@ layout(std140) uniform ub_DoodadParams {
 };
 
 layout(binding = 0) uniform sampler2D u_DataTex;
-layout(binding = 3) uniform sampler2D u_Tex0;
-layout(binding = 4) uniform sampler2D u_Tex1;
-layout(binding = 5) uniform sampler2D u_Tex2;
+layout(binding = 1) uniform sampler2D u_Tex0;
+layout(binding = 2) uniform sampler2D u_Tex1;
+layout(binding = 3) uniform sampler2D u_Tex2;
 
 varying float v_InstanceID;
 varying vec4 v_Color;
@@ -1281,6 +1281,7 @@ void mainVS() {
     DoodadInstance doodad = instances[gl_InstanceID];
     int vertNum = gl_VertexID % 4;
     vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, gl_VertexID / 4), 0).xyz;
+    // bone transform's not quite right...
     // if (params.x >= 0.0) {
     //   BoneParams bone = bones[int(params.x)];
     //   pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
@@ -1288,23 +1289,25 @@ void mainVS() {
     v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, gl_VertexID / 4), 0);
     vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, gl_VertexID / 4), 0).xy;
     vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
+    vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, gl_VertexID / 4), 0).xy;
+    vec2 texScale = params.yz;
     float offset = 0.1;
     if (vertNum == 0) {
       viewSpacePos.x -= scale.x;
       viewSpacePos.y += scale.y;
-      v_UV0 = vec2(0.0, 0.0);
+      v_UV0 = texPos + vec2(0.0, 0.0) * texScale;
     } else if (vertNum == 1) {
       viewSpacePos.x += scale.x;
       viewSpacePos.y += scale.y;
-      v_UV0 = vec2(1.0, 0.0);
+      v_UV0 = texPos + vec2(1.0, 0.0) * texScale;
     } else if (vertNum == 2) {
       viewSpacePos.x += scale.x;
       viewSpacePos.y -= scale.y;
-      v_UV0 = vec2(1.0, 1.0);
+      v_UV0 = texPos + vec2(1.0, 1.0) * texScale;
     } else if (vertNum == 3) {
       viewSpacePos.x -= scale.x;
       viewSpacePos.y -= scale.y;
-      v_UV0 = vec2(0.0, 1.0);
+      v_UV0 = texPos + vec2(0.0, 1.0) * texScale;
     }
     gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
 }
@@ -1316,6 +1319,9 @@ void mainPS() {
   vec4 tex1 = texture(SAMPLER_2D(u_Tex1), v_UV1);
   vec4 tex2 = texture(SAMPLER_2D(u_Tex2), v_UV2);
   gl_FragColor = tex0;
+  if (gl_FragColor.a < params.w) {
+    discard;
+  }
 }
 #endif
 `;
