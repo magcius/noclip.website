@@ -1026,8 +1026,8 @@ class VtxLoaderImpl implements VtxLoader {
                 indexCount = (vertexCount - 2) * 3;
                 break;
             case GX.Command.DRAW_QUADS:
-            case GX.Command.DRAW_QUADS_2:
-                indexCount = ((vertexCount * 6) / 4) * 3;
+            case GX.Command.DRAW_QUAD_STRIP:
+                indexCount = ((vertexCount * 6) / 4);
                 break;
             default:
                 throw new Error(`Invalid data at ${hexzero(srcBuffer.byteOffset, 0x08)} / ${hexzero(drawCallIdx - 0x03, 0x04)} cmd ${hexzero(cmd, 0x02)}`);
@@ -1088,7 +1088,7 @@ class VtxLoaderImpl implements VtxLoader {
                 }
                 break;
             case GX.Command.DRAW_QUADS:
-            case GX.Command.DRAW_QUADS_2:
+            case GX.Command.DRAW_QUAD_STRIP:
                 // Each quad (4 vertices) is split into 2 triangles (6 vertices)
                 for (let i = 0; i < drawCall.vertexCount; i += 4) {
                     dstIndexData[indexDataIdx++] = vertexId + 0;
@@ -1100,6 +1100,7 @@ class VtxLoaderImpl implements VtxLoader {
                     dstIndexData[indexDataIdx++] = vertexId + 3;
                     vertexId += 4;
                 }
+                break;
             }
         }
 
