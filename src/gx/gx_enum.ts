@@ -40,8 +40,7 @@ export const enum Command {
     NOOP                = 0x00,
 
     DRAW_QUADS          = 0x80,
-    // Early code for GX_DRAW_QUADS? Seen in Luigi's Mansion.
-    DRAW_QUADS_2        = 0x88,
+    DRAW_QUAD_STRIP     = 0x88,
     DRAW_TRIANGLES      = 0x90,
     DRAW_TRIANGLE_STRIP = 0x98,
     DRAW_TRIANGLE_FAN   = 0xA0,
