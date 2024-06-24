@@ -385,8 +385,8 @@ impl AnimationManager {
         }
     }
 
-    pub fn update_particle(&self, emitter_index: u32, age: f64, update_buffer: &Float32Array) {
-        let emitter = &self.particle_emitters[emitter_index as usize];
+    pub fn update_particle(&self, emitter_index: usize, age: f64, update_buffer: &Float32Array) {
+        let emitter = &self.particle_emitters[emitter_index];
         let default_color = Vec3::default();
         let default_alpha = 1;
         let default_scale = Vec2 { x: 1.0, y: 1.0 };
@@ -619,10 +619,10 @@ impl AnimationManager {
                     animation.values()[time_index].clone()
                 } else {
                     let value1 = animation.values()[time_index].clone();
-                    let time1 = animation.timestamps()[time_index];
+                    let time1 = animation.timestamps()[time_index].as_timestamp();
                     let value2 = animation.values()[time_index + 1].clone();
-                    let time2 = animation.timestamps()[time_index + 1];
-                    let t = (age - time1 as f64) / (time2 as f64 - time1 as f64);
+                    let time2 = animation.timestamps()[time_index + 1].as_timestamp();
+                    let t = (age - time1) / (time2 - time1);
                     value1.lerp(value2, t as f32)
                 }
             } else {
@@ -631,14 +631,28 @@ impl AnimationManager {
         }
 }
 
-fn find_timestamp_index<T: Into<f64> + Clone>(timestamps: &Vec<T>, curr_time: f64) -> Option<usize> {
+trait AsTimestamp {
+    fn as_timestamp(&self) -> f64;
+}
+
+impl AsTimestamp for u32 {
+    fn as_timestamp(&self) -> f64 { *self as f64 }
+}
+
+impl AsTimestamp for u16 {
+    fn as_timestamp(&self) -> f64 {
+        *self as f64 / 32768.0
+    }
+}
+
+fn find_timestamp_index<T: AsTimestamp>(timestamps: &Vec<T>, curr_time: f64) -> Option<usize> {
     if timestamps.len() > 1 {
         let last_index = timestamps.len() - 1;
-        if curr_time > timestamps[last_index].clone().into() {
+        if curr_time > timestamps[last_index].as_timestamp() {
             Some(last_index)
         } else {
             let next_timestamp_idx = timestamps.iter().position(|time| {
-                time.clone().into() >= curr_time
+                time.as_timestamp() >= curr_time
             }).unwrap();
             if next_timestamp_idx != 0 {
                 Some(next_timestamp_idx - 1)

@@ -586,6 +586,37 @@ impl ParticleEmitter {
     }
 }
 
+#[wasm_bindgen(js_name = "WowM2ParticleEmitterFlags")]
+#[derive(DekuRead, Clone, Debug)]
+pub struct ParticleEmitterFlags {
+    #[deku(bits=1)] pub use_multitexturing: bool,
+    #[deku(bits=1)] pub ignore_distance_for_emission: bool,
+    #[deku(bits=1)] pub use_bone_generator: bool,
+    #[deku(bits=1)] pub use_compressed_gravity: bool,
+    #[deku(bits=1)] pub ignore_distance: bool,
+    #[deku(bits=1)] pub random_flipbook_start: bool,
+    #[deku(bits=1)] pub vary_xy_scale_independently: bool,
+    #[deku(bits=1)] pub unk_0x40000: bool,
+    #[deku(bits=1)] pub outward_moving: bool,
+    #[deku(bits=1)] pub random_texture: bool,
+    #[deku(bits=1)] pub unk_0x8000: bool,
+    #[deku(bits=1)] pub unk_0x4000: bool,
+    #[deku(bits=1)] pub clamp_to_ground: bool,
+    #[deku(bits=1)] pub xy_quad: bool, // align to xy axis facing z dir
+    #[deku(bits=1)] pub unk_0x800: bool,
+    #[deku(bits=1)] pub pinned: bool,
+    #[deku(bits=1)] pub random_spawn_pos: bool,
+    #[deku(bits=1)] pub unk_0x100: bool,
+    #[deku(bits=1)] pub use_model_space: bool, // causes animation of particle emitter to be carried over to particles
+    #[deku(bits=1)] pub use_burst_multiplier: bool,
+    #[deku(bits=1)] pub unk_0x20: bool,
+    #[deku(bits=1)] pub do_not_trail: bool,
+    #[deku(bits=1)] pub up_in_world_space: bool,
+    #[deku(bits=1)] pub orient_based_on_player: bool,
+    #[deku(bits=1)] pub unk_0x2: bool,
+    #[deku(bits=1)] pub lit: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

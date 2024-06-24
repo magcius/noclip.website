@@ -347,9 +347,9 @@ class Particle {
         vec3.normalize(velocity, velocity);
       }
     }
-    vec3.scale(velocity, velocity, emitter.emissionSpeed);
+    vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
 
-    return new Particle(position, velocity, emitter.lifespan);
+    return new Particle(position, velocity, emitter.getLifespan());
   }
 
   static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
@@ -367,20 +367,21 @@ class Particle {
       const cosPolar = Math.cos(polar);
       const cosAzimuth = Math.cos(azimuth);
       velocity = vec3.fromValues(
-        cosAzimuth * sinPolar * emitter.emissionSpeed,
-        sinAzimuth * sinPolar * emitter.emissionSpeed,
-        cosPolar * emitter.emissionSpeed,
+        cosAzimuth * sinPolar,
+        sinAzimuth * sinPolar,
+        cosPolar,
       );
+      vec3.scale(velocity, velocity, emitter.getEmissionSpeed());
     } else {
       velocity = vec3.fromValues(0, 0, emitter.zSource);
       vec3.sub(velocity, position, velocity);
       if (vec3.len(velocity) > 0.0001) {
         vec3.normalize(velocity, velocity);
-        vec3.scale(velocity, velocity, emitter.emissionSpeed)
+        vec3.scale(velocity, velocity, emitter.getEmissionSpeed())
       }
     }
 
-    return new Particle(position, velocity, emitter.lifespan);
+    return new Particle(position, velocity, emitter.getLifespan());
   }
 
   constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
@@ -392,19 +393,19 @@ export class ParticleEmitter {
   static TEXELS_PER_PARTICLE = 4; // pos, color, scale, texCoord
 
   public enabled = 0;
-  public emissionSpeed = 0;
-  public speedVariation = 0;
+  private emissionSpeed = 0;
+  private speedVariation = 0;
   public verticalRange = 0;
   public horizontalRange = 0;
   public gravity = 0;
-  public lifespan = 0;
-  public emissionRate = 0;
+  private lifespan = 0;
+  private emissionRate = 0;
   public emissionAreaLength = 0;
   public emissionAreaWidth = 0;
   public zSource = 0;
   public particles: Particle[] = [];
-  public baseSpin = 0;
-  public spin = 0;
+  private baseSpin = 0;
+  private spin = 0;
   public wind: vec3;
   public textures: (BlpData | null)[] = [];
   public texScaleX: number;
@@ -449,7 +450,7 @@ export class ParticleEmitter {
     this.blendMode = emitter.get_blend_mode();
   }
 
-  private updateAndPerturbParams(dt: number, animationManager: WowM2AnimationManager) {
+  private updateParams(dt: number, animationManager: WowM2AnimationManager) {
     animationManager.update_particle_emitter(this.index, this.updateBuffer);
     [
       this.enabled,
@@ -466,11 +467,26 @@ export class ParticleEmitter {
     ] = this.updateBuffer;
 
     vec3.transformMat4(this.translatedPosition, this.position, this.model.boneTransforms[this.emitter.bone]);
-    this.emissionRate += Math.random() * this.emitter.emission_rate_variance;
-    this.emissionSpeed += Math.random() * this.speedVariation;
-    this.lifespan += Math.random() * this.emitter.lifespan_variance;
-    this.baseSpin = this.emitter.base_spin + Math.random() * this.emitter.base_spin_variance;
-    this.spin = this.emitter.spin + Math.random() * this.emitter.spin_variance;
+  }
+
+  public getEmissionRate(): number {
+    return this.emissionRate + Math.random() * this.emitter.emission_rate_variance;
+  }
+
+  public getEmissionSpeed(): number {
+    return this.emissionSpeed + Math.random() * this.speedVariation;
+  }
+
+  public getLifespan(): number {
+    return this.lifespan + Math.random() * this.emitter.lifespan_variance;
+  }
+
+  public getBaseSpin(): number {
+    return this.emitter.base_spin + Math.random() * this.emitter.base_spin_variance;
+  }
+
+  public getSpin(): number {
+    return this.emitter.spin + Math.random() * this.emitter.spin_variance;
   }
 
   private createParticle(dt: number) {
@@ -612,12 +628,17 @@ export class ParticleEmitter {
     }
   }
 
+  private maxLifespan(): number {
+    return this.lifespan + this.emitter.lifespan_variance
+  }
+
   public update(dt: number, animationManager: WowM2AnimationManager) {
+    // the particle system's units are seconds
     dt /= 1000;
-    this.updateAndPerturbParams(dt, animationManager);
+    this.updateParams(dt, animationManager);
 
     if (this.enabled > 0.0) {
-      this.particlesToEmit += this.emissionRate * dt;
+      this.particlesToEmit += this.getEmissionRate() * dt;
       while (this.particlesToEmit > 1.0) {
         if (this.particles.length < ParticleEmitter.MAX_PARTICLES) {
           this.createParticle(dt);
@@ -637,7 +658,8 @@ export class ParticleEmitter {
       if (particle.age > this.lifespan) {
         this.particles.splice(i, 1);
       } else {
-        animationManager.update_particle(this.index, particle.age * 5000, this.updateBuffer);
+        const agePercent = particle.age / this.maxLifespan();
+        animationManager.update_particle(this.index, agePercent, this.updateBuffer);
         particle.color[0] = this.updateBuffer[0] / 255.0;
         particle.color[1] = this.updateBuffer[1] / 255.0;
         particle.color[2] = this.updateBuffer[2] / 255.0;
