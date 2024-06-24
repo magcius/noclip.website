@@ -1246,7 +1246,9 @@ struct BoneParams {
 };
 
 layout(std140) uniform ub_EmitterParams {
-    vec4 params; // boneIndex, texScaleX, texScaleY, alphaTest
+    vec4 params; // boneIndex, alphaTest, fragShaderType, _
+    vec4 ub_emitterPosition;
+    vec4 ub_texScale; // x, y, _, _
 };
 
 layout(std140) uniform ub_DoodadParams {
@@ -1278,38 +1280,45 @@ mat4 convertMat4x4(Mat4x4 m) {
 }
 
 void mainVS() {
-    DoodadInstance doodad = instances[gl_InstanceID];
-    int vertNum = gl_VertexID % 4;
-    vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, gl_VertexID / 4), 0).xyz;
-    // bone transform's not quite right...
-    // if (params.x >= 0.0) {
-    //   BoneParams bone = bones[int(params.x)];
-    //   pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
-    // }
-    v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, gl_VertexID / 4), 0);
-    vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, gl_VertexID / 4), 0).xy;
-    vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
-    vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, gl_VertexID / 4), 0).xy;
-    vec2 texScale = params.yz;
-    float offset = 0.1;
-    if (vertNum == 0) {
-      viewSpacePos.x -= scale.x;
-      viewSpacePos.y += scale.y;
-      v_UV0 = texPos + vec2(0.0, 0.0) * texScale;
-    } else if (vertNum == 1) {
-      viewSpacePos.x += scale.x;
-      viewSpacePos.y += scale.y;
-      v_UV0 = texPos + vec2(1.0, 0.0) * texScale;
-    } else if (vertNum == 2) {
-      viewSpacePos.x += scale.x;
-      viewSpacePos.y -= scale.y;
-      v_UV0 = texPos + vec2(1.0, 1.0) * texScale;
-    } else if (vertNum == 3) {
-      viewSpacePos.x -= scale.x;
-      viewSpacePos.y -= scale.y;
-      v_UV0 = texPos + vec2(0.0, 1.0) * texScale;
-    }
-    gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
+  Mat4x4 particleCoordinatesFix;
+  particleCoordinatesFix.mx = vec4(0.0, 1.0, 0.0, 0.0);
+  particleCoordinatesFix.my = vec4(-1.0, 0.0, 0.0, 0.0);
+  particleCoordinatesFix.mz = vec4(0.0, 0.0, 1.0, 0.0);
+  particleCoordinatesFix.mw = vec4(0.0, 0.0, 0.0, 1.0);
+
+  DoodadInstance doodad = instances[gl_InstanceID];
+  int vertNum = gl_VertexID % 4;
+  vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, gl_VertexID / 4), 0).xyz;
+  pos = Mul(particleCoordinatesFix, vec4(pos, 1.0)).xyz;
+  pos = pos + ub_emitterPosition.xyz;
+  // bone transform's not quite right...
+  // if (params.x >= 0.0) {
+  //   BoneParams bone = bones[int(params.x)];
+  //   pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
+  // }
+  v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, gl_VertexID / 4), 0);
+  vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, gl_VertexID / 4), 0).xy;
+  vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
+  vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, gl_VertexID / 4), 0).xy;
+  vec2 texScale = ub_texScale.xy;
+  if (vertNum == 0) {
+    viewSpacePos.x -= scale.x;
+    viewSpacePos.y += scale.y;
+    v_UV0 = texPos + vec2(0.0, 0.0) * texScale;
+  } else if (vertNum == 1) {
+    viewSpacePos.x += scale.x;
+    viewSpacePos.y += scale.y;
+    v_UV0 = texPos + vec2(1.0, 0.0) * texScale;
+  } else if (vertNum == 2) {
+    viewSpacePos.x += scale.x;
+    viewSpacePos.y -= scale.y;
+    v_UV0 = texPos + vec2(1.0, 1.0) * texScale;
+  } else if (vertNum == 3) {
+    viewSpacePos.x -= scale.x;
+    viewSpacePos.y -= scale.y;
+    v_UV0 = texPos + vec2(0.0, 1.0) * texScale;
+  }
+  gl_Position = Mul(u_Projection, vec4(viewSpacePos.xyz, 1.0));
 }
 #endif
 
@@ -1318,10 +1327,26 @@ void mainPS() {
   vec4 tex0 = texture(SAMPLER_2D(u_Tex0), v_UV0);
   vec4 tex1 = texture(SAMPLER_2D(u_Tex1), v_UV1);
   vec4 tex2 = texture(SAMPLER_2D(u_Tex2), v_UV2);
-  gl_FragColor = tex0;
-  if (gl_FragColor.a < params.w) {
+
+  int shaderType = int(params.z);
+  vec4 finalColor;
+  if (shaderType == ${rust.WowM2ParticleShaderType.Mod}) {
+    finalColor = v_Color * tex0;
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.TwoColorTexThreeAlphaTex}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTex}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTexUV}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  } else if (shaderType == ${rust.WowM2ParticleShaderType.Refraction}) {
+    finalColor = vec4(1.0, 0.0, 1.0, 1.0);
+  }
+
+  if (finalColor.a < params.y) {
     discard;
   }
+
+  gl_FragColor = finalColor;
 }
 #endif
 `;

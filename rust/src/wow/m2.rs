@@ -497,6 +497,15 @@ pub struct ParticleEmitter {
     texture_velocity_variance1: [u16; 2],
 }
 
+#[wasm_bindgen(js_name = "WowM2ParticleShaderType")]
+pub enum ParticleShaderType {
+    Mod,
+    TwoColorTexThreeAlphaTex,
+    ThreeColorTexThreeAlphaTex,
+    ThreeColorTexThreeAlphaTexUV,
+    Refraction,
+}
+
 #[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
 impl ParticleEmitter {
     pub fn use_compressed_gravity(&self) -> bool {
@@ -529,6 +538,47 @@ impl ParticleEmitter {
 
     pub fn emits_tail_particles(&self) -> bool {
         (self.flags & 0x40000) > 0
+    }
+
+    pub fn get_shader_type(&self) -> ParticleShaderType {
+        let particle_type: u8;
+        if (self.flags & 0x10100000) == 0 {
+            particle_type = 0;
+        } else {
+            if self.has_multiple_textures() {
+                particle_type = 2;
+            } else {
+                particle_type = 3;
+            }
+        }
+
+        if (particle_type == 2 || (particle_type == 4 && self.has_multiple_textures())) {
+            assert!(self.flags & 0x20 > 0);
+            ParticleShaderType::ThreeColorTexThreeAlphaTexUV
+        } else if particle_type == 2 || (particle_type == 4 && self.has_multiple_textures()) {
+            if self.flags & 0x20 > 0 {
+                ParticleShaderType::ThreeColorTexThreeAlphaTex
+            } else {
+                ParticleShaderType::TwoColorTexThreeAlphaTex
+            }
+        } else if particle_type == 3 {
+            ParticleShaderType::Refraction
+        } else {
+            ParticleShaderType::Mod
+        }
+    }
+
+    pub fn get_blend_mode(&self) -> M2BlendingMode {
+        match self.blending_type {
+            1 => M2BlendingMode::AlphaKey,
+            2 => M2BlendingMode::Alpha,
+            3 => M2BlendingMode::NoAlphaAdd,
+            4 => M2BlendingMode::Add,
+            5 => M2BlendingMode::Mod,
+            6 => M2BlendingMode::Mod2x,
+            7 => M2BlendingMode::BlendAdd,
+            _ => M2BlendingMode::Opaque,
+        }
     }
 }
 

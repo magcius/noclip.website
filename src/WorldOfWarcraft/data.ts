@@ -327,6 +327,7 @@ class Particle {
       Math.sin(polar),
     );
     const position = vec3.scale(emissionDir, emissionDir, radius);
+    // vec3.add(position, position, emitter.translatedPosition);
 
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
@@ -358,6 +359,7 @@ class Particle {
       Math.random() * emitter.emissionAreaWidth * 0.5,
       0,
     );
+    // vec3.add(position, position, emitter.translatedPosition);
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
       const polar = emitter.verticalRange * Math.random();
@@ -410,6 +412,10 @@ export class ParticleEmitter {
   public texScaleX: number;
   public texScaleY: number;
   public alphaTest: number;
+  public fragShaderType: number;
+  public blendMode: WowM2BlendingMode;
+  public position: vec3;
+  public translatedPosition = vec3.create();
   private force = vec3.create();
   private updateBuffer: Float32Array;
   private particlesToEmit = 0.0;
@@ -417,9 +423,10 @@ export class ParticleEmitter {
   private textureColMask: number;
   private textureColBits: number;
 
-  constructor(public index: number, public emitter: WowM2ParticleEmitter, model: ModelData) {
+  constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData) {
     this.updateBuffer = new Float32Array(11);
     this.wind = convertWowVec3(emitter.wind_vector);
+    this.position = convertWowVec3(emitter.position);
     if (emitter.has_multiple_textures()) {
       this.textures.push(model.blps[emitter.texture_id & 0x1F]);
       this.textures.push(model.blps[(emitter.texture_id >> 5) & 0x1F]);
@@ -440,6 +447,8 @@ export class ParticleEmitter {
     } else {
       this.alphaTest = 0.0039215689;
     }
+    this.fragShaderType = emitter.get_shader_type();
+    this.blendMode = emitter.get_blend_mode();
   }
 
   private updateAndPerturbParams(dt: number, animationManager: WowM2AnimationManager) {
@@ -458,6 +467,7 @@ export class ParticleEmitter {
       this.zSource,
     ] = this.updateBuffer;
 
+    vec3.transformMat4(this.translatedPosition, this.position, this.model.boneTransforms[this.emitter.bone]);
     this.emissionRate += Math.random() * this.emitter.emission_rate_variance;
     this.emissionSpeed += Math.random() * this.speedVariation;
     this.lifespan += Math.random() * this.emitter.lifespan_variance;
@@ -475,6 +485,119 @@ export class ParticleEmitter {
     } else {
       throw new Error(`unknown particle emitter type ${this.emitter.emitter_type}`);
     }
+  }
+
+  public setMegaStateFlags(renderInst: GfxRenderInst) {
+    const defaultBlendState = {
+        blendMode: GfxBlendMode.Add,
+        blendSrcFactor: GfxBlendFactor.One,
+        blendDstFactor: GfxBlendFactor.Zero,
+    };
+    let settings: Partial<GfxMegaStateDescriptor> = {
+      cullMode: GfxCullMode.None,
+      depthWrite: false,
+      attachmentsState: [{
+        channelWriteMask: GfxChannelWriteMask.RGB,
+        rgbBlendState: defaultBlendState,
+        alphaBlendState: defaultBlendState,
+      }],
+    };
+
+    let sortKeyLayer = makeSortKey(GfxRendererLayer.TRANSLUCENT + this.index);
+
+    // TODO setSortKeyDepth based on distance to transparent object
+    switch (this.blendMode) {
+      case rust.WowM2BlendingMode.Alpha: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.SrcAlpha,
+          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.One,
+          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        };
+        settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.NoAlphaAdd: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.One,
+          blendDstFactor: GfxBlendFactor.One,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.Zero,
+          blendDstFactor: GfxBlendFactor.One,
+        };
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.Add: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.SrcAlpha,
+          blendDstFactor: GfxBlendFactor.One,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.Zero,
+          blendDstFactor: GfxBlendFactor.One,
+        };
+        settings.attachmentsState![0].channelWriteMask = GfxChannelWriteMask.AllChannels;
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.Mod: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.Dst,
+          blendDstFactor: GfxBlendFactor.Zero,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.DstAlpha,
+          blendDstFactor: GfxBlendFactor.Zero,
+        };
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.Mod2x: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.Dst,
+          blendDstFactor: GfxBlendFactor.Src,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.DstAlpha,
+          blendDstFactor: GfxBlendFactor.SrcAlpha,
+        };
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.BlendAdd: {
+        settings.attachmentsState![0].rgbBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.One,
+          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        };
+        settings.attachmentsState![0].alphaBlendState = {
+          blendMode: GfxBlendMode.Add,
+          blendSrcFactor: GfxBlendFactor.One,
+          blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
+        };
+        renderInst.sortKey = sortKeyLayer
+        break;
+      }
+      case rust.WowM2BlendingMode.Opaque:
+      case rust.WowM2BlendingMode.AlphaKey:
+        break;
+    }
+    renderInst.setMegaStateFlags(settings);
   }
 
   private ensureTexture(device: GfxDevice) {
@@ -517,9 +640,9 @@ export class ParticleEmitter {
         this.particles.splice(i, 1);
       } else {
         animationManager.update_particle(this.index, particle.age * 5000, this.updateBuffer);
-        particle.color[0] = this.updateBuffer[0];
-        particle.color[1] = this.updateBuffer[1];
-        particle.color[2] = this.updateBuffer[2];
+        particle.color[0] = this.updateBuffer[0] / 255.0;
+        particle.color[1] = this.updateBuffer[1] / 255.0;
+        particle.color[2] = this.updateBuffer[2] / 255.0;
         particle.color[3] = this.updateBuffer[3];
         particle.scale[0] = this.updateBuffer[4];
         particle.scale[1] = this.updateBuffer[5];

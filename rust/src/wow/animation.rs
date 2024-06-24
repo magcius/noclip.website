@@ -400,7 +400,7 @@ impl AnimationManager {
         update_buffer.set_index(0, color.x);
         update_buffer.set_index(1, color.y);
         update_buffer.set_index(2, color.z);
-        update_buffer.set_index(3, alpha as f32);
+        update_buffer.set_index(3, alpha as f32 / 32768.0);
         update_buffer.set_index(4, scale.x);
         update_buffer.set_index(5, scale.y);
         update_buffer.set_index(6, head_cell as f32);

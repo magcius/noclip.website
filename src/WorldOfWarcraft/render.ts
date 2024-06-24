@@ -276,20 +276,26 @@ export class ModelRenderer {
         emitter.updateDataTex(this.device);
 
         let renderInst = renderInstManager.newRenderInst();
-        let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4);
+        let offs = renderInst.allocateUniformBuffer(ParticleProgram.ub_EmitterParams, 4 * 3);
         const mapped = renderInst.mapUniformBufferF32(ParticleProgram.ub_EmitterParams);
         offs += fillVec4(mapped, offs,
           emitter.emitter.bone,
+          emitter.alphaTest,
+          emitter.fragShaderType,
+        );
+        offs += fillVec4(mapped, offs,
+          emitter.translatedPosition[0],
+          emitter.translatedPosition[1],
+          emitter.translatedPosition[2],
+        );
+        offs += fillVec4(mapped, offs,
           emitter.texScaleX,
           emitter.texScaleY,
-          emitter.alphaTest,
         );
 
         renderInst.setVertexInput(this.particleInputLayout, null, this.particleQuadIndices);
         renderInst.setDrawCount(emitter.particles.length * 4, 0);
-        renderInst.setMegaStateFlags({
-          cullMode: GfxCullMode.None,
-        });
+        emitter.setMegaStateFlags(renderInst);
         renderInst.setInstanceCount(doodadChunk.length);
         renderInst.setSamplerBindingsFromTextureMappings(this.emitterTextures[i]);
         renderInstManager.submitRenderInst(renderInst);
