@@ -1246,7 +1246,7 @@ struct BoneParams {
 };
 
 layout(std140) uniform ub_EmitterParams {
-    vec4 params; // boneIndex, alphaTest, fragShaderType, _
+    vec4 params; // boneIndex, alphaTest, fragShaderType, useBoneTransform
     vec4 ub_emitterPosition;
     vec4 ub_texScale; // x, y, _, _
 };
@@ -1291,11 +1291,10 @@ void mainVS() {
   vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, gl_VertexID / 4), 0).xyz;
   pos = Mul(particleCoordinatesFix, vec4(pos, 1.0)).xyz;
   pos = pos + ub_emitterPosition.xyz;
-  // bone transform's not quite right...
-  // if (params.x >= 0.0) {
-  //   BoneParams bone = bones[int(params.x)];
-  //   pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
-  // }
+  if (params.x >= 0.0 && params.w > 0.0) {
+    BoneParams bone = bones[int(params.x)];
+    pos = Mul(bone.transform, vec4(pos, 1.0)).xyz;
+  }
   v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, gl_VertexID / 4), 0);
   vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, gl_VertexID / 4), 0).xy;
   vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));

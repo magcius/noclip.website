@@ -282,6 +282,7 @@ export class ModelRenderer {
           emitter.emitter.bone,
           emitter.alphaTest,
           emitter.fragShaderType,
+          emitter.emitter.translate_particle_with_bone() ? 1 : 0,
         );
         offs += fillVec4(mapped, offs,
           emitter.translatedPosition[0],

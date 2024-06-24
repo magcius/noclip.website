@@ -540,6 +540,10 @@ impl ParticleEmitter {
         (self.flags & 0x40000) > 0
     }
 
+    pub fn translate_particle_with_bone(&self) -> bool {
+        (self.flags & 0x10) > 0
+    }
+
     pub fn get_shader_type(&self) -> ParticleShaderType {
         let particle_type: u8;
         if (self.flags & 0x10100000) == 0 {
@@ -552,7 +556,7 @@ impl ParticleEmitter {
             }
         }
 
-        if (particle_type == 2 || (particle_type == 4 && self.has_multiple_textures())) {
+        if particle_type == 2 || (particle_type == 4 && self.has_multiple_textures()) {
             assert!(self.flags & 0x20 > 0);
             ParticleShaderType::ThreeColorTexThreeAlphaTexUV
         } else if particle_type == 2 || (particle_type == 4 && self.has_multiple_textures()) {

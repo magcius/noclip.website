@@ -327,7 +327,6 @@ class Particle {
       Math.sin(polar),
     );
     const position = vec3.scale(emissionDir, emissionDir, radius);
-    // vec3.add(position, position, emitter.translatedPosition);
 
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
@@ -359,7 +358,6 @@ class Particle {
       Math.random() * emitter.emissionAreaWidth * 0.5,
       0,
     );
-    // vec3.add(position, position, emitter.translatedPosition);
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
       const polar = emitter.verticalRange * Math.random();
