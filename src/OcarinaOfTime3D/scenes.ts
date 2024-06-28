@@ -20,6 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { bindingLayouts } from './oot3d_scenes.js';
 import { ZSIEnvironmentSettings } from './zsi.js';
+import { vec3 } from 'gl-matrix';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {
@@ -272,7 +273,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         this.cmbData.push(cmbData);
         const cmbRenderer = new CmbInstance(cache, this.textureHolder, cmbData, file.name);
 
-        if(cmbData.cmb.version === CMB.Version.Ocarina){
+        if (cmbData.cmb.version === CMB.Version.Ocarina) {
             const envSettings = new ZSIEnvironmentSettings();
             vec3.set(envSettings.lights[0].direction, -0.57715, -0.57715, -0.57715);
             vec3.set(envSettings.lights[1].direction, 0.57715, 0.57715, 0.57715);
