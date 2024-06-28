@@ -19,6 +19,7 @@ import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager.js';
 import { bindingLayouts } from './oot3d_scenes.js';
+import { ZSIEnvironmentSettings } from './zsi.js';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public override findTextureEntryIndex(name: string): number {
@@ -270,6 +271,14 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         this.textureHolder.addTextures(device, cmb.textures);
         this.cmbData.push(cmbData);
         const cmbRenderer = new CmbInstance(cache, this.textureHolder, cmbData, file.name);
+
+        if(cmbData.cmb.version === CMB.Version.Ocarina){
+            const envSettings = new ZSIEnvironmentSettings();
+            vec3.set(envSettings.lights[0].direction, -0.57715, -0.57715, -0.57715);
+            vec3.set(envSettings.lights[1].direction, 0.57715, 0.57715, 0.57715);
+            cmbRenderer.setEnvironmentSettings(envSettings);
+        }
+
         this.cmbRenderers.push(cmbRenderer);
     }
 
