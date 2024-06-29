@@ -139,6 +139,7 @@ class SpecialTextureBinder {
 class RenderParams {
     public sceneParamsOffs2D: number = -1;
     public sceneParamsOffs3D: number = -1;
+    public wireframe: boolean = false;
 }
 
 const sceneParams = new SceneParams();
@@ -234,11 +235,35 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return scenarioPanel;
     }
 
+    private createRenderHacksPanel(): UI.Panel | null {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        if (this.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                const v = wireframe.checked;
+                this.sceneObjHolder.renderParams.wireframe = v;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
+        }
+
+        if (renderHacksPanel.contents.childElementCount > 0)
+            return renderHacksPanel;
+        else
+            return null;
+    }
+
     public createPanels(): UI.Panel[] {
         const panels: UI.Panel[] = [];
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride === null)
             panels.push(this.createScenarioPanel());
+
+        const renderHacksPanel = this.createRenderHacksPanel();
+        if (renderHacksPanel !== null)
+            panels.push(renderHacksPanel);
 
         return panels;
     }
@@ -435,12 +460,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
 
-        executor.executeDrawAll(sceneObjHolder, renderInstManager, viewerInput);
-
         // Draw our render insts.
+        const template = renderInstManager.pushTemplateRenderInst();
+        if (sceneObjHolder.renderParams.wireframe)
+            template.setMegaStateFlags({ wireframe: true });
+
+        executor.executeDrawAll(sceneObjHolder, renderInstManager, viewerInput);
         this.drawAllEffects(viewerInput);
 
-        const template = renderInstManager.pushTemplateRenderInst();
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(sceneObjHolder.modelCache.device, renderInstManager, camera, DrawCameraType.DrawCameraType_3D);
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
