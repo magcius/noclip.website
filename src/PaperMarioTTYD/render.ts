@@ -529,6 +529,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
     private animationController = new AnimationController(60);
     private animationNames: string[];
+    private wireframe: boolean = false;
 
     public animGroupCache: AnimGroupDataCache | null = null;
     public mobj: MOBJ[] = [];
@@ -602,6 +603,9 @@ export class WorldRenderer extends BasicGXRendererHelper {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
+        if (this.wireframe)
+            template.setMegaStateFlags({ wireframe: true });
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         if (this.backgroundRenderer !== null)
@@ -659,6 +663,14 @@ export class WorldRenderer extends BasicGXRendererHelper {
                 otherNodes.forEach((nodeInstance) => nodeInstance.setVisible(enableOtherNodes.checked));
             };
             renderHacksPanel.contents.appendChild(enableOtherNodes.elem);
+        }
+        if (this.renderHelper.device.queryLimits().wireframeSupported) {
+            const wireframe = new UI.Checkbox('Wireframe', false);
+            wireframe.onchanged = () => {
+                const v = wireframe.checked;
+                this.wireframe = v;
+            };
+            renderHacksPanel.contents.appendChild(wireframe.elem);
         }
         return [renderHacksPanel];
     }
