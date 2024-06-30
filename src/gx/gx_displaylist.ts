@@ -1080,7 +1080,7 @@ class VtxLoaderImpl implements VtxLoader {
                 }
                 break;
             case GX.Command.DRAW_TRIANGLE_FAN:
-                for (let i = 0; i < drawCall.vertexCount; i++) {
+                for (let i = 2; i < drawCall.vertexCount; i++) {
                     dstIndexData[indexDataIdx++] = baseVertex;
                     dstIndexData[indexDataIdx++] = baseVertex + i - 1;
                     dstIndexData[indexDataIdx++] = baseVertex + i;
