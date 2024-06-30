@@ -340,8 +340,7 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
                 for (let t = 0; t < texCount; t++)
                     sourceIndexData[GX.Attr.TEX0 + t].set(buffer.createTypedArray(Uint32Array, bufferIdxTexOffs[t] + (elemIdxStart + idxTexStart[t]) * 4, elemVertCount, Endianness.BIG_ENDIAN), vertexCount);
 
-                convertToTrianglesRange(loadedIndexData, indexCount, GfxTopology.TriFans, vertexCount, elemVertCount);
-                indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, elemVertCount);
+                indexCount += convertToTrianglesRange(loadedIndexData, indexCount, GfxTopology.TriFans, vertexCount, elemVertCount);
                 vertexCount += elemVertCount;
             }
 

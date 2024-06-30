@@ -34,13 +34,13 @@
 // standard formats.
 
 import ArrayBufferSlice from '../ArrayBufferSlice.js';
-import { align, assert, hexzero, assertExists, nArray, fallbackUndefined } from '../util.js';
+import { align, assert, assertExists, fallbackUndefined, hexzero, nArray } from '../util.js';
 
-import * as GX from './gx_enum.js';
-import { Endianness, getSystemEndianness } from '../endian.js';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat.js';
 import { HashMap, nullHashFunc } from '../HashMap.js';
+import { Endianness, getSystemEndianness } from '../endian.js';
+import { FormatCompFlags, FormatFlags, FormatTypeFlags, GfxFormat, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatComponentCount, getFormatFlags, getFormatTypeFlags } from '../gfx/platform/GfxPlatformFormat.js';
 import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformObjUtil.js';
+import * as GX from './gx_enum.js';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -1021,13 +1021,13 @@ class VtxLoaderImpl implements VtxLoader {
             case GX.Command.DRAW_TRIANGLES:
                 indexCount = vertexCount;
                 break;
-            case GX.Command.DRAW_TRIANGLE_FAN:
-            case GX.Command.DRAW_TRIANGLE_STRIP:
-                indexCount = (vertexCount - 2) * 3;
-                break;
             case GX.Command.DRAW_QUADS:
             case GX.Command.DRAW_QUAD_STRIP:
                 indexCount = ((vertexCount * 6) / 4);
+                break;
+            case GX.Command.DRAW_TRIANGLE_FAN:
+            case GX.Command.DRAW_TRIANGLE_STRIP:
+                indexCount = (vertexCount - 2) * 3;
                 break;
             default:
                 throw new Error(`Invalid data at ${hexzero(srcBuffer.byteOffset, 0x08)} / ${hexzero(drawCallIdx - 0x03, 0x04)} cmd ${hexzero(cmd, 0x02)}`);
@@ -1048,7 +1048,7 @@ class VtxLoaderImpl implements VtxLoader {
 
         let indexDataIdx = 0;
         const dstIndexData = new Uint16Array(totalIndexCount);
-        let vertexId = firstVertexId;
+        let baseVertex = firstVertexId;
 
         for (let z = 0; z < drawCalls.length; z++) {
             const drawCall = drawCalls[z];
@@ -1056,48 +1056,39 @@ class VtxLoaderImpl implements VtxLoader {
             // Convert topology to triangles.
             switch (drawCall.primType) {
             case GX.Command.DRAW_TRIANGLES:
-                // Copy vertices.
                 for (let i = 0; i < drawCall.vertexCount; i++)
-                    dstIndexData[indexDataIdx++] = vertexId++;
-                break;
-            case GX.Command.DRAW_TRIANGLE_STRIP:
-                vertexId += 2;
-
-                for (let i = 2; i < drawCall.vertexCount; i++) {
-                    dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
-                    dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
-                    dstIndexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            case GX.Command.DRAW_TRIANGLE_FAN:
-                // First vertex defines original triangle.
-                const firstVertex = vertexId;
-
-                for (let i = 0; i < 3; i++) {
-                    dstIndexData[indexDataIdx++] = vertexId++;
-                }
-
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    dstIndexData[indexDataIdx++] = firstVertex;
-                    dstIndexData[indexDataIdx++] = vertexId - 1;
-                    dstIndexData[indexDataIdx++] = vertexId++;
-                }
+                    dstIndexData[indexDataIdx++] = baseVertex + i;
                 break;
             case GX.Command.DRAW_QUADS:
             case GX.Command.DRAW_QUAD_STRIP:
                 // Each quad (4 vertices) is split into 2 triangles (6 vertices)
                 for (let i = 0; i < drawCall.vertexCount; i += 4) {
-                    dstIndexData[indexDataIdx++] = vertexId + 0;
-                    dstIndexData[indexDataIdx++] = vertexId + 1;
-                    dstIndexData[indexDataIdx++] = vertexId + 2;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 0;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 1;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 2;
 
-                    dstIndexData[indexDataIdx++] = vertexId + 0;
-                    dstIndexData[indexDataIdx++] = vertexId + 2;
-                    dstIndexData[indexDataIdx++] = vertexId + 3;
-                    vertexId += 4;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 0;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 2;
+                    dstIndexData[indexDataIdx++] = baseVertex + i + 3;
+                }
+                break;
+            case GX.Command.DRAW_TRIANGLE_STRIP:
+                for (let i = 2; i < drawCall.vertexCount; i++) {
+                    dstIndexData[indexDataIdx++] = baseVertex + i - 2;
+                    dstIndexData[indexDataIdx++] = baseVertex + i - (~i & 1);
+                    dstIndexData[indexDataIdx++] = baseVertex + i - (i & 1);
+                }
+                break;
+            case GX.Command.DRAW_TRIANGLE_FAN:
+                for (let i = 0; i < drawCall.vertexCount; i++) {
+                    dstIndexData[indexDataIdx++] = baseVertex;
+                    dstIndexData[indexDataIdx++] = baseVertex + i - 1;
+                    dstIndexData[indexDataIdx++] = baseVertex + i;
                 }
                 break;
             }
+
+            baseVertex += drawCall.vertexCount;
         }
 
         const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
@@ -1105,7 +1096,7 @@ class VtxLoaderImpl implements VtxLoader {
         const vertexBuffers: ArrayBuffer[] = [dstVertexData];
 
         const indexData = dstIndexData.buffer;
-        return { indexData, totalIndexCount, totalVertexCount, draws, vertexId, vertexBuffers, dlView, drawCalls };
+        return { indexData, totalIndexCount, totalVertexCount, draws, vertexId: baseVertex, vertexBuffers, dlView, drawCalls };
     }
 
     public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {

@@ -224,11 +224,10 @@ function translatePolyType(polyType: PolyType): GfxTopology {
     case PolyType.TRIANGLES:
         return GfxTopology.Triangles;
     case PolyType.TRIANGLE_STRIP:
-        return GfxTopology.TriStrips;
+    case PolyType.QUAD_STRIP:
+            return GfxTopology.TriStrips;
     case PolyType.QUADS:
         return GfxTopology.Quads;
-    case PolyType.QUAD_STRIP:
-        return GfxTopology.QuadStrips;
     }
 }
 

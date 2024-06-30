@@ -7,12 +7,12 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers.js';
 import { fullscreenMegaState, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers.js';
 import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/GfxShaderLibrary.js';
 import { makeBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers.js';
-import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
+import { convertToTriangles, getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers.js';
 import { fillColor, fillMatrix4x2, fillMatrix4x4, fillVec3v, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers.js';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform.js';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFrontFaceMode, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxMegaStateDescriptor, GfxProgram, GfxSamplerFormatKind, GfxTexture, GfxTextureDimension, GfxTextureUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform.js';
 import { GfxFormat } from "../gfx/platform/GfxPlatformFormat.js";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache.js';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph.js';
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph.js';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper.js';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstList, GfxRenderInstManager, makeSortKeyOpaque, makeSortKeyTranslucent, setSortKeyDepth, setSortKeyLayer } from '../gfx/render/GfxRenderInstManager.js';
 import { computeModelMatrixS, computeModelMatrixSRT, getMatrixTranslation, setMatrixTranslation } from '../MathHelpers.js';
@@ -1285,7 +1285,7 @@ void mainVS() {
             default:
                 throw new Error(`don't recognize ShaderEnvironmentType ${this.shader!.shader_environment_type}`);
         }
-        
+
         if (this.shader!.has_primary_detail_bitmap) {
             switch (this.shader!.detail_bitmap_function) {
                 case rust.DetailBitmapFunction.DoubleBiasedMultiply:
@@ -1319,7 +1319,7 @@ void mainVS() {
             default:
                 throw new Error(`don't recognize ShaderEnvironmentType ${this.shader!.shader_environment_type}`);
         }
-        
+
         if (this.shader!.has_micro_detail_bitmap) {
             switch (this.shader!.detail_bitmap_function) {
                 case rust.DetailBitmapFunction.DoubleBiasedMultiply:
@@ -1728,20 +1728,9 @@ class ModelData {
 
             const indexBuffer = mgr.get_model_part_indices(parts[i]);
 
-            // convertToTriangles(indexData, indexOffs, GfxTopology.TriStrips, indexBuffer);
-            // Inlined to support vertexBase
-            for (let i = 0; i < indexBuffer.length - 2; i++) {
-                if (i % 2 === 0) {
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 0];
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 1];
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 2];
-                } else {
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 1];
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 0];
-                    indexData[indexOffs++] = vertexBase + indexBuffer[i + 2];
-                }
-            }
-            this.parts[shaderIndex].indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriStrips, indexBuffer.length);
+            const indexCount = convertToTriangles(indexData, indexOffs, GfxTopology.TriStrips, indexBuffer, vertexBase);
+            indexOffs += indexCount;
+            this.parts[shaderIndex].indexCount += indexCount;
 
             const vertexData = mgr.get_model_part_vertices(parts[i]);
             device.uploadBufferData(this.vertexBuffer, vertexOffs, vertexData);
