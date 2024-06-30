@@ -284,11 +284,7 @@ export class ModelRenderer {
           emitter.fragShaderType,
           emitter.emitter.translate_particle_with_bone() ? 1 : 0,
         );
-        offs += fillVec4(mapped, offs,
-          emitter.translatedPosition[0],
-          emitter.translatedPosition[1],
-          emitter.translatedPosition[2],
-        );
+        offs += fillVec4(mapped, offs, 0);
         offs += fillVec4(mapped, offs,
           emitter.texScaleX,
           emitter.texScaleY,

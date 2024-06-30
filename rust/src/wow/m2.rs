@@ -202,9 +202,11 @@ impl M2Header {
 pub struct M2 {
     header: M2Header,
     pub texture_ids: Vec<u32>,
+    pub flags: u32,
     pub skin_ids: Vec<u32>,
     pub name: String,
     pub materials: Vec<M2Material>,
+    txac: Option<Vec<u16>>, // seems to be used in some particle emitter shader logic
     legacy_textures: Option<Vec<LegacyTexture>>,
     vertex_data: Option<Vec<u8>>,
     texture_lookup_table: Option<Vec<u16>>,
@@ -227,10 +229,12 @@ impl M2 {
 
         let mut txid: Option<Vec<u32>> = None;
         let mut sfid: Option<Vec<u32>> = None;
+        let mut txac: Option<Vec<u16>> = None;
         for (chunk, chunk_data) in &mut chunked_data {
             match &chunk.magic {
                 b"TXID" => txid = Some(parse_array(chunk_data, 4)?),
                 b"SFID" => sfid = Some(parse_array(chunk_data, 4)?),
+                b"TXAC" => txac = Some(parse_array(chunk_data, 2)?),
                 _ => {},
             }
         }
@@ -263,6 +267,8 @@ impl M2 {
             texture_ids: txid.unwrap_or_default(),
             skin_ids: sfid.ok_or("M2 didn't have SFID chunk!".to_string())?,
             animation_manager,
+            flags: header.flags,
+            txac,
             name: header.get_name(m2_data)?,
             materials: header.get_materials(m2_data)?,
             vertex_data: Some(header.get_vertex_data(m2_data)?),
@@ -274,6 +280,10 @@ impl M2 {
             transparency_lookup_table: Some(header.get_transparency_lookup_table(m2_data)?),
             header,
         })
+    }
+
+    pub fn get_txac_value(&self, index: usize) -> Option<u16> {
+        self.txac.as_ref()?.get(index).cloned()
     }
 
     pub fn take_animation_manager(&mut self) -> AnimationManager {
@@ -508,12 +518,25 @@ pub enum ParticleShaderType {
 
 #[wasm_bindgen(js_class = "WowM2ParticleEmitter")]
 impl ParticleEmitter {
+    pub fn check_flag(&self, mask: u32) -> bool {
+        (self.flags & mask) > 0
+    }
+
+    pub fn set_flags(&mut self, mask: u32, value: bool) {
+        let mask_off = self.flags & !mask;
+        if value {
+            self.flags = mask_off | mask;
+        } else {
+            self.flags = mask_off;
+        }
+    }
+
     pub fn use_compressed_gravity(&self) -> bool {
-        (self.flags & 0x800000) > 0
+        self.check_flag(0x800000)
     }
 
     pub fn has_multiple_textures(&self) -> bool {
-        (self.flags & 0x10000000) > 0
+        self.check_flag(0x10000000)
     }
 
     pub fn get_texture_velocity(&self, i: u8) -> Vec2 {
@@ -533,43 +556,15 @@ impl ParticleEmitter {
     }
 
     pub fn emits_head_particles(&self) -> bool {
-        (self.flags & 0x20000) > 0
+        self.check_flag(0x20000)
     }
 
     pub fn emits_tail_particles(&self) -> bool {
-        (self.flags & 0x40000) > 0
+        self.check_flag(0x40000)
     }
 
     pub fn translate_particle_with_bone(&self) -> bool {
-        (self.flags & 0x10) > 0
-    }
-
-    pub fn get_shader_type(&self) -> ParticleShaderType {
-        let particle_type: u8;
-        if (self.flags & 0x10100000) == 0 {
-            particle_type = 0;
-        } else {
-            if self.has_multiple_textures() {
-                particle_type = 2;
-            } else {
-                particle_type = 3;
-            }
-        }
-
-        if particle_type == 2 || (particle_type == 4 && self.has_multiple_textures()) {
-            assert!(self.flags & 0x20 > 0);
-            ParticleShaderType::ThreeColorTexThreeAlphaTexUV
-        } else if particle_type == 2 || (particle_type == 4 && self.has_multiple_textures()) {
-            if self.flags & 0x20 > 0 {
-                ParticleShaderType::ThreeColorTexThreeAlphaTex
-            } else {
-                ParticleShaderType::TwoColorTexThreeAlphaTex
-            }
-        } else if particle_type == 3 {
-            ParticleShaderType::Refraction
-        } else {
-            ParticleShaderType::Mod
-        }
+        self.check_flag(0x10)
     }
 
     pub fn get_blend_mode(&self) -> M2BlendingMode {
@@ -584,37 +579,6 @@ impl ParticleEmitter {
             _ => M2BlendingMode::Opaque,
         }
     }
-}
-
-#[wasm_bindgen(js_name = "WowM2ParticleEmitterFlags")]
-#[derive(DekuRead, Clone, Debug)]
-pub struct ParticleEmitterFlags {
-    #[deku(bits=1)] pub use_multitexturing: bool,
-    #[deku(bits=1)] pub ignore_distance_for_emission: bool,
-    #[deku(bits=1)] pub use_bone_generator: bool,
-    #[deku(bits=1)] pub use_compressed_gravity: bool,
-    #[deku(bits=1)] pub ignore_distance: bool,
-    #[deku(bits=1)] pub random_flipbook_start: bool,
-    #[deku(bits=1)] pub vary_xy_scale_independently: bool,
-    #[deku(bits=1)] pub unk_0x40000: bool,
-    #[deku(bits=1)] pub outward_moving: bool,
-    #[deku(bits=1)] pub random_texture: bool,
-    #[deku(bits=1)] pub unk_0x8000: bool,
-    #[deku(bits=1)] pub unk_0x4000: bool,
-    #[deku(bits=1)] pub clamp_to_ground: bool,
-    #[deku(bits=1)] pub xy_quad: bool, // align to xy axis facing z dir
-    #[deku(bits=1)] pub unk_0x800: bool,
-    #[deku(bits=1)] pub pinned: bool,
-    #[deku(bits=1)] pub random_spawn_pos: bool,
-    #[deku(bits=1)] pub unk_0x100: bool,
-    #[deku(bits=1)] pub use_model_space: bool, // causes animation of particle emitter to be carried over to particles
-    #[deku(bits=1)] pub use_burst_multiplier: bool,
-    #[deku(bits=1)] pub unk_0x20: bool,
-    #[deku(bits=1)] pub do_not_trail: bool,
-    #[deku(bits=1)] pub up_in_world_space: bool,
-    #[deku(bits=1)] pub orient_based_on_player: bool,
-    #[deku(bits=1)] pub unk_0x2: bool,
-    #[deku(bits=1)] pub lit: bool,
 }
 
 #[cfg(test)]

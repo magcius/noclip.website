@@ -1,8 +1,8 @@
 import { ReadonlyMat4, ReadonlyVec3, mat4, quat, vec2, vec3, vec4 } from "gl-matrix";
-import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
+import { WowAABBox, WowAdt, WowAdtChunkDescriptor, WowAdtLiquidLayer, WowAdtWmoDefinition, WowBgra, WowBlp, WowDatabase, WowDoodad, WowDoodadDef, WowGlobalWmoDefinition, WowLightResult, WowLiquidResult, WowM2, WowM2AnimationManager, WowM2BlendingMode, WowM2BoneFlags, WowM2MaterialFlags, WowM2ParticleEmitter, WowM2ParticleShaderType, WowMapFileDataIDs, WowModelBatch, WowSkin, WowSkinSubmesh, WowSkyboxMetadata, WowVec3, WowWmo, WowWmoBspNode, WowWmoGroupFlags, WowWmoGroupInfo, WowWmoHeaderFlags, WowWmoLiquidResult, WowWmoMaterial, WowWmoMaterialBatch, WowWmoMaterialFlags, WowWmoMaterialPixelShader, WowWmoMaterialVertexShader, WowWmoPortal, WowWmoPortalRef } from "../../rust/pkg/index.js";
 import { DataFetcher } from "../DataFetcher.js";
 import { AABB, Frustum, Plane } from "../Geometry.js";
-import { MathConstants, Vec3NegZ, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
+import { MathConstants, Vec3NegZ, lerp, rayTriangleIntersect, setMatrixTranslation } from "../MathHelpers.js";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers.js";
@@ -303,6 +303,10 @@ export class SkyboxData {
   }
 }
 
+function uniform(min: number, max: number): number {
+  return lerp(min, max, Math.random());
+}
+
 class Particle {
   public age = 0;
   public alive = true;
@@ -318,8 +322,8 @@ class Particle {
   static createSpherical(emitter: ParticleEmitter, dt: number): Particle {
     const emissionArea = emitter.emissionAreaWidth - emitter.emissionAreaLength;
     const radius = emitter.emissionAreaLength + Math.random() * emissionArea;
-    const polar = Math.random() * emitter.verticalRange;
-    const azimuth = Math.random() * emitter.horizontalRange;
+    const polar = uniform(-1, 1) * emitter.verticalRange;
+    const azimuth = uniform(-1, 1) * emitter.horizontalRange;
     const cosPolar = Math.cos(polar);
     const emissionDir = vec3.fromValues(
       cosPolar * Math.cos(azimuth),
@@ -354,14 +358,14 @@ class Particle {
 
   static createPlanar(emitter: ParticleEmitter, dt: number): Particle {
     const position = vec3.fromValues(
-      Math.random() * emitter.emissionAreaLength * 0.5,
-      Math.random() * emitter.emissionAreaWidth * 0.5,
+      uniform(-1, 1) * emitter.emissionAreaLength * 0.5,
+      uniform(-1, 1) * emitter.emissionAreaWidth * 0.5,
       0,
     );
     let velocity: vec3;
     if (emitter.zSource < 0.001) {
-      const polar = emitter.verticalRange * Math.random();
-      const azimuth = emitter.horizontalRange * Math.random();
+      const polar = emitter.verticalRange * uniform(-1, 1);
+      const azimuth = emitter.horizontalRange * uniform(-1, 1);
       const sinPolar = Math.sin(polar);
       const sinAzimuth = Math.sin(azimuth);
       const cosPolar = Math.cos(polar);
@@ -387,6 +391,13 @@ class Particle {
   constructor(public position: vec3, public velocity: vec3, public lifespan: number) {
   }
 }
+
+const PARTICLE_COORDINATE_FIX: mat4 = mat4.fromValues(
+  0.0, 1.0, 0.0, 0.0,
+  -1.0, 0.0, 0.0, 0.0,
+  0.0, 0.0, 1.0, 0.0,
+  0.0, 0.0, 0.0, 1.0
+);
 
 export class ParticleEmitter {
   static MAX_PARTICLES = 2000;
@@ -414,18 +425,20 @@ export class ParticleEmitter {
   public fragShaderType: number;
   public blendMode: WowM2BlendingMode;
   public position: vec3;
-  public translatedPosition = vec3.create();
+  public modelMatrix = mat4.create();
   private force = vec3.create();
   private updateBuffer: Float32Array;
   private particlesToEmit = 0.0;
   private dataTexture: GfxTexture | undefined;
   private textureColMask: number;
   private textureColBits: number;
+  public particleType: number;
 
-  constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData) {
+  constructor(public index: number, public emitter: WowM2ParticleEmitter, private model: ModelData, public txac: number) {
     this.updateBuffer = new Float32Array(11);
     this.wind = convertWowVec3(emitter.wind_vector);
     this.position = convertWowVec3(emitter.position);
+    this.particleType = this.calculateParticleType();
     if (emitter.has_multiple_textures()) {
       this.textures.push(model.blps[emitter.texture_id & 0x1F]);
       this.textures.push(model.blps[(emitter.texture_id >> 5) & 0x1F]);
@@ -446,8 +459,50 @@ export class ParticleEmitter {
     } else {
       this.alphaTest = 0.0039215689;
     }
-    this.fragShaderType = emitter.get_shader_type();
+    this.fragShaderType = this.calculateShaderType();
     this.blendMode = emitter.get_blend_mode();
+  }
+
+  private calculateParticleType(): number {
+    if (!this.emitter.check_flag(0x10100000)) {
+      return 0;
+    } else {
+      if (this.emitter.check_flag(0x1c)) {
+        return 2;
+      } else {
+        return 3;
+      }
+    }
+  }
+
+  private calculateShaderType(): WowM2ParticleShaderType {
+    // some awful undocumented flag stuff
+    let material0x20 = false;
+    let material0x01 = true;
+    if (this.emitter.check_flag(0x10000000)) {
+      material0x01 = false;
+      material0x20 = this.emitter.check_flag(0x40000000);
+    } else if (this.emitter.check_flag(0x100000)) {
+      material0x01 = false;
+    } else {
+      material0x01 = !this.emitter.check_flag(0x1);
+    }
+
+    const multiTex = this.emitter.check_flag(0x10000000);
+    if (this.particleType === 2 || (this.particleType === 4 && multiTex) && this.txac !== 0) {
+      assert(material0x20);
+      return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTexUV;
+    } else if (this.particleType === 2 || (this.particleType === 4 && multiTex)) {
+      if (material0x20) {
+        return rust.WowM2ParticleShaderType.ThreeColorTexThreeAlphaTex;
+      } else {
+        return rust.WowM2ParticleShaderType.TwoColorTexThreeAlphaTex;
+      }
+    } else if (this.particleType === 3) {
+      return rust.WowM2ParticleShaderType.Refraction;
+    } else {
+      return rust.WowM2ParticleShaderType.Mod;
+    }
   }
 
   private updateParams(dt: number, animationManager: WowM2AnimationManager) {
@@ -466,39 +521,60 @@ export class ParticleEmitter {
       this.zSource,
     ] = this.updateBuffer;
 
-    vec3.transformMat4(this.translatedPosition, this.position, this.model.boneTransforms[this.emitter.bone]);
+    mat4.identity(this.modelMatrix);
+    mat4.translate(this.modelMatrix, this.modelMatrix, this.position);
+    mat4.mul(this.modelMatrix, this.model.boneTransforms[this.emitter.bone], this.modelMatrix);
+    mat4.mul(this.modelMatrix, this.modelMatrix, PARTICLE_COORDINATE_FIX);
   }
 
   public getEmissionRate(): number {
-    return this.emissionRate + Math.random() * this.emitter.emission_rate_variance;
+    return this.emissionRate + uniform(-1, 1) * this.emitter.emission_rate_variance;
   }
 
   public getEmissionSpeed(): number {
-    return this.emissionSpeed + Math.random() * this.speedVariation;
+    return this.emissionSpeed * (1 + uniform(-1, 1) * this.speedVariation);
   }
 
   public getLifespan(): number {
-    return this.lifespan + Math.random() * this.emitter.lifespan_variance;
+    return this.lifespan + uniform(-1, 1) * this.emitter.lifespan_variance;
   }
 
   public getBaseSpin(): number {
-    return this.emitter.base_spin + Math.random() * this.emitter.base_spin_variance;
+    return this.emitter.base_spin + uniform(-1, 1) * this.emitter.base_spin_variance;
   }
 
   public getSpin(): number {
-    return this.emitter.spin + Math.random() * this.emitter.spin_variance;
+    return this.emitter.spin + uniform(-1, 1) * this.emitter.spin_variance;
   }
 
   private createParticle(dt: number) {
+    let particle: Particle;
     if (this.emitter.emitter_type === 1) { // Plane
-      this.particles.push(Particle.createPlanar(this, dt));
+      particle = Particle.createPlanar(this, dt);
     } else if (this.emitter.emitter_type === 2) { // Sphere
-      this.particles.push(Particle.createSpherical(this, dt));
+      particle = Particle.createSpherical(this, dt);
     } else if (this.emitter.emitter_type === 3) { // Spline
-      this.particles.push(Particle.createSpline(this, dt));
+      particle = Particle.createSpline(this, dt);
     } else {
       throw new Error(`unknown particle emitter type ${this.emitter.emitter_type}`);
     }
+
+    if (!this.emitter.check_flag(0x10)) {
+      vec3.transformMat4(particle.position, particle.position, this.modelMatrix);
+      const transformedVelocity = vec4.fromValues(particle.velocity[0], particle.velocity[1], particle.velocity[2], 0);
+      vec4.transformMat4(transformedVelocity, transformedVelocity, this.modelMatrix);
+      vec3.set(particle.velocity, transformedVelocity[0], transformedVelocity[1], transformedVelocity[2]);
+      if (this.emitter.check_flag(0x2000)) {
+        particle.position[2] = 0;
+      }
+    }
+    if (this.emitter.check_flag(0x40)) {
+      // TODO: add random burst value to velocity
+    }
+    if (this.emitter.check_flag(0x10000000)) {
+      // TODO: randomize particle texture stuff
+    }
+    this.particles.push(particle);
   }
 
   public setMegaStateFlags(renderInst: GfxRenderInst) {
@@ -632,29 +708,27 @@ export class ParticleEmitter {
     return this.lifespan + this.emitter.lifespan_variance
   }
 
-  public update(dt: number, animationManager: WowM2AnimationManager) {
+  public update(dtMilliseconds: number, animationManager: WowM2AnimationManager) {
     // the particle system's units are seconds
-    dt /= 1000;
-    this.updateParams(dt, animationManager);
+    const dtSeconds = dtMilliseconds / 1000;
+    this.updateParams(dtSeconds, animationManager);
 
     if (this.enabled > 0.0) {
-      this.particlesToEmit += this.getEmissionRate() * dt;
+      this.particlesToEmit += this.getEmissionRate() * dtSeconds;
       while (this.particlesToEmit > 1.0) {
         if (this.particles.length < ParticleEmitter.MAX_PARTICLES) {
-          this.createParticle(dt);
+          this.createParticle(dtSeconds);
         }
         this.particlesToEmit -= 1.0;
       }
     }
 
-    // vec3.copy(this.force, this.wind);
-    vec3.set(this.force, 0, 0, 0);
-    this.force[1] -= this.gravity;
-    vec3.scale(this.force, this.force, dt);
+    vec3.copy(this.force, this.wind);
+    this.force[2] -= this.gravity;
 
     for (let i=this.particles.length - 1; i >= 0; i--) {
       const particle = this.particles[i];
-      particle.age += dt;
+      particle.age += dtSeconds;
       if (particle.age > this.lifespan) {
         this.particles.splice(i, 1);
       } else {
@@ -671,8 +745,11 @@ export class ParticleEmitter {
         const cellTail = this.updateBuffer[6];
         this.extractTexCoords(particle.texCoordTail, cellTail);
 
-        vec3.add(particle.velocity, particle.velocity, this.force);
-        vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dt);
+        vec3.scaleAndAdd(particle.velocity, particle.velocity, this.force, dtSeconds);
+        if (this.emitter.drag > 0) {
+          vec3.scale(particle.velocity, particle.velocity, 1.0 - this.emitter.drag * dtSeconds);
+        }
+        vec3.scaleAndAdd(particle.position, particle.position, particle.velocity, dtSeconds);
       }
     }
   }
@@ -685,11 +762,18 @@ export class ParticleEmitter {
 
   public updateDataTex(device: GfxDevice): GfxTexture {
     this.ensureTexture(device);
-    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * ParticleEmitter.TEXELS_PER_PARTICLE * 4);
+    const bytesPerParticle = ParticleEmitter.TEXELS_PER_PARTICLE * 4;
+    const pixels = new Float32Array(ParticleEmitter.MAX_PARTICLES * bytesPerParticle);
+    const scratchVec3 = vec3.create();
     for (let i=0; i<this.particles.length; i++) {
       const particle = this.particles[i];
       let offs = ParticleEmitter.TEXELS_PER_PARTICLE * i * 4;
-      offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
+      vec3.copy(scratchVec3, particle.position);
+      if (this.emitter.translate_particle_with_bone()) {
+        vec3.transformMat4(scratchVec3, scratchVec3, this.modelMatrix);
+      }
+      // offs += fillVec4(pixels, offs, particle.position[0], particle.position[1], particle.position[2]);
+      offs += fillVec4(pixels, offs, scratchVec3[0], scratchVec3[1], scratchVec3[2]);
       offs += fillVec4v(pixels, offs, particle.color);
       offs += fillVec4(pixels, offs, particle.scale[0], particle.scale[1]);
       offs += fillVec4(pixels, offs, particle.texCoordHead[0], particle.texCoordHead[1]);
@@ -711,6 +795,7 @@ export class ModelData {
   public textureTranslations: Float32Array;
   public numColors: number;
   public numBones: number;
+  public flags: number;
   public boneRotations: Float32Array;
   public boneScalings: Float32Array;
   public boneTranslations: Float32Array;
@@ -776,6 +861,7 @@ export class ModelData {
 
   public async load(cache: WowCache): Promise<undefined> {
     const m2 = await cache.fetchFileByID(this.fileId, rust.WowM2.new);
+    this.flags = m2.flags;
 
     this.vertexBuffer = m2.take_vertex_data();
     this.modelAABB = convertWowAABB(m2.get_bounding_box());
@@ -795,7 +881,11 @@ export class ModelData {
     this.skins = await this.loadSkins(cache, m2);
 
     this.particleEmitters = m2.take_particle_emitters().map((emitter, i) => {
-      return new ParticleEmitter(i, emitter, this);
+      let txac = m2.get_txac_value(i)
+      if (txac === undefined) {
+        txac = 0;
+      }
+      return new ParticleEmitter(i, emitter, this, txac);
     });
 
     this.animationManager = m2.take_animation_manager();
@@ -880,6 +970,7 @@ export class ModelData {
       }
     }
 
+    // if (this.fileId === 197012) debugger;
     this.particleEmitters.forEach(emitter => {
       emitter.update(view.deltaTime, this.animationManager);
     });
