@@ -1913,7 +1913,7 @@ export function drawSimpleModel(renderInstManager: GfxRenderInstManager, modelDa
 
         const shape = shapeData[i];
         assert(shape.draws.length === 1);
-        shape.shapeHelper.setOnRenderInst(renderInst, shape.draws[0]);
+        shape.setOnRenderInst(renderInst, shape.draws[0]);
 
         renderInstManager.submitRenderInst(renderInst);
     }

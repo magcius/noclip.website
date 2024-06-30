@@ -414,9 +414,8 @@ class FurCtrl {
     private furDrawer: FurDrawer;
     public onDraw: boolean = true;
 
-    private shapeHelpers: GXShapeHelperGfx[] = [];
+    private vertexBufferDescriptors: GfxVertexBufferDescriptor[][] = [];
 
-    private ownShapeHelpers: GXShapeHelperGfx[] = [];
     private ownCoalescedBufferData: GfxBuffer | null = null;
     private ownIndirectMapData: BTIData | null = null;
     private ownDensityMapData: BTIData | null = null;
@@ -467,16 +466,15 @@ class FurCtrl {
             this.actor.actorLightCtrl.loadLightOnMaterialParams(materialParams, viewerInput.camera);
         }
 
-        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const cache = sceneObjHolder.modelCache.cache;
         const shape = this.shapeData.shape;
 
         this.furDrawer.setupMaterial(materialParams, this.dynamicFurParam);
 
         const shapeInstanceState = this.actor.modelInstance!.shapeInstanceState;
         for (let i = 0; i < this.furDrawer.numLayers; i++) {
-            const shapeHelper = this.shapeHelpers[i];
-
             const template = renderInstManager.pushTemplateRenderInst();
+            template.setVertexInput(this.shapeData.inputLayout, this.vertexBufferDescriptors[i], this.shapeData.indexBufferDescriptor);
             this.furDrawer.setupLayerMaterial(materialParams, i);
             this.furDrawer.setOnRenderInst(cache, template, materialParams);
 
@@ -484,8 +482,9 @@ class FurCtrl {
                 if (!prepareShapeMtxGroup(drawParams, shapeInstanceState, shape, shape.mtxGroups[j]))
                     continue;
 
+                const draw = this.shapeData.draws[j];
                 const renderInst = renderInstManager.newRenderInst();
-                shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[j]);
+                renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
                 this.furDrawer.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
                 renderInstManager.submitRenderInst(renderInst);
@@ -510,26 +509,20 @@ class FurCtrl {
         const coalescedBuffers = coalesceBuffer(device, GfxBufferUsage.Vertex, vtxDatas);
         this.ownCoalescedBufferData = coalescedBuffers[0].buffer;
 
-        for (let i = 0; i < numLayers; i++) {
-            const vertexBuffers: GfxVertexBufferDescriptor[] = [coalescedBuffers[i]];
-            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBufferDescriptor, shapeData.shapeHelper.loadedVertexLayout);
-            this.ownShapeHelpers.push(shapeHelper);
-            this.shapeHelpers.push(shapeHelper);
-        }
+        for (let i = 0; i < numLayers; i++)
+            this.vertexBufferDescriptors.push([coalescedBuffers[i]]);
     }
 
     public setupFurClone(existingFurCtrl: FurCtrl): void {
         assert(this.param.numLayers === existingFurCtrl.param.numLayers);
 
         this.furDrawer = existingFurCtrl.furDrawer;
-        this.shapeHelpers = existingFurCtrl.shapeHelpers;
+        this.vertexBufferDescriptors = existingFurCtrl.vertexBufferDescriptors;
     }
 
     public destroy(device: GfxDevice): void {
         if (this.ownCoalescedBufferData !== null)
             device.destroyBuffer(this.ownCoalescedBufferData);
-        for (let i = 0; i < this.ownShapeHelpers.length; i++)
-            this.ownShapeHelpers[i].destroy(device);
         if (this.ownIndirectMapData !== null)
             this.ownIndirectMapData.destroy(device);
         if (this.ownDensityMapData !== null)

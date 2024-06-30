@@ -38,7 +38,7 @@ import { align, assert, hexzero, assertExists, nArray, fallbackUndefined } from 
 
 import * as GX from './gx_enum.js';
 import { Endianness, getSystemEndianness } from '../endian.js';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat.js';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat.js';
 import { HashMap, nullHashFunc } from '../HashMap.js';
 import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformObjUtil.js';
 
@@ -1057,17 +1057,13 @@ class VtxLoaderImpl implements VtxLoader {
             switch (drawCall.primType) {
             case GX.Command.DRAW_TRIANGLES:
                 // Copy vertices.
-                for (let i = 0; i < drawCall.vertexCount; i++) {
+                for (let i = 0; i < drawCall.vertexCount; i++)
                     dstIndexData[indexDataIdx++] = vertexId++;
-                }
                 break;
             case GX.Command.DRAW_TRIANGLE_STRIP:
-                // First vertex defines original triangle.
-                for (let i = 0; i < 3; i++) {
-                    dstIndexData[indexDataIdx++] = vertexId++;
-                }
+                vertexId += 2;
 
-                for (let i = 3; i < drawCall.vertexCount; i++) {
+                for (let i = 2; i < drawCall.vertexCount; i++) {
                     dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
                     dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
                     dstIndexData[indexDataIdx++] = vertexId++;
@@ -1109,7 +1105,7 @@ class VtxLoaderImpl implements VtxLoader {
         const vertexBuffers: ArrayBuffer[] = [dstVertexData];
 
         const indexData = dstIndexData.buffer;
-        return { indexData, totalIndexCount, totalVertexCount, draws: draws, vertexId, vertexBuffers, dlView, drawCalls };
+        return { indexData, totalIndexCount, totalVertexCount, draws, vertexId, vertexBuffers, dlView, drawCalls };
     }
 
     public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {

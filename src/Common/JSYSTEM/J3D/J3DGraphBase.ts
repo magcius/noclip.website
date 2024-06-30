@@ -4,14 +4,14 @@ import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeMtxType, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader.js';
 
 import * as GX_Material from '../../../gx/gx_material.js';
-import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render.js';
+import { DrawParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled, createInputLayout } from '../../../gx/gx_render.js';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render.js';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera.js';
 import { TextureMapping } from '../../../TextureHolder.js';
 import { nArray, assert, assertExists } from '../../../util.js';
 import { AABB } from '../../../Geometry.js';
-import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform.js';
+import { GfxDevice, GfxSampler, GfxTexture, GfxChannelWriteMask, GfxFormat, GfxInputLayout, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from '../../../gfx/platform/GfxPlatform.js';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers.js';
 import { Texture } from '../../../viewer.js';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager.js';
@@ -46,7 +46,9 @@ export class ShapeInstanceState {
 }
 
 export class ShapeData {
-    public shapeHelper: GXShapeHelperGfx;
+    public inputLayout: GfxInputLayout;
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[];
+    public indexBufferDescriptor: GfxIndexBufferDescriptor;
     public draws: LoadedVertexDraw[] = [];
     public sortKeyBias: number = 0;
 
@@ -63,7 +65,9 @@ export class ShapeData {
                 firstCoalescedBuffer.vertexBuffers[i].byteCount += coalescedBuffer.vertexBuffers[i].byteCount;
         }
 
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, firstCoalescedBuffer.vertexBuffers, firstCoalescedBuffer.indexBuffer, this.shape.loadedVertexLayout);
+        this.inputLayout = createInputLayout(cache, this.shape.loadedVertexLayout);
+        this.vertexBufferDescriptors = firstCoalescedBuffer.vertexBuffers;
+        this.indexBufferDescriptor = firstCoalescedBuffer.indexBuffer;
 
         let totalIndexCount = 0;
         for (let i = 0; i < this.shape.mtxGroups.length; i++) {
@@ -77,8 +81,9 @@ export class ShapeData {
         }
     }
 
-    public destroy(device: GfxDevice) {
-        this.shapeHelper.destroy(device);
+    public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw): void {
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setDrawCount(draw.indexCount, draw.indexOffset);
     }
 }
 
@@ -156,7 +161,7 @@ export class ShapeInstance {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[i]);
+            this.shapeData.setOnRenderInst(renderInst, this.shapeData.draws[i]);
             materialInstance.materialHelper.allocateDrawParamsDataOnInst(renderInst, drawParams);
 
             if (multi)
@@ -859,8 +864,6 @@ export class J3DModelData {
             return;
 
         this.bufferCoalescer.destroy(device);
-        for (let i = 0; i < this.shapeData.length; i++)
-            this.shapeData[i].destroy(device);
         this.modelMaterialData.tex1Data!.destroy(device);
         this.realized = false;
     }

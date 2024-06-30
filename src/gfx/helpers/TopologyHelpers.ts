@@ -64,16 +64,11 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array | n
             dstBuffer[dst++] = baseVertex + i + 0;
         }
     } else if (topology === GfxTopology.TriStrips) {
-        for (let i = 0; i < numVertices - 2; i++) {
-            if (i % 2 === 0) {
-                dstBuffer[dst++] = baseVertex + i + 0;
-                dstBuffer[dst++] = baseVertex + i + 1;
-                dstBuffer[dst++] = baseVertex + i + 2;
-            } else {
-                dstBuffer[dst++] = baseVertex + i + 1;
-                dstBuffer[dst++] = baseVertex + i + 0;
-                dstBuffer[dst++] = baseVertex + i + 2;
-            }
+        baseVertex += 2;
+        for (let i = 2; i < numVertices; i++) {
+            dstBuffer[dst++] = baseVertex - ((i & 1) ? 1 : 2);
+            dstBuffer[dst++] = baseVertex - ((i & 1) ? 2 : 1);
+            dstBuffer[dst++] = baseVertex++;
         }
     } else if (topology === GfxTopology.TriFans) {
         for (let i = 0; i < numVertices - 2; i++) {

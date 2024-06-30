@@ -1,23 +1,24 @@
 
+import { ReadonlyMat4, mat4, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice.js";
-import { readString, nArray, assert, assertExists, align } from "../util.js";
-import { GX_VtxDesc, GX_VtxAttrFmt, LoadedVertexLayout, compileVtxLoader, LoadedVertexData, VtxLoader, GX_Array, GX_VtxDescOutputMode } from "../gx/gx_displaylist.js";
-import * as GX from "../gx/gx_enum.js";
-import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxSampler } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
-import * as TPL from "./tpl.js";
-import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, DrawParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
-import { ViewerRenderInput } from "../viewer.js";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
-import { mapSetMaterialTev } from "./world.js";
-import { computeModelMatrixS, computeModelMatrixT, getMatrixTranslation, MathConstants } from "../MathHelpers.js";
 import BitMap from "../BitMap.js";
-import { Endianness } from "../endian.js";
-import { DataFetcher, AbortedCallback } from "../DataFetcher.js";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera.js";
+import { BTIData, TEX1_SamplerSub } from "../Common/JSYSTEM/JUTTexture.js";
+import { AbortedCallback, DataFetcher } from "../DataFetcher.js";
+import { MathConstants, computeModelMatrixS, computeModelMatrixT, getMatrixTranslation } from "../MathHelpers.js";
+import { Endianness } from "../endian.js";
+import { GfxTopology, convertToTrianglesRange, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers.js";
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxSampler, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, setSortKeyLayer } from "../gfx/render/GfxRenderInstManager.js";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder.js";
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, GX_VtxDescOutputMode, LoadedVertexLayout, compileLoadedVertexLayout } from "../gx/gx_displaylist.js";
+import * as GX from "../gx/gx_enum.js";
+import { DrawParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render.js";
+import { align, assert, assertExists, nArray, readString } from "../util.js";
+import { ViewerRenderInput } from "../viewer.js";
+import * as TPL from "./tpl.js";
+import { mapSetMaterialTev } from "./world.js";
 
 export interface AnimGroup {
     anmFilename: string;
@@ -40,9 +41,12 @@ export interface AnimGroup {
 interface AnimGroupData_Draw {
     tevMode: number;
     texId: number[];
-    vtxLoader: VtxLoader;
+    vertexCount: number;
+    indexCount: number;
     loadedVertexLayout: LoadedVertexLayout;
-    loadedVertexData: LoadedVertexData;
+    loadedVertexData: ArrayBuffer;
+    loadedIndexData: Uint16Array;
+    sourceIndexData: ArrayLike<number>[];
 }
 
 interface AnimGroupData_Shape {
@@ -136,9 +140,42 @@ interface AnimGroupData_Animation {
     keyframes: AnimGroupData_Keyframe[];
 }
 
-function animGroupShapeLoadVertexData(shape: AnimGroupData_Shape, vtxArrays: GX_Array[]): void {
-    for (let i = 0; i < shape.draws.length; i++)
-        shape.draws[i].vtxLoader.loadVertexData(shape.draws[i].loadedVertexData, vtxArrays);
+function animGroupDrawLoadVertexData(draw: AnimGroupData_Draw, vtxArrays: GX_Array[]): void {
+    const dstView = new DataView(draw.loadedVertexData);
+    for (let attr = 0; attr <= GX.Attr.MAX; attr++) {
+        const srcArray = vtxArrays[attr];
+        if (srcArray === undefined)
+            continue;
+
+        const srcView = srcArray.buffer.createDataView();
+
+        const dstStride = draw.loadedVertexLayout.vertexBufferStrides[0];
+        const dstBaseOffs = draw.loadedVertexLayout.vertexAttributeOffsets[attr];
+        if (dstBaseOffs === undefined)
+            continue;
+
+        // assume input == output here
+        const format = draw.loadedVertexLayout.vertexAttributeFormats[attr];
+
+        const idxArray = draw.sourceIndexData[attr];
+        for (let i = 0; i < idxArray.length; i++) {
+            const srcIdx = idxArray[i];
+            const srcOffs = srcIdx * srcArray.stride + srcArray.offs;
+            const dstOffs = dstBaseOffs + dstStride * i;
+            if (format === GfxFormat.F32_RG) {
+                dstView.setFloat32(dstOffs + 0x00, srcView.getFloat32(srcOffs + 0x00), true);
+                dstView.setFloat32(dstOffs + 0x04, srcView.getFloat32(srcOffs + 0x04), true);
+            } else if (format === GfxFormat.F32_RGB) {
+                dstView.setFloat32(dstOffs + 0x00, srcView.getFloat32(srcOffs + 0x00), true);
+                dstView.setFloat32(dstOffs + 0x04, srcView.getFloat32(srcOffs + 0x04), true);
+                dstView.setFloat32(dstOffs + 0x08, srcView.getFloat32(srcOffs + 0x08), true);
+            } else if (format === GfxFormat.U8_RGBA_NORM) {
+                dstView.setUint32(dstOffs + 0x00, srcView.getUint32(srcOffs + 0x00));
+            } else {
+                throw "whoops";
+            }
+        }
+    }
 }
 
 export function parse(buffer: ArrayBufferSlice): AnimGroup {
@@ -268,58 +305,50 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
                 vat[attr] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
             }
 
-            // Process our topology / draw calls by generating a display list buffer and then getting our JIT to run it.
-            // TODO(jstpierre): Having a "Vertex Loader 2.0" that compiles down to a quicker series of load commands,
-            // and then we can remove the outer DL fluff.
-            let drawCallIdx;
+            const loadedVertexLayout = compileLoadedVertexLayout(vcd, false);
+            const sourceIndexData: Uint32Array[] = [];
 
-            // Compute how big our DL needs to be.
-            const numComponents = 3 + texCount;
-            const perVertexByteStride = numComponents * 0x02;
-
-            let totalDisplayListSize = 0;
-            drawCallIdx = drawCallOffs + drawCallRunStart * 0x08;
+            let vertexCount = 0, indexCount = 0;
+            let drawCallIdx = drawCallOffs + drawCallRunStart * 0x08;
             for (let j = 0; j < drawCallRunCount; j++, drawCallIdx += 0x08) {
                 const elemVertCount = view.getUint32(drawCallIdx + 0x04);
-                // 3 bytes for command header.
-                totalDisplayListSize += 0x03 + perVertexByteStride * elemVertCount;
+                vertexCount += elemVertCount;
+                indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, elemVertCount);
             }
 
-            if (totalDisplayListSize === 0)
+            if (vertexCount === 0)
                 continue;
 
-            const displayList = new ArrayBuffer(totalDisplayListSize);
-            const dlView = new DataView(displayList);
+            // Copy and merge our source index data
+            sourceIndexData[GX.Attr.POS] = new Uint32Array(vertexCount);
+            sourceIndexData[GX.Attr.NRM] = new Uint32Array(vertexCount);
+            sourceIndexData[GX.Attr.CLR0] = new Uint32Array(vertexCount);
+            for (let t = 0; t < texCount; t++)
+                sourceIndexData[GX.Attr.TEX0 + t] = new Uint32Array(vertexCount);
 
-            let dlIdx = 0;
+            const loadedIndexData = new Uint16Array(indexCount);
+            vertexCount = 0;
+            indexCount = 0;
             drawCallIdx = drawCallOffs + drawCallRunStart * 0x08;
             for (let j = 0; j < drawCallRunCount; j++, drawCallIdx += 0x08) {
                 const elemIdxStart = view.getUint32(drawCallIdx + 0x00);
                 const elemVertCount = view.getUint32(drawCallIdx + 0x04);
 
-                // Write our draw call header.
-                dlView.setUint8(dlIdx + 0x00, GX.Command.DRAW_TRIANGLE_FAN);
-                dlView.setUint16(dlIdx + 0x01, elemVertCount);
-                dlIdx += 0x03;
+                sourceIndexData[GX.Attr.POS].set(buffer.createTypedArray(Uint32Array, bufferIdxPosOffs + (elemIdxStart + idxPosStart) * 4, elemVertCount, Endianness.BIG_ENDIAN), vertexCount);
+                sourceIndexData[GX.Attr.NRM].set(buffer.createTypedArray(Uint32Array, bufferIdxNrmOffs + (elemIdxStart + idxNrmStart) * 4, elemVertCount, Endianness.BIG_ENDIAN), vertexCount);
+                sourceIndexData[GX.Attr.CLR0].set(buffer.createTypedArray(Uint32Array, bufferIdxClr0Offs + (elemIdxStart + idxClr0Start) * 4, elemVertCount, Endianness.BIG_ENDIAN), vertexCount);
+                for (let t = 0; t < texCount; t++)
+                    sourceIndexData[GX.Attr.TEX0 + t].set(buffer.createTypedArray(Uint32Array, bufferIdxTexOffs[t] + (elemIdxStart + idxTexStart[t]) * 4, elemVertCount, Endianness.BIG_ENDIAN), vertexCount);
 
-                // Write our index data.
-                for (let k = 0; k < elemVertCount; k++) {
-                    dlView.setUint16(dlIdx + 0x00, view.getUint16(bufferIdxPosOffs + (elemIdxStart + idxPosStart + k) * 4 + 2));
-                    dlView.setUint16(dlIdx + 0x02, view.getUint16(bufferIdxNrmOffs + (elemIdxStart + idxNrmStart + k) * 4 + 2));
-                    dlView.setUint16(dlIdx + 0x04, view.getUint16(bufferIdxClr0Offs + (elemIdxStart + idxClr0Start + k) * 4 + 2));
-                    dlIdx += 0x06;
-                    for (let t = 0; t < texCount; t++, dlIdx += 0x02) {
-                        const texArrayIdx = 0;
-                        dlView.setUint16(dlIdx, view.getUint16(bufferIdxTexOffs[texArrayIdx] + (elemIdxStart + idxTexStart[texArrayIdx] + k) * 4 + 2));
-                    }
-                }
+                convertToTrianglesRange(loadedIndexData, indexCount, GfxTopology.TriFans, vertexCount, elemVertCount);
+                indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TriFans, elemVertCount);
+                vertexCount += elemVertCount;
             }
 
-            const vtxLoader = compileVtxLoader(vat, vcd);
-            const loadedVertexLayout = vtxLoader.loadedVertexLayout;
-            const loadedVertexData = vtxLoader.parseDisplayList(new ArrayBufferSlice(displayList));
-
-            draws.push({ tevMode, texId, loadedVertexLayout, loadedVertexData, vtxLoader });
+            const loadedVertexData = new ArrayBuffer(loadedVertexLayout.vertexBufferStrides[0] * vertexCount);
+            const draw: AnimGroupData_Draw = { tevMode, texId, vertexCount, indexCount, loadedVertexLayout, loadedVertexData, loadedIndexData, sourceIndexData };
+            animGroupDrawLoadVertexData(draw, vtxArrays);
+            draws.push(draw);
         }
 
         const dispMode = view.getUint32(shapeIdx + 0xA0);
@@ -329,10 +358,6 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
         const cullMode = cullModeTable[cullModeRaw];
 
         const shape: AnimGroupData_Shape = { name, vtxArrays, draws, dispMode, cullMode };
-
-        // Run the vertices a first time.
-        animGroupShapeLoadVertexData(shape, vtxArrays);
-
         shapes.push(shape);
     }
 
@@ -541,8 +566,21 @@ const materialParams = new MaterialParams();
 const drawParams = new DrawParams();
 const scratchVec3a = vec3.create();
 
+class AnimGroupData_ShapeDraw {
+    public inputLayout: GfxInputLayout;
+
+    constructor(cache: GfxRenderCache, public vertexBufferDescriptors: GfxVertexBufferDescriptor[], public indexBufferDescriptor: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public indexOffset: number, public indexCount: number) {
+        this.inputLayout = createInputLayout(cache, loadedVertexLayout);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
+        renderInst.setDrawCount(this.indexCount, this.indexOffset);
+    }
+}
+
 class AnimGroupInstance_Shape {
-    private shapeHelper: GXShapeHelperGfx[];
+    private shapeHelper: AnimGroupData_ShapeDraw[];
     private materialHelper: GXMaterialHelperGfx[];
     private renderLayers: GfxRendererLayer[] = [];
     private vtxBuffer: GfxBuffer;
@@ -550,12 +588,10 @@ class AnimGroupInstance_Shape {
     private visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private animGroupData: AnimGroupData, private shape: AnimGroupData_Shape) {
-        // TODO(jstpierre): Coalesce shape draws into one shape
-
         let vtxByteCount = 0, idxByteCount = 0;
         for (let i = 0; i < this.shape.draws.length; i++) {
-            vtxByteCount += this.shape.draws[i].loadedVertexData.vertexBuffers[0].byteLength;
-            idxByteCount += this.shape.draws[i].loadedVertexData.indexData.byteLength;
+            vtxByteCount += this.shape.draws[i].loadedVertexData.byteLength;
+            idxByteCount += this.shape.draws[i].loadedIndexData.byteLength;
         }
         this.vtxBuffer = device.createBuffer(align(vtxByteCount, 4) / 4, GfxBufferUsage.Vertex, this.animGroupData.animGroup.hasAnyVtxAnm ? GfxBufferFrequencyHint.Dynamic : GfxBufferFrequencyHint.Static);
         this.idxBuffer = device.createBuffer(align(idxByteCount, 4) / 4, GfxBufferUsage.Index, GfxBufferFrequencyHint.Static);
@@ -564,11 +600,11 @@ class AnimGroupInstance_Shape {
         this.shapeHelper = this.shape.draws.map((draw, i) => {
             const vertexBuffer: GfxVertexBufferDescriptor = { buffer: this.vtxBuffer, byteOffset: vtxByteOffset };
             const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: idxByteOffset };
-            device.uploadBufferData(this.vtxBuffer, vtxByteOffset, new Uint8Array(draw.loadedVertexData.vertexBuffers[0]));
-            device.uploadBufferData(this.idxBuffer, idxByteOffset, new Uint8Array(draw.loadedVertexData.indexData));
-            vtxByteOffset += draw.loadedVertexData.vertexBuffers[0].byteLength;
-            idxByteOffset += draw.loadedVertexData.indexData.byteLength;
-            return new GXShapeHelperGfx(device, cache, [vertexBuffer], indexBuffer, draw.loadedVertexLayout, draw.loadedVertexData);
+            device.uploadBufferData(this.vtxBuffer, vtxByteOffset, new Uint8Array(draw.loadedVertexData));
+            device.uploadBufferData(this.idxBuffer, idxByteOffset, new Uint8Array(draw.loadedIndexData.buffer));
+            vtxByteOffset += draw.loadedVertexData.byteLength;
+            idxByteOffset += draw.loadedIndexData.byteLength;
+            return new AnimGroupData_ShapeDraw(cache, [vertexBuffer], indexBuffer, draw.loadedVertexLayout, 0, draw.indexCount);
         });
 
         this.materialHelper = this.shape.draws.map((draw, idx) => {
@@ -609,16 +645,16 @@ class AnimGroupInstance_Shape {
     }
 
     public runAndUploadVertexData(device: GfxDevice, animVtxPos: ArrayBufferSlice, animVtxNrm: ArrayBufferSlice): void {
-        const vtxArrays = this.shape.vtxArrays.slice();
-        vtxArrays[GX.Attr.POS].buffer = animVtxPos;
-        vtxArrays[GX.Attr.NRM].buffer = animVtxNrm;
-        animGroupShapeLoadVertexData(this.shape, vtxArrays);
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.Attr.POS] = { buffer: animVtxPos, offs: 0, stride: 0x0C };
+        vtxArrays[GX.Attr.NRM] = { buffer: animVtxNrm, offs: 0, stride: 0x0C };
 
         let vtxByteOffset = 0;
         for (let i = 0; i < this.shape.draws.length; i++) {
             const draw = this.shape.draws[i];
-            device.uploadBufferData(this.vtxBuffer, vtxByteOffset, new Uint8Array(draw.loadedVertexData.vertexBuffers[0]));
-            vtxByteOffset += draw.loadedVertexData.vertexBuffers[0].byteLength;
+            animGroupDrawLoadVertexData(draw, vtxArrays);
+            device.uploadBufferData(this.vtxBuffer, vtxByteOffset, new Uint8Array(draw.loadedVertexData));
+            vtxByteOffset += draw.loadedVertexData.byteLength;
         }
     }
 
@@ -673,8 +709,6 @@ class AnimGroupInstance_Shape {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.shapeHelper.length; i++)
-            this.shapeHelper[i].destroy(device);
         device.destroyBuffer(this.vtxBuffer);
         device.destroyBuffer(this.idxBuffer);
     }
