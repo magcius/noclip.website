@@ -138,7 +138,7 @@ pub struct M2TextureTransform {
 #[derive(DekuRead, Debug, Clone)]
 pub struct M2Color {
     pub color: M2Track<Vec3>, // rgb
-    pub alpha: M2Track<u16>, // 0 = transparent, 0x7FFF = opaque
+    pub alpha: M2Track<Fixedi16>, // 0 = transparent, 0x7FFF = opaque
 }
 
 #[derive(Debug, Clone)]
@@ -174,7 +174,7 @@ pub struct AnimationManager {
     global_sequence_durations: Vec<u32>,
     global_sequence_times: Vec<f64>,
     sequences: Vec<M2Sequence>,
-    texture_weights: Vec<M2Track<u16>>,
+    texture_weights: Vec<M2Track<Fixedi16>>,
     texture_transforms: Vec<M2TextureTransform>,
     current_animation: AnimationState,
     next_animation: AnimationState,
@@ -314,16 +314,16 @@ impl AnimationManager {
     
     pub fn update_vertex_colors(&self, colors: &Float32Array) {
         let default_color = Vec3::new(1.0);
-        let default_alpha = 0x7fff;
+        let default_alpha = Fixedi16::from(1.0);
         for i in 0..self.colors.len() {
             let color = &self.colors[i];
             let color_index = i as u32 * 4;
             let rgb = self.get_current_value_with_blend(&color.color, default_color);
-            let alpha = self.get_current_value_with_blend(&color.alpha, default_alpha) as f32 / 0x7fff as f32;
+            let alpha = self.get_current_value_with_blend(&color.alpha, default_alpha);
             colors.set_index(color_index, rgb.x);
             colors.set_index(color_index + 1, rgb.y);
             colors.set_index(color_index + 2, rgb.z);
-            colors.set_index(color_index + 3, alpha);
+            colors.set_index(color_index + 3, alpha.into());
         }
     }
     
@@ -354,10 +354,10 @@ impl AnimationManager {
     }
     
     pub fn update_textures(&self, transparencies: &Float32Array, texture_translations: &Float32Array, texture_rotations: &Float32Array, texture_scalings: &Float32Array) {
-        let default_alpha = 0x7fff;
+        let default_alpha = Fixedi16::from(1.0);
         for (i, weight) in self.texture_weights.iter().enumerate() {
-            let alpha = self.get_current_value_with_blend(&weight, default_alpha) as f32 / 0x7fff as f32;
-            transparencies.set_index(i as u32, alpha);
+            let alpha = self.get_current_value_with_blend(&weight, default_alpha);
+            transparencies.set_index(i as u32, alpha.into());
         }
 
         let default_translation = Vec3::new(0.0);
@@ -388,7 +388,7 @@ impl AnimationManager {
     pub fn update_particle(&self, emitter_index: usize, age: f64, update_buffer: &Float32Array) {
         let emitter = &self.particle_emitters[emitter_index];
         let default_color = Vec3::default();
-        let default_alpha = 1;
+        let default_alpha = Fixedi16::from(1.0);
         let default_scale = Vec2 { x: 1.0, y: 1.0 };
         let default_head_cell = 0;
         let default_tail_cell = 0;
@@ -400,7 +400,7 @@ impl AnimationManager {
         update_buffer.set_index(0, color.x);
         update_buffer.set_index(1, color.y);
         update_buffer.set_index(2, color.z);
-        update_buffer.set_index(3, alpha as f32 / 32768.0);
+        update_buffer.set_index(3, alpha.into());
         update_buffer.set_index(4, scale.x);
         update_buffer.set_index(5, scale.y);
         update_buffer.set_index(6, head_cell as f32);
@@ -500,7 +500,7 @@ impl AnimationManager {
     pub fn new(
         global_sequence_durations: Vec<u32>,
         sequences: Vec<M2Sequence>,
-        texture_weights: Vec<M2Track<u16>>,
+        texture_weights: Vec<M2Track<Fixedi16>>,
         texture_transforms: Vec<M2TextureTransform>,
         colors: Vec<M2Color>,
         bones: Vec<M2CompBone>,

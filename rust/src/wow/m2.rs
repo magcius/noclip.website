@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use crate::wow::animation::*;
 
 use super::common::{
-    fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Quat, Vec2, Vec3, WowArray, WowCharArray
+    fixed_precision_6_9_to_f32, parse_array, AABBox, ChunkedData, Fixedi16, Quat, Vec2, Vec3, WowArray, WowCharArray
 };
 
 // if it's an MD21 chunk, all pointers are relative to the end of that chunk
@@ -32,7 +32,7 @@ pub struct M2Header {
     pub num_skin_profiles: u32,
     colors: WowArray<M2Color>,
     textures: WowArray<M2Texture>,
-    texture_weights: WowArray<M2Track<u16>>,
+    texture_weights: WowArray<M2Track<Fixedi16>>,
     texture_transforms: WowArray<M2TextureTransform>,
     _replacable_texture_lookup: WowArray<u8>,
     materials: WowArray<M2Material>,
@@ -123,8 +123,8 @@ impl M2Header {
         Ok(bones)
     }
 
-    fn get_texture_weights(&self, m2_data: &[u8]) -> Result<Vec<M2Track<u16>>, String> {
-        let mut weights: Vec<M2Track<u16>> = self.texture_weights.to_vec(m2_data)?;
+    fn get_texture_weights(&self, m2_data: &[u8]) -> Result<Vec<M2Track<Fixedi16>>, String> {
+        let mut weights: Vec<M2Track<Fixedi16>> = self.texture_weights.to_vec(m2_data)?;
 
         for weight in weights.iter_mut() {
             weight.allocate(m2_data)?;
@@ -474,7 +474,7 @@ pub struct ParticleEmitter {
     pub(crate) emission_area_width: M2Track<f32>,
     pub(crate) z_source: M2Track<f32>,
     pub(crate) color: M2TrackPartial<Vec3>,
-    pub(crate) alpha: M2TrackPartial<i16>,
+    pub(crate) alpha: M2TrackPartial<Fixedi16>,
     pub(crate) scale: M2TrackPartial<Vec2>,
     pub scale_variance: Vec2,
     pub(crate) head_cell: M2TrackPartial<u16>,

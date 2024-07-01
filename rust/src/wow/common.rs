@@ -2,6 +2,23 @@ use deku::{bitvec::{BitSlice, BitVec}, ctx::ByteSize, prelude::*};
 use wasm_bindgen::prelude::*;
 use std::ops::{Mul, AddAssign};
 
+#[derive(DekuRead, Debug, Clone, Copy)]
+pub struct Fixedi16 {
+    pub inner: i16,
+}
+
+impl From<Fixedi16> for f32 {
+    fn from(value: Fixedi16) -> Self {
+        value.inner as f32 / 32768.0
+    }
+}
+
+impl From<f32> for Fixedi16 {
+    fn from(value: f32) -> Self {
+        Self { inner: (value * 32768.0) as i16 }
+    }
+}
+
 #[derive(DekuRead, Debug)]
 pub struct Chunk {
     pub magic: [u8; 4],
@@ -312,6 +329,14 @@ impl From<Quat16> for Quat {
 impl Lerp for u8 {
     fn lerp(self, other: Self, t: f32) -> Self {
         ((self as f32) * (1.0 - t) + (other as f32) * t) as u8
+    }
+}
+
+impl Lerp for Fixedi16 {
+    fn lerp(self, other: Self, t: f32) -> Self {
+        let a: f32 = self.into();
+        let b: f32 = other.into();
+        Fixedi16::from(a.lerp(b, t))
     }
 }
 

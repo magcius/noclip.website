@@ -5,7 +5,7 @@ import { fillMatrix4x4, fillVec4, fillVec4v } from "../gfx/helpers/UniformBuffer
 import { GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform.js";
 import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager.js";
 import { rust } from "../rustlib.js";
-import { LiquidCategory } from "./data.js";
+import { LiquidCategory, ParticleEmitter } from "./data.js";
 import { SkyboxColor } from './mesh.js';
 import { View } from "./scenes.js";
 
@@ -808,7 +808,7 @@ export class ModelProgram extends BaseProgram {
   private static buildVertexShaderBlock(colorType: string, uvs: string[]): string {
     const colorAssignment = colorType === 'diffuse' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a);`
       : colorType === 'color' ? `v_DiffuseColor = vec4(0.5, 0.5, 0.5, 1.0);`
-      : colorType === 'edgeFade' ? `v_DiffuseColor = v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
+      : colorType === 'edgeFade' ? `v_DiffuseColor = vec4(combinedColorHalved.r, combinedColorHalved.g, combinedColorHalved.b, combinedColor.a * edgeScanVal);`
       : `v_DiffuseColor = vec4(combinedColor.rgb * 0.5, combinedColor.a);`;
     const uvAssignments = uvs.map((uv, uvIndex) => {
       if (uv.startsWith('t')) {
@@ -1268,31 +1268,15 @@ varying vec2 v_UV1;
 varying vec2 v_UV2;
 
 #ifdef VERT
-void ScaledAddMat(inout Mat4x4 self, float t, Mat4x4 other) {
-    self.mx += t * other.mx;
-    self.my += t * other.my;
-    self.mz += t * other.mz;
-    self.mw += t * other.mw;
-}
-
-mat4 convertMat4x4(Mat4x4 m) {
-  return transpose(mat4(m.mx, m.my, m.mz, m.mw));
-}
-
 void mainVS() {
-  Mat4x4 particleCoordinatesFix;
-  particleCoordinatesFix.mx = vec4(0.0, 1.0, 0.0, 0.0);
-  particleCoordinatesFix.my = vec4(-1.0, 0.0, 0.0, 0.0);
-  particleCoordinatesFix.mz = vec4(0.0, 0.0, 1.0, 0.0);
-  particleCoordinatesFix.mw = vec4(0.0, 0.0, 0.0, 1.0);
-
   DoodadInstance doodad = instances[gl_InstanceID];
   int vertNum = gl_VertexID % 4;
-  vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, gl_VertexID / 4), 0).xyz;
-  v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, gl_VertexID / 4), 0);
-  vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, gl_VertexID / 4), 0).xy;
+  int texelY = gl_VertexID / 4;
+  vec3 pos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(0, texelY), 0).xyz;
+  v_Color = texelFetch(SAMPLER_2D(u_DataTex), ivec2(1, texelY), 0);
+  vec2 scale = texelFetch(SAMPLER_2D(u_DataTex), ivec2(2, texelY), 0).xy;
+  vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, texelY), 0).xy;
   vec4 viewSpacePos = Mul(u_ModelView, Mul(doodad.transform, vec4(pos, 1.0)));
-  vec2 texPos = texelFetch(SAMPLER_2D(u_DataTex), ivec2(3, gl_VertexID / 4), 0).xy;
   vec2 texScale = ub_texScale.xy;
   if (vertNum == 0) {
     viewSpacePos.x -= scale.x;
