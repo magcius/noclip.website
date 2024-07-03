@@ -3308,7 +3308,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             // const idx = sceneObjHolder.debugDraw.pages[0] !== undefined ? sceneObjHolder.debugDraw.pages[0].vertexBufferOffs / 42 : 0;
             // drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, '' + idx);
 
-            sceneObjHolder.debugDraw.drawWorldBasis(this.getBaseMtx()!);
+            sceneObjHolder.debugDraw.drawBasis(this.getBaseMtx()!);
         }
 
         for (let i = 0; i < this.seaGullGroup.points.length; i++) {
