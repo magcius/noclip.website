@@ -237,6 +237,8 @@ function getPlatformSampler(sampler_: GfxSampler): GPUSampler {
 function translateTopology(topology: GfxPrimitiveTopology): GPUPrimitiveTopology {
     if (topology === GfxPrimitiveTopology.Triangles)
         return 'triangle-list';
+    else if (topology === GfxPrimitiveTopology.Lines)
+        return 'line-list';
     else
         throw "whoops";
 }

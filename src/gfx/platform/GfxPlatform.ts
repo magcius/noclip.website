@@ -52,7 +52,7 @@ export const enum GfxWrapMode { Clamp, Repeat, Mirror }
 export const enum GfxTexFilterMode { Point, Bilinear }
 // TODO(jstpierre): remove NoMip
 export const enum GfxMipFilterMode { NoMip, Nearest, Linear }
-export const enum GfxPrimitiveTopology { Triangles }
+export const enum GfxPrimitiveTopology { Triangles, Lines }
 
 export const enum GfxBufferUsage {
     Index   = 0b00001,

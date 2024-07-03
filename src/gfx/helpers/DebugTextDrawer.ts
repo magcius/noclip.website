@@ -11,7 +11,7 @@ import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color.js";
 
 // TODO(jstpierre): Don't use the Super Mario Galaxy system for this... use our own font data,
 // or use HTML5 canvas? It would be helpful to have in any case...
-import { CharWriter, parseBRFNT, ResFont, RFNT } from "../../Common/NW4R/lyt/Font.js";
+import { CharWriter, parseBRFNT, ResFont } from "../../Common/NW4R/lyt/Font.js";
 import { decompress } from "../../Common/Compression/Yaz0.js";
 import * as JKRArchive from "../../Common/JSYSTEM/JKRArchive.js";
 import { TDDraw } from "../../SuperMarioGalaxy/DDraw.js";

@@ -195,7 +195,7 @@ export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorld
 }
 
 // https://jcgt.org/published/0006/01/01/
-function branchlessONB(dstA: vec3, dstB: vec3, n: ReadonlyVec3): void {
+export function branchlessONB(dstA: vec3, dstB: vec3, n: ReadonlyVec3): void {
     const sign = n[2] >= 0.0 ? 1.0 : -1.0;
     const a = -1.0 / (sign + n[2]);
     const b = n[0] * n[1] * a;

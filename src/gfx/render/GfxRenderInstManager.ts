@@ -226,18 +226,21 @@ export class GfxRenderInst {
     }
 
     /**
-     * Set the {@see GfxProgram} that this render inst will render with. This is part of the automatic
-     * pipeline building facilities. At render time, a pipeline will be automatically and constructed from
-     * the pipeline parameters.
+     * Set the {@see GfxPrimitiveTopology} that this render inst will render with.
+     */
+    public setPrimitiveTopology(topology: GfxPrimitiveTopology): void {
+        this._renderPipelineDescriptor.topology = topology;
+    }
+
+    /**
+     * Set the {@see GfxProgram} that this render inst will render with.
      */
     public setGfxProgram(program: GfxProgram): void {
         this._renderPipelineDescriptor.program = program;
     }
 
     /**
-     * Set the {@see GfxMegaStateDescriptor} that this render inst will render with. This is part of the automatic
-     * pipeline building facilities. At render time, a pipeline will be automatically and constructed from
-     * the pipeline parameters.
+     * Set the {@see GfxMegaStateDescriptor} that this render inst will render with.
      */
     public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor>): GfxMegaStateDescriptor {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, r);
@@ -296,6 +299,10 @@ export class GfxRenderInst {
     public setDrawCount(count: number, start: number = 0): void {
         this._drawCount = count;
         this._drawStart = start;
+    }
+
+    public getDrawCount(): number {
+        return this._drawCount;
     }
 
     /**

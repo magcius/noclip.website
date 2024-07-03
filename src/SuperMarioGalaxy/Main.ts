@@ -56,9 +56,9 @@ import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare.js';
 import { NPCDirector } from './Actors/NPC.js';
 import { GalaxyMapController } from './Actors/GalaxyMap.js';
 import { KameckBeamHolder, KameckBeamTurtleHolder, KameckFireBallHolder, TakoHeiInkHolder } from './Actors/Enemy.js';
-import { dfLabel, dfShow } from '../DebugFloaters.js';
 import { makeSolidColorTexture2D } from '../gfx/helpers/TextureHelpers.js';
 import InputManager from '../InputManager.js';
+import { DebugDraw } from '../gfx/helpers/DebugDraw.js';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -459,6 +459,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // Prepare all of our NameObjs.
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
+        sceneObjHolder.debugDraw.beginFrame(this.renderHelper.uniformBuffer, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
 
         // Draw our render insts.
         const template = renderInstManager.pushTemplateRenderInst();
@@ -790,6 +791,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
+        sceneObjHolder.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
         this.renderHelper.antialiasingSupport.pushPasses(builder, viewerInput, mainColorTargetID);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
@@ -1275,6 +1277,7 @@ export class SceneObjHolder {
     public inputManager: InputManager;
     public uiContainer: HTMLElement;
     public debugUtils = new DebugUtils();
+    public debugDraw: DebugDraw;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1479,6 +1482,7 @@ export class SceneObjHolder {
         this.nameObjHolder.destroy(device);
         this.drawSyncManager.destroy(device);
         this.specialTextureBinder.destroy(device);
+        this.debugDraw.destroy();
     }
 }
 
@@ -1901,6 +1905,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.inputManager = context.inputManager;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.renderCache);
+        sceneObjHolder.debugDraw = new DebugDraw(renderHelper.renderCache);
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
 

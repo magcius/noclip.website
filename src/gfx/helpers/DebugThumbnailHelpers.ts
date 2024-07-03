@@ -120,13 +120,13 @@ void main() {
         if (!this.enabled)
             return;
 
-        const textDrawer = this.helper.getDebugTextDrawer() as TextDrawer | null;
-
         const builderDebug = builder.getDebug();
         const debugThumbnails = builderDebug.getDebugThumbnails();
 
         if (debugThumbnails.length === 0)
             return;
+
+        const textDrawer = this.helper.getDebugTextDrawer() as TextDrawer | null;
 
         // Add our passes.
         const resolveTextureIDs: GfxrResolveTextureID[] = [];

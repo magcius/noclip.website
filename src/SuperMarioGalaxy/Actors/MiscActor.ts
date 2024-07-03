@@ -8,7 +8,7 @@ import { buildEnvMtx, J3DModelInstance } from '../../Common/JSYSTEM/J3D/J3DGraph
 import * as RARC from '../../Common/JSYSTEM/JKRArchive.js';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture.js';
 import { dfRange, dfShow } from '../../DebugFloaters.js';
-import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
+import { drawWorldSpaceBasis, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../../DebugJunk.js';
 import { AABB } from '../../Geometry.js';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers.js';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers.js';
@@ -19,7 +19,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist.js';
 import * as GX from '../../gx/gx_enum.js';
 import { getVertexInputLocation } from '../../gx/gx_material.js';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, DrawParams } from '../../gx/gx_render.js';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers.js';
 import { TextureMapping } from '../../TextureHolder.js';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util.js';
 import * as Viewer from '../../viewer.js';
@@ -3296,12 +3296,35 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         }
     }
 
-    private debugDraw(viewerInput: Viewer.ViewerRenderInput): void {
+    private debugDraw(sceneObjHolder: SceneObjHolder): void {
+        const viewerInput = sceneObjHolder.viewerInput;
         const ctx = getDebugOverlayCanvas2D();
 
-        this.seaGullGroup.railRider!.debugDrawRailLine(viewerInput.camera, 50);
+        // this.seaGullGroup.railRider!.debugDrawRailLine(viewerInput.camera, 50);
 
-        drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.getBaseMtx()!);
+        // drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.getBaseMtx()!);
+
+        {
+            getMatrixTranslation(scratchVec3a, this.getBaseMtx()!);
+
+            // const idx = sceneObjHolder.debugDraw.pages[0] !== undefined ? sceneObjHolder.debugDraw.pages[0].vertexBufferOffs / 42 : 0;
+            // drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, '' + idx);
+
+            getMatrixAxisX(scratchVec3b, this.getBaseMtx()!);
+            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
+            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Red);
+        
+            getMatrixAxisY(scratchVec3b, this.getBaseMtx()!);
+            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
+            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Green);
+        
+            getMatrixAxisZ(scratchVec3b, this.getBaseMtx()!);
+            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
+            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Blue);
+
+            getMatrixAxisZ(scratchVec3c, this.getBaseMtx()!);
+            sceneObjHolder.debugDraw.drawWorldDiscSolidN(scratchVec3b, scratchVec3c, 50, colorNewCopy(Magenta, 0.4));
+        }
 
         for (let i = 0; i < this.seaGullGroup.points.length; i++) {
             const p = this.seaGullGroup.points[i];
@@ -3392,7 +3415,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         }
 
         if (this.debug)
-            this.debugDraw(sceneObjHolder.viewerInput);
+            this.debugDraw(sceneObjHolder);
 
         super.control(sceneObjHolder);
 
