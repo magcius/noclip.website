@@ -3,8 +3,8 @@ import { ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetID } from "../render/GfxRenderGraph.js";
 import { GfxRenderInst } from "../render/GfxRenderInstManager.js";
 import { GfxRenderDynamicUniformBuffer } from "../render/GfxRenderDynamicUniformBuffer.js";
-import { fillColor, fillMatrix4x3, fillMatrix4x4 } from "./UniformBufferHelpers.js";
-import { Color } from "../../Color.js";
+import { fillColor, fillMatrix4x3, fillMatrix4x4, fillVec4 } from "./UniformBufferHelpers.js";
+import { Blue, Color, Green, Red } from "../../Color.js";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxPrimitiveTopology, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from "../platform/GfxPlatform.js";
 import { align, nArray } from "../../util.js";
 import { GfxRenderCache } from "../render/GfxRenderCache.js";
@@ -12,16 +12,24 @@ import { preprocessProgram_GLSL } from "../shaderc/GfxShaderCompiler.js";
 import { GfxTopology, convertToTrianglesRange } from "./TopologyHelpers.js";
 import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
-import { MathConstants } from "../../MathHelpers.js";
+import { MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
 
 // TODO(jstpierre):
-//  - Don't split pages based on behavior
 //  - Instantiate in GfxRenderHelper, like we do for thumbnails/text?
 //  - Integrate text renderer?
 //  - More primitive types
 //  - Support view-space and screen-space primitives
 //  - Line width emulation?
-//  - Depth fade?
+//  - Depth tint?
+
+const enum DrawFlags {
+    Default = 0,
+
+    WorldSpace = 0,
+    ViewSpace = 1 << 0,
+    ScreenSpace = 1 << 1,
+    BillboardSpace = 1 << 2,
+};
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 1, numSamplers: 0 },
@@ -31,7 +39,10 @@ const debugDrawVS = `
 layout(std140) uniform ub_BaseData {
     Mat4x4 u_ClipFromView;
     Mat4x3 u_ViewFromWorld;
+    vec4 u_Misc[1];
 };
+
+#define u_ScreenSize (u_Misc[0].xy)
 
 in vec3 a_Position;
 in vec4 a_Color;
@@ -39,8 +50,10 @@ in vec4 a_Color;
 out vec4 v_Color;
 
 void main() {
+    uint t_Flags = uint(a_Color.a);
     gl_Position = Mul(u_ClipFromView, Mul(_Mat4x4(u_ViewFromWorld), vec4(a_Position.xyz, 1.0)));
     v_Color = a_Color;
+    v_Color.a = 1.0 - fract(a_Color.a);
     v_Color.rgb *= v_Color.aaa;
 }
 `;
@@ -60,11 +73,11 @@ function fillVec3p(d: Float32Array, offs: number, v: ReadonlyVec3): number {
     return 3;
 }
 
-enum BehaviorType {
+const enum BehaviorType {
     Lines,
     Opaque,
     Transparent,
-}
+};
 
 class BufferPage {
     public vertexData: Float32Array;
@@ -73,9 +86,9 @@ class BufferPage {
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
 
-    public vertexBufferOffs = 0;
+    public vertexDataOffs = 0;
     public vertexStride = 3+4;
-    public indexBufferOffs = 0;
+    public indexDataOffs = 0;
 
     public lifetime = 3;
 
@@ -105,16 +118,27 @@ class BufferPage {
         });
     }
 
-    public getCurrentVertexID() { return (this.vertexBufferOffs / this.vertexStride) >>> 0; }
-    private remainVertex() { return this.vertexData.length - this.vertexBufferOffs; }
-    private remainIndex() { return this.indexData.length - this.indexBufferOffs; }
+    public getCurrentVertexID() { return (this.vertexDataOffs / this.vertexStride) >>> 0; }
+    private remainVertex() { return this.vertexData.length - this.vertexDataOffs; }
+    private remainIndex() { return this.indexData.length - this.indexDataOffs; }
 
     public canAllocVertices(vertexCount: number, indexCount: number): boolean {
         return (vertexCount * this.vertexStride) <= this.remainVertex() && indexCount <= this.remainIndex();
     }
 
+    public vertexPC(v: ReadonlyVec3, c: Color, flags: DrawFlags = DrawFlags.Default): void {
+        this.vertexDataOffs += fillVec3p(this.vertexData, this.vertexDataOffs, v);
+        // encode flags in alpha
+        const alpha = (1.0 - c.a) + flags;
+        this.vertexDataOffs += fillColor(this.vertexData, this.vertexDataOffs, c, alpha);
+    }
+
+    public index(n: number): void {
+        this.indexData[this.indexDataOffs++] = n;
+    }
+
     public endFrame(device: GfxDevice, templateRenderInst: GfxRenderInst): boolean {
-        if (this.vertexBufferOffs === 0) {
+        if (this.vertexDataOffs === 0) {
             if (--this.lifetime === 0) {
                 this.destroy(device);
                 return false;
@@ -123,8 +147,8 @@ class BufferPage {
             }
         }
 
-        device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer), 0, this.vertexBufferOffs * 4);
-        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer), 0, this.indexBufferOffs * 2);
+        device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer), 0, this.vertexDataOffs * 4);
+        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer), 0, this.indexDataOffs * 2);
 
         this.renderInst.copyFrom(templateRenderInst);
 
@@ -137,10 +161,10 @@ class BufferPage {
         if (this.behaviorType === BehaviorType.Transparent)
             this.renderInst.setMegaStateFlags({ depthWrite: false });
 
-        this.renderInst.setDrawCount(this.indexBufferOffs);
+        this.renderInst.setDrawCount(this.indexDataOffs);
 
-        this.vertexBufferOffs = 0;
-        this.indexBufferOffs = 0;
+        this.vertexDataOffs = 0;
+        this.indexDataOffs = 0;
         this.lifetime = 3;
         return true;
     }
@@ -169,18 +193,21 @@ export class DebugDraw {
         this.templateRenderInst.setBindingLayouts(bindingLayouts);
     }
 
-    public beginFrame(uniformBuffer: GfxRenderDynamicUniformBuffer, clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4): void {
+    public beginFrame(uniformBuffer: GfxRenderDynamicUniformBuffer, clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4, width: number, height: number): void {
         this.templateRenderInst.setUniformBuffer(uniformBuffer);
-        let offs = this.templateRenderInst.allocateUniformBuffer(0, 16 + 12);
+        let offs = this.templateRenderInst.allocateUniformBuffer(0, 16 + 12 + 4);
         const d = uniformBuffer.mapBufferF32();
         offs += fillMatrix4x4(d, offs, clipFromViewMatrix);
         offs += fillMatrix4x3(d, offs, viewFromWorldMatrix);
+        offs += fillVec4(d, offs, width, height);
     }
 
     private findPage(behaviorType: BehaviorType, vertexCount: number, indexCount: number): BufferPage {
-        for (let i = 0; i < this.pages.length; i++)
-            if (this.pages[i].behaviorType === behaviorType && this.pages[i].canAllocVertices(vertexCount, indexCount))
-                return this.pages[i];
+        for (let i = 0; i < this.pages.length; i++) {
+            const page = this.pages[i];
+            if (page.behaviorType === behaviorType && page.canAllocVertices(vertexCount, indexCount))
+                return page;
+        }
 
         vertexCount = align(vertexCount, this.defaultPageVertexCount);
         indexCount = align(indexCount, this.defaultPageIndexCount);
@@ -193,13 +220,67 @@ export class DebugDraw {
         const page = this.findPage(BehaviorType.Lines, 2, 2);
 
         const baseVertex = page.getCurrentVertexID();
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p0);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color0);
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p1);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color1);
+        page.vertexPC(p0, color0);
+        page.vertexPC(p1, color1);
 
-        page.indexData[page.indexBufferOffs++] = baseVertex + 0;
-        page.indexData[page.indexBufferOffs++] = baseVertex + 1;
+        for (let i = 0; i < 2; i++)
+            page.index(baseVertex + i);
+    }
+
+    public drawWorldVector(p0: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color0: Color, color1 = color0): void {
+        vec3.scaleAndAdd(DebugDraw.scratchVec3[0], p0, dir, mag);
+        this.drawWorldLine(p0, DebugDraw.scratchVec3[0], color0, color1);
+    }
+
+    public drawWorldBasis(m: ReadonlyMat4, mag = 100): void {
+        const page = this.findPage(BehaviorType.Lines, 6, 6);
+
+        const baseVertex = page.getCurrentVertexID();
+        getMatrixTranslation(DebugDraw.scratchVec3[0], m);
+
+        // X
+        getMatrixAxisX(DebugDraw.scratchVec3[1], m);
+        vec3.scaleAndAdd(DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], mag);
+        page.vertexPC(DebugDraw.scratchVec3[0], Red);
+        page.vertexPC(DebugDraw.scratchVec3[1], Red);
+
+        // Y
+        getMatrixAxisY(DebugDraw.scratchVec3[1], m);
+        vec3.scaleAndAdd(DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], mag);
+        page.vertexPC(DebugDraw.scratchVec3[0], Green);
+        page.vertexPC(DebugDraw.scratchVec3[1], Green);
+
+        // Z
+        getMatrixAxisZ(DebugDraw.scratchVec3[1], m);
+        vec3.scaleAndAdd(DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], mag);
+        page.vertexPC(DebugDraw.scratchVec3[0], Blue);
+        page.vertexPC(DebugDraw.scratchVec3[1], Blue);
+
+        for (let i = 0; i < 6; i++)
+            page.index(baseVertex + i);
+    }
+
+    public drawWorldDiscLineN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32): void {
+        branchlessONB(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], n);
+        this.drawWorldDiscSolidRU(center, DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], r, color, sides);
+    }
+
+    public drawWorldDiscLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, sides = 32): void {
+        const page = this.findPage(BehaviorType.Lines, sides, sides * 2);
+
+        const baseVertex = page.getCurrentVertexID();
+        const s = DebugDraw.scratchVec3[2];
+        for (let i = 0; i < sides; i++) {
+            const theta = i / sides * MathConstants.TAU;
+            const sin = Math.sin(theta) * r, cos = Math.cos(theta) * r;
+            s[0] = center[0] + right[0] * cos + up[0] * sin;
+            s[1] = center[1] + right[1] * cos + up[1] * sin;
+            s[2] = center[2] + right[2] * cos + up[2] * sin;
+            page.vertexPC(s, color);
+
+            page.index(baseVertex + i);
+            page.index(baseVertex + ((i === sides - 1) ? 0 : i + 1));
+        }
     }
 
     public drawWorldDiscSolidN(center: ReadonlyVec3, n: ReadonlyVec3, r: number, color: Color, sides = 32): void {
@@ -212,8 +293,7 @@ export class DebugDraw {
         const page = this.findPage(behaviorType, sides + 1, sides * 3);
 
         const baseVertex = page.getCurrentVertexID();
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, center);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
+        page.vertexPC(center, color);
         const s = DebugDraw.scratchVec3[2];
         for (let i = 0; i < sides - 1; i++) {
             const theta = i / sides * MathConstants.TAU;
@@ -221,37 +301,68 @@ export class DebugDraw {
             s[0] = center[0] + right[0] * cos + up[0] * sin;
             s[1] = center[1] + right[1] * cos + up[1] * sin;
             s[2] = center[2] + right[2] * cos + up[2] * sin;
-            page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, s);
-            page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
+            page.vertexPC(s, color);
         }
 
         // construct trifans by hand
         for (let i = 0; i < sides - 2; i++) {
-            page.indexData[page.indexBufferOffs++] = baseVertex;
-            page.indexData[page.indexBufferOffs++] = baseVertex + 1 + i;
-            page.indexData[page.indexBufferOffs++] = baseVertex + 2 + i;
+            page.index(baseVertex);
+            page.index(baseVertex + 1 + i);
+            page.index(baseVertex + 2 + i);
         }
 
-        page.indexData[page.indexBufferOffs++] = baseVertex;
-        page.indexData[page.indexBufferOffs++] = baseVertex + sides - 1;
-        page.indexData[page.indexBufferOffs++] = baseVertex + 1;
+        page.index(baseVertex);
+        page.index(baseVertex + sides - 1);
+        page.index(baseVertex + 1);
     }
 
-    public drawWorldRectSolid(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color): void {
+    private rectCorner(dst: vec3[], center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number): void {
+        // TL, TR, BL, BR
+        for (let i = 0; i < 4; i++) {
+            const signX = i & 1 ? -1 : 1;
+            const signY = i & 2 ? -1 : 1;
+            const s = dst[i];
+            vec3.scaleAndAdd(s, center, right, signX * r);
+            vec3.scaleAndAdd(s, s, up, signY * r);
+        }
+    }
+
+    public drawWorldRectLineP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color): void {
+        const page = this.findPage(BehaviorType.Lines, 4, 8);
+
+        const baseVertex = page.getCurrentVertexID();
+        page.vertexPC(p0, color);
+        page.vertexPC(p1, color);
+        page.vertexPC(p3, color);
+        page.vertexPC(p2, color);
+
+        for (let i = 0; i < 4; i++) {
+            page.index(baseVertex + i);
+            page.index(baseVertex + ((i + 1) & 3));
+        }
+    }
+
+    public drawWorldRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color): void {
+        this.rectCorner(DebugDraw.scratchVec3, center, right, up, r);
+        this.drawWorldRectLineP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color);
+    }
+
+    public drawWorldRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color): void {
         const behaviorType = color.a < 1.0 ? BehaviorType.Transparent : BehaviorType.Opaque;
         const page = this.findPage(behaviorType, 4, 6);
 
         const baseVertex = page.getCurrentVertexID();
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p0);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p1);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p2);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
-        page.vertexBufferOffs += fillVec3p(page.vertexData, page.vertexBufferOffs, p3);
-        page.vertexBufferOffs += fillColor(page.vertexData, page.vertexBufferOffs, color);
+        page.vertexPC(p0, color);
+        page.vertexPC(p1, color);
+        page.vertexPC(p3, color);
+        page.vertexPC(p2, color);
 
-        page.indexBufferOffs += convertToTrianglesRange(page.indexData, page.indexBufferOffs, GfxTopology.Quads, baseVertex, 4);
+        page.indexDataOffs += convertToTrianglesRange(page.indexData, page.indexDataOffs, GfxTopology.Quads, baseVertex, 4);
+    }
+
+    public drawWorldRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color): void {
+        this.rectCorner(DebugDraw.scratchVec3, center, right, up, r);
+        this.drawWorldRectSolidP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color);
     }
 
     private endFrame(): boolean {

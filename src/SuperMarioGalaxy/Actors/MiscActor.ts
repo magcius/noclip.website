@@ -3305,25 +3305,10 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         // drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.getBaseMtx()!);
 
         {
-            getMatrixTranslation(scratchVec3a, this.getBaseMtx()!);
-
             // const idx = sceneObjHolder.debugDraw.pages[0] !== undefined ? sceneObjHolder.debugDraw.pages[0].vertexBufferOffs / 42 : 0;
             // drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, '' + idx);
 
-            getMatrixAxisX(scratchVec3b, this.getBaseMtx()!);
-            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
-            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Red);
-        
-            getMatrixAxisY(scratchVec3b, this.getBaseMtx()!);
-            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
-            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Green);
-        
-            getMatrixAxisZ(scratchVec3b, this.getBaseMtx()!);
-            vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 100);
-            sceneObjHolder.debugDraw.drawWorldLine(scratchVec3a, scratchVec3b, Blue);
-
-            getMatrixAxisZ(scratchVec3c, this.getBaseMtx()!);
-            sceneObjHolder.debugDraw.drawWorldDiscSolidN(scratchVec3b, scratchVec3c, 50, colorNewCopy(Magenta, 0.4));
+            sceneObjHolder.debugDraw.drawWorldBasis(this.getBaseMtx()!);
         }
 
         for (let i = 0; i < this.seaGullGroup.points.length; i++) {

@@ -459,7 +459,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // Prepare all of our NameObjs.
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
-        sceneObjHolder.debugDraw.beginFrame(this.renderHelper.uniformBuffer, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
+        sceneObjHolder.debugDraw.beginFrame(this.renderHelper.uniformBuffer, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         // Draw our render insts.
         const template = renderInstManager.pushTemplateRenderInst();
