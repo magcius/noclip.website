@@ -3182,7 +3182,7 @@ export class FishGroup extends LiveActor {
 
         moveCoordAndFollowTrans(this, this.railSpeed * sceneObjHolder.deltaTimeFrames);
 
-        // this.railRider!.debugDrawRailLine(viewerInput.camera, 200);
+        // this.railRider!.debugDrawRailLine(sceneObjHolder, 200);
     }
 
     private static getArchiveName(infoIter: JMapInfoIter): string {
@@ -3300,7 +3300,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         const viewerInput = sceneObjHolder.viewerInput;
         const ctx = getDebugOverlayCanvas2D();
 
-        // this.seaGullGroup.railRider!.debugDrawRailLine(viewerInput.camera, 50);
+        // this.seaGullGroup.railRider!.debugDrawRailLine(sceneObjHolder, 50);
 
         // drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.getBaseMtx()!);
 

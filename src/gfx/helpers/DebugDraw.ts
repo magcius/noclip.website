@@ -14,6 +14,7 @@ import { setAttachmentStateSimple } from "./GfxMegaStateDescriptorHelpers.js";
 import { branchlessONB } from "../../DebugJunk.js";
 import { MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from "../../MathHelpers.js";
 import { IS_DEPTH_REVERSED } from "./ReversedDepthHelpers.js";
+import { assert } from "../platform/GfxPlatformUtil.js";
 
 // TODO(jstpierre):
 //  - Instantiate in GfxRenderHelper, like we do for thumbnails/text?
@@ -159,7 +160,7 @@ class BufferPage {
         this.vertexDataOffs += fillVec3p(this.vertexData, this.vertexDataOffs, v);
         let flags = options.flags ?? DebugDrawFlags.Default;
         // encode flags in alpha
-        const alpha = (1.0 - c.a) | flags;
+        const alpha = (1.0 - c.a) + flags;
         this.vertexDataOffs += fillColor(this.vertexData, this.vertexDataOffs, c, alpha);
     }
 
@@ -215,10 +216,11 @@ export class DebugDraw {
     private defaultPageIndexCount = 1024;
     private debugDrawProgram: GfxProgram;
     private depthSampler: GfxSampler;
+    private currentPage: BufferPage | null = null; // for the batch system
 
     public static scratchVec3 = nArray(4, () => vec3.create());
 
-    constructor(private cache: GfxRenderCache) {
+    constructor(private cache: GfxRenderCache, uniformBuffer: GfxRenderDynamicUniformBuffer) {
         const device = cache.device;
         this.debugDrawProgram = cache.createProgramSimple(preprocessProgram_GLSL(device.queryVendorInfo(), debugDrawVS, debugDrawFS));
 
@@ -230,20 +232,40 @@ export class DebugDraw {
             wrapT: GfxWrapMode.Clamp,
         });
 
+        this.templateRenderInst.setUniformBuffer(uniformBuffer);
         this.templateRenderInst.setGfxProgram(this.debugDrawProgram);
         this.templateRenderInst.setBindingLayouts(bindingLayouts);
     }
 
-    public beginFrame(uniformBuffer: GfxRenderDynamicUniformBuffer, clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4, width: number, height: number): void {
-        this.templateRenderInst.setUniformBuffer(uniformBuffer);
+    public beginFrame(clipFromViewMatrix: ReadonlyMat4, viewFromWorldMatrix: ReadonlyMat4, width: number, height: number): void {
         let offs = this.templateRenderInst.allocateUniformBuffer(0, 16 + 12 + 4);
-        const d = uniformBuffer.mapBufferF32();
+        const d = this.templateRenderInst.mapUniformBufferF32(0);
         offs += fillMatrix4x4(d, offs, clipFromViewMatrix);
         offs += fillMatrix4x3(d, offs, viewFromWorldMatrix);
         offs += fillVec4(d, offs, width, height);
     }
 
+    private beginBatch(behaviorType: BehaviorType, vertexCount: number, indexCount: number): void {
+        assert(this.currentPage === null);
+        this.currentPage = this.findPage(behaviorType, vertexCount, indexCount);
+    }
+
+    public beginBatchLine(numSegments: number): void {
+        this.beginBatch(BehaviorType.Lines, numSegments * 2, numSegments * 2);
+    }
+
+    public endBatch(): void {
+        assert(this.currentPage !== null);
+        this.currentPage = null;
+    }
+
     private findPage(behaviorType: BehaviorType, vertexCount: number, indexCount: number): BufferPage {
+        if (this.currentPage !== null) {
+            assert(this.currentPage.behaviorType === behaviorType);
+            assert(this.currentPage.canAllocVertices(vertexCount, indexCount));
+            return this.currentPage;
+        }
+
         for (let i = 0; i < this.pages.length; i++) {
             const page = this.pages[i];
             if (page.behaviorType === behaviorType && page.canAllocVertices(vertexCount, indexCount))
@@ -357,14 +379,14 @@ export class DebugDraw {
         page.index(baseVertex + 1);
     }
 
-    private rectCorner(dst: vec3[], center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number): void {
+    private rectCorner(dst: vec3[], center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number): void {
         // TL, TR, BL, BR
         for (let i = 0; i < 4; i++) {
             const signX = i & 1 ? -1 : 1;
             const signY = i & 2 ? -1 : 1;
             const s = dst[i];
-            vec3.scaleAndAdd(s, center, right, signX * r);
-            vec3.scaleAndAdd(s, s, up, signY * r);
+            vec3.scaleAndAdd(s, center, right, signX * rightMag);
+            vec3.scaleAndAdd(s, s, up, signY * upMag);
         }
     }
 
@@ -383,9 +405,9 @@ export class DebugDraw {
         }
     }
 
-    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        this.rectCorner(DebugDraw.scratchVec3, center, right, up, r);
-        this.drawRectLineP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color);
+    public drawRectLineRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+        this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
+        this.drawRectLineP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
 
     public drawRectSolidP(p0: ReadonlyVec3, p1: ReadonlyVec3, p2: ReadonlyVec3, p3: ReadonlyVec3, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
@@ -401,8 +423,8 @@ export class DebugDraw {
         page.indexDataOffs += convertToTrianglesRange(page.indexData, page.indexDataOffs, GfxTopology.Quads, baseVertex, 4);
     }
 
-    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, r: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
-        this.rectCorner(DebugDraw.scratchVec3, center, right, up, r);
+    public drawRectSolidRU(center: ReadonlyVec3, right: ReadonlyVec3, up: ReadonlyVec3, rightMag: number, upMag: number, color: Color, options: DebugDrawOptions = { flags: DebugDrawFlags.Default }): void {
+        this.rectCorner(DebugDraw.scratchVec3, center, right, up, rightMag, upMag);
         this.drawRectSolidP(DebugDraw.scratchVec3[0], DebugDraw.scratchVec3[1], DebugDraw.scratchVec3[2], DebugDraw.scratchVec3[3], color, options);
     }
 

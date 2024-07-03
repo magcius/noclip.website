@@ -5,6 +5,8 @@ import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer.j
 import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager.js";
 import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph.js";
 import { DebugThumbnailDrawer, TextDrawer } from "../helpers/DebugThumbnailHelpers.js";
+import { DebugDraw } from "../helpers/DebugDraw.js";
+import { AntialiasingSupport } from "../helpers/RenderGraphHelpers.js";
 
 class GfxRenderHelperBase {
     public renderCache: GfxRenderCache;
@@ -12,6 +14,7 @@ class GfxRenderHelperBase {
     public renderInstManager: GfxRenderInstManager;
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public debugThumbnails: DebugThumbnailDrawer;
+    public debugDraw: DebugDraw;
     public antialiasingSupport: AntialiasingSupport;
 
     private renderCacheOwn: GfxRenderCache | null = null;
@@ -27,6 +30,7 @@ class GfxRenderHelperBase {
         this.renderGraph = new GfxrRenderGraphImpl(this.device);
         this.renderInstManager = new GfxRenderInstManager(this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
+        this.debugDraw = new DebugDraw(this.renderCache, this.uniformBuffer);
         this.debugThumbnails = new DebugThumbnailDrawer(this as unknown as GfxRenderHelper);
         this.antialiasingSupport = new AntialiasingSupport(this as unknown as GfxRenderHelper);
     }
@@ -47,6 +51,7 @@ class GfxRenderHelperBase {
             this.renderCacheOwn.destroy();
         this.uniformBuffer.destroy();
         this.renderGraph.destroy();
+        this.debugDraw.destroy();
     }
 
     public getDebugTextDrawer(): TextDrawer | null {
@@ -57,7 +62,6 @@ class GfxRenderHelperBase {
 // Debug Thumbnails
 import { SceneContext } from "../../SceneBase.js";
 import type { DebugTextDrawer } from "../helpers/DebugTextDrawer.js";
-import { AntialiasingSupport } from "../helpers/RenderGraphHelpers.js";
 
 class PromiseWithSavedValue<T> {
     public value: T | null = null;

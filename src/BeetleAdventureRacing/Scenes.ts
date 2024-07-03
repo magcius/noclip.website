@@ -103,7 +103,7 @@ class BARRenderer implements SceneGfx {
         // TODO: should this be lazy?
         let trackData = getTrackData(this.sceneIndex, this.filesystem);
         if (trackData !== null)
-            this.trackDataRenderer = new TrackDataRenderer(this.renderHelper.renderCache, trackData);
+            this.trackDataRenderer = new TrackDataRenderer(trackData, this.renderHelper.debugDraw);
 
         this.inputManager = context.inputManager;
     }
@@ -233,6 +233,8 @@ class BARRenderer implements SceneGfx {
     public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(0.1);
 
+        this.renderHelper.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
+
         // Update animations
         let deltaTimeSecs = viewerInput.deltaTime / 1000;
         for (let texScrollAnim of this.texScrollAnims) {
@@ -279,7 +281,6 @@ class BARRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.attachmentClearDescriptor);
@@ -295,6 +296,7 @@ class BARRenderer implements SceneGfx {
                 this.renderInstListMain.drawOnPassRenderer(this.renderHelper.renderCache, passRenderer);
             });
         });
+        this.renderHelper.debugDraw.pushPasses(builder, mainColorTargetID, mainDepthTargetID);
 
         //TODO: snow
 
@@ -308,8 +310,6 @@ class BARRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy();
-        if (this.trackDataRenderer !== undefined)
-            this.trackDataRenderer.destroy(device);
     }
 }
 

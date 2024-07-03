@@ -459,7 +459,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // Prepare all of our NameObjs.
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
-        sceneObjHolder.debugDraw.beginFrame(this.renderHelper.uniformBuffer, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
+        sceneObjHolder.debugDraw.beginFrame(viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix, viewerInput.backbufferHeight, viewerInput.backbufferHeight);
 
         // Draw our render insts.
         const template = renderInstManager.pushTemplateRenderInst();
@@ -1482,7 +1482,6 @@ export class SceneObjHolder {
         this.nameObjHolder.destroy(device);
         this.drawSyncManager.destroy(device);
         this.specialTextureBinder.destroy(device);
-        this.debugDraw.destroy();
     }
 }
 
@@ -1905,7 +1904,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.inputManager = context.inputManager;
         sceneObjHolder.deltaTimeFrames = sceneObjHolder.deltaTimeFrames;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.renderCache);
-        sceneObjHolder.debugDraw = new DebugDraw(renderHelper.renderCache);
+        sceneObjHolder.debugDraw = renderHelper.debugDraw;
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
 

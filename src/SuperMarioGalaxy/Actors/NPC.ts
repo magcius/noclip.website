@@ -1317,7 +1317,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
     protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        // this.railRider!.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
+        // this.railRider!.debugDrawRailLine(sceneObjHolder);
 
         if (currentNerve === TicoRailNrv.Wait) {
             if (isFirstStep(this)) {

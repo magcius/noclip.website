@@ -585,18 +585,20 @@ export class RailRider {
         }
     }
 
-    public debugDrawRailLine(camera: Camera, nPoints: number = 100): void {
+    public debugDrawRailLine(sceneObjHolder: SceneObjHolder, nPoints: number = 100): void {
+        const debugDraw = sceneObjHolder.debugDraw;
+
         const totalLength = this.getTotalLength();
         const speed = totalLength / nPoints;
-        const ctx = getDebugOverlayCanvas2D();
 
+        this.bezierRail.calcPos(scratchVec3b, 0);
+        debugDraw.beginBatchLine(nPoints);
         for (let i = 0; i < nPoints; i++) {
-            const coord0 = this.bezierRail.normalizePos((i - 1) * speed, 1);
-            const coord1 = this.bezierRail.normalizePos(i * speed, 1);
-            this.bezierRail.calcPos(scratchVec3b, coord0);
-            this.bezierRail.calcPos(scratchVec3c, coord1);
-            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c, Magenta, 1);
+            this.bezierRail.calcPos(scratchVec3c, i * speed);
+            debugDraw.drawLine(scratchVec3b, scratchVec3c, Magenta);
+            vec3.copy(scratchVec3b, scratchVec3c);
         }
+        debugDraw.endBatch();
     }
 }
 

@@ -7498,7 +7498,7 @@ export class SkeletalFishBaby extends LiveActor<SkeletalFishBabyNrv> {
         this.railControl.speed = this.railSpeed * sceneObjHolder.deltaTimeFrames;
         this.railControl.update();
         this.railControl.getPos(this.translation);
-        // this.railRider!.debugDrawRailLine(viewerInput.camera);
+        // this.railRider!.debugDrawRailLine(sceneObjHolder);
     }
 
     protected override updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SkeletalFishBabyNrv, deltaTimeFrames: number): void {

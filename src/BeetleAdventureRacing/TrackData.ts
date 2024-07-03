@@ -1,16 +1,13 @@
 
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { vec3, vec4 } from "gl-matrix";
 import { divideByW } from "../Camera.js";
 import { Color, White, colorFromHSL, colorNewFromRGBA } from "../Color.js";
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk.js";
 import { AABB } from "../Geometry.js";
-import { DeviceProgram } from "../Program.js";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers.js";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers.js";
-import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers.js";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxProgram, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform.js";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache.js";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager.js";
+import { Vec3UnitX, Vec3UnitY, Vec3UnitZ } from "../MathHelpers.js";
+import { DebugDraw } from "../gfx/helpers/DebugDraw.js";
+import { GfxDevice } from "../gfx/platform/GfxPlatform.js";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager.js";
 import { ViewerRenderInput } from "../viewer.js";
 import { Filesystem } from "./Filesystem.js";
 import { UVTT } from "./ParsedFiles/UVTT.js";
@@ -169,120 +166,6 @@ export function getTrackData(sceneIndex: number | null, filesystem: Filesystem):
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 1, numSamplers: 0 },
-];
-
-class TranslucentPlaneProgram extends DeviceProgram {
-    public override both = `
-layout(std140) uniform ub {
-    Mat4x4 u_ClipFromView;
-    Mat4x4 u_ViewFromModel;
-    vec4 u_color;
-};`;
-
-    public override vert = `
-layout(location = 0) in vec2 a_Position;
-
-void main() {
-    gl_Position = Mul(u_ClipFromView, Mul(u_ViewFromModel, vec4(a_Position.xy, 0.0, 1.0)));
-}`;
-
-    public override frag = `void main() { gl_FragColor = u_color; }`;
-}
-
-export class TranslucentPlaneRenderer {
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private vertexBufferDescriptors: GfxVertexBufferDescriptor[];
-    private indexBufferDescriptor: GfxIndexBufferDescriptor;
-    private program: DeviceProgram;
-    private gfxProgram: GfxProgram | null;
-
-    constructor(cache: GfxRenderCache) {
-        this.program = new TranslucentPlaneProgram();
-        this.gfxProgram = null;
-
-        const vertexData = new Float32Array([0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5]);
-        const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
-
-        const device = cache.device;
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Vertex, vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.Index, indices.buffer);
-
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 0 },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 2 * 0x04, frequency: GfxVertexBufferFrequency.PerVertex },
-        ];
-
-        this.inputLayout = cache.createInputLayout({
-            indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-        });
-
-        this.vertexBufferDescriptors = [{ buffer: this.vertexBuffer, byteOffset: 0 }];
-        this.indexBufferDescriptor ={ buffer: this.indexBuffer, byteOffset: 0 };
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
-        planePos: vec3, planeUp: vec3, planeRight: vec3, planeWidth: number, planeHeight: number, planeColor: Color) {
-
-        const renderInst = renderInstManager.newRenderInst();
-        renderInst.setBindingLayouts(bindingLayouts);
-
-        renderInst.setMegaStateFlags(setAttachmentStateSimple({
-            cullMode: GfxCullMode.None,
-            depthWrite: false // So that they wont block each other
-        }, {
-            blendMode: GfxBlendMode.Add,
-            blendSrcFactor: GfxBlendFactor.SrcAlpha,
-            blendDstFactor: GfxBlendFactor.OneMinusSrcAlpha,
-        }));
-
-        // Always draw these planes after everything else has been rendered
-        renderInst.sortKey = setSortKeyDepth(makeSortKey(GfxRendererLayer.TRANSLUCENT), -1);
-
-        let uniformsOffset = renderInst.allocateUniformBuffer(0, 16 + 16 + 4);
-        const uniforms = renderInst.mapUniformBufferF32(0);
-        uniformsOffset += fillMatrix4x4(uniforms, uniformsOffset, viewerInput.camera.projectionMatrix);
-
-        const p = planePos;
-        const u = planeUp;
-        const r = planeRight;
-        const h = planeHeight;
-        const w = planeWidth;
-        const worldFromModelMatrix = mat4.fromValues(
-            r[1] * w, r[2] * w, r[0] * w, 0,
-            u[1] * h, u[2] * h, u[0] * h, 0,
-            0, 0, 0, 0,
-            p[1], p[2], p[0], 1
-        );
-
-        let viewFromModelMatrix = mat4.create();
-        mat4.mul(viewFromModelMatrix, viewerInput.camera.viewMatrix, worldFromModelMatrix);
-        uniformsOffset += fillMatrix4x4(uniforms, uniformsOffset, viewFromModelMatrix);
-        uniformsOffset += fillVec4v(uniforms, uniformsOffset, vec4.fromValues(planeColor.r, planeColor.g, planeColor.b, planeColor.a));
-
-        renderInst.setVertexInput(this.inputLayout, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-
-        if (this.gfxProgram === null)
-            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.program);
-
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setDrawCount(6, 0);
-        renderInstManager.submitRenderInst(renderInst);
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyBuffer(this.vertexBuffer);
-    }
-}
-
 let curHue = 0;
 let curLightness = 0.5;
 function nextConsistentRandomColor() {
@@ -319,21 +202,16 @@ export class TrackDataRenderer {
 
     public progressValuesToShow: number[] = [];
 
-    private planeRenderer: TranslucentPlaneRenderer;
-
     private progressFixZonesZPos: number;
     private progressFixZonesHeight: number;
 
-
-    constructor(cache: GfxRenderCache, private trackData: CourseTrackData) {
-        this.planeRenderer = new TranslucentPlaneRenderer(cache);
-
+    constructor(private trackData: CourseTrackData, private debugDraw: DebugDraw) {
         let sortedZVals = trackData.uvtt.pnts.map(p => p.pos[2]).sort((a, b) => a - b);
         let zMin = sortedZVals[0];
         let zMax = sortedZVals[sortedZVals.length - 1];
 
-        this.progressFixZonesZPos = (zMin + zMax) / 2;
-        this.progressFixZonesHeight = (zMax - zMin) * 1.5;
+        this.progressFixZonesZPos = (zMin + zMax) * 0.5;
+        this.progressFixZonesHeight = (zMax - zMin) * 0.75;
     }
 
     public setMinAndMaxSegmentIndices(min: number, max: number) {
@@ -447,19 +325,12 @@ export class TrackDataRenderer {
                 let pnt = this.trackData.uvtt.pnts[segmentIndex];
 
                 if (this.showTrackSegmentBeginPlanes) {
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        pnt.pos, pnt.up, pnt.right,
-                        3000, 3000,
-                        color);
+                    this.debugDraw.drawRectSolidRU(BARVecToStandardVec(pnt.pos), BARVecToStandardVec(pnt.right), BARVecToStandardVec(pnt.up), 1500, 1500, color);
                 }
                 if (this.showTrackSegmentEndPlanes) {
                     let segmentEnd = vec3.create();
                     vec3.scaleAndAdd(segmentEnd, pnt.pos, pnt.fwd, pnt.trackSectionLength);
-
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        segmentEnd, pnt.up, pnt.right,
-                        3000, 3000,
-                        color);
+                    this.debugDraw.drawRectSolidRU(BARVecToStandardVec(segmentEnd), BARVecToStandardVec(pnt.right), BARVecToStandardVec(pnt.up), 1500, 1500, color);
                 }
             }
         }
@@ -477,25 +348,18 @@ export class TrackDataRenderer {
                     color = nextConsistentRandomColor();
                     color.a = 0.4;
 
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        vec3.fromValues(progressFixZone.x + progressFixZone.squareHalfSize, progressFixZone.y, this.progressFixZonesZPos), vec3.fromValues(0, 0, 1), vec3.fromValues(0, 1, 0),
-                        progressFixZone.squareHalfSize * 2, this.progressFixZonesHeight,
-                        color);
-
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        vec3.fromValues(progressFixZone.x - progressFixZone.squareHalfSize, progressFixZone.y, this.progressFixZonesZPos), vec3.fromValues(0, 0, 1), vec3.fromValues(0, 1, 0),
-                        progressFixZone.squareHalfSize * 2, this.progressFixZonesHeight,
-                        color);
-
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        vec3.fromValues(progressFixZone.x, progressFixZone.y + progressFixZone.squareHalfSize, this.progressFixZonesZPos), vec3.fromValues(0, 0, 1), vec3.fromValues(1, 0, 0),
-                        progressFixZone.squareHalfSize * 2, this.progressFixZonesHeight,
-                        color);
-
-                    this.planeRenderer.prepareToRender(device, renderInstManager, viewerInput,
-                        vec3.fromValues(progressFixZone.x, progressFixZone.y - progressFixZone.squareHalfSize, this.progressFixZonesZPos), vec3.fromValues(0, 0, 1), vec3.fromValues(1, 0, 0),
-                        progressFixZone.squareHalfSize * 2, this.progressFixZonesHeight,
-                        color);
+                    this.debugDraw.drawRectSolidRU(
+                        vec3.fromValues(progressFixZone.x + progressFixZone.squareHalfSize, progressFixZone.y, this.progressFixZonesZPos),
+                        Vec3UnitY, Vec3UnitZ, progressFixZone.squareHalfSize, this.progressFixZonesHeight, color);
+                    this.debugDraw.drawRectSolidRU(
+                        vec3.fromValues(progressFixZone.x - progressFixZone.squareHalfSize, progressFixZone.y, this.progressFixZonesZPos),
+                        Vec3UnitY, Vec3UnitZ, progressFixZone.squareHalfSize, this.progressFixZonesHeight, color);
+                    this.debugDraw.drawRectSolidRU(
+                        vec3.fromValues(progressFixZone.x, progressFixZone.y + progressFixZone.squareHalfSize, this.progressFixZonesZPos),
+                        Vec3UnitX, Vec3UnitZ, progressFixZone.squareHalfSize, this.progressFixZonesHeight, color);
+                    this.debugDraw.drawRectSolidRU(
+                        vec3.fromValues(progressFixZone.x, progressFixZone.y - progressFixZone.squareHalfSize, this.progressFixZonesZPos),
+                        Vec3UnitX, Vec3UnitZ, progressFixZone.squareHalfSize, this.progressFixZonesHeight, color);
 
                     xValToColorMap[progressFixZone.x] = color;
                 } else {
@@ -535,9 +399,5 @@ export class TrackDataRenderer {
             let pnt = this.trackData.uvtt.getPointAlongTrack(progressVal);
             drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(pnt), colorNewFromRGBA(1, 0, 0, 1), 20);
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.planeRenderer.destroy(device);
     }
 }
